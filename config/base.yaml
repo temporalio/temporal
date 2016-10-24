@@ -1,0 +1,8 @@
+serviceName: minions
+
+logging:
+  level: info
+  stdout: true
+
+jaeger:
+  disabled: false

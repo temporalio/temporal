@@ -1,0 +1,21 @@
+# Add your development configuration here
+tchannel:
+  # Use a fixed port during development.
+  port: 9876
+  # Use the local Hyperbahn nodes during development.
+  routers: ["127.0.0.1:21300", "127.0.0.1:21301"]
+
+jaeger:
+  # This tells Jaeger to sample and capture every trace in the service.
+  # This section should not be in the production configuration,
+  # because it will degrade the application performance by reporting
+  # multiple spans per each request, and spam Jaeger with lots of data.
+  sampler:
+    type: "const"
+    param: 1
+  # The reporter settings ensure that each span is reported immediately
+  # as soon as it is finished (without being buffered), and its trace ID
+  # is written to the log.
+  reporter:
+    queueSize: 1
+    logSpans: true

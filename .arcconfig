@@ -1,0 +1,4 @@
+{
+    "phabricator.uri": "https://code.uberinternal.com/",
+    "git.default-relative-commit": "origin/master"
+}

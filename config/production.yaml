@@ -1,0 +1,13 @@
+# Add your production configuration here
+logging:
+  stdout: true
+  kafka:
+    topic: minions
+
+metrics:
+  m3:
+    hostPort: 127.0.0.1:9052
+    service: minions
+
+sentry:
+  dsn: http://fill:mein@sentry.local.uber.internal/fillmein
