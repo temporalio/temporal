@@ -1,13 +1,13 @@
 package main
 
-import (
-	"testing"
+// import (
+// 	"testing"
 
-	"github.com/stretchr/testify/assert"
-)
+// 	"github.com/stretchr/testify/assert"
+// )
 
-func TestHello(t *testing.T) {
-	handler := myHandler{}
-	_, err := handler.Hello(nil)
-	assert.NoError(t, err, "Handler failed")
-}
+// func TestHello(t *testing.T) {
+// 	handler := myHandler{}
+// 	_, err := handler.Hello(nil)
+// 	assert.NoError(t, err, "Handler failed")
+// }

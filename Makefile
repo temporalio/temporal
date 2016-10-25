@@ -7,7 +7,9 @@ THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift
 # list all executables
 PROGS = minions
 
-minions: $(wildcard *.go)
+minions: main.go \
+	$(wildcard config/*.go)  \
+	$(wildcard service/*.go) \
 
 -include go-build/rules.mk
 
