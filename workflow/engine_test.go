@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
-	"code.uber.internal/odp/cherami-client-go.git/common"
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	"code.uber.internal/devexp/minions/common"
 )
 
 type (
