@@ -1,0 +1,1 @@
+CREATE KEYSPACE IF NOT EXISTS workflow WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};
