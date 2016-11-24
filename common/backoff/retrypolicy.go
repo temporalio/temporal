@@ -7,9 +7,10 @@ import (
 )
 
 const (
+	// NoInterval represents Maximim interval
+	NoInterval                      = 0
 	done              time.Duration = -1
 	noMaximumAttempts               = 0
-	noInterval                      = 0
 
 	defaultBackoffCoefficient = 2.0
 	defaultMaximumInterval    = 10 * time.Second
@@ -117,7 +118,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	}
 
 	// Stop retrying after expiration interval is elasped
-	if p.expirationInterval != noInterval && elapsedTime > p.expirationInterval {
+	if p.expirationInterval != NoInterval && elapsedTime > p.expirationInterval {
 		return done
 	}
 
@@ -126,11 +127,11 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	if nextInterval <= 0 {
 		return done
 	}
-	if p.maximumInterval != noInterval {
+	if p.maximumInterval != NoInterval {
 		nextInterval = math.Min(nextInterval, float64(p.maximumInterval))
 	}
 
-	if p.expirationInterval != noInterval {
+	if p.expirationInterval != NoInterval {
 		remainingTime := float64(math.Max(0, float64(p.expirationInterval-elapsedTime)))
 		nextInterval = math.Min(remainingTime, nextInterval)
 	}

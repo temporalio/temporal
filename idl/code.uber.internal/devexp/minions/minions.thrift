@@ -46,6 +46,11 @@ enum EventType {
   ActivityTaskTimedOut,
   TimerStarted,
   TimerFired,
+  CompleteWorkflowExecutionFailed,
+}
+
+enum WorkflowCompleteFailedCause {
+  UNHANDLED_DECISION,
 }
 
 struct WorkflowType {
@@ -120,6 +125,11 @@ struct WorkflowExecutionFailedEventAttributes {
 
 struct WorkflowExecutionTimedOutEventAttributes {
   10: optional TimeoutType timeoutType
+}
+
+struct CompleteWorkflowExecutionFailedEventAttributes {
+  10: optional WorkflowCompleteFailedCause cause
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
 }
 
 struct DecisionTaskScheduledEventAttributes {
@@ -206,6 +216,7 @@ struct HistoryEvent {
   90:  optional ActivityTaskTimedOutEventAttributes activityTaskTimedOutEventAttributes
   95:  optional TimerStartedEventAttributes timerStartedEventAttributes
   100: optional TimerFiredEventAttributes timerFiredEventAttributes
+  105: optional CompleteWorkflowExecutionFailedEventAttributes completeWorkflowExecutionFailedEventAttributes
 }
 
 struct History {
