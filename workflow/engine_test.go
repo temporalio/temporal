@@ -19,10 +19,10 @@ import (
 type (
 	engineSuite struct {
 		suite.Suite
-		workflowTestBase
-		engine           workflowEngine
+		WorkflowTestBase
+		engine           WorkflowEngine
 		builder          *historyBuilder
-		mockEngine       *engineImpl
+		mockEngine       *EngineImpl
 		mockTaskMgr      *mockTaskPersistence
 		mockExecutionMgr *mockWorkflowExecutionPersistence
 		logger           bark.Logger
@@ -40,7 +40,7 @@ func (s *engineSuite) SetupSuite() {
 	}
 
 	s.setupWorkflowStore()
-	s.engine = newWorkflowEngine(s.workflowMgr, s.taskMgr, bark.NewLoggerFromLogrus(log.New()))
+	s.engine = NewWorkflowEngine(s.WorkflowMgr, s.TaskMgr, bark.NewLoggerFromLogrus(log.New()))
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
 	s.builder = newHistoryBuilder(s.logger)
@@ -54,7 +54,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockTaskMgr = &mockTaskPersistence{}
 	s.mockExecutionMgr = &mockWorkflowExecutionPersistence{}
 
-	s.mockEngine = &engineImpl{
+	s.mockEngine = &EngineImpl{
 		executionManager: s.mockExecutionMgr,
 		taskManager:      s.mockTaskMgr,
 		txProcessor:      newTransferQueueProcessor(s.mockExecutionMgr, s.mockTaskMgr, s.logger),

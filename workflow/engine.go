@@ -27,7 +27,8 @@ const (
 )
 
 type (
-	engineImpl struct {
+	// EngineImpl wraps up implementation for engine layer.
+	EngineImpl struct {
 		executionManager workflowExecutionPersistence
 		taskManager      taskPersistence
 		txProcessor      transferQueueProcessor
@@ -39,7 +40,7 @@ type (
 		workflowExecution workflow.WorkflowExecution
 		builder           *historyBuilder
 		executionInfo     *workflowExecutionInfo
-		engine            *engineImpl
+		engine            *EngineImpl
 		updateCondition   int64
 		logger            bark.Logger
 	}
@@ -64,9 +65,10 @@ var (
 	errMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
 )
 
-func newWorkflowEngine(executionManager workflowExecutionPersistence, taskManager taskPersistence,
-	logger bark.Logger) workflowEngine {
-	return &engineImpl{
+// NewWorkflowEngine creates an instannce of engine.
+func NewWorkflowEngine(executionManager workflowExecutionPersistence, taskManager taskPersistence,
+	logger bark.Logger) WorkflowEngine {
+	return &EngineImpl{
 		executionManager: executionManager,
 		taskManager:      taskManager,
 		txProcessor:      newTransferQueueProcessor(executionManager, taskManager, logger),
@@ -77,15 +79,18 @@ func newWorkflowEngine(executionManager workflowExecutionPersistence, taskManage
 	}
 }
 
-func (e *engineImpl) Start() {
+// Start the engine.
+func (e *EngineImpl) Start() {
 	e.txProcessor.Start()
 }
 
-func (e *engineImpl) Stop() {
+// Stop the engine.
+func (e *EngineImpl) Stop() {
 	e.txProcessor.Stop()
 }
 
-func (e *engineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (
+// StartWorkflowExecution starts a workflow execution
+func (e *EngineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (
 	workflow.WorkflowExecution, error) {
 	executionID := request.GetWorkflowId()
 	runID := uuid.New()
@@ -125,7 +130,7 @@ func (e *engineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecu
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *engineImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (
+func (e *EngineImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (
 	*workflow.PollForDecisionTaskResponse, error) {
 	var response *workflow.PollForDecisionTaskResponse
 	err := backoff.Retry(
@@ -142,7 +147,8 @@ func (e *engineImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRe
 	return response, err
 }
 
-func (e *engineImpl) RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error {
+// RespondDecisionTaskCompleted completes a decision task
+func (e *EngineImpl) RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error {
 	token, err0 := e.tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return &workflow.BadRequestError{Message: "Error deserializing task token."}
@@ -240,7 +246,7 @@ Update_History_Loop:
 }
 
 // PollForActivityTask tries to get the activity task using exponential backoff.
-func (e *engineImpl) PollForActivityTask(request *workflow.PollForActivityTaskRequest) (
+func (e *EngineImpl) PollForActivityTask(request *workflow.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
 	var response *workflow.PollForActivityTaskResponse
 	err := backoff.Retry(
@@ -257,7 +263,8 @@ func (e *engineImpl) PollForActivityTask(request *workflow.PollForActivityTaskRe
 	return response, err
 }
 
-func (e *engineImpl) RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error {
+// RespondActivityTaskCompleted completes an activity task.
+func (e *EngineImpl) RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error {
 	token, err0 := e.tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return &workflow.BadRequestError{Message: "Error deserializing task token."}
@@ -315,7 +322,8 @@ Update_History_Loop:
 	return errMaxAttemptsExceeded
 }
 
-func (e *engineImpl) RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error {
+// RespondActivityTaskFailed completes an activity task failure.
+func (e *EngineImpl) RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error {
 	token, err0 := e.tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return &workflow.BadRequestError{Message: "Error deserializing task token."}
@@ -373,7 +381,7 @@ Update_History_Loop:
 	return errMaxAttemptsExceeded
 }
 
-func (e *engineImpl) pollForDecisionTaskOperation(request *workflow.PollForDecisionTaskRequest) (
+func (e *EngineImpl) pollForDecisionTaskOperation(request *workflow.PollForDecisionTaskRequest) (
 	*workflow.PollForDecisionTaskResponse, error) {
 	context, err := e.buildTaskContext(request.TaskList.GetName(), taskTypeDecision)
 	if err != nil {
@@ -420,7 +428,7 @@ Update_History_Loop:
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *engineImpl) pollForActivityTaskOperation(request *workflow.PollForActivityTaskRequest) (
+func (e *EngineImpl) pollForActivityTaskOperation(request *workflow.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
 	context, err := e.buildTaskContext(request.TaskList.GetName(), taskTypeActivity)
 	if err != nil {
@@ -465,7 +473,7 @@ Update_History_Loop:
 }
 
 // Creates a task context for a given task list and type.
-func (e *engineImpl) buildTaskContext(taskList string, taskType int) (*taskContext, error) {
+func (e *EngineImpl) buildTaskContext(taskList string, taskType int) (*taskContext, error) {
 	getTaskResponse, err := e.getTasksWithRetry(&getTasksRequest{
 		taskList:    taskList,
 		taskType:    taskType,
@@ -497,7 +505,7 @@ func (e *engineImpl) buildTaskContext(taskList string, taskType int) (*taskConte
 	return context, nil
 }
 
-func (e *engineImpl) getTasksWithRetry(request *getTasksRequest) (*getTasksResponse, error) {
+func (e *EngineImpl) getTasksWithRetry(request *getTasksRequest) (*getTasksResponse, error) {
 	var response *getTasksResponse
 	op := func() error {
 		var err error
@@ -514,7 +522,7 @@ func (e *engineImpl) getTasksWithRetry(request *getTasksRequest) (*getTasksRespo
 	return response, nil
 }
 
-func (e *engineImpl) completeTaskWithRetry(request *completeTaskRequest) error {
+func (e *EngineImpl) completeTaskWithRetry(request *completeTaskRequest) error {
 	op := func() error {
 		return e.taskManager.CompleteTask(request)
 	}
@@ -522,7 +530,7 @@ func (e *engineImpl) completeTaskWithRetry(request *completeTaskRequest) error {
 	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
 }
 
-func (e *engineImpl) getWorkflowExecutionWithRetry(request *getWorkflowExecutionRequest) (*getWorkflowExecutionResponse,
+func (e *EngineImpl) getWorkflowExecutionWithRetry(request *getWorkflowExecutionRequest) (*getWorkflowExecutionResponse,
 	error) {
 	var response *getWorkflowExecutionResponse
 	op := func() error {
@@ -540,7 +548,7 @@ func (e *engineImpl) getWorkflowExecutionWithRetry(request *getWorkflowExecution
 	return response, nil
 }
 
-func (e *engineImpl) deleteWorkflowExecutionWithRetry(request *deleteWorkflowExecutionRequest) error {
+func (e *EngineImpl) deleteWorkflowExecutionWithRetry(request *deleteWorkflowExecutionRequest) error {
 	op := func() error {
 		return e.executionManager.DeleteWorkflowExecution(request)
 	}
@@ -548,7 +556,7 @@ func (e *engineImpl) deleteWorkflowExecutionWithRetry(request *deleteWorkflowExe
 	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
 }
 
-func (e *engineImpl) updateWorkflowExecutionWithRetry(request *updateWorkflowExecutionRequest) error {
+func (e *EngineImpl) updateWorkflowExecutionWithRetry(request *updateWorkflowExecutionRequest) error {
 	op := func() error {
 		return e.executionManager.UpdateWorkflowExecution(request)
 
@@ -557,7 +565,7 @@ func (e *engineImpl) updateWorkflowExecutionWithRetry(request *updateWorkflowExe
 	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
 }
 
-func (e *engineImpl) createPollForDecisionTaskResponse(context *taskContext,
+func (e *EngineImpl) createPollForDecisionTaskResponse(context *taskContext,
 	startedEvent *workflow.HistoryEvent) *workflow.PollForDecisionTaskResponse {
 	task := context.info
 	builder := context.builder
@@ -581,7 +589,7 @@ func (e *engineImpl) createPollForDecisionTaskResponse(context *taskContext,
 }
 
 // Populate the activity task response based on context and scheduled/started events.
-func (e *engineImpl) createPollForActivityTaskResponse(context *taskContext,
+func (e *EngineImpl) createPollForActivityTaskResponse(context *taskContext,
 	startedEvent *workflow.HistoryEvent) *workflow.PollForActivityTaskResponse {
 	task := context.info
 	builder := context.builder
@@ -606,7 +614,7 @@ func (e *engineImpl) createPollForActivityTaskResponse(context *taskContext,
 	return response
 }
 
-func newWorkflowExecutionContext(engine *engineImpl, execution workflow.WorkflowExecution) *workflowExecutionContext {
+func newWorkflowExecutionContext(engine *EngineImpl, execution workflow.WorkflowExecution) *workflowExecutionContext {
 	return &workflowExecutionContext{
 		workflowExecution: execution,
 		engine:            engine,

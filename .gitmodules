@@ -1,3 +1,6 @@
 [submodule "go-build"]
 	path = go-build
 	url = gitolite@code.uber.internal:go-build
+[submodule "cassandra"]
+	path = cassandra
+	url = gitolite@code.uber.internal:personal/nx/cassandra

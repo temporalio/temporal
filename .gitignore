@@ -10,3 +10,7 @@
 .gen/
 /vendor
 /minions
+
+# Executables produced by minions repo
+cmd/stress/stress
+workflow/workflow

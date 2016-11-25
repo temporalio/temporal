@@ -8,7 +8,8 @@ import (
 var nilWorkflowExecution = workflow.WorkflowExecution{}
 
 type (
-	workflowEngine interface {
+	// WorkflowEngine represents an interface for workflow engine
+	WorkflowEngine interface {
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error)
 		PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error)

@@ -17,7 +17,7 @@ import (
 type (
 	transferQueueProcessorSuite struct {
 		suite.Suite
-		workflowTestBase
+		WorkflowTestBase
 		processor *transferQueueProcessorImpl
 	}
 )

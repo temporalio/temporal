@@ -193,8 +193,8 @@ func (c *TestClock) moveClock(duration time.Duration) {
 func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
 	policy := NewExponentialRetryPolicy(initialInterval)
 	policy.SetBackoffCoefficient(2)
-	policy.SetMaximumInterval(noInterval)
-	policy.SetExpirationInterval(noInterval)
+	policy.SetMaximumInterval(NoInterval)
+	policy.SetExpirationInterval(NoInterval)
 	policy.SetMaximumAttempts(noMaximumAttempts)
 
 	return policy

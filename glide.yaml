@@ -10,7 +10,9 @@ import:
 - package: github.com/uber/tchannel-go
   subpackages:
   - thrift
-testImport:
-- package: github.com/stretchr/testify
+- package: github.com/gocql/gocql
+  repo: gitolite@code.uber.internal:odp/cherami-gocql.git
   subpackages:
-  - assert
+  - internal/lru
+  - internal/murmur
+  - internal/streams

@@ -1,8 +1,8 @@
-hash: 7d29b0d9f986f367da1e34c20628b77582834edb5b52f91690f5aba43638059e
-updated: 2016-10-24T16:05:36.553604573-07:00
+hash: 38e69577b630428f6d90c7c2eb6d5e52ef85ef7031bcd4214cde74c323f2791a
+updated: 2016-11-24T13:50:01.659621527-08:00
 imports:
 - name: code.uber.internal/go-common.git
-  version: 552c50b2b812bc727b9d16e81b9aa6bf1cdde4bb
+  version: 4b349844a2c93b3c125ebff6d62b12ab73621e9f
   subpackages:
   - x/backoff
   - x/config
@@ -21,26 +21,56 @@ imports:
   - x/tchannel/metrics
   - x/time
 - name: github.com/apache/thrift
-  version: 9549b25c77587b29be4e0b5c258221a4ed85d37a
+  version: 84d6af4cf903571319e0ebddd7beb12bc93fb752
   subpackages:
   - lib/go/thrift
 - name: github.com/cactus/go-statsd-client
-  version: 95cb85a8d6b2d1ccfce95fa58d1ca3445779d8af
+  version: d8eabe07bc70ff9ba6a56836cde99d1ea3d005f7
   subpackages:
   - statsd
 - name: github.com/codahale/hdrhistogram
   version: f8ad88b59a584afeee9d334eff879b104439117b
+- name: github.com/davecgh/go-spew
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
+  subpackages:
+  - spew
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/getsentry/raven-go
   version: e39495fea085e98d1281fac0ff4d6eb8dc56f86d
+- name: github.com/gocql/gocql
+  version: 8e63066b8432f0fbc02d63b7b04de8da132f0b21
+  repo: gitolite@code.uber.internal:odp/cherami-gocql.git
+  subpackages:
+  - internal/lru
+  - internal/murmur
+  - internal/streams
+- name: github.com/golang/snappy
+  version: d9eb7a3d35ec988b8585d4a0068e462c27d28380
+- name: github.com/hailocab/go-hostpool
+  version: e80d13ce29ede4452c43dea11e79b9bc8a15b478
 - name: github.com/opentracing/opentracing-go
   version: 0c3154a3c2ce79d3271985848659870599dfb77c
   subpackages:
   - ext
   - log
+- name: github.com/pborman/uuid
+  version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
+- name: github.com/pmezard/go-difflib
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
+  subpackages:
+  - difflib
 - name: github.com/Sirupsen/logrus
   version: 08a8a7c27e3d058a8989316a850daad1c10bf4ab
+- name: github.com/stretchr/objx
+  version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
+- name: github.com/stretchr/testify
+  version: 18a02ba4a312f95da08ff4cfc0055750ce50ae9e
+  subpackages:
+  - assert
+  - mock
+  - require
+  - suite
 - name: github.com/uber-common/bark
   version: d52ffa061726911f47fcd3d9e8b9b55f22794772
 - name: github.com/uber-go/atomic
@@ -52,7 +82,6 @@ imports:
   subpackages:
   - config
   - internal/spanlog
-  - testutils
   - thrift-gen/agent
   - thrift-gen/sampling
   - thrift-gen/zipkincore
@@ -75,28 +104,17 @@ imports:
   - trand
   - typed
 - name: golang.org/x/net
-  version: 3b993948b6f0e651ffb58ba135d8538a68b1cddf
+  version: 4971afdc2f162e82d185353533d3cf16188a9f4e
   subpackages:
   - context
-  - context/ctxhttp
 - name: golang.org/x/sys
   version: d4feaf1a7e61e1d9e79e6c4e76c6349e9cab0a03
   subpackages:
   - unix
+- name: gopkg.in/inf.v0
+  version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/validator.v2
   version: 3e4f037f12a1221a0864cf0dd2e81c452ab22448
 - name: gopkg.in/yaml.v2
-  version: a83829b6f1293c91addabc89d0571c246397bbf4
-testImports:
-- name: github.com/davecgh/go-spew
-  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
-  subpackages:
-  - spew
-- name: github.com/pmezard/go-difflib
-  version: 792786c7400a136282c1664665ae0a8db921c6c2
-  subpackages:
-  - difflib
-- name: github.com/stretchr/testify
-  version: 976c720a22c8eb4eb6a0b4348ad85ad12491a506
-  subpackages:
-  - assert
+  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+testImports: []
