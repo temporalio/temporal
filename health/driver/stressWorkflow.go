@@ -91,8 +91,11 @@ func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, inp
 }
 
 // LaunchWorkflows starts workflows.
-func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParams, service *ServiceMockEngine) error {
-	logrusSettings()
+func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParams,
+	service *ServiceMockEngine, reporter common.Reporter) error {
+	// logrusSettings()
+
+	workerOverrides := &flow.WorkerOverrides{Reporter: reporter}
 	// Workflow execution parameters.
 	workflowExecutionParameters := flow.WorkerExecutionParameters{}
 	workflowExecutionParameters.TaskListName = "testTaskList"
@@ -106,7 +109,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 	}
 
 	// Launch worker.
-	workflowWorker := flow.NewWorkflowWorker(workflowExecutionParameters, workflowFactory, service)
+	workflowWorker := flow.NewWorkflowWorker(workflowExecutionParameters, workflowFactory, service, workerOverrides)
 	workflowWorker.Start()
 
 	// Create activity execution parameters.
@@ -115,7 +118,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 	activityExecutionParameters.ConcurrentPollRoutineSize = 10
 
 	// Register activity instances and launch the worker.
-	activityWorker := flow.NewActivityWorker(activityExecutionParameters, activityFactory, service)
+	activityWorker := flow.NewActivityWorker(activityExecutionParameters, activityFactory, service, workerOverrides)
 	activityWorker.Start()
 
 	// Start a workflow.
@@ -140,11 +143,11 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 
 		for i := 0; i < createCount; i++ {
 			options.WorkflowID = fmt.Sprintf("stressWorkflowId-%d-%d", routineId, i)
-			workflowClient := flow.NewWorkflowClient(options, service)
-			we, err := workflowClient.StartWorkflowExecution()
+			workflowClient := flow.NewWorkflowClient(options, service, reporter)
+			_, err := workflowClient.StartWorkflowExecution()
 			if err == nil {
 				atomic.AddInt32(&totalWorkflowCount, 1)
-				log.Infof("Created Workflow - workflow Id: %s, run Id: %s \n", we.GetWorkflowId(), we.GetRunId())
+				// log.Infof("Created Workflow - workflow Id: %s, run Id: %s \n", we.GetWorkflowId(), we.GetRunId())
 			} else {
 				log.Error(err)
 			}

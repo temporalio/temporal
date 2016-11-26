@@ -2,6 +2,7 @@ package flow
 
 import (
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	"code.uber.internal/devexp/minions/common"
 )
 
 type (
@@ -77,7 +78,7 @@ type (
 		workflowExecution m.WorkflowExecution
 		workflowService   m.TChanWorkflowService
 		Identity          string
-
+		reporter          common.Reporter
 		// struct methods.
 		// WorkflowExecution() m.WorkflowExecution
 		// WorkflowType() m.WorkflowType

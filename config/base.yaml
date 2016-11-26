@@ -9,8 +9,8 @@ jaeger:
 
 stress:
   workflow:
-    totalLaunchCount: 1000
-    routineCount: 20
+    totalLaunchCount: 10000
+    routineCount: 50
     chainSequence: 4
     activitySleepMin: 1
     activitySleepMax: 60

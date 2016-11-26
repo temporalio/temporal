@@ -22,12 +22,11 @@ type Host struct {
 }
 
 var stressMetrics = map[common.MetricName]common.MetricType{
-	common.MessagesSentTotalCounter:         common.Counter,
-	common.MessagesSentErrorCounter:         common.Counter,
-	common.MessagesSentLatency:              common.Timer,
-	common.MessagesReceivedTotalCounter:     common.Counter,
-	common.MessagesReceivedDuplicateCounter: common.Counter,
-	common.MessagesEndToEndLatency:          common.Timer,
+	common.WorkflowsStartTotalCounter:      common.Counter,
+	common.WorkflowsCompletionTotalCounter: common.Counter,
+	common.ActivitiesTotalCounter:          common.Counter,
+	common.DecisionsTotalCounter:           common.Counter,
+	common.WorkflowEndToEndLatency:         common.Timer,
 }
 
 // NewStressHost creates an instance of stress host
@@ -64,7 +63,9 @@ func (s *Host) Start() {
 			workflowConfig.TotalLaunchCount,
 			workflowConfig.RoutineCount,
 			workflowPrams,
-			service)
+			service,
+			s.reporter)
+
 		// close(launchCh)
 	}()
 

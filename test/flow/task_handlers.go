@@ -19,6 +19,7 @@ type (
 		identity           string
 		workflowDefFactory WorkflowDefinitionFactory
 		contextLogger      *log.Entry
+		reporter           common.Reporter
 	}
 
 	// activityTaskHandler is the implementation of ActivityTaskHandler
@@ -28,6 +29,7 @@ type (
 		activityImplFactory ActivityImplementationFactory
 		service             m.TChanWorkflowService
 		contextLogger       *log.Entry
+		reporter            common.Reporter
 	}
 
 	// eventsHelper wrapper method to help information about events.
@@ -72,12 +74,14 @@ func (eh eventsHelper) LastNonReplayedID() int64 {
 }
 
 // newWorkflowTaskHandler returns an implementation of workflow task handler.
-func newWorkflowTaskHandler(taskListName string, identity string, factory WorkflowDefinitionFactory, contextLogger *log.Entry) *workflowTaskHandler {
+func newWorkflowTaskHandler(taskListName string, identity string, factory WorkflowDefinitionFactory,
+	contextLogger *log.Entry, reporter common.Reporter) *workflowTaskHandler {
 	return &workflowTaskHandler{
 		taskListName:       taskListName,
 		identity:           identity,
 		workflowDefFactory: factory,
-		contextLogger:      contextLogger}
+		contextLogger:      contextLogger,
+		reporter:           reporter}
 }
 
 // ProcessWorkflowTask processes each all the events of the workflow task.
@@ -86,6 +90,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 		return nil, fmt.Errorf("Nil workflowtask provided.")
 	}
 
+	wth.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
 	// wth.contextLogger.Debugf("Processing Workflow Task: %+v", workflowTask.task)
 
 	// Setup workflow Info
@@ -130,6 +135,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 
 	eventDecisions := wth.completeWorkflow(isWorkflowCompleted, completionResult, failureReason, failureDetails)
 	if len(eventDecisions) > 0 {
+		wth.reporter.IncCounter(common.WorkflowsCompletionTotalCounter, nil, 1)
 		decisions = append(decisions, eventDecisions...)
 	}
 
@@ -166,18 +172,21 @@ func (wth *workflowTaskHandler) completeWorkflow(isWorkflowCompleted bool, compl
 }
 
 func newActivityTaskHandler(taskListName string, identity string, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, contextLogger *log.Entry) ActivityTaskHandler {
+	service m.TChanWorkflowService, contextLogger *log.Entry, reporter common.Reporter) ActivityTaskHandler {
 	return &activityTaskHandler{
 		taskListName:        taskListName,
 		identity:            identity,
 		activityImplFactory: factory,
 		service:             service,
-		contextLogger:       contextLogger}
+		contextLogger:       contextLogger,
+		reporter:            reporter}
 }
 
 // Execute executes an implementation of the activity.
 func (ath *activityTaskHandler) Execute(context context.Context, activityTask *ActivityTask) (interface{}, error) {
 	ath.contextLogger.Debugf("activityTaskHandler::Execute: %+v", activityTask.task)
+	ath.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
+
 	activityExecutionContext := &activityExecutionContext{
 		taskToken: activityTask.task.TaskToken,
 		identity:  ath.identity,

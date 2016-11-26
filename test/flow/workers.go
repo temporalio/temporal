@@ -52,20 +52,22 @@ type (
 		identity            string
 	}
 
-	// Worker overrides.
-	workerOverrides struct {
+	// WorkerOverrides overrides.
+	WorkerOverrides struct {
 		workflowTaskHander  WorkflowTaskHandler
 		activityTaskHandler ActivityTaskHandler
+		Reporter            common.Reporter
 	}
 )
 
 // NewWorkflowWorker returns an instance of the workflow worker.
-func NewWorkflowWorker(params WorkerExecutionParameters, factory WorkflowDefinitionFactory, service m.TChanWorkflowService) *WorkflowWorker {
-	return newWorkflowWorkerInternal(params, factory, service, nil)
+func NewWorkflowWorker(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
+	service m.TChanWorkflowService, overrides *WorkerOverrides) *WorkflowWorker {
+	return newWorkflowWorkerInternal(params, factory, service, overrides)
 }
 
 func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
-	service m.TChanWorkflowService, overrides *workerOverrides) *WorkflowWorker {
+	service m.TChanWorkflowService, overrides *WorkerOverrides) *WorkflowWorker {
 	// Get an identity.
 	identity := params.Identity
 	if identity == "" {
@@ -79,7 +81,7 @@ func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory Workflo
 	if overrides != nil && overrides.workflowTaskHander != nil {
 		taskHandler = overrides.workflowTaskHander
 	} else {
-		taskHandler = newWorkflowTaskHandler(params.TaskListName, identity, factory, logger)
+		taskHandler = newWorkflowTaskHandler(params.TaskListName, identity, factory, logger, overrides.Reporter)
 	}
 
 	poller := newWorkflowTaskPoller(
@@ -116,12 +118,12 @@ func (ww *WorkflowWorker) Shutdown() {
 
 // NewActivityWorker returns an instance of the activity worker.
 func NewActivityWorker(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService) *ActivityWorker {
-	return newActivityWorkerInternal(executionParameters, factory, service, nil)
+	service m.TChanWorkflowService, overrides *WorkerOverrides) *ActivityWorker {
+	return newActivityWorkerInternal(executionParameters, factory, service, overrides)
 }
 
 func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, overrides *workerOverrides) *ActivityWorker {
+	service m.TChanWorkflowService, overrides *WorkerOverrides) *ActivityWorker {
 	// Get an identity.
 	identity := executionParameters.Identity
 	if identity == "" {
@@ -135,7 +137,8 @@ func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, fa
 	if overrides != nil && overrides.activityTaskHandler != nil {
 		taskHandler = overrides.activityTaskHandler
 	} else {
-		taskHandler = newActivityTaskHandler(executionParameters.TaskListName, executionParameters.Identity, factory, service, logger)
+		taskHandler = newActivityTaskHandler(executionParameters.TaskListName, executionParameters.Identity,
+			factory, service, logger, overrides.Reporter)
 	}
 	poller := newActivityTaskPoller(
 		service,
@@ -170,13 +173,13 @@ func (aw *ActivityWorker) Shutdown() {
 }
 
 // NewWorkflowClient creates an instance of workflow client that users can start a workflow
-func NewWorkflowClient(options StartWorkflowOptions, service m.TChanWorkflowService) *WorkflowClient {
+func NewWorkflowClient(options StartWorkflowOptions, service m.TChanWorkflowService, reporter common.Reporter) *WorkflowClient {
 	// Get an identity.
 	identity := options.Identity
 	if identity == "" {
 		identity = GetWorkerIdentity(options.TaskListName)
 	}
-	return &WorkflowClient{options: options, workflowService: service, Identity: identity}
+	return &WorkflowClient{options: options, workflowService: service, Identity: identity, reporter: reporter}
 }
 
 // StartWorkflowExecution starts a workflow execution
@@ -208,6 +211,7 @@ func (wc *WorkflowClient) StartWorkflowExecution() (*m.WorkflowExecution, error)
 		return nil, err
 	}
 
+	wc.reporter.IncCounter(common.WorkflowsStartTotalCounter, nil, 1)
 	executionInfo := &m.WorkflowExecution{
 		// TODO: StartWorkflowExecution should return workflow ID as well along with run Id
 		WorkflowId: common.StringPtr(wc.options.WorkflowID),

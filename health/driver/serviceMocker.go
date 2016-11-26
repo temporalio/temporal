@@ -65,5 +65,5 @@ func (se *ServiceMockEngine) StartWorkflowExecution(ctx thrift.Context, startReq
 
 // Start the workflow engine in a different go routine.
 func (se *ServiceMockEngine) Start() {
-  go se.engine.Start()
+	go se.engine.Start()
 }

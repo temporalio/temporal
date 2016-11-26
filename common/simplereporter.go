@@ -14,19 +14,18 @@ type (
 		scope metrics.Scope
 		tags  map[string]string
 
-		messagesSentCount   int64
-		messagesErrorCount  int64
-		messagesSentLatency int64
+		workflowsStartCount      int64
+		activitiesTotalCount     int64
+		decisionsTotalCount      int64
+		workflowsCompletionCount int64
+		workflowsEndToEndLatency int64
 
-		messagesReceivedCount          int64
-		messagesReceivedDuplicateCount int64
-		messagesEndToEndLatency        int64
-		messagesCorruptedCounter       int64
-
-		previousReportTime   time.Time
-		previousPublishCount int64
-		previousConsumeCount int64
-		previousLatency      int64
+		previousReportTime               time.Time
+		previousWorkflowsStartCount      int64
+		previousActivitiesTotalCount     int64
+		previousDecisionsTotalCount      int64
+		previousWorkflowsCompletionCount int64
+		previousWorkflowsEndToEndLatency int64
 	}
 
 	simpleStopWatch struct {
@@ -37,19 +36,13 @@ type (
 	}
 )
 
-// Generator metric
+// Workflow Creation metrics
 const (
-	MessagesSentTotalCounter = "messages-sent-total"
-	MessagesSentErrorCounter = "messages-sent-error"
-	MessagesSentLatency      = "messages-sent-latency"
-)
-
-// Processor metric
-const (
-	MessagesReceivedTotalCounter     = "messages-received-total"
-	MessagesReceivedDuplicateCounter = "messages-received-duplicate"
-	MessagesEndToEndLatency          = "messages-endtoend-latency"
-	MessagesCorruptedCounter         = "messages-corrupted-total"
+	WorkflowsStartTotalCounter      = "workflows-start-total"
+	ActivitiesTotalCounter          = "activities-total"
+	DecisionsTotalCounter           = "decisions-total"
+	WorkflowEndToEndLatency         = "workflows-endtoend-latency"
+	WorkflowsCompletionTotalCounter = "workflows-completion-total"
 )
 
 // NewSimpleReporter create an instance of Reporter which can be used for driver to emit metric to console
@@ -63,16 +56,12 @@ func NewSimpleReporter(scope metrics.Scope, tags map[string]string) Reporter {
 		copyMap(tags, reporter.tags)
 	}
 
-	// Initialize generator metric
-	reporter.messagesSentCount = 0
-	reporter.messagesErrorCount = 0
-	reporter.messagesSentLatency = 0
-
-	// Initialize processor metric
-	reporter.messagesReceivedCount = 0
-	reporter.messagesReceivedDuplicateCount = 0
-	reporter.messagesEndToEndLatency = 0
-	reporter.messagesCorruptedCounter = 0
+	// Initialize metric
+	reporter.workflowsStartCount = 0
+	reporter.activitiesTotalCount = 0
+	reporter.decisionsTotalCount = 0
+	reporter.workflowsCompletionCount = 0
+	reporter.workflowsEndToEndLatency = 0
 
 	return reporter
 }
@@ -105,20 +94,16 @@ func (r *SimpleReporter) GetScope() metrics.Scope {
 // IncCounter reports Counter metric to M3
 func (r *SimpleReporter) IncCounter(name string, tags map[string]string, delta int64) {
 	switch name {
-	case MessagesSentTotalCounter:
-		atomic.AddInt64(&r.messagesSentCount, delta)
-	case MessagesSentErrorCounter:
-		atomic.AddInt64(&r.messagesErrorCount, delta)
-	case MessagesSentLatency:
-		atomic.AddInt64(&r.messagesSentLatency, delta)
-	case MessagesReceivedTotalCounter:
-		atomic.AddInt64(&r.messagesReceivedCount, delta)
-	case MessagesReceivedDuplicateCounter:
-		atomic.AddInt64(&r.messagesReceivedDuplicateCount, delta)
-	case MessagesEndToEndLatency:
-		atomic.AddInt64(&r.messagesEndToEndLatency, delta)
-	case MessagesCorruptedCounter:
-		atomic.AddInt64(&r.messagesCorruptedCounter, delta)
+	case WorkflowsStartTotalCounter:
+		atomic.AddInt64(&r.workflowsStartCount, delta)
+	case ActivitiesTotalCounter:
+		atomic.AddInt64(&r.activitiesTotalCount, delta)
+	case DecisionsTotalCounter:
+		atomic.AddInt64(&r.decisionsTotalCount, delta)
+	case WorkflowsCompletionTotalCounter:
+		atomic.AddInt64(&r.workflowsCompletionCount, delta)
+	case WorkflowEndToEndLatency:
+		atomic.AddInt64(&r.workflowsEndToEndLatency, delta)
 	default:
 		log.WithField(`name`, name).Error(`Unknown metric`)
 	}
@@ -153,78 +138,79 @@ func (r *SimpleReporter) PrintStressMetric() {
 		elapsed = currentTime.Sub(r.previousReportTime) / time.Second
 	}
 
-	total := atomic.LoadInt64(&r.messagesSentCount)
-	errors := atomic.LoadInt64(&r.messagesErrorCount)
-	latency := atomic.LoadInt64(&r.messagesSentLatency)
-	publishThroughput := int64(0)
-	if elapsed > 0 && total > r.previousPublishCount {
-		publishThroughput = (total - r.previousPublishCount) / int64(elapsed)
+	totalWorkflowStarted := atomic.LoadInt64(&r.workflowsStartCount)
+	creationThroughput := int64(0)
+	if elapsed > 0 && totalWorkflowStarted > r.previousWorkflowsStartCount {
+		creationThroughput = (totalWorkflowStarted - r.previousWorkflowsStartCount) / int64(elapsed)
 	}
 
-	messageCount := atomic.LoadInt64(&r.messagesReceivedCount)
-	messageDupCount := atomic.LoadInt64(&r.messagesReceivedDuplicateCount)
-	totalLatency := atomic.LoadInt64(&r.messagesEndToEndLatency)
-	receiveThroughput := int64(0)
-	endToEndLatency := int64(0)
-	if elapsed > 0 && messageCount > r.previousConsumeCount {
-		currentMessageCount := messageCount - r.previousConsumeCount
-		receiveThroughput = currentMessageCount / int64(elapsed)
-		currentLatency := totalLatency - r.previousLatency
-		endToEndLatency = currentLatency / currentMessageCount
+	totalActivitiesCount := atomic.LoadInt64(&r.activitiesTotalCount)
+	activitiesThroughput := int64(0)
+	if elapsed > 0 && totalActivitiesCount > r.previousActivitiesTotalCount {
+		activitiesThroughput = (totalActivitiesCount - r.previousActivitiesTotalCount) / int64(elapsed)
 	}
 
-	if total > 0 {
-		log.Infof("Publish(S=%v, L=%v, E=%v, T=%v)-Consume(R=%v, L=%v, D=%v, T=%v)",
-			total, latency/total, errors, publishThroughput,
-			messageCount, endToEndLatency, messageDupCount, receiveThroughput)
+	totalDecisionsCount := atomic.LoadInt64(&r.decisionsTotalCount)
+	decisionsThroughput := int64(0)
+	if elapsed > 0 && totalDecisionsCount > r.previousDecisionsTotalCount {
+		decisionsThroughput = (totalDecisionsCount - r.previousDecisionsTotalCount) / int64(elapsed)
 	}
 
-	r.previousPublishCount = total
-	r.previousConsumeCount = messageCount
-	r.previousLatency = totalLatency
+	totalWorkflowsCompleted := atomic.LoadInt64(&r.workflowsCompletionCount)
+	completionThroughput := int64(0)
+	if elapsed > 0 && totalWorkflowsCompleted > r.previousWorkflowsCompletionCount {
+		completionThroughput = (totalWorkflowsCompleted - r.previousWorkflowsCompletionCount) / int64(elapsed)
+	}
+
+	var latency int64
+	workflowsLatency := atomic.LoadInt64(&r.workflowsEndToEndLatency)
+	if totalWorkflowsCompleted > 0 && workflowsLatency > r.previousWorkflowsEndToEndLatency {
+		currentLatency := workflowsLatency - r.previousWorkflowsEndToEndLatency
+		latency = currentLatency / totalWorkflowsCompleted
+	}
+
+	log.Infof("Workflows Started(Count=%v, Throughput=%v)", totalWorkflowStarted, creationThroughput)
+	log.Infof("Workflows Completed(Count=%v, Throughput=%v, Average Latency: %v)", totalWorkflowsCompleted, completionThroughput, latency)
+	log.Infof("Activites(Count=%v, Throughput=%v)", totalActivitiesCount, activitiesThroughput)
+	log.Infof("Decisions(Count=%v, Throughput=%v)", totalDecisionsCount, decisionsThroughput)
+
+	r.previousWorkflowsStartCount = totalWorkflowStarted
+	r.previousActivitiesTotalCount = totalActivitiesCount
+	r.previousDecisionsTotalCount = totalDecisionsCount
+	r.previousWorkflowsCompletionCount = totalWorkflowsCompleted
+	r.previousWorkflowsEndToEndLatency = workflowsLatency
 	r.previousReportTime = currentTime
 }
 
-// PrintGeneratorMetric prints the metrics for generator
-func (r *SimpleReporter) PrintGeneratorMetric() {
-	total := atomic.LoadInt64(&r.messagesSentCount)
-	errors := atomic.LoadInt64(&r.messagesErrorCount)
-	latency := atomic.LoadInt64(&r.messagesSentLatency)
+// PrintFinalMetric prints the workflows metrics
+func (r *SimpleReporter) PrintFinalMetric(startTime time.Time, totalMessageCount uint64) {
+	workflowsCount := atomic.LoadInt64(&r.workflowsStartCount)
+	workflowsCompletedCount := atomic.LoadInt64(&r.workflowsCompletionCount)
+	totalLatency := atomic.LoadInt64(&r.workflowsEndToEndLatency)
+	activitiesCount := atomic.LoadInt64(&r.activitiesTotalCount)
+	decisionsCount := atomic.LoadInt64(&r.decisionsTotalCount)
 
-	if total > 0 {
-		log.Infof("Total Messages Sent: %v, Average Latency: %v, Errors: %v",
-			total, latency/total, errors)
-	}
-}
-
-// PrintProcessorMetric prints the processor metrics
-func (r *SimpleReporter) PrintProcessorMetric(startTime time.Time, totalMessageCount uint64) {
-	messageCount := atomic.LoadInt64(&r.messagesReceivedCount)
-	messageDupCount := atomic.LoadInt64(&r.messagesReceivedDuplicateCount)
-	totalLatency := atomic.LoadInt64(&r.messagesEndToEndLatency)
-	corruptedCount := atomic.LoadInt64(&r.messagesCorruptedCounter)
-
-	if messageCount > 0 {
+	var throughput int64
+	var latency int64
+	if workflowsCompletedCount > 0 {
 		elapsed := time.Since(startTime) / time.Second
-		throughput := messageCount / int64(elapsed)
-		latency := totalLatency / messageCount
-
-		log.Infof("Total messages processed: %v, duplicates: %v, Throughput: %v, Average Latency: %v, Corrupted: %v",
-			totalMessageCount, messageDupCount, throughput, time.Duration(latency), corruptedCount)
+		throughput = workflowsCompletedCount / int64(elapsed)
+		latency = totalLatency / workflowsCompletedCount
 	}
+
+	log.Infof("Total workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
+		workflowsCount, workflowsCompletedCount, throughput, time.Duration(latency))
+	log.Infof("Total activites processed: %v, decisions processed: %v", activitiesCount, decisionsCount)
 }
 
 // ResetMetric resets the metric values to zero
 func (r *SimpleReporter) ResetMetric() {
-	// Reset generator metric
-	atomic.StoreInt64(&r.messagesSentCount, 0)
-	atomic.StoreInt64(&r.messagesErrorCount, 0)
-	atomic.StoreInt64(&r.messagesSentLatency, 0)
-
-	// Reset processor metric
-	atomic.StoreInt64(&r.messagesReceivedCount, 0)
-	atomic.StoreInt64(&r.messagesEndToEndLatency, 0)
-	atomic.StoreInt64(&r.messagesCorruptedCounter, 0)
+	// Reset workflow metric
+	atomic.StoreInt64(&r.workflowsStartCount, 0)
+	atomic.StoreInt64(&r.workflowsCompletionCount, 0)
+	atomic.StoreInt64(&r.activitiesTotalCount, 0)
+	atomic.StoreInt64(&r.decisionsTotalCount, 0)
+	atomic.StoreInt64(&r.workflowsEndToEndLatency, 0)
 }
 
 func newSimpleStopWatch(metricName string, reporter *SimpleReporter) *simpleStopWatch {
