@@ -92,6 +92,10 @@ func (s *Host) printMetric() {
 		select {
 		case <-ticker.C:
 			sr.PrintStressMetric()
+			if sr.IsProcessComplete() {
+				sr.PrintFinalMetric()
+				return
+			}
 
 		case <-s.doneCh:
 			return

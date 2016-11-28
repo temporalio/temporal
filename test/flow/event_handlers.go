@@ -29,9 +29,10 @@ type (
 		scheduledActivites           map[string]ResultHandler // Map of Activities(activity ID ->) and their response handlers
 		scheduledEventIDToActivityID map[int64]string         // Mapping from scheduled event ID to activity ID
 		counterID                    int32                    // To generate activity IDs
-		executeStartDecisions        []*m.Decision            // Decisions made during the execute of the workflow
+		executeDecisions             []*m.Decision            // Decisions made during the execute of the workflow
 		completeHandler              CompletionHandler        // events completion handler
 		failureHandler               FailureHandler           // events failure handler
+		contextLogger                *log.Entry
 	}
 )
 
@@ -42,9 +43,10 @@ func newWorkflowExecutionEventHandler(workflowInfo *WorkflowInfo, workflowDefini
 		workflowDefinitionFactory:    workflowDefinitionFactory,
 		scheduledActivites:           make(map[string]ResultHandler),
 		scheduledEventIDToActivityID: make(map[int64]string),
-		executeStartDecisions:        make([]*m.Decision, 0),
+		executeDecisions:             make([]*m.Decision, 0),
 		completeHandler:              completionHandler,
-		failureHandler:               failureHandler}
+		failureHandler:               failureHandler,
+		contextLogger:                logger}
 	return &workflowExecutionEventHandler{context, logger}
 }
 
@@ -66,8 +68,10 @@ func (wc *workflowContext) GenerateActivityID() string {
 	return fmt.Sprintf("%d", activityID)
 }
 
-func (wc *workflowContext) ExecutionStartDecisions() []*m.Decision {
-	return wc.executeStartDecisions
+func (wc *workflowContext) SwapExecuteDecisions(decisions []*m.Decision) []*m.Decision {
+	oldDecisions := wc.executeDecisions
+	wc.executeDecisions = decisions
+	return oldDecisions
 }
 
 func (wc *workflowContext) CreateNewDecision(decisionType m.DecisionType) *m.Decision {
@@ -93,8 +97,9 @@ func (wc *workflowContext) ScheduleActivityTask(parameters ExecuteActivityParame
 	decision := wc.CreateNewDecision(m.DecisionType_ScheduleActivityTask)
 	decision.ScheduleActivityTaskDecisionAttributes = scheduleTaskAttr
 
-	wc.executeStartDecisions = append(wc.executeStartDecisions, decision)
+	wc.executeDecisions = append(wc.executeDecisions, decision)
 	wc.scheduledActivites[scheduleTaskAttr.GetActivityId()] = callback
+	wc.contextLogger.Debugf("Schedule ActivityTask: %s: %+v", scheduleTaskAttr.GetActivityId(), scheduleTaskAttr)
 }
 
 func (weh *workflowExecutionEventHandler) ProcessEvent(event *m.HistoryEvent) ([]*m.Decision, error) {
@@ -157,7 +162,7 @@ func (weh *workflowExecutionEventHandler) handleWorkflowExecutionStarted(
 
 	// Invoke the workflow.
 	workflowDefinition.Execute(weh, attributes.Input)
-	return weh.ExecutionStartDecisions(), nil
+	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskCompleted(
@@ -176,7 +181,7 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskCompleted(
 		// Invoke the callback
 		handler(nil, attributes.GetResult_())
 	}
-	return nil, nil
+	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskFailed(
@@ -198,7 +203,7 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskFailed(
 		// Invoke the callback
 		handler(err, nil)
 	}
-	return nil, nil
+	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskTimedOut(
@@ -218,5 +223,5 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskTimedOut(
 		// Invoke the callback
 		handler(err, nil)
 	}
-	return nil, nil
+	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }

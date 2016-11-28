@@ -58,19 +58,29 @@ func (wf stressWorkflow) Execute(context flow.WorkflowContext, input []byte) {
 		return
 	}
 
-	activityParameters := flow.ExecuteActivityParameters{
-		TaskListName: "testTaskList",
-		ActivityType: m.ActivityType{Name: common.StringPtr("sleepActivity")},
-		Input:        activityInput,
-	}
-	context.ScheduleActivityTask(activityParameters, func(err error, result []byte) {
-		if err != nil {
-			taskFailure := err.(flow.ActivityTaskFailedError)
-			context.Fail(taskFailure.Reason, taskFailure.Details)
-			return
+	wf.runActivityCount(workflowInput.ChainSequence, context, activityInput)
+}
+
+func (wf stressWorkflow) runActivityCount(count int, context flow.WorkflowContext, activityInput []byte) {
+	if count > 0 {
+		activityParameters := flow.ExecuteActivityParameters{
+			TaskListName: "testTaskList",
+			ActivityType: m.ActivityType{Name: common.StringPtr("sleepActivity")},
+			Input:        activityInput,
 		}
-		context.Complete(nil)
-	})
+		context.ScheduleActivityTask(activityParameters, func(err error, result []byte) {
+			if err != nil {
+				taskFailure := err.(flow.ActivityTaskFailedError)
+				context.Fail(taskFailure.Reason, taskFailure.Details)
+				return
+			}
+			if count > 1 {
+				wf.runActivityCount(count-1, context, activityInput)
+			} else {
+				context.Complete(nil)
+			}
+		})
+	}
 }
 
 func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, input []byte) ([]byte, error) {

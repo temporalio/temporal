@@ -14,6 +14,7 @@ type (
 		scope metrics.Scope
 		tags  map[string]string
 
+		startTime                time.Time
 		workflowsStartCount      int64
 		activitiesTotalCount     int64
 		decisionsTotalCount      int64
@@ -62,6 +63,7 @@ func NewSimpleReporter(scope metrics.Scope, tags map[string]string) Reporter {
 	reporter.decisionsTotalCount = 0
 	reporter.workflowsCompletionCount = 0
 	reporter.workflowsEndToEndLatency = 0
+	reporter.startTime = time.Now()
 
 	return reporter
 }
@@ -183,7 +185,7 @@ func (r *SimpleReporter) PrintStressMetric() {
 }
 
 // PrintFinalMetric prints the workflows metrics
-func (r *SimpleReporter) PrintFinalMetric(startTime time.Time, totalMessageCount uint64) {
+func (r *SimpleReporter) PrintFinalMetric() {
 	workflowsCount := atomic.LoadInt64(&r.workflowsStartCount)
 	workflowsCompletedCount := atomic.LoadInt64(&r.workflowsCompletionCount)
 	totalLatency := atomic.LoadInt64(&r.workflowsEndToEndLatency)
@@ -193,7 +195,7 @@ func (r *SimpleReporter) PrintFinalMetric(startTime time.Time, totalMessageCount
 	var throughput int64
 	var latency int64
 	if workflowsCompletedCount > 0 {
-		elapsed := time.Since(startTime) / time.Second
+		elapsed := time.Since(r.startTime) / time.Second
 		throughput = workflowsCompletedCount / int64(elapsed)
 		latency = totalLatency / workflowsCompletedCount
 	}
@@ -201,6 +203,13 @@ func (r *SimpleReporter) PrintFinalMetric(startTime time.Time, totalMessageCount
 	log.Infof("Total workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
 		workflowsCount, workflowsCompletedCount, throughput, time.Duration(latency))
 	log.Infof("Total activites processed: %v, decisions processed: %v", activitiesCount, decisionsCount)
+}
+
+// IsProcessComplete  indicates if we have completed processing.
+func (r *SimpleReporter) IsProcessComplete() bool {
+	totalWorkflowStarted := atomic.LoadInt64(&r.workflowsStartCount)
+	totalWorkflowsCompleted := atomic.LoadInt64(&r.workflowsCompletionCount)
+	return totalWorkflowStarted > 0 && totalWorkflowStarted == totalWorkflowsCompleted
 }
 
 // ResetMetric resets the metric values to zero

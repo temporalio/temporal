@@ -3,6 +3,7 @@ package flow
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/uber/tchannel-go/thrift"
 
@@ -91,7 +92,8 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 	}
 
 	wth.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
-	// wth.contextLogger.Debugf("Processing Workflow Task: %+v", workflowTask.task)
+	wth.contextLogger.Debugf("Processing New Workflow Task: Type=%s, PreviousStartedEventId=%d",
+		workflowTask.task.GetWorkflowType().GetName(), workflowTask.task.GetPreviousStartedEventId())
 
 	// Setup workflow Info
 	workflowInfo := &WorkflowInfo{
@@ -120,8 +122,14 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 	history := workflowTask.task.History
 	decisions := []*m.Decision{}
 
+	startTime := time.Now()
+
 	// Process events
 	for _, event := range history.Events {
+		wth.contextLogger.Debugf("ProcessWorkflowTask: Id=%d, Event=%+v", event.GetEventId(), event)
+		if event.GetEventType() == m.EventType_WorkflowExecutionStarted {
+			startTime = time.Unix(0, event.GetTimestamp())
+		}
 		eventDecisions, err := eventHandler.ProcessEvent(event)
 		if err != nil {
 			return nil, err
@@ -135,8 +143,11 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 
 	eventDecisions := wth.completeWorkflow(isWorkflowCompleted, completionResult, failureReason, failureDetails)
 	if len(eventDecisions) > 0 {
-		wth.reporter.IncCounter(common.WorkflowsCompletionTotalCounter, nil, 1)
 		decisions = append(decisions, eventDecisions...)
+
+		wth.reporter.IncCounter(common.WorkflowsCompletionTotalCounter, nil, 1)
+		elapsed := time.Now().Sub(startTime)
+		wth.reporter.RecordTimer(common.WorkflowEndToEndLatency, nil, elapsed)
 	}
 
 	// Fill the response.
