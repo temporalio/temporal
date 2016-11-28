@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -129,12 +130,14 @@ const (
 
 type (
 	cassandraPersistence struct {
-		session *gocql.Session
-		shardID int
+		session      *gocql.Session
+		lowConslevel gocql.Consistency
+		shardID      int
 	}
 )
 
-func newCassandraWorkflowExecutionPersistence(hosts string, keyspace string) (workflowExecutionPersistence, error) {
+// NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionPersistence implementation
+func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string) (ExecutionPersistence, error) {
 	cluster := common.NewCassandraCluster(hosts)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -145,10 +148,11 @@ func newCassandraWorkflowExecutionPersistence(hosts string, keyspace string) (wo
 	if err != nil {
 		return nil, err
 	}
-	return &cassandraPersistence{shardID: 1, session: session}, nil
+	return &cassandraPersistence{shardID: 1, session: session, lowConslevel: gocql.One}, nil
 }
 
-func newCassandraTaskPersistence(hosts string, keyspace string) (taskPersistence, error) {
+// NewCassandraTaskPersistence is used to create an instance of taskPersistence implementation
+func NewCassandraTaskPersistence(hosts string, keyspace string) (TaskPersistence, error) {
 	cluster := common.NewCassandraCluster(hosts)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -159,7 +163,7 @@ func newCassandraTaskPersistence(hosts string, keyspace string) (taskPersistence
 	if err != nil {
 		return nil, err
 	}
-	return &cassandraPersistence{shardID: -1, session: session}, nil
+	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One}, nil
 }
 
 func (d *cassandraPersistence) CreateWorkflowExecution(request *createWorkflowExecutionRequest) (
@@ -214,7 +218,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *getWorkflowExecutio
 		d.shardID,
 		rowTypeExecution,
 		execution.GetWorkflowId(),
-		rowTypeExecutionTaskUUID)
+		rowTypeExecutionTaskUUID).Consistency(d.lowConslevel)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
@@ -269,10 +273,14 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *updateWorkflowEx
 	}
 
 	if !applied {
-		actualValue := previous["next_event_id"].(int64)
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
+
 		return &conditionFailedError{
-			msg: fmt.Sprintf("Failed to update workflow execution.  condition: %v, actual: %v",
-				request.condition, actualValue),
+			msg: fmt.Sprintf("Failed to update workflow execution.  condition: %v, columns: (%v)",
+				request.condition, strings.Join(columns, ",")),
 		}
 	}
 
@@ -297,9 +305,13 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *deleteWorkflowEx
 	}
 
 	if !applied {
-		actualValue := previous["next_event_id"].(int64)
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
 		return &conditionFailedError{
-			msg: fmt.Sprintf("Failed to delete workflow execution.  condition: %v, actual: %v", request.condition, actualValue),
+			msg: fmt.Sprintf("Failed to delete workflow execution.  condition: %v, columns: (%v)", request.condition,
+				strings.Join(columns, ",")),
 		}
 	}
 
@@ -311,7 +323,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *getTransferTasksRequest
 
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
-		rowTypeTransferTask)
+		rowTypeTransferTask).Consistency(d.lowConslevel)
 
 	iter := query.Iter()
 	if iter == nil {
@@ -445,7 +457,7 @@ func (d *cassandraPersistence) CreateTask(request *createTaskRequest) (*createTa
 		cqlNowTimestamp,
 		lockToken,
 		0,
-		lockToken)
+		lockToken).Consistency(d.lowConslevel)
 
 	if err := query.Exec(); err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -461,7 +473,7 @@ func (d *cassandraPersistence) GetTasks(request *getTasksRequest) (*getTasksResp
 
 	query := d.session.Query(templateGetTasksQuery,
 		request.taskList,
-		request.taskType)
+		request.taskType).Consistency(d.lowConslevel)
 
 	iter := query.Iter()
 	if iter == nil {

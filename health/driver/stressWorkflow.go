@@ -161,6 +161,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 			} else {
 				log.Error(err)
 			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 

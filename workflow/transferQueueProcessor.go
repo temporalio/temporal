@@ -20,8 +20,8 @@ const (
 
 type (
 	transferQueueProcessorImpl struct {
-		executionManager workflowExecutionPersistence
-		taskManager      taskPersistence
+		executionManager ExecutionPersistence
+		taskManager      TaskPersistence
 		isStarted        int32
 		isStopped        int32
 		shutdownWG       sync.WaitGroup
@@ -30,8 +30,8 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(executionManager workflowExecutionPersistence,
-	taskManager taskPersistence, logger bark.Logger) transferQueueProcessor {
+func newTransferQueueProcessor(executionManager ExecutionPersistence,
+	taskManager TaskPersistence, logger bark.Logger) transferQueueProcessor {
 	return &transferQueueProcessorImpl{
 		executionManager: executionManager,
 		taskManager:      taskManager,
@@ -112,15 +112,15 @@ func (t *transferQueueProcessorImpl) processTransferTasks(prevPollInterval time.
 		execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(tsk.workflowID),
 			RunId: common.StringPtr(tsk.runID)}
 
-		createResponse, err1 := t.taskManager.CreateTask(&createTaskRequest{
+		_, err1 := t.taskManager.CreateTask(&createTaskRequest{
 			execution: execution,
 			taskList:  tsk.taskList,
 			data:      transferTask,
 		})
 
 		if err1 == nil {
-			t.logger.Debugf("Processor transfered taskID '%v' to tasklist '%v' using taskID '%v'.",
-				tsk.taskID, tsk.taskList, createResponse.taskID)
+			//t.logger.Debugf("Processor transfered taskID '%v' to tasklist '%v' using taskID '%v'.",
+			//	tsk.taskID, tsk.taskList, createResponse.taskID)
 			err2 := t.executionManager.CompleteTransferTask(&completeTransferTaskRequest{
 				execution: execution,
 				taskID:    tsk.taskID,

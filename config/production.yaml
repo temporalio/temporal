@@ -7,7 +7,7 @@ logging:
 metrics:
   m3:
     hostPort: 127.0.0.1:9052
-    service: minions
+    service: cherami-stress
 
 sentry:
   dsn: http://fill:mein@sentry.local.uber.internal/fillmein

@@ -1,20 +1,21 @@
 serviceName: minions
 
-logging:
-  level: info
-  stdout: true
-
 jaeger:
   disabled: false
 
 stress:
   workflow:
     totalLaunchCount: 10000
-    routineCount: 50
+    routineCount: 1
     chainSequence: 4
     activitySleepMin: 1
     activitySleepMax: 60
-  metrics:
-    m3:
-      hostPort: 127.0.0.1:9052
-      service: cherami-stress
+
+logging:
+  level: info
+  stdout: true
+
+metrics:
+  m3:
+    hostPort: 127.0.0.1:9052
+    service: cherami-stress

@@ -15,15 +15,15 @@ const (
 )
 
 type (
-	// WorkflowTestBaseOptions options to configure workflow test base.
-	WorkflowTestBaseOptions struct {
+	// TestBaseOptions options to configure workflow test base.
+	TestBaseOptions struct {
 		ClusterHost string
 	}
 
-	// WorkflowTestBase wraps the base setup needed to create workflows over engine layer.
-	WorkflowTestBase struct {
-		WorkflowMgr workflowExecutionPersistence
-		TaskMgr     taskPersistence
+	// TestBase wraps the base setup needed to create workflows over engine layer.
+	TestBase struct {
+		WorkflowMgr ExecutionPersistence
+		TaskMgr     TaskPersistence
 		cassandraTestCluster
 	}
 
@@ -35,19 +35,19 @@ type (
 )
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
-func (s *WorkflowTestBase) SetupWorkflowStoreWithOptions(options WorkflowTestBaseOptions) {
+func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
 	s.cassandraTestCluster.setupTestCluster()
 	var err error
-	s.WorkflowMgr, err = newCassandraWorkflowExecutionPersistence(options.ClusterHost,
+	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
 		s.cassandraTestCluster.keyspace)
-	s.TaskMgr, err = newCassandraTaskPersistence(options.ClusterHost, s.cassandraTestCluster.keyspace)
+	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.cassandraTestCluster.keyspace)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func (s *WorkflowTestBase) createWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList string,
+func (s *TestBase) createWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList string,
 	history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64) (
 	string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&createWorkflowExecutionRequest{
@@ -66,7 +66,7 @@ func (s *WorkflowTestBase) createWorkflowExecution(workflowExecution workflow.Wo
 	return response.taskID, nil
 }
 
-func (s *WorkflowTestBase) createWorkflowExecutionManyTasks(workflowExecution workflow.WorkflowExecution,
+func (s *TestBase) createWorkflowExecutionManyTasks(workflowExecution workflow.WorkflowExecution,
 	taskList string, history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64) (string, error) {
 
@@ -95,7 +95,7 @@ func (s *WorkflowTestBase) createWorkflowExecutionManyTasks(workflowExecution wo
 	return response.taskID, nil
 }
 
-func (s *WorkflowTestBase) getWorkflowExecutionInfo(workflowExecution workflow.WorkflowExecution) (*workflowExecutionInfo,
+func (s *TestBase) getWorkflowExecutionInfo(workflowExecution workflow.WorkflowExecution) (*workflowExecutionInfo,
 	error) {
 	response, err := s.WorkflowMgr.GetWorkflowExecution(&getWorkflowExecutionRequest{
 		execution: workflowExecution,
@@ -107,7 +107,7 @@ func (s *WorkflowTestBase) getWorkflowExecutionInfo(workflowExecution workflow.W
 	return response.executionInfo, nil
 }
 
-func (s *WorkflowTestBase) updateWorkflowExecution(updatedInfo *workflowExecutionInfo, decisionScheduleIDs []int64,
+func (s *TestBase) updateWorkflowExecution(updatedInfo *workflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, condition int64) error {
 	transferTasks := []task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
@@ -127,14 +127,14 @@ func (s *WorkflowTestBase) updateWorkflowExecution(updatedInfo *workflowExecutio
 	})
 }
 
-func (s *WorkflowTestBase) deleteWorkflowExecution(workflowExecution workflow.WorkflowExecution, condition int64) error {
+func (s *TestBase) deleteWorkflowExecution(workflowExecution workflow.WorkflowExecution, condition int64) error {
 	return s.WorkflowMgr.DeleteWorkflowExecution(&deleteWorkflowExecutionRequest{
 		execution: workflowExecution,
 		condition: condition,
 	})
 }
 
-func (s *WorkflowTestBase) getTransferTasks(timeout time.Duration, batchSize int) ([]*taskInfo, error) {
+func (s *TestBase) getTransferTasks(timeout time.Duration, batchSize int) ([]*taskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&getTransferTasksRequest{
 		lockTimeout: timeout,
 		batchSize:   batchSize,
@@ -147,7 +147,7 @@ func (s *WorkflowTestBase) getTransferTasks(timeout time.Duration, batchSize int
 	return response.tasks, nil
 }
 
-func (s *WorkflowTestBase) completeTransferTask(workflowExecution workflow.WorkflowExecution, taskID string,
+func (s *TestBase) completeTransferTask(workflowExecution workflow.WorkflowExecution, taskID string,
 	lockToken string) error {
 
 	return s.WorkflowMgr.CompleteTransferTask(&completeTransferTaskRequest{
@@ -157,7 +157,7 @@ func (s *WorkflowTestBase) completeTransferTask(workflowExecution workflow.Workf
 	})
 }
 
-func (s *WorkflowTestBase) createDecisionTask(workflowExecution workflow.WorkflowExecution, taskList string,
+func (s *TestBase) createDecisionTask(workflowExecution workflow.WorkflowExecution, taskList string,
 	decisionScheduleID int64) (string, error) {
 	response, err := s.TaskMgr.CreateTask(&createTaskRequest{
 		execution: workflowExecution,
@@ -175,7 +175,7 @@ func (s *WorkflowTestBase) createDecisionTask(workflowExecution workflow.Workflo
 	return response.taskID, nil
 }
 
-func (s *WorkflowTestBase) createActivityTasks(workflowExecution workflow.WorkflowExecution, activities map[int64]string) (
+func (s *TestBase) createActivityTasks(workflowExecution workflow.WorkflowExecution, activities map[int64]string) (
 	[]string, error) {
 	var taskIDs []string
 	for activityScheduleID, taskList := range activities {
@@ -198,7 +198,7 @@ func (s *WorkflowTestBase) createActivityTasks(workflowExecution workflow.Workfl
 	return taskIDs, nil
 }
 
-func (s *WorkflowTestBase) getTasks(taskList string, taskType int, timeout time.Duration, batchSize int) ([]*taskInfo,
+func (s *TestBase) getTasks(taskList string, taskType int, timeout time.Duration, batchSize int) ([]*taskInfo,
 	error) {
 	response, err := s.TaskMgr.GetTasks(&getTasksRequest{
 		taskList:    taskList,
@@ -214,7 +214,7 @@ func (s *WorkflowTestBase) getTasks(taskList string, taskType int, timeout time.
 	return response.tasks, nil
 }
 
-func (s *WorkflowTestBase) completeTask(workflowExecution workflow.WorkflowExecution, taskList string,
+func (s *TestBase) completeTask(workflowExecution workflow.WorkflowExecution, taskList string,
 	taskType int, taskID string, lockToken string) error {
 
 	return s.TaskMgr.CompleteTask(&completeTaskRequest{
@@ -226,7 +226,7 @@ func (s *WorkflowTestBase) completeTask(workflowExecution workflow.WorkflowExecu
 	})
 }
 
-func (s *WorkflowTestBase) clearTransferQueue() {
+func (s *TestBase) clearTransferQueue() {
 	tasks, err := s.getTransferTasks(time.Minute, 100)
 	if err != nil {
 		for _, t := range tasks {
@@ -256,11 +256,11 @@ func generateRandomKeyspace(n int) string {
 	return string(b)
 }
 
-func (s *WorkflowTestBase) setupWorkflowStore() {
-	s.SetupWorkflowStoreWithOptions(WorkflowTestBaseOptions{ClusterHost: testWorkflowClusterHosts})
+func (s *TestBase) setupWorkflowStore() {
+	s.SetupWorkflowStoreWithOptions(TestBaseOptions{ClusterHost: testWorkflowClusterHosts})
 }
 
-func (s *WorkflowTestBase) tearDownWorkflowStore() {
+func (s *TestBase) tearDownWorkflowStore() {
 	s.cassandraTestCluster.tearDownTestCluster()
 }
 

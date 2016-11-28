@@ -8,12 +8,12 @@ import (
 // Configuration is the configuration used by cherami-stress
 type Configuration struct {
 	Logging      log.Configuration
+	Metrics      metrics.Configuration       `yaml:"metrics"`
 	StressConfig WorkflowStressConfiguration `yaml:"stress"`
 }
 
 // WorkflowStressConfiguration encompasses stress configuration
 type WorkflowStressConfiguration struct {
-	Metrics        metrics.Configuration `yaml:"metrics"`
 	WorkflowConfig WorkflowConfiguration `yaml:"workflow"`
 }
 

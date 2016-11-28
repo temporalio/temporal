@@ -139,7 +139,8 @@ type (
 		lockToken string
 	}
 
-	workflowExecutionPersistence interface {
+	// ExecutionPersistence is the used to manage workflow executions
+	ExecutionPersistence interface {
 		CreateWorkflowExecution(request *createWorkflowExecutionRequest) (*createWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *getWorkflowExecutionRequest) (*getWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *updateWorkflowExecutionRequest) error
@@ -148,7 +149,8 @@ type (
 		CompleteTransferTask(request *completeTransferTaskRequest) error
 	}
 
-	taskPersistence interface {
+	// TaskPersistence is used to manage tasks
+	TaskPersistence interface {
 		CreateTask(request *createTaskRequest) (*createTaskResponse, error)
 		GetTasks(request *getTasksRequest) (*getTasksResponse, error)
 		CompleteTask(request *completeTaskRequest) error

@@ -19,8 +19,8 @@ import (
 type (
 	engineSuite struct {
 		suite.Suite
-		WorkflowTestBase
-		engine           WorkflowEngine
+		TestBase
+		engine           Engine
 		builder          *historyBuilder
 		mockEngine       *EngineImpl
 		mockTaskMgr      *mockTaskPersistence

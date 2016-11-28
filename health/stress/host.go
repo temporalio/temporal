@@ -8,14 +8,15 @@ import (
 
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/health/driver"
+	"code.uber.internal/devexp/minions/workflow"
 )
 
 // Host is created for each host running the stress test
 type Host struct {
-	hostName          string
-	config            Configuration
-	cassandraHostName string
-	reporter          common.Reporter
+	hostName string
+	config   Configuration
+	engine   *workflow.EngineImpl
+	reporter common.Reporter
 
 	instancesWG sync.WaitGroup
 	doneCh      chan struct{}
@@ -30,13 +31,13 @@ var stressMetrics = map[common.MetricName]common.MetricType{
 }
 
 // NewStressHost creates an instance of stress host
-func NewStressHost(cassandraHostName string, instanceName string, config Configuration, reporter common.Reporter) *Host {
+func NewStressHost(engine *workflow.EngineImpl, instanceName string, config Configuration, reporter common.Reporter) *Host {
 	h := &Host{
-		cassandraHostName: cassandraHostName,
-		hostName:          instanceName,
-		config:            config,
-		reporter:          reporter,
-		doneCh:            make(chan struct{}),
+		engine:   engine,
+		hostName: instanceName,
+		config:   config,
+		reporter: reporter,
+		doneCh:   make(chan struct{}),
 	}
 
 	h.reporter.InitMetrics(stressMetrics)
@@ -51,7 +52,7 @@ func (s *Host) Start() {
 	log.Infof("Launching stress workflow with configuration: %+v", workflowConfig)
 
 	go func() {
-		service := driver.NewServiceMockEngine(s.cassandraHostName)
+		service := driver.NewServiceMockEngine(s.engine)
 		service.Start()
 
 		workflowPrams := &driver.WorkflowParams{

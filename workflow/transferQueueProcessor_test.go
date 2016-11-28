@@ -17,7 +17,7 @@ import (
 type (
 	transferQueueProcessorSuite struct {
 		suite.Suite
-		WorkflowTestBase
+		TestBase
 		processor *transferQueueProcessorImpl
 	}
 )
@@ -33,7 +33,7 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	}
 
 	s.setupWorkflowStore()
-	s.processor = newTransferQueueProcessor(s.workflowMgr, s.taskMgr,
+	s.processor = newTransferQueueProcessor(s.WorkflowMgr, s.TaskMgr,
 		bark.NewLoggerFromLogrus(log.New())).(*transferQueueProcessorImpl)
 }
 

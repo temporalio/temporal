@@ -12,6 +12,8 @@ import (
 
 	"code.uber.internal/devexp/minions/common"
 	s "code.uber.internal/devexp/minions/health/stress"
+	"code.uber.internal/devexp/minions/workflow"
+	wmetrics "code.uber.internal/devexp/minions/workflow/metrics"
 )
 
 func main() {
@@ -48,7 +50,8 @@ func main() {
 
 	var reporter common.Reporter
 	if emitMetric == "m3" {
-		m, e := cfg.StressConfig.Metrics.New()
+		log.Infof("M3 metric reporter: hostport=%v, service=%v", cfg.Metrics.M3.HostPort, cfg.Metrics.M3.Service)
+		m, e := cfg.Metrics.New()
 		if e != nil {
 			log.WithField(common.TagErr, e).Fatal(`Failed to initialize metrics`)
 		}
@@ -61,6 +64,23 @@ func main() {
 		reporter = common.NewSimpleReporter(nil, nil)
 	}
 
-	h := s.NewStressHost(host, instanceName, cfg, reporter)
+	m3ReporterClient := wmetrics.NewClient(reporter, wmetrics.Workflow)
+
+	executionPersistence, err2 := workflow.NewCassandraWorkflowExecutionPersistence(host, "workflow")
+	if err2 != nil {
+		panic(err2)
+	}
+
+	executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
+
+	taskPersistence, err3 := workflow.NewCassandraTaskPersistence(host, "workflow")
+	if err3 != nil {
+		panic(err3)
+	}
+
+	taskPersistenceClient := workflow.NewTaskPersistenceClient(taskPersistence, m3ReporterClient)
+
+	engine := workflow.NewWorkflowEngine(executionPersistenceClient, taskPersistenceClient, log.WithField("host", "workflow_host")).(*workflow.EngineImpl)
+	h := s.NewStressHost(engine, instanceName, cfg, reporter)
 	h.Start()
 }

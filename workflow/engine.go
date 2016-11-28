@@ -29,8 +29,8 @@ const (
 type (
 	// EngineImpl wraps up implementation for engine layer.
 	EngineImpl struct {
-		executionManager workflowExecutionPersistence
-		taskManager      taskPersistence
+		executionManager ExecutionPersistence
+		taskManager      TaskPersistence
 		txProcessor      transferQueueProcessor
 		tokenSerializer  taskTokenSerializer
 		logger           bark.Logger
@@ -66,8 +66,8 @@ var (
 )
 
 // NewWorkflowEngine creates an instannce of engine.
-func NewWorkflowEngine(executionManager workflowExecutionPersistence, taskManager taskPersistence,
-	logger bark.Logger) WorkflowEngine {
+func NewWorkflowEngine(executionManager ExecutionPersistence, taskManager TaskPersistence,
+	logger bark.Logger) Engine {
 	return &EngineImpl{
 		executionManager: executionManager,
 		taskManager:      taskManager,

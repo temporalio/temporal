@@ -16,7 +16,7 @@ import (
 type (
 	cassandraPersistenceSuite struct {
 		suite.Suite
-		WorkflowTestBase
+		TestBase
 	}
 )
 
