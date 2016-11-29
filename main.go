@@ -2,7 +2,6 @@ package main
 
 import (
 	"code.uber.internal/devexp/minions/config"
-	"code.uber.internal/devexp/minions/service"
 
 	"code.uber.internal/go-common.git/x/jaeger"
 	"code.uber.internal/go-common.git/x/log"
@@ -28,14 +27,6 @@ func main() {
 		log.Fatalf("Jaeger.InitGlobalTracer failed: %v", err)
 	}
 	defer closer.Close()
-
-	// Start TChannel workflow server
-	server := service.NewTChannelWorkflowServer()
-	err = server.Start(appConfig)
-	if err != nil {
-		log.Fatalf("Error initializing workflow configuration: %s", err)
-		return
-	}
 
 	// ...
 
