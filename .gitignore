@@ -7,7 +7,6 @@
 *.cov
 *.html
 .tmp/
-.gen/
 /vendor
 /minions
 

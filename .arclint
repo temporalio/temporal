@@ -6,7 +6,8 @@
       "exclude": [
         "(^Godeps/)",
         "(^client/)",
-        "(/thrift/)"
+        "(/thrift/)",
+        "(\\.gen/)"
       ]
     },
     "gofmt": {
@@ -15,7 +16,8 @@
       "exclude": [
         "(^Godeps/)",
         "(^client/)",
-        "(/thrift/)"
+        "(/thrift/)",
+        "(\\.gen/)"
        ]
     },
     "govet": {
