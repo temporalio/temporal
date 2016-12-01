@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"math/rand"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/uber/tchannel-go"
 
@@ -66,21 +68,41 @@ func main() {
 
 	m3ReporterClient := wmetrics.NewClient(reporter, wmetrics.Workflow)
 
-	executionPersistence, err2 := workflow.NewCassandraWorkflowExecutionPersistence(host, "workflow")
-	if err2 != nil {
-		panic(err2)
+	var engine workflow.Engine
+
+	if host == "127.0.0.1" {
+		testBase := workflow.TestBase{}
+		testBase.SetupWorkflowStoreWithOptions(workflow.TestBaseOptions{ClusterHost: host})
+		engine = workflow.NewWorkflowEngine(testBase.WorkflowMgr, testBase.TaskMgr, log.WithField("host", "workflow_host"))
+	} else {
+		executionPersistence, err2 := workflow.NewCassandraWorkflowExecutionPersistence(host, "workflow")
+		if err2 != nil {
+			panic(err2)
+		}
+
+		executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
+
+		taskPersistence, err3 := workflow.NewCassandraTaskPersistence(host, "workflow")
+		if err3 != nil {
+			panic(err3)
+		}
+
+		taskPersistenceClient := workflow.NewTaskPersistenceClient(taskPersistence, m3ReporterClient)
+
+		engine = workflow.NewEngineWithMetricsImpl(
+			workflow.NewWorkflowEngine(executionPersistenceClient, taskPersistenceClient, log.WithField("host", "workflow_host")),
+			m3ReporterClient)
 	}
-
-	executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
-
-	taskPersistence, err3 := workflow.NewCassandraTaskPersistence(host, "workflow")
-	if err3 != nil {
-		panic(err3)
-	}
-
-	taskPersistenceClient := workflow.NewTaskPersistenceClient(taskPersistence, m3ReporterClient)
-
-	engine := workflow.NewWorkflowEngine(executionPersistenceClient, taskPersistenceClient, log.WithField("host", "workflow_host")).(*workflow.EngineImpl)
 	h := s.NewStressHost(engine, instanceName, cfg, reporter)
 	h.Start()
+}
+
+func generateRandomKeyspace(n int) string {
+	rand.Seed(time.Now().UnixNano())
+	letterRunes := []rune("workflow")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

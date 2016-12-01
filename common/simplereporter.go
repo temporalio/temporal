@@ -14,19 +14,23 @@ type (
 		scope metrics.Scope
 		tags  map[string]string
 
-		startTime                time.Time
-		workflowsStartCount      int64
-		activitiesTotalCount     int64
-		decisionsTotalCount      int64
-		workflowsCompletionCount int64
-		workflowsEndToEndLatency int64
+		startTime                 time.Time
+		workflowsStartCount       int64
+		activitiesTotalCount      int64
+		decisionsTotalCount       int64
+		workflowsCompletionCount  int64
+		workflowsEndToEndLatency  int64
+		activitiesEndToEndLatency int64
+		decisionsEndToEndLatency  int64
 
-		previousReportTime               time.Time
-		previousWorkflowsStartCount      int64
-		previousActivitiesTotalCount     int64
-		previousDecisionsTotalCount      int64
-		previousWorkflowsCompletionCount int64
-		previousWorkflowsEndToEndLatency int64
+		previousReportTime                time.Time
+		previousWorkflowsStartCount       int64
+		previousActivitiesTotalCount      int64
+		previousDecisionsTotalCount       int64
+		previousWorkflowsCompletionCount  int64
+		previousWorkflowsEndToEndLatency  int64
+		previousActivitiesEndToEndLatency int64
+		previousDecisionsEndToEndLatency  int64
 	}
 
 	simpleStopWatch struct {
@@ -42,8 +46,10 @@ const (
 	WorkflowsStartTotalCounter      = "workflows-start-total"
 	ActivitiesTotalCounter          = "activities-total"
 	DecisionsTotalCounter           = "decisions-total"
-	WorkflowEndToEndLatency         = "workflows-endtoend-latency"
 	WorkflowsCompletionTotalCounter = "workflows-completion-total"
+	WorkflowEndToEndLatency         = "workflows-endtoend-latency"
+	ActivityEndToEndLatency         = "activities-endtoend-latency"
+	DecisionsEndToEndLatency        = "decisions-endtoend-latency"
 )
 
 // NewSimpleReporter create an instance of Reporter which can be used for driver to emit metric to console
@@ -63,6 +69,8 @@ func NewSimpleReporter(scope metrics.Scope, tags map[string]string) Reporter {
 	reporter.decisionsTotalCount = 0
 	reporter.workflowsCompletionCount = 0
 	reporter.workflowsEndToEndLatency = 0
+	reporter.activitiesEndToEndLatency = 0
+	reporter.decisionsEndToEndLatency = 0
 	reporter.startTime = time.Now()
 
 	return reporter
@@ -106,6 +114,10 @@ func (r *SimpleReporter) IncCounter(name string, tags map[string]string, delta i
 		atomic.AddInt64(&r.workflowsCompletionCount, delta)
 	case WorkflowEndToEndLatency:
 		atomic.AddInt64(&r.workflowsEndToEndLatency, delta)
+	case ActivityEndToEndLatency:
+		atomic.AddInt64(&r.activitiesEndToEndLatency, delta)
+	case DecisionsEndToEndLatency:
+		atomic.AddInt64(&r.decisionsEndToEndLatency, delta)
 	default:
 		log.WithField(`name`, name).Error(`Unknown metric`)
 	}
@@ -152,10 +164,24 @@ func (r *SimpleReporter) PrintStressMetric() {
 		activitiesThroughput = (totalActivitiesCount - r.previousActivitiesTotalCount) / int64(elapsed)
 	}
 
+	var activityLatency int64
+	activitiesEndToEndLatency := atomic.LoadInt64(&r.activitiesEndToEndLatency)
+	if totalActivitiesCount > 0 && activitiesEndToEndLatency > r.previousActivitiesEndToEndLatency {
+		currentLatency := activitiesEndToEndLatency - r.previousActivitiesEndToEndLatency
+		activityLatency = currentLatency / totalActivitiesCount
+	}
+
 	totalDecisionsCount := atomic.LoadInt64(&r.decisionsTotalCount)
 	decisionsThroughput := int64(0)
 	if elapsed > 0 && totalDecisionsCount > r.previousDecisionsTotalCount {
 		decisionsThroughput = (totalDecisionsCount - r.previousDecisionsTotalCount) / int64(elapsed)
+	}
+
+	var decisionsLatency int64
+	decisionsEndToEndLatency := atomic.LoadInt64(&r.decisionsEndToEndLatency)
+	if totalDecisionsCount > 0 && decisionsEndToEndLatency > r.previousDecisionsEndToEndLatency {
+		currentLatency := decisionsEndToEndLatency - r.previousDecisionsEndToEndLatency
+		activityLatency = currentLatency / totalDecisionsCount
 	}
 
 	totalWorkflowsCompleted := atomic.LoadInt64(&r.workflowsCompletionCount)
@@ -171,16 +197,22 @@ func (r *SimpleReporter) PrintStressMetric() {
 		latency = currentLatency / totalWorkflowsCompleted
 	}
 
-	log.Infof("Workflows Started(Count=%v, Throughput=%v)", totalWorkflowStarted, creationThroughput)
-	log.Infof("Workflows Completed(Count=%v, Throughput=%v, Average Latency: %v)", totalWorkflowsCompleted, completionThroughput, latency)
-	log.Infof("Activites(Count=%v, Throughput=%v)", totalActivitiesCount, activitiesThroughput)
-	log.Infof("Decisions(Count=%v, Throughput=%v)", totalDecisionsCount, decisionsThroughput)
+	log.Infof("Workflows Started(Count=%v, Throughput=%v)",
+		totalWorkflowStarted, creationThroughput)
+	log.Infof("Workflows Completed(Count=%v, Throughput=%v, Average Latency: %v)",
+		totalWorkflowsCompleted, completionThroughput, latency)
+	log.Infof("Activites(Count=%v, Throughput=%v, Average Latency: %v)",
+		totalActivitiesCount, activitiesThroughput, activityLatency)
+	log.Infof("Decisions(Count=%v, Throughput=%v, Average Latency: %v)",
+		totalDecisionsCount, decisionsThroughput, decisionsLatency)
 
 	r.previousWorkflowsStartCount = totalWorkflowStarted
 	r.previousActivitiesTotalCount = totalActivitiesCount
 	r.previousDecisionsTotalCount = totalDecisionsCount
 	r.previousWorkflowsCompletionCount = totalWorkflowsCompleted
 	r.previousWorkflowsEndToEndLatency = workflowsLatency
+	r.previousActivitiesEndToEndLatency = activitiesEndToEndLatency
+	r.previousDecisionsEndToEndLatency = decisionsEndToEndLatency
 	r.previousReportTime = currentTime
 }
 
@@ -190,19 +222,39 @@ func (r *SimpleReporter) PrintFinalMetric() {
 	workflowsCompletedCount := atomic.LoadInt64(&r.workflowsCompletionCount)
 	totalLatency := atomic.LoadInt64(&r.workflowsEndToEndLatency)
 	activitiesCount := atomic.LoadInt64(&r.activitiesTotalCount)
+	totalActivitiesLatency := atomic.LoadInt64(&r.activitiesEndToEndLatency)
 	decisionsCount := atomic.LoadInt64(&r.decisionsTotalCount)
+	totalDecisionsLatency := atomic.LoadInt64(&r.decisionsEndToEndLatency)
+
+	elapsed := time.Since(r.startTime) / time.Second
 
 	var throughput int64
 	var latency int64
 	if workflowsCompletedCount > 0 {
-		elapsed := time.Since(r.startTime) / time.Second
 		throughput = workflowsCompletedCount / int64(elapsed)
 		latency = totalLatency / workflowsCompletedCount
 	}
 
-	log.Infof("Total workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
+	var activityThroughput int64
+	var activityLatency int64
+	if activitiesCount > 0 {
+		activityThroughput = activitiesCount / int64(elapsed)
+		activityLatency = totalActivitiesLatency / activitiesCount
+	}
+
+	var decisionsThroughput int64
+	var decisionLatency int64
+	if decisionsCount > 0 {
+		decisionsThroughput = decisionsCount / int64(elapsed)
+		decisionLatency = totalDecisionsLatency / decisionsCount
+	}
+
+	log.Infof("Total Workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
 		workflowsCount, workflowsCompletedCount, throughput, time.Duration(latency))
-	log.Infof("Total activites processed: %v, decisions processed: %v", activitiesCount, decisionsCount)
+	log.Infof("Total Activites processed:(Count=%v, Throughput=%v, Average Latency=%v)",
+		activitiesCount, activityThroughput, activityLatency)
+	log.Infof("Total Decisions processed:(Count=%v, Throughput=%v, Average Latency=%v)",
+		decisionsCount, decisionsThroughput, decisionLatency)
 }
 
 // IsProcessComplete  indicates if we have completed processing.

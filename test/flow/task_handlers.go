@@ -91,9 +91,9 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 		return nil, fmt.Errorf("Nil workflowtask provided.")
 	}
 
-	wth.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
-	wth.contextLogger.Debugf("Processing New Workflow Task: Type=%s, PreviousStartedEventId=%d",
-		workflowTask.task.GetWorkflowType().GetName(), workflowTask.task.GetPreviousStartedEventId())
+	// wth.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
+	// wth.contextLogger.Debugf("Processing New Workflow Task: Type=%s, PreviousStartedEventId=%d",
+	// 	workflowTask.task.GetWorkflowType().GetName(), workflowTask.task.GetPreviousStartedEventId())
 
 	// Setup workflow Info
 	workflowInfo := &WorkflowInfo{
@@ -126,7 +126,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 
 	// Process events
 	for _, event := range history.Events {
-		wth.contextLogger.Debugf("ProcessWorkflowTask: Id=%d, Event=%+v", event.GetEventId(), event)
+		// wth.contextLogger.Debugf("ProcessWorkflowTask: Id=%d, Event=%+v", event.GetEventId(), event)
 		if event.GetEventType() == m.EventType_WorkflowExecutionStarted {
 			startTime = time.Unix(0, event.GetTimestamp())
 		}
@@ -195,8 +195,8 @@ func newActivityTaskHandler(taskListName string, identity string, factory Activi
 
 // Execute executes an implementation of the activity.
 func (ath *activityTaskHandler) Execute(context context.Context, activityTask *ActivityTask) (interface{}, error) {
-	ath.contextLogger.Debugf("activityTaskHandler::Execute: %+v", activityTask.task)
-	ath.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
+	//ath.contextLogger.Debugf("activityTaskHandler::Execute: %+v", activityTask.task)
+	//ath.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
 
 	activityExecutionContext := &activityExecutionContext{
 		taskToken: activityTask.task.TaskToken,

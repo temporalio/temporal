@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
+
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/test/flow"
@@ -103,7 +105,7 @@ func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, inp
 // LaunchWorkflows starts workflows.
 func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParams,
 	service *ServiceMockEngine, reporter common.Reporter) error {
-	// logrusSettings()
+	logrusSettings()
 
 	workerOverrides := &flow.WorkerOverrides{Reporter: reporter}
 	// Workflow execution parameters.
@@ -152,7 +154,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 		defer goWaitGroup.Done()
 
 		for i := 0; i < createCount; i++ {
-			options.WorkflowID = fmt.Sprintf("stressWorkflowId-%d-%d", routineId, i)
+			options.WorkflowID = fmt.Sprintf("%s-%d-%d", uuid.New(), routineId, i)
 			workflowClient := flow.NewWorkflowClient(options, service, reporter)
 			_, err := workflowClient.StartWorkflowExecution()
 			if err == nil {

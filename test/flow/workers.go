@@ -89,7 +89,8 @@ func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory Workflo
 		params.TaskListName,
 		identity,
 		taskHandler,
-		logger)
+		logger,
+		overrides.Reporter)
 	worker := newBaseWorker(baseWorkerOptions{
 		routineCount:    params.ConcurrentPollRoutineSize,
 		taskPoller:      poller,
@@ -145,7 +146,8 @@ func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, fa
 		executionParameters.TaskListName,
 		identity,
 		taskHandler,
-		logger)
+		logger,
+		overrides.Reporter)
 	worker := newBaseWorker(baseWorkerOptions{
 		routineCount:    executionParameters.ConcurrentPollRoutineSize,
 		taskPoller:      poller,

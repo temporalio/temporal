@@ -40,6 +40,12 @@ const (
 	CreateTaskScope
 	GetTasksScope
 	CompleteTaskScope
+	StartWorkflowExecutionScope
+	PollForDecisionTaskScope
+	PollForActivityTaskScope
+	RespondDecisionTaskCompletedScope
+	RespondActivityTaskCompletedScope
+	RespondActivityTaskFailedScope
 )
 
 // ScopeToTags record the scope name for all services
@@ -55,6 +61,12 @@ var ScopeToTags = [NumServices][]map[string]string{
 		{OperationTagName: CreateTaskOperationTagValue},
 		{OperationTagName: GetTasksOperationTagValue},
 		{OperationTagName: CompleteTaskOperationTagValue},
+		{OperationTagName: StartWorkflowExecutionOperationTagValue},
+		{OperationTagName: PollForDecisionTaskOperationTagValue},
+		{OperationTagName: PollForActivityTaskOperationTagValue},
+		{OperationTagName: RespondDecisionTaskCompletedOperationTagValue},
+		{OperationTagName: RespondActivityTaskCompletedOperationTagValue},
+		{OperationTagName: RespondActivityTaskFailedOperationTagValue},
 	},
 }
 
@@ -93,13 +105,19 @@ var GaugeNames = [NumServices]map[int]string{}
 
 // Workflow operation tag values as seen by the M3 backend
 const (
-	CreateWorkflowExecutionOperationTagValue = "CreateWorkflowExecution"
-	GetWorkflowExecutionOperationTagValue    = "GetWorkflowExecution"
-	UpdateWorkflowExecutionOperationTagValue = "UpdateWorkflowExecution"
-	DeleteWorkflowExecutionOperationTagValue = "DeleteWorkflowExecution"
-	GetTransferTasksOperationTagValue        = "GetTransferTasks"
-	CompleteTransferTaskOperationTagValue    = "CompleteTransferTask"
-	CreateTaskOperationTagValue              = "CreateTask"
-	GetTasksOperationTagValue                = "GetTasks"
-	CompleteTaskOperationTagValue            = "CompleteTask"
+	CreateWorkflowExecutionOperationTagValue      = "CreateWorkflowExecution"
+	GetWorkflowExecutionOperationTagValue         = "GetWorkflowExecution"
+	UpdateWorkflowExecutionOperationTagValue      = "UpdateWorkflowExecution"
+	DeleteWorkflowExecutionOperationTagValue      = "DeleteWorkflowExecution"
+	GetTransferTasksOperationTagValue             = "GetTransferTasks"
+	CompleteTransferTaskOperationTagValue         = "CompleteTransferTask"
+	CreateTaskOperationTagValue                   = "CreateTask"
+	GetTasksOperationTagValue                     = "GetTasks"
+	CompleteTaskOperationTagValue                 = "CompleteTask"
+	StartWorkflowExecutionOperationTagValue       = "StartWorkflowExecution"
+	PollForDecisionTaskOperationTagValue          = "PollForDecisionTask"
+	PollForActivityTaskOperationTagValue          = "PollForActivityTask"
+	RespondDecisionTaskCompletedOperationTagValue = "RespondDecisionTaskCompleted"
+	RespondActivityTaskCompletedOperationTagValue = "RespondActivityTaskCompleted"
+	RespondActivityTaskFailedOperationTagValue    = "RespondActivityTaskFailed"
 )

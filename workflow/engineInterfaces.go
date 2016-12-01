@@ -17,6 +17,9 @@ type (
 		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
 		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error
+
+		Start()
+		Stop()
 	}
 
 	historySerializer interface {

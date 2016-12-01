@@ -27,7 +27,7 @@ var (
 type (
 	// TaskPoller interface to poll for a single task
 	TaskPoller interface {
-		PollAndProcessSingleTask() error
+		PollAndProcessSingleTask(routineID int) error
 	}
 
 	// workflowTaskPoller implements polling/processing a workflow task
@@ -37,6 +37,7 @@ type (
 		service       m.TChanWorkflowService
 		taskHandler   WorkflowTaskHandler
 		contextLogger *log.Entry
+		reporter      common.Reporter
 	}
 
 	// activityTaskPoller implements polling/processing a workflow task
@@ -46,6 +47,7 @@ type (
 		service       m.TChanWorkflowService
 		taskHandler   ActivityTaskHandler
 		contextLogger *log.Entry
+		reporter      common.Reporter
 	}
 )
 
@@ -72,19 +74,27 @@ func isServiceTransientError(err error) bool {
 }
 
 func newWorkflowTaskPoller(service m.TChanWorkflowService, taskListName string, identity string,
-	taskHandler WorkflowTaskHandler, logger *log.Entry) *workflowTaskPoller {
+	taskHandler WorkflowTaskHandler, logger *log.Entry, reporter common.Reporter) *workflowTaskPoller {
 	return &workflowTaskPoller{
 		service:       service,
 		taskListName:  taskListName,
 		identity:      identity,
 		taskHandler:   taskHandler,
-		contextLogger: logger}
+		contextLogger: logger,
+		reporter:      reporter}
 }
 
 // PollAndProcessSingleTask process one single task
-func (wtp *workflowTaskPoller) PollAndProcessSingleTask() error {
+func (wtp *workflowTaskPoller) PollAndProcessSingleTask(routineID int) error {
+	startTime := time.Now()
+	defer func() {
+		deltaTime := time.Now().Sub(startTime)
+		wtp.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
+		wtp.reporter.RecordTimer(common.DecisionsEndToEndLatency, nil, deltaTime)
+	}()
+
 	// Get the task.
-	workflowTask, err := wtp.poll()
+	workflowTask, err := wtp.poll(routineID)
 	if err != nil {
 		return err
 	}
@@ -115,8 +125,8 @@ func (wtp *workflowTaskPoller) PollAndProcessSingleTask() error {
 }
 
 // Poll for a single workflow task from the service
-func (wtp *workflowTaskPoller) poll() (*WorkflowTask, error) {
-	wtp.contextLogger.Debug("workflowTaskPoller::Poll")
+func (wtp *workflowTaskPoller) poll(routineID int) (*WorkflowTask, error) {
+	wtp.contextLogger.Debugf("[%d]workflowTaskPoller::Poll", routineID)
 	request := &m.PollForDecisionTaskRequest{
 		TaskList: common.TaskListPtr(m.TaskList{Name: common.StringPtr(wtp.taskListName)}),
 		Identity: common.StringPtr(wtp.identity),
@@ -136,17 +146,19 @@ func (wtp *workflowTaskPoller) poll() (*WorkflowTask, error) {
 }
 
 func newActivityTaskPoller(service m.TChanWorkflowService, taskListName string, identity string,
-	taskHandler ActivityTaskHandler, logger *log.Entry) *activityTaskPoller {
+	taskHandler ActivityTaskHandler, logger *log.Entry, reporter common.Reporter) *activityTaskPoller {
 	return &activityTaskPoller{
 		service:       service,
 		taskListName:  taskListName,
 		identity:      identity,
 		taskHandler:   taskHandler,
-		contextLogger: logger}
+		contextLogger: logger,
+		reporter:      reporter}
 }
 
 // Poll for a single activity task from the service
-func (atp *activityTaskPoller) poll() (*ActivityTask, error) {
+func (atp *activityTaskPoller) poll(routineID int) (*ActivityTask, error) {
+	atp.contextLogger.Debugf("[%d]activityTaskPoller::Poll", routineID)
 	request := &m.PollForActivityTaskRequest{
 		TaskList: common.TaskListPtr(m.TaskList{Name: common.StringPtr(atp.taskListName)}),
 		Identity: common.StringPtr(atp.identity),
@@ -166,9 +178,16 @@ func (atp *activityTaskPoller) poll() (*ActivityTask, error) {
 }
 
 // PollAndProcessSingleTask process one single activity task
-func (atp *activityTaskPoller) PollAndProcessSingleTask() error {
+func (atp *activityTaskPoller) PollAndProcessSingleTask(routineID int) error {
+	startTime := time.Now()
+	defer func() {
+		deltaTime := time.Now().Sub(startTime)
+		atp.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
+		atp.reporter.RecordTimer(common.ActivityEndToEndLatency, nil, deltaTime)
+	}()
+
 	// Get the task.
-	activityTask, err := atp.poll()
+	activityTask, err := atp.poll(routineID)
 	if err != nil {
 		return err
 	}

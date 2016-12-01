@@ -97,7 +97,7 @@ func (bw *baseWorker) execute(routineID int) {
 			continue
 		}
 
-		err := bw.options.taskPoller.PollAndProcessSingleTask()
+		err := bw.options.taskPoller.PollAndProcessSingleTask(routineID)
 		if err != nil {
 			log.WithFields(log.Fields{tagWorkerID: bw.options.identity, tagRoutineID: routineID}).Error("Poll failed with error:", err)
 			bw.retrier.Failed()

@@ -11,13 +11,13 @@ import (
 type (
 	// ServiceMockEngine implements TChanWorkflowService to talk to engine directly
 	ServiceMockEngine struct {
-		engine *workflow.EngineImpl
+		engine workflow.Engine
 		logger bark.Logger
 	}
 )
 
 // NewServiceMockEngine creats an isntance of mocker service layer for the engine
-func NewServiceMockEngine(engine *workflow.EngineImpl) *ServiceMockEngine {
+func NewServiceMockEngine(engine workflow.Engine) *ServiceMockEngine {
 	mockEngine := &ServiceMockEngine{}
 	mockEngine.logger = bark.NewLoggerFromLogrus(log.New())
 	mockEngine.engine = engine

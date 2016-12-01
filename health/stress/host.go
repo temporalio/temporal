@@ -15,7 +15,7 @@ import (
 type Host struct {
 	hostName string
 	config   Configuration
-	engine   *workflow.EngineImpl
+	engine   workflow.Engine
 	reporter common.Reporter
 
 	instancesWG sync.WaitGroup
@@ -28,10 +28,12 @@ var stressMetrics = map[common.MetricName]common.MetricType{
 	common.ActivitiesTotalCounter:          common.Counter,
 	common.DecisionsTotalCounter:           common.Counter,
 	common.WorkflowEndToEndLatency:         common.Timer,
+	common.ActivityEndToEndLatency:         common.Timer,
+	common.DecisionsEndToEndLatency:        common.Timer,
 }
 
 // NewStressHost creates an instance of stress host
-func NewStressHost(engine *workflow.EngineImpl, instanceName string, config Configuration, reporter common.Reporter) *Host {
+func NewStressHost(engine workflow.Engine, instanceName string, config Configuration, reporter common.Reporter) *Host {
 	h := &Host{
 		engine:   engine,
 		hostName: instanceName,
@@ -93,6 +95,7 @@ func (s *Host) printMetric() {
 		select {
 		case <-ticker.C:
 			sr.PrintStressMetric()
+			sr.PrintFinalMetric()
 			if sr.IsProcessComplete() {
 				sr.PrintFinalMetric()
 				return
