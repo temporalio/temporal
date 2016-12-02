@@ -14,6 +14,7 @@ import (
 
 	"code.uber.internal/devexp/minions/common"
 	s "code.uber.internal/devexp/minions/health/stress"
+	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/workflow"
 	wmetrics "code.uber.internal/devexp/minions/workflow/metrics"
 )
@@ -72,17 +73,20 @@ func main() {
 
 	if host == "127.0.0.1" {
 		testBase := workflow.TestBase{}
-		testBase.SetupWorkflowStoreWithOptions(workflow.TestBaseOptions{ClusterHost: host, DropKeySpace: true})
+		options := workflow.TestBaseOptions{}
+		options.ClusterHost = host
+		options.DropKeySpace = true
+		testBase.SetupWorkflowStoreWithOptions(options.TestBaseOptions)
 		engine = workflow.NewWorkflowEngine(testBase.WorkflowMgr, testBase.TaskMgr, log.WithField("host", "workflow_host"))
 	} else {
-		executionPersistence, err2 := workflow.NewCassandraWorkflowExecutionPersistence(host, "workflow")
+		executionPersistence, err2 := persistence.NewCassandraWorkflowExecutionPersistence(host, "workflow")
 		if err2 != nil {
 			panic(err2)
 		}
 
 		executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
 
-		taskPersistence, err3 := workflow.NewCassandraTaskPersistence(host, "workflow")
+		taskPersistence, err3 := persistence.NewCassandraTaskPersistence(host, "workflow")
 		if err3 != nil {
 			panic(err3)
 		}

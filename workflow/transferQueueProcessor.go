@@ -9,6 +9,7 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/persistence"
 )
 
 const (
@@ -20,8 +21,8 @@ const (
 
 type (
 	transferQueueProcessorImpl struct {
-		executionManager ExecutionPersistence
-		taskManager      TaskPersistence
+		executionManager persistence.ExecutionManager
+		taskManager      persistence.TaskManager
 		isStarted        int32
 		isStopped        int32
 		shutdownWG       sync.WaitGroup
@@ -30,8 +31,8 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(executionManager ExecutionPersistence,
-	taskManager TaskPersistence, logger bark.Logger) transferQueueProcessor {
+func newTransferQueueProcessor(executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager, logger bark.Logger) transferQueueProcessor {
 	return &transferQueueProcessorImpl{
 		executionManager: executionManager,
 		taskManager:      taskManager,
@@ -86,9 +87,9 @@ func (t *transferQueueProcessorImpl) processorPump() {
 }
 
 func (t *transferQueueProcessorImpl) processTransferTasks(prevPollInterval time.Duration) time.Duration {
-	response, err := t.executionManager.GetTransferTasks(&getTransferTasksRequest{
-		lockTimeout: transferTaskLockTimeout,
-		batchSize:   transferTaskBatchSize,
+	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
+		LockTimeout: transferTaskLockTimeout,
+		BatchSize:   transferTaskBatchSize,
 	})
 
 	if err != nil {
@@ -96,39 +97,39 @@ func (t *transferQueueProcessorImpl) processTransferTasks(prevPollInterval time.
 		return minDuration(2*prevPollInterval, transferProcessorMaxPollInterval)
 	}
 
-	tasks := response.tasks
+	tasks := response.Tasks
 	if len(tasks) == 0 {
 		return minDuration(2*prevPollInterval, transferProcessorMaxPollInterval)
 	}
 
 	for _, tsk := range tasks {
-		var transferTask task
-		switch tsk.taskType {
-		case taskTypeActivity:
-			transferTask = &activityTask{taskList: tsk.taskList, scheduleID: tsk.scheduleID}
-		case taskTypeDecision:
-			transferTask = &decisionTask{taskList: tsk.taskList, scheduleID: tsk.scheduleID}
+		var transferTask persistence.Task
+		switch tsk.TaskType {
+		case persistence.TaskTypeActivity:
+			transferTask = &persistence.ActivityTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID}
+		case persistence.TaskTypeDecision:
+			transferTask = &persistence.DecisionTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID}
 		}
-		execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(tsk.workflowID),
-			RunId: common.StringPtr(tsk.runID)}
+		execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(tsk.WorkflowID),
+			RunId: common.StringPtr(tsk.RunID)}
 
-		_, err1 := t.taskManager.CreateTask(&createTaskRequest{
-			execution: execution,
-			taskList:  tsk.taskList,
-			data:      transferTask,
+		_, err1 := t.taskManager.CreateTask(&persistence.CreateTaskRequest{
+			Execution: execution,
+			TaskList:  tsk.TaskList,
+			Data:      transferTask,
 		})
 
 		if err1 == nil {
 			//t.logger.Debugf("Processor transfered taskID '%v' to tasklist '%v' using taskID '%v'.",
 			//	tsk.taskID, tsk.taskList, createResponse.taskID)
-			err2 := t.executionManager.CompleteTransferTask(&completeTransferTaskRequest{
-				execution: execution,
-				taskID:    tsk.taskID,
-				lockToken: tsk.lockToken,
+			err2 := t.executionManager.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
+				Execution: execution,
+				TaskID:    tsk.TaskID,
+				LockToken: tsk.LockToken,
 			})
 
 			if err2 != nil {
-				t.logger.Warnf("Processor unable to complete transfer task '%v': %v", tsk.taskID, err2)
+				t.logger.Warnf("Processor unable to complete transfer task '%v': %v", tsk.TaskID, err2)
 			}
 		} else {
 			t.logger.Warnf("Processor failed to create task: %v", err1)

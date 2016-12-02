@@ -6,6 +6,7 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/persistence"
 
 	"github.com/uber-common/bark"
 )
@@ -40,14 +41,14 @@ func newHistoryBuilder(logger bark.Logger) *historyBuilder {
 		outstandingDecisionTask:          make(map[int64]int64),
 		previousDecisionTaskStartedEvent: emptyEventID,
 		nextEventID:                      firstEventID,
-		state:                            workflowStateCreated,
+		state:                            persistence.WorkflowStateCreated,
 		logger:                           logger.WithField(tagWorkflowComponent, tagValueHistoryBuilderComponent),
 	}
 }
 
-func (b *historyBuilder) loadExecutionInfo(executionInfo *workflowExecutionInfo) error {
+func (b *historyBuilder) loadExecutionInfo(executionInfo *persistence.WorkflowExecutionInfo) error {
 	if executionInfo != nil {
-		h, err := b.serializer.Deserialize(executionInfo.history)
+		h, err := b.serializer.Deserialize(executionInfo.History)
 		if err != nil {
 			return err
 		}
@@ -220,7 +221,7 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 			return nil
 		}
 		b.outstandingDecisionTask[scheduleEventID] = eventID
-		b.state = workflowStateRunning
+		b.state = persistence.WorkflowStateRunning
 	case workflow.EventType_DecisionTaskCompleted:
 		outstandingDecisionCount := len(b.outstandingDecisionTask)
 		scheduleEventID := event.GetDecisionTaskCompletedEventAttributes().GetScheduledEventId()
@@ -276,14 +277,14 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 				"{OutStandingActivityTasks: %v, OutStandingDecisionTasks: %v}", len(b.outstandingActivities),
 				len(b.outstandingDecisionTask)))
 		}
-		b.state = workflowStateCompleted
+		b.state = persistence.WorkflowStateCompleted
 	case workflow.EventType_WorkflowExecutionFailed:
 		if b.hasPendingTasks() || b.hasPendingDecisionTask() {
 			logInvalidHistoryActionEvent(b.logger, tagValueActionFailWorkflow, eventID, fmt.Sprintf(
 				"{OutStandingActivityTasks: %v, OutStandingDecisionTasks: %v}", len(b.outstandingActivities),
 				len(b.outstandingDecisionTask)))
 		}
-		b.state = workflowStateCompleted
+		b.state = persistence.WorkflowStateCompleted
 	case workflow.EventType_CompleteWorkflowExecutionFailed:
 	default:
 		logInvalidHistoryActionEvent(b.logger, tagValueActionUnknownEvent, eventID, fmt.Sprintf(

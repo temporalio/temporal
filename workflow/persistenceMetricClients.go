@@ -3,23 +3,24 @@ package workflow
 import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/workflow/metrics"
 )
 
 type (
 	workflowExecutionPersistenceClient struct {
 		m3Client    common.Client
-		persistence ExecutionPersistence
+		persistence persistence.ExecutionManager
 	}
 
 	taskPersistenceClient struct {
 		m3Client    common.Client
-		persistence TaskPersistence
+		persistence persistence.TaskManager
 	}
 )
 
 // NewWorkflowExecutionPersistenceClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceClient(persistence ExecutionPersistence, m3Client common.Client) ExecutionPersistence {
+func NewWorkflowExecutionPersistenceClient(persistence persistence.ExecutionManager, m3Client common.Client) persistence.ExecutionManager {
 	return &workflowExecutionPersistenceClient{
 		persistence: persistence,
 		m3Client:    m3Client,
@@ -27,14 +28,14 @@ func NewWorkflowExecutionPersistenceClient(persistence ExecutionPersistence, m3C
 }
 
 // NewTaskPersistenceClient creates a client to manage tasks
-func NewTaskPersistenceClient(persistence TaskPersistence, m3Client common.Client) TaskPersistence {
+func NewTaskPersistenceClient(persistence persistence.TaskManager, m3Client common.Client) persistence.TaskManager {
 	return &taskPersistenceClient{
 		persistence: persistence,
 		m3Client:    m3Client,
 	}
 }
 
-func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *createWorkflowExecutionRequest) (*createWorkflowExecutionResponse, error) {
+func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateWorkflowExecutionScope, metrics.WorkflowLatencyTimer)
@@ -50,7 +51,7 @@ func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *cr
 	return response, err
 }
 
-func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *getWorkflowExecutionRequest) (*getWorkflowExecutionResponse, error) {
+func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
 	p.m3Client.IncCounter(metrics.GetWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetWorkflowExecutionScope, metrics.WorkflowLatencyTimer)
@@ -66,7 +67,7 @@ func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *getWo
 	return response, err
 }
 
-func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *updateWorkflowExecutionRequest) error {
+func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowLatencyTimer)
@@ -74,7 +75,7 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *up
 	sw.Stop()
 
 	if err != nil {
-		if _, ok := err.(*conditionFailedError); !ok {
+		if _, ok := err.(*persistence.ConditionFailedError); !ok {
 			p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowFailures)
 		}
 	}
@@ -82,7 +83,7 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *up
 	return err
 }
 
-func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *deleteWorkflowExecutionRequest) error {
+func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
 	p.m3Client.IncCounter(metrics.DeleteWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.DeleteWorkflowExecutionScope, metrics.WorkflowLatencyTimer)
@@ -90,7 +91,7 @@ func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *de
 	sw.Stop()
 
 	if err != nil {
-		if _, ok := err.(*conditionFailedError); !ok {
+		if _, ok := err.(*persistence.ConditionFailedError); !ok {
 			p.m3Client.IncCounter(metrics.DeleteWorkflowExecutionScope, metrics.WorkflowFailures)
 		}
 	}
@@ -98,7 +99,7 @@ func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *de
 	return err
 }
 
-func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *getTransferTasksRequest) (*getTransferTasksResponse, error) {
+func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
 	p.m3Client.IncCounter(metrics.GetTransferTasksScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetTransferTasksScope, metrics.WorkflowLatencyTimer)
@@ -112,7 +113,7 @@ func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *getTransf
 	return response, err
 }
 
-func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *completeTransferTaskRequest) error {
+func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
 	p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CompleteTransferTaskScope, metrics.WorkflowLatencyTimer)
@@ -128,7 +129,7 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *compl
 	return err
 }
 
-func (p *taskPersistenceClient) CreateTask(request *createTaskRequest) (*createTaskResponse, error) {
+func (p *taskPersistenceClient) CreateTask(request *persistence.CreateTaskRequest) (*persistence.CreateTaskResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateTaskScope, metrics.WorkflowLatencyTimer)
@@ -142,7 +143,7 @@ func (p *taskPersistenceClient) CreateTask(request *createTaskRequest) (*createT
 	return response, err
 }
 
-func (p *taskPersistenceClient) GetTasks(request *getTasksRequest) (*getTasksResponse, error) {
+func (p *taskPersistenceClient) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
 	p.m3Client.IncCounter(metrics.GetTasksScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetTasksScope, metrics.WorkflowLatencyTimer)
@@ -156,7 +157,7 @@ func (p *taskPersistenceClient) GetTasks(request *getTasksRequest) (*getTasksRes
 	return response, err
 }
 
-func (p *taskPersistenceClient) CompleteTask(request *completeTaskRequest) error {
+func (p *taskPersistenceClient) CompleteTask(request *persistence.CompleteTaskRequest) error {
 	p.m3Client.IncCounter(metrics.CompleteTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CompleteTaskScope, metrics.WorkflowLatencyTimer)
