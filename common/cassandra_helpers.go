@@ -20,7 +20,9 @@ func NewCassandraCluster(clusterHosts string) *gocql.ClusterConfig {
 		}
 	}
 
-	return gocql.NewCluster(hosts...)
+	cluster := gocql.NewCluster(hosts...)
+	cluster.ProtoVersion = 4
+	return cluster
 }
 
 // CreateCassandraKeyspace creates the keyspace using this session for given replica count
