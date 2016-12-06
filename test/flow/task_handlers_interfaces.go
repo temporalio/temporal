@@ -1,7 +1,7 @@
 package flow
 
 import (
-	"context"
+	"golang.org/x/net/context"
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
 )

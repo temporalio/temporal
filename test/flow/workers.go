@@ -36,6 +36,7 @@ type (
 		poller              TaskPoller // TaskPoller to poll the tasks.
 		worker              *baseWorker
 		identity            string
+		contextLogger       *log.Entry
 	}
 
 	// ActivityRegistry collection of activity implementations
@@ -50,38 +51,36 @@ type (
 		poller              *activityTaskPoller
 		worker              *baseWorker
 		identity            string
+		contextLogger       *log.Entry
 	}
 
-	// WorkerOverrides overrides.
-	WorkerOverrides struct {
+	// workerOverrides overrides.
+	workerOverrides struct {
 		workflowTaskHander  WorkflowTaskHandler
 		activityTaskHandler ActivityTaskHandler
-		Reporter            common.Reporter
 	}
 )
 
 // NewWorkflowWorker returns an instance of the workflow worker.
 func NewWorkflowWorker(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
-	service m.TChanWorkflowService, overrides *WorkerOverrides) *WorkflowWorker {
-	return newWorkflowWorkerInternal(params, factory, service, overrides)
+	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter) *WorkflowWorker {
+	return newWorkflowWorkerInternal(params, factory, service, logger, reporter, nil)
 }
 
 func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
-	service m.TChanWorkflowService, overrides *WorkerOverrides) *WorkflowWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter, overrides *workerOverrides) *WorkflowWorker {
 	// Get an identity.
 	identity := params.Identity
 	if identity == "" {
 		identity = GetWorkerIdentity(params.TaskListName)
 	}
 
-	logger := log.WithFields(log.Fields{tagTaskListName: params.TaskListName})
-
 	// Get a workflow task handler.
 	var taskHandler WorkflowTaskHandler
 	if overrides != nil && overrides.workflowTaskHander != nil {
 		taskHandler = overrides.workflowTaskHander
 	} else {
-		taskHandler = newWorkflowTaskHandler(params.TaskListName, identity, factory, logger, overrides.Reporter)
+		taskHandler = newWorkflowTaskHandler(params.TaskListName, identity, factory, logger, reporter)
 	}
 
 	poller := newWorkflowTaskPoller(
@@ -90,7 +89,7 @@ func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory Workflo
 		identity,
 		taskHandler,
 		logger,
-		overrides.Reporter)
+		reporter)
 	worker := newBaseWorker(baseWorkerOptions{
 		routineCount:    params.ConcurrentPollRoutineSize,
 		taskPoller:      poller,
@@ -119,19 +118,17 @@ func (ww *WorkflowWorker) Shutdown() {
 
 // NewActivityWorker returns an instance of the activity worker.
 func NewActivityWorker(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, overrides *WorkerOverrides) *ActivityWorker {
-	return newActivityWorkerInternal(executionParameters, factory, service, overrides)
+	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter) *ActivityWorker {
+	return newActivityWorkerInternal(executionParameters, factory, service, logger, reporter, nil)
 }
 
 func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, overrides *WorkerOverrides) *ActivityWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter, overrides *workerOverrides) *ActivityWorker {
 	// Get an identity.
 	identity := executionParameters.Identity
 	if identity == "" {
 		identity = GetWorkerIdentity(executionParameters.TaskListName)
 	}
-
-	logger := log.WithFields(log.Fields{tagTaskListName: executionParameters.TaskListName})
 
 	// Get a activity task handler.
 	var taskHandler ActivityTaskHandler
@@ -139,7 +136,7 @@ func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, fa
 		taskHandler = overrides.activityTaskHandler
 	} else {
 		taskHandler = newActivityTaskHandler(executionParameters.TaskListName, executionParameters.Identity,
-			factory, service, logger, overrides.Reporter)
+			factory, service, logger, reporter)
 	}
 	poller := newActivityTaskPoller(
 		service,
@@ -147,7 +144,7 @@ func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, fa
 		identity,
 		taskHandler,
 		logger,
-		overrides.Reporter)
+		reporter)
 	worker := newBaseWorker(baseWorkerOptions{
 		routineCount:    executionParameters.ConcurrentPollRoutineSize,
 		taskPoller:      poller,

@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	log "github.com/Sirupsen/logrus"
+	"golang.org/x/net/context"
 )
 
 type (
@@ -47,8 +47,8 @@ type (
 
 	// ActivityTaskFailedError wraps the details of the failure of activity
 	ActivityTaskFailedError struct {
-		Reason  string
-		Details []byte
+		reason  string
+		details []byte
 	}
 
 	// ActivityTaskTimeoutError wraps the details of the timeout of activity
@@ -57,18 +57,39 @@ type (
 	}
 )
 
+// Error from error.Error
 func (e ActivityTaskFailedError) Error() string {
-	return fmt.Sprintf("Reason: %s, Details: %s", e.Reason, e.Details)
+	return fmt.Sprintf("Reason: %s, Details: %s", e.reason, e.details)
 }
 
+// Details of the error
+func (e ActivityTaskFailedError) Details() []byte {
+	return e.details
+}
+
+// Reason of the error
+func (e ActivityTaskFailedError) Reason() string {
+	return e.reason
+}
+
+// Error from error.Error
 func (e ActivityTaskTimeoutError) Error() string {
 	return fmt.Sprintf("TimeoutType: %v", e.TimeoutType)
+}
+
+// Details of the error
+func (e ActivityTaskTimeoutError) Details() []byte {
+	return nil
+}
+
+// Reason of the error
+func (e ActivityTaskTimeoutError) Reason() string {
+	return e.Error()
 }
 
 // Get last non replayed event ID.
 func (eh eventsHelper) LastNonReplayedID() int64 {
 	if eh.workflowTask.task.PreviousStartedEventId == nil {
-		// TODO: Just hack until we check if this mandatory field on PollForDecisionTaskResponse.s
 		return 0
 	}
 	return *eh.workflowTask.task.PreviousStartedEventId
@@ -88,7 +109,7 @@ func newWorkflowTaskHandler(taskListName string, identity string, factory Workfl
 // ProcessWorkflowTask processes each all the events of the workflow task.
 func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) (*m.RespondDecisionTaskCompletedRequest, error) {
 	if workflowTask == nil {
-		return nil, fmt.Errorf("Nil workflowtask provided.")
+		return nil, fmt.Errorf("nil workflowtask provided")
 	}
 
 	// wth.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
@@ -104,20 +125,16 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 
 	isWorkflowCompleted := false
 	var completionResult []byte
-	var failureReason *string
-	var failureDetails []byte
+	var failure Error
 
-	completionHandler := func(result []byte) {
+	completionHandler := func(result []byte, err Error) {
 		completionResult = result
+		failure = err
 		isWorkflowCompleted = true
-	}
-	failureHandler := func(reason string, details []byte) {
-		failureReason = common.StringPtr(reason)
-		failureDetails = details
 	}
 
 	eventHandler := newWorkflowExecutionEventHandler(
-		workflowInfo, wth.workflowDefFactory, completionHandler, failureHandler, wth.contextLogger)
+		workflowInfo, wth.workflowDefFactory, completionHandler, wth.contextLogger)
 	helperEvents := &eventsHelper{workflowTask: workflowTask}
 	history := workflowTask.task.History
 	decisions := []*m.Decision{}
@@ -141,7 +158,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 		}
 	}
 
-	eventDecisions := wth.completeWorkflow(isWorkflowCompleted, completionResult, failureReason, failureDetails)
+	eventDecisions := wth.completeWorkflow(isWorkflowCompleted, completionResult, failure)
 	if len(eventDecisions) > 0 {
 		decisions = append(decisions, eventDecisions...)
 
@@ -161,14 +178,14 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 }
 
 func (wth *workflowTaskHandler) completeWorkflow(isWorkflowCompleted bool, completionResult []byte,
-	failureReason *string, failureDetails []byte) []*m.Decision {
+	err Error) []*m.Decision {
 	decisions := []*m.Decision{}
-	if failureReason != nil {
+	if err != nil {
 		// Workflow failures
 		failDecision := createNewDecision(m.DecisionType_FailWorkflowExecution)
 		failDecision.FailWorkflowExecutionDecisionAttributes = &m.FailWorkflowExecutionDecisionAttributes{
-			Reason:  failureReason,
-			Details: failureDetails,
+			Reason:  common.StringPtr(err.Reason()),
+			Details: err.Details(),
 		}
 		decisions = append(decisions, failDecision)
 	} else if isWorkflowCompleted {
@@ -213,8 +230,8 @@ func (ath *activityTaskHandler) Execute(context context.Context, activityTask *A
 		failureErr := err.(ActivityTaskFailedError)
 		responseFailure := &m.RespondActivityTaskFailedRequest{
 			TaskToken: activityTask.task.TaskToken,
-			Reason:    common.StringPtr(failureErr.Reason),
-			Details:   failureErr.Details,
+			Reason:    common.StringPtr(failureErr.Reason()),
+			Details:   failureErr.Details(),
 			Identity:  common.StringPtr(ath.identity)}
 		return responseFailure, nil
 	}

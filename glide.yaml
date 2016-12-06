@@ -16,3 +16,4 @@ import:
   - internal/lru
   - internal/murmur
   - internal/streams
+- package: github.com/golang/mock/gomock

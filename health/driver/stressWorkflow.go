@@ -12,6 +12,7 @@ import (
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/test/flow"
+	"code.uber.internal/devexp/minions/test/workflow"
 	log "github.com/Sirupsen/logrus"
 )
 
@@ -35,7 +36,24 @@ type (
 		sleepMin time.Duration
 		sleepMax time.Duration
 	}
+
+	workflowError struct {
+		reason  string
+		details []byte
+	}
 )
+
+func (we *workflowError) Reason() string {
+	return we.reason
+}
+
+func (we *workflowError) Details() []byte {
+	return we.details
+}
+
+func (we *workflowError) Error() string {
+	return we.reason
+}
 
 func logrusSettings() {
 	formatter := &log.TextFormatter{}
@@ -45,51 +63,40 @@ func logrusSettings() {
 }
 
 // Stress workflow decider
-func (wf stressWorkflow) Execute(context flow.WorkflowContext, input []byte) {
+func (wf stressWorkflow) Execute(ctx workflow.Context, input []byte) (result []byte, err workflow.Error) {
 	workflowInput := &WorkflowParams{}
-	err := json.Unmarshal(input, workflowInput)
+	err1 := json.Unmarshal(input, workflowInput)
 	if err != nil {
-		context.Fail(err.Error(), []byte("Failed to parse the workflow input"))
-		return
+		return nil, &workflowError{reason: err1.Error(), details: nil}
 	}
 
 	activityParams := &sleepActivityParams{sleepMin: workflowInput.ActivitySleepMin, sleepMax: workflowInput.ActivitySleepMax}
-	activityInput, err := json.Marshal(activityParams)
-	if err != nil {
-		context.Fail(err.Error(), []byte("Failed to serialize sleep activity input"))
-		return
+	activityInput, err1 := json.Marshal(activityParams)
+	if err1 != nil {
+		return nil, &workflowError{reason: err1.Error(), details: []byte("Failed to serialize sleep activity input")}
 	}
 
-	wf.runActivityCount(workflowInput.ChainSequence, context, activityInput)
-}
+	activityParameters := flow.ExecuteActivityParameters{
+		TaskListName: "testTaskList",
+		ActivityType: m.ActivityType{Name: common.StringPtr("sleepActivity")},
+		Input:        activityInput,
+	}
 
-func (wf stressWorkflow) runActivityCount(count int, context flow.WorkflowContext, activityInput []byte) {
-	if count > 0 {
-		activityParameters := flow.ExecuteActivityParameters{
-			TaskListName: "testTaskList",
-			ActivityType: m.ActivityType{Name: common.StringPtr("sleepActivity")},
-			Input:        activityInput,
+	for i := 0; i < workflowInput.ChainSequence; i++ {
+		_, err2 := ctx.ExecuteActivity(activityParameters)
+		if err2 != nil {
+			return nil, err2
 		}
-		context.ScheduleActivityTask(activityParameters, func(err error, result []byte) {
-			if err != nil {
-				taskFailure := err.(flow.ActivityTaskFailedError)
-				context.Fail(taskFailure.Reason, taskFailure.Details)
-				return
-			}
-			if count > 1 {
-				wf.runActivityCount(count-1, context, activityInput)
-			} else {
-				context.Complete(nil)
-			}
-		})
 	}
+	return nil, nil
 }
 
-func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, input []byte) ([]byte, error) {
+func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, input []byte) ([]byte, flow.Error) {
 	activityParams := &sleepActivityParams{}
 	err := json.Unmarshal(input, activityParams)
 	if err != nil {
-		return nil, &flow.ActivityTaskFailedError{Reason: "failed to parse input with error:" + err.Error(), Details: input}
+		// TODO: fix this error types.
+		return nil, &workflowError{reason: err.Error(), details: []byte("Failed to de-serialize sleep activity input")}
 	}
 
 	// log.Infof("Activity parameters: %+v", activityParams)
@@ -106,22 +113,22 @@ func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, inp
 func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParams,
 	service *ServiceMockEngine, reporter common.Reporter) error {
 	logrusSettings()
+	logger := log.WithFields(log.Fields{})
 
-	workerOverrides := &flow.WorkerOverrides{Reporter: reporter}
 	// Workflow execution parameters.
 	workflowExecutionParameters := flow.WorkerExecutionParameters{}
 	workflowExecutionParameters.TaskListName = "testTaskList"
 	workflowExecutionParameters.ConcurrentPollRoutineSize = 4
 
-	workflowFactory := func(wt m.WorkflowType) (flow.WorkflowDefinition, error) {
-		return &stressWorkflow{}, nil
+	workflowFactory := func(wt m.WorkflowType) (flow.WorkflowDefinition, flow.Error) {
+		return workflow.NewWorkflowDefinition(stressWorkflow{}), nil
 	}
-	activityFactory := func(at m.ActivityType) (flow.ActivityImplementation, error) {
+	activityFactory := func(at m.ActivityType) (flow.ActivityImplementation, flow.Error) {
 		return &stressSleepActivity{}, nil
 	}
 
 	// Launch worker.
-	workflowWorker := flow.NewWorkflowWorker(workflowExecutionParameters, workflowFactory, service, workerOverrides)
+	workflowWorker := flow.NewWorkflowWorker(workflowExecutionParameters, workflowFactory, service, logger, reporter)
 	workflowWorker.Start()
 
 	// Create activity execution parameters.
@@ -130,7 +137,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 	activityExecutionParameters.ConcurrentPollRoutineSize = 10
 
 	// Register activity instances and launch the worker.
-	activityWorker := flow.NewActivityWorker(activityExecutionParameters, activityFactory, service, workerOverrides)
+	activityWorker := flow.NewActivityWorker(activityExecutionParameters, activityFactory, service, logger, reporter)
 	activityWorker.Start()
 
 	// Start a workflow.

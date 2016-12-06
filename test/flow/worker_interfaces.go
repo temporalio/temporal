@@ -6,17 +6,23 @@ import (
 )
 
 type (
+	// Error to return from Workflow and Activity implementations.
+	Error interface {
+		error
+		Reason() string
+		Details() []byte
+	}
+
 	// ResultHandler that returns result
-	ResultHandler func(err error, result []byte)
+	ResultHandler func(result []byte, err Error)
 
 	// WorkflowContext Represents the context for workflow/decider.
 	// Should only be used within the scope of workflow definition
 	// TODO: Should model around GO context (When adding Cancel feature)
 	WorkflowContext interface {
-		ActivityClient
+		AsyncActivityClient
 		WorkflowInfo() *WorkflowInfo
-		Complete(result []byte)
-		Fail(reason string, details []byte)
+		Complete(result []byte, err Error)
 	}
 
 	// ActivityExecutionContext is context object passed to an activity implementation.
@@ -33,16 +39,16 @@ type (
 
 	// ActivityImplementation wraps the code to execute an activity
 	ActivityImplementation interface {
-		Execute(context ActivityExecutionContext, input []byte) ([]byte, error)
+		Execute(context ActivityExecutionContext, input []byte) ([]byte, Error)
 	}
 
 	// WorkflowDefinitionFactory that returns a workflow definition for a specific
 	// workflow type.
-	WorkflowDefinitionFactory func(workflowType m.WorkflowType) (WorkflowDefinition, error)
+	WorkflowDefinitionFactory func(workflowType m.WorkflowType) (WorkflowDefinition, Error)
 
 	// ActivityImplementationFactory that returns a activity implementation for a specific
 	// activity type.
-	ActivityImplementationFactory func(activityType m.ActivityType) (ActivityImplementation, error)
+	ActivityImplementationFactory func(activityType m.ActivityType) (ActivityImplementation, Error)
 
 	// ExecuteActivityParameters configuration parameters for scheduling an activity
 	ExecuteActivityParameters struct {
@@ -56,9 +62,9 @@ type (
 		HeartbeatTimeoutSeconds       int32
 	}
 
-	// ActivityClient for dynamically schedule an activity for execution
-	ActivityClient interface {
-		ScheduleActivityTask(parameters ExecuteActivityParameters, callback ResultHandler)
+	// AsyncActivityClient for requesting activity execution
+	AsyncActivityClient interface {
+		ExecuteActivity(parameters ExecuteActivityParameters, callback ResultHandler)
 	}
 
 	// StartWorkflowOptions configuration parameters for starting a workflow
@@ -79,10 +85,6 @@ type (
 		workflowService   m.TChanWorkflowService
 		Identity          string
 		reporter          common.Reporter
-		// struct methods.
-		// WorkflowExecution() m.WorkflowExecution
-		// WorkflowType() m.WorkflowType
-		// StartWorkflowExecution() (m.WorkflowExecution, error)
 	}
 
 	// WorkflowInfo is the information that the decider has access to during workflow execution.

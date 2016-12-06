@@ -10,10 +10,7 @@ import (
 
 type (
 	// CompletionHandler Handler to indicate completion result
-	CompletionHandler func(result []byte)
-
-	// FailureHandler Handler to indicate failure of the events.
-	FailureHandler func(reason string, details []byte)
+	CompletionHandler func(result []byte, err Error)
 
 	// workflowExecutionEventHandler handler to handle workflowExecutionEventHandler
 	workflowExecutionEventHandler struct {
@@ -31,13 +28,12 @@ type (
 		counterID                    int32                    // To generate activity IDs
 		executeDecisions             []*m.Decision            // Decisions made during the execute of the workflow
 		completeHandler              CompletionHandler        // events completion handler
-		failureHandler               FailureHandler           // events failure handler
 		contextLogger                *log.Entry
 	}
 )
 
 func newWorkflowExecutionEventHandler(workflowInfo *WorkflowInfo, workflowDefinitionFactory WorkflowDefinitionFactory,
-	completionHandler CompletionHandler, failureHandler FailureHandler, logger *log.Entry) *workflowExecutionEventHandler {
+	completionHandler CompletionHandler, logger *log.Entry) *workflowExecutionEventHandler {
 	context := &workflowContext{
 		workflowInfo:                 workflowInfo,
 		workflowDefinitionFactory:    workflowDefinitionFactory,
@@ -45,7 +41,6 @@ func newWorkflowExecutionEventHandler(workflowInfo *WorkflowInfo, workflowDefini
 		scheduledEventIDToActivityID: make(map[int64]string),
 		executeDecisions:             make([]*m.Decision, 0),
 		completeHandler:              completionHandler,
-		failureHandler:               failureHandler,
 		contextLogger:                logger}
 	return &workflowExecutionEventHandler{context, logger}
 }
@@ -54,12 +49,8 @@ func (wc *workflowContext) WorkflowInfo() *WorkflowInfo {
 	return wc.workflowInfo
 }
 
-func (wc *workflowContext) Complete(result []byte) {
-	wc.completeHandler(result)
-}
-
-func (wc *workflowContext) Fail(reason string, details []byte) {
-	wc.failureHandler(reason, details)
+func (wc *workflowContext) Complete(result []byte, err Error) {
+	wc.completeHandler(result, err)
 }
 
 func (wc *workflowContext) GenerateActivityID() string {
@@ -80,7 +71,7 @@ func (wc *workflowContext) CreateNewDecision(decisionType m.DecisionType) *m.Dec
 	}
 }
 
-func (wc *workflowContext) ScheduleActivityTask(parameters ExecuteActivityParameters, callback ResultHandler) {
+func (wc *workflowContext) ExecuteActivity(parameters ExecuteActivityParameters, callback ResultHandler) {
 	scheduleTaskAttr := &m.ScheduleActivityTaskDecisionAttributes{}
 	if parameters.ActivityID == nil {
 		scheduleTaskAttr.ActivityId = common.StringPtr(wc.GenerateActivityID())
@@ -99,12 +90,12 @@ func (wc *workflowContext) ScheduleActivityTask(parameters ExecuteActivityParame
 
 	wc.executeDecisions = append(wc.executeDecisions, decision)
 	wc.scheduledActivites[scheduleTaskAttr.GetActivityId()] = callback
-	// wc.contextLogger.Debugf("Schedule ActivityTask: %s: %+v", scheduleTaskAttr.GetActivityId(), scheduleTaskAttr)
+	//wc.contextLogger.Debugf("ExectueActivity: %s: %+v", scheduleTaskAttr.GetActivityId(), scheduleTaskAttr)
 }
 
 func (weh *workflowExecutionEventHandler) ProcessEvent(event *m.HistoryEvent) ([]*m.Decision, error) {
 	if event == nil {
-		return nil, fmt.Errorf("Nil event provided.")
+		return nil, fmt.Errorf("nil event provided")
 	}
 
 	switch event.GetEventType() {
@@ -145,7 +136,7 @@ func (weh *workflowExecutionEventHandler) ProcessEvent(event *m.HistoryEvent) ([
 	case m.EventType_TimerFired:
 		// TODO:
 	default:
-		return nil, fmt.Errorf("Missing event handler for event type: %v", event)
+		return nil, fmt.Errorf("missing event handler for event type: %v", event)
 	}
 	return nil, nil
 }
@@ -170,16 +161,16 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskCompleted(
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find activity ID for the event: %v", attributes)
+		return nil, fmt.Errorf("unable to find activity ID for the event: %v", attributes)
 	}
 	handler, ok := weh.scheduledActivites[activityID]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find callback handler for the event: %v with activity ID: %v", attributes, activityID)
+		return nil, fmt.Errorf("unable to find callback handler for the event: %v with activity ID: %v", attributes, activityID)
 	}
 
 	if handler != nil {
 		// Invoke the callback
-		handler(nil, attributes.GetResult_())
+		handler(attributes.GetResult_(), nil)
 	}
 	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
@@ -189,19 +180,19 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskFailed(
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find activity ID for the event: %v", attributes)
+		return nil, fmt.Errorf("unable to find activity ID for the event: %v", attributes)
 	}
 	handler, ok := weh.scheduledActivites[activityID]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find callback handler for the event: %v", attributes)
+		return nil, fmt.Errorf("unable to find callback handler for the event: %v", attributes)
 	}
 
 	if handler != nil {
 		err := &ActivityTaskFailedError{
-			Reason:  *attributes.Reason,
-			Details: attributes.Details}
+			reason:  *attributes.Reason,
+			details: attributes.Details}
 		// Invoke the callback
-		handler(err, nil)
+		handler(nil, err)
 	}
 	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
@@ -211,17 +202,17 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskTimedOut(
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find activity ID for the event: %v", attributes)
+		return nil, fmt.Errorf("unable to find activity ID for the event: %v", attributes)
 	}
 	handler, ok := weh.scheduledActivites[activityID]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find callback handler for the event: %v", attributes)
+		return nil, fmt.Errorf("unable to find callback handler for the event: %v", attributes)
 	}
 
 	if handler != nil {
 		err := &ActivityTaskTimeoutError{TimeoutType: attributes.GetTimeoutType()}
 		// Invoke the callback
-		handler(err, nil)
+		handler(nil, err)
 	}
 	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
 }
