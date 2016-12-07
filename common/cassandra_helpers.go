@@ -31,7 +31,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 	if overwrite {
 		DropCassandraKeyspace(s, keyspace)
 	}
-	err = s.Query(fmt.Sprintf(`CREATE KEYSPACE %s WITH replication = {
+	err = s.Query(fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {
 		'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, replicas)).Exec()
 	if err != nil {
 		log.WithField(TagErr, err).Error(`create keyspace error`)

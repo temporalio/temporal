@@ -17,12 +17,13 @@ const (
 	taskLockDuration      = 10 * time.Second
 	conditionalRetryCount = 5
 
-	retryPersistenceOperationInitialInterval    = 50 * time.Millisecond
+	retryPersistenceOperationInitialInterval = 50 * time.Millisecond
+	// TODO: Just minimizing for demo from 10 * time.second to time.second
 	retryPersistenceOperationMaxInterval        = time.Second
 	retryPersistenceOperationExpirationInterval = 10 * time.Second
 
 	retryLongPollInitialInterval    = 10 * time.Millisecond
-	retryLongPollMaxInterval        = 10 * time.Second
+	retryLongPollMaxInterval        = 10 * time.Millisecond
 	retryLongPollExpirationInterval = 2 * time.Minute
 )
 

@@ -154,6 +154,12 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 		if event.GetEventId() >= helperEvents.LastNonReplayedID() {
 			if eventDecisions != nil {
 				decisions = append(decisions, eventDecisions...)
+				for _, d := range decisions {
+					if d.GetDecisionType() == m.DecisionType_ScheduleActivityTask {
+						wth.contextLogger.Infof("Scheduling Activity: %s",
+							d.GetScheduleActivityTaskDecisionAttributes().GetActivityType().GetName())
+					}
+				}
 			}
 		}
 	}
@@ -212,7 +218,7 @@ func newActivityTaskHandler(taskListName string, identity string, factory Activi
 
 // Execute executes an implementation of the activity.
 func (ath *activityTaskHandler) Execute(context context.Context, activityTask *ActivityTask) (interface{}, error) {
-	//ath.contextLogger.Debugf("activityTaskHandler::Execute: %+v", activityTask.task)
+	ath.contextLogger.Infof("Execute Activity: %s", activityTask.task.GetActivityType().GetName())
 	//ath.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
 
 	activityExecutionContext := &activityExecutionContext{

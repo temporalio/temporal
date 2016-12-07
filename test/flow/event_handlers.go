@@ -90,7 +90,7 @@ func (wc *workflowContext) ExecuteActivity(parameters ExecuteActivityParameters,
 
 	wc.executeDecisions = append(wc.executeDecisions, decision)
 	wc.scheduledActivites[scheduleTaskAttr.GetActivityId()] = callback
-	//wc.contextLogger.Debugf("ExectueActivity: %s: %+v", scheduleTaskAttr.GetActivityId(), scheduleTaskAttr)
+	// wc.contextLogger.Infof("Scheduling Activity: %+v", parameters.ActivityType.GetName())
 }
 
 func (weh *workflowExecutionEventHandler) ProcessEvent(event *m.HistoryEvent) ([]*m.Decision, error) {

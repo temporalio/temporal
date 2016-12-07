@@ -7,6 +7,7 @@ THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift
 # list all executables
 PROGS = minions \
 	cmd/stress/stress \
+	cmd/demo/demo \
 
 minions: main.go \
 	$(wildcard config/*.go)  \
@@ -16,6 +17,14 @@ cmd/stress/stress: cmd/stress/main.go \
         $(wildcard health/driver/*.go) \
         $(wildcard health/stress/*.go) \
 				$(wildcard test/flow/*.go) \
+				$(wildcard common/*.go) \
+				$(wildcard common/**/*.go) \
+				$(wildcard workflow/*.go) \
+				$(wildcard store/*.go) \
+
+cmd/demo/demo: cmd/demo/*.go \
+				$(wildcard test/flow/*.go) \
+				$(wildcard common/*.go) \
 				$(wildcard common/**/*.go) \
 				$(wildcard workflow/*.go) \
 				$(wildcard store/*.go) \

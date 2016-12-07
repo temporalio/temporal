@@ -72,7 +72,7 @@ func main() {
 
 	if host == "127.0.0.1" {
 		testBase := workflow.TestBase{}
-		testBase.SetupWorkflowStoreWithOptions(workflow.TestBaseOptions{ClusterHost: host})
+		testBase.SetupWorkflowStoreWithOptions(workflow.TestBaseOptions{ClusterHost: host, DropKeySpace: true})
 		engine = workflow.NewWorkflowEngine(testBase.WorkflowMgr, testBase.TaskMgr, log.WithField("host", "workflow_host"))
 	} else {
 		executionPersistence, err2 := workflow.NewCassandraWorkflowExecutionPersistence(host, "workflow")

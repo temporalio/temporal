@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"math/rand"
+	"strings"
 	"time"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
@@ -17,7 +18,9 @@ const (
 type (
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		ClusterHost string
+		ClusterHost  string
+		KeySpace     string
+		DropKeySpace bool
 	}
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
@@ -37,7 +40,7 @@ type (
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
-	s.cassandraTestCluster.setupTestCluster()
+	s.cassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace)
 	var err error
 	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
 		s.cassandraTestCluster.keyspace)
@@ -257,16 +260,19 @@ func generateRandomKeyspace(n int) string {
 }
 
 func (s *TestBase) setupWorkflowStore() {
-	s.SetupWorkflowStoreWithOptions(TestBaseOptions{ClusterHost: testWorkflowClusterHosts})
+	s.SetupWorkflowStoreWithOptions(TestBaseOptions{ClusterHost: testWorkflowClusterHosts, DropKeySpace: true})
 }
 
 func (s *TestBase) tearDownWorkflowStore() {
 	s.cassandraTestCluster.tearDownTestCluster()
 }
 
-func (s *cassandraTestCluster) setupTestCluster() {
-	s.createCluster(testWorkflowClusterHosts, gocql.Consistency(1), generateRandomKeyspace(10))
-	s.createKeyspace(1)
+func (s *cassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool) {
+	if keySpace == "" {
+		keySpace = generateRandomKeyspace(10)
+	}
+	s.createCluster(testWorkflowClusterHosts, gocql.Consistency(1), keySpace)
+	s.createKeyspace(1, dropKeySpace)
 	s.loadSchema("workflow_test.cql")
 }
 
@@ -288,8 +294,8 @@ func (s *cassandraTestCluster) createCluster(clusterHosts string, cons gocql.Con
 	s.keyspace = keyspace
 }
 
-func (s *cassandraTestCluster) createKeyspace(replicas int) {
-	err := common.CreateCassandraKeyspace(s.session, s.keyspace, replicas, true)
+func (s *cassandraTestCluster) createKeyspace(replicas int, dropKeySpace bool) {
+	err := common.CreateCassandraKeyspace(s.session, s.keyspace, replicas, dropKeySpace)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -306,11 +312,11 @@ func (s *cassandraTestCluster) dropKeyspace() {
 
 func (s *cassandraTestCluster) loadSchema(fileName string) {
 	err := common.LoadCassandraSchema("./cassandra/bin/cqlsh", "./schema/"+fileName, s.keyspace)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		err = common.LoadCassandraSchema("../cassandra/bin/cqlsh", "../schema/"+fileName, s.keyspace)
 	}
 
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
 }
