@@ -46,10 +46,16 @@ type Context interface {
 	context.Context
 
 	NewChannel() Channel
+	NewNamedChannel(name string) Channel
+
 	NewBufferedChannel(size int) Channel
+	NewNamedBufferedChannel(name string, size int) Channel
 
 	NewSelector() Selector
+	NewNamedSelector(name string) Selector
+
 	NewCoroutine(f Func)
+	NewNamedCoroutine(name string, f Func)
 }
 
 // WithCancel returns a copy of parent with a new Done channel. The returned
@@ -106,15 +112,22 @@ func WithValue(parent Context, key interface{}, val interface{}) Context {
 	return pImpl
 }
 
+// PanicError contains information about panicked coroutine
+type PanicError interface {
+	error
+	Value() interface{} // Value passed to panic call
+	StackTrace() string // Stack trace of a panicked coroutine
+}
+
 // Dispatcher is a container of a set of coroutines.
 type Dispatcher interface {
 	// ExecuteUntilAllBlocked executes coroutines one by one in deterministic order
 	// until all of them are completed or blocked on Channel or Selector
-	ExecuteUntilAllBlocked()
+	ExecuteUntilAllBlocked() (err PanicError)
 	// IsDone returns true when all of coroutines are completed
 	IsDone() bool
-	Close() // Destroys all coroutines without waiting for their completion
-	// TODO: Add support for dumping stack traces of all coroutines
+	Close()             // Destroys all coroutines without waiting for their completion
+	StackTrace() string // Stack trace of all coroutines owned by the Dispatcher instance
 }
 
 // NewDispatcher creates a new Dispatcher instance with a root coroutine function.

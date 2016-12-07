@@ -3,6 +3,7 @@ package coroutine
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -243,6 +244,7 @@ func TestSendSelect(t *testing.T) {
 			assert.True(t, more)
 			history = append(history, fmt.Sprintf("c2-%v", v))
 			v, more = c1.Recv(ctx)
+
 			assert.True(t, more)
 			history = append(history, fmt.Sprintf("c1-%v", v))
 		})
@@ -275,9 +277,9 @@ func TestChannelClose(t *testing.T) {
 	var history []string
 	d := NewDispatcher(func(ctx Context) {
 		jobs := ctx.NewBufferedChannel(5)
-		done := ctx.NewChannel()
+		done := ctx.NewNamedChannel("done")
 
-		ctx.NewCoroutine(func(ctx Context) {
+		ctx.NewNamedCoroutine("receiver", func(ctx Context) {
 			for {
 				j, more := jobs.Recv(ctx)
 				if more {
@@ -301,7 +303,7 @@ func TestChannelClose(t *testing.T) {
 	})
 	require.EqualValues(t, 0, len(history))
 	d.ExecuteUntilAllBlocked()
-	require.True(t, d.IsDone())
+	require.True(t, d.IsDone(), d.StackTrace())
 
 	expected := []string{
 		"sent job 1",
@@ -363,10 +365,10 @@ func TestAsyncSendClosedChannel(t *testing.T) {
 func TestDispatchClose(t *testing.T) {
 	var history []string
 	d := NewDispatcher(func(ctx Context) {
-		c := ctx.NewChannel()
+		c := ctx.NewNamedChannel("forever_blocked")
 		for i := 0; i < 10; i++ {
 			ii := i
-			ctx.NewCoroutine(func(ctx Context) {
+			ctx.NewNamedCoroutine(fmt.Sprintf("c-%v", i), func(ctx Context) {
 				_, _ = c.Recv(ctx) // blocked forever
 				history = append(history, fmt.Sprintf("child-%v", ii))
 			})
@@ -377,6 +379,13 @@ func TestDispatchClose(t *testing.T) {
 	require.EqualValues(t, 0, len(history))
 	d.ExecuteUntilAllBlocked()
 	require.False(t, d.IsDone())
+	stack := d.StackTrace()
+	// 11 coroutines (3 lines each) + 10 nl
+	require.EqualValues(t, 11*3+10, len(strings.Split(stack, "\n")), stack)
+	require.Contains(t, stack, "coroutine 1 [blocked on forever_blocked.Recv]:")
+	for i := 0; i < 10; i++ {
+		require.Contains(t, stack, fmt.Sprintf("coroutine c-%v [blocked on forever_blocked.Recv]:", i))
+	}
 	beforeClose := runtime.NumGoroutine()
 	d.Close()
 	time.Sleep(100 * time.Millisecond) // Let all goroutines to die
@@ -386,4 +395,30 @@ func TestDispatchClose(t *testing.T) {
 		"root",
 	}
 	require.EqualValues(t, expected, history)
+}
+
+func TestPanic(t *testing.T) {
+	var history []string
+	d := NewDispatcher(func(ctx Context) {
+		c := ctx.NewNamedChannel("forever_blocked")
+		for i := 0; i < 10; i++ {
+			ii := i
+			ctx.NewNamedCoroutine(fmt.Sprintf("c-%v", i), func(ctx Context) {
+				if ii == 9 {
+					panic("simulated failure")
+				}
+				_, _ = c.Recv(ctx) // blocked forever
+				history = append(history, fmt.Sprintf("child-%v", ii))
+			})
+		}
+		history = append(history, "root")
+		_, _ = c.Recv(ctx) // blocked forever
+	})
+	require.EqualValues(t, 0, len(history))
+	err := d.ExecuteUntilAllBlocked()
+	require.NotNil(t, err)
+	require.EqualValues(t, "simulated failure", err.Value())
+	require.EqualValues(t, "simulated failure", err.Error())
+
+	require.Contains(t, err.StackTrace(), "common/coroutine.TestPanic")
 }

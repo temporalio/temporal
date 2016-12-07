@@ -12,6 +12,11 @@ type Error interface {
 	Details() []byte
 }
 
+// NewError creates Error instance
+func NewError(reason string, details []byte) Error {
+	return &errorImpl{reason: reason, details: details}
+}
+
 // ActivityClient is used to invoke activities from a workflow definition
 type ActivityClient interface {
 	ExecuteActivity(parameters flow.ExecuteActivityParameters) (result []byte, err Error)
@@ -61,6 +66,26 @@ type activityClient struct {
 	asyncClient flow.AsyncActivityClient
 }
 
+// errorImpl implements Error
+type errorImpl struct {
+	reason  string
+	details []byte
+}
+
+func (e *errorImpl) Error() string {
+	return e.reason
+}
+
+// Reason is from Error interface
+func (e *errorImpl) Reason() string {
+	return e.reason
+}
+
+// Details is from Error interface
+func (e *errorImpl) Details() []byte {
+	return e.details
+}
+
 func (d *workflowDefinition) Execute(wc flow.WorkflowContext, input []byte) {
 	var resultPtr *workflowResult
 	c := &contextImpl{
@@ -79,7 +104,12 @@ func (d *workflowDefinition) Execute(wc flow.WorkflowContext, input []byte) {
 // executeDispatcher executed coroutines in the calling thread and calls workflow completion callbacks
 // if root workflow function returned
 func (c *contextImpl) executeDispatcher() {
-	c.dispatcher.ExecuteUntilAllBlocked()
+	panicErr := c.dispatcher.ExecuteUntilAllBlocked()
+	if panicErr != nil {
+		c.wc.Complete(nil, NewError(panicErr.Error(), []byte(panicErr.StackTrace())))
+		c.dispatcher.Close()
+		return
+	}
 	r := *c.result
 	if r == nil {
 		return
