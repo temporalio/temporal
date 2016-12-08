@@ -136,10 +136,9 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 }
 
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
-func (s *TestBase) DeleteWorkflowExecution(workflowExecution workflow.WorkflowExecution, condition int64) error {
+func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 	return s.WorkflowMgr.DeleteWorkflowExecution(&DeleteWorkflowExecutionRequest{
-		Execution: workflowExecution,
-		Condition: condition,
+		ExecutionInfo: info,
 	})
 }
 

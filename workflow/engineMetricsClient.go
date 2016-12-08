@@ -24,7 +24,8 @@ func NewEngineWithMetricsImpl(engine Engine, m3Client common.Client) Engine {
 	}
 }
 
-func (e *engineWithMetricsImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error) {
+func (e *engineWithMetricsImpl) StartWorkflowExecution(
+	request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error) {
 	e.m3Client.IncCounter(metrics.StartWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.StartWorkflowExecutionScope, metrics.WorkflowLatencyTimer)
@@ -39,7 +40,8 @@ func (e *engineWithMetricsImpl) StartWorkflowExecution(request *workflow.StartWo
 	return resp, err
 }
 
-func (e *engineWithMetricsImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error) {
+func (e *engineWithMetricsImpl) PollForDecisionTask(
+	request *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error) {
 	e.m3Client.IncCounter(metrics.PollForDecisionTaskScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.PollForDecisionTaskScope, metrics.WorkflowLatencyTimer)
@@ -52,7 +54,8 @@ func (e *engineWithMetricsImpl) PollForDecisionTask(request *workflow.PollForDec
 	return resp, err
 }
 
-func (e *engineWithMetricsImpl) PollForActivityTask(request *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
+func (e *engineWithMetricsImpl) PollForActivityTask(
+	request *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
 	e.m3Client.IncCounter(metrics.PollForActivityTaskScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.PollForActivityTaskScope, metrics.WorkflowLatencyTimer)
@@ -65,7 +68,8 @@ func (e *engineWithMetricsImpl) PollForActivityTask(request *workflow.PollForAct
 	return resp, err
 }
 
-func (e *engineWithMetricsImpl) RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error {
+func (e *engineWithMetricsImpl) RespondDecisionTaskCompleted(
+	request *workflow.RespondDecisionTaskCompletedRequest) error {
 	e.m3Client.IncCounter(metrics.RespondDecisionTaskCompletedScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.RespondDecisionTaskCompletedScope, metrics.WorkflowLatencyTimer)
@@ -78,7 +82,8 @@ func (e *engineWithMetricsImpl) RespondDecisionTaskCompleted(request *workflow.R
 	return err
 }
 
-func (e *engineWithMetricsImpl) RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error {
+func (e *engineWithMetricsImpl) RespondActivityTaskCompleted(
+	request *workflow.RespondActivityTaskCompletedRequest) error {
 	e.m3Client.IncCounter(metrics.RespondActivityTaskCompletedScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.RespondActivityTaskCompletedScope, metrics.WorkflowLatencyTimer)
@@ -106,6 +111,23 @@ func (e *engineWithMetricsImpl) RespondActivityTaskFailed(request *workflow.Resp
 		}
 	}
 	return err
+}
+
+func (e *engineWithMetricsImpl) GetWorkflowExecutionHistory(
+	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
+	e.m3Client.IncCounter(metrics.GetWorkflowExecutionHistoryScope, metrics.WorkflowRequests)
+
+	sw := e.m3Client.StartTimer(metrics.GetWorkflowExecutionHistoryScope, metrics.WorkflowLatencyTimer)
+	resp, err := e.engine.GetWorkflowExecutionHistory(request)
+	sw.Stop()
+
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			e.m3Client.IncCounter(metrics.GetWorkflowExecutionHistoryScope, metrics.WorkflowFailures)
+		}
+	}
+
+	return resp, err
 }
 
 func (e *engineWithMetricsImpl) Start() {

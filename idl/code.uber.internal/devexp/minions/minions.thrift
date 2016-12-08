@@ -294,6 +294,14 @@ struct RespondActivityTaskFailedRequest {
   40: optional string identity
 }
 
+struct GetWorkflowExecutionHistoryRequest {
+  10: optional WorkflowExecution execution
+}
+
+struct GetWorkflowExecutionHistoryResponse {
+  10: optional History history
+}
+
 /**
 * WorkflowService API is exposed to provide support for long running applications.  Application is expected to call
 * StartWorkflowExecution to create an instance for each instance of long running workflow.  Such applications are expected
@@ -378,7 +386,7 @@ service WorkflowService {
   * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
   * anymore due to activity timeout.
   **/
-  void  RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)
+  void RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)
     throws (
       1: BadRequestError badRequestError,
       2: InternalServiceError internalServiceError,
@@ -392,7 +400,18 @@ service WorkflowService {
   * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
   * anymore due to activity timeout.
   **/
-  void  RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)
+  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)
+    throws (
+      1: BadRequestError badRequestError,
+      2: InternalServiceError internalServiceError,
+      3: EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+  * execution in unknown to the service.
+  **/
+  GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(1: GetWorkflowExecutionHistoryRequest getRequest)
     throws (
       1: BadRequestError badRequestError,
       2: InternalServiceError internalServiceError,

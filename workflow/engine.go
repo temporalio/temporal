@@ -7,6 +7,7 @@ import (
 	"github.com/uber-common/bark"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/persistence"
 )
@@ -30,6 +31,7 @@ type (
 	EngineImpl struct {
 		historyService HistoryEngine
 		matchingEngine MatchingEngine
+		logger         bark.Logger
 	}
 )
 
@@ -53,6 +55,7 @@ func NewWorkflowEngine(executionManager persistence.ExecutionManager, taskManage
 	return &EngineImpl{
 		historyService: history,
 		matchingEngine: newMatchingEngine(taskManager, history, logger),
+		logger:         logger,
 	}
 }
 
@@ -94,6 +97,32 @@ func (e *EngineImpl) RespondActivityTaskCompleted(request *workflow.RespondActiv
 // RespondActivityTaskFailed responds to an activity failure.
 func (e *EngineImpl) RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error {
 	return e.historyService.RespondActivityTaskFailed(request)
+}
+
+// GetWorkflowExecutionHistory retrieves the history for given workflow execution
+func (e *EngineImpl) GetWorkflowExecutionHistory(
+	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
+	r := &persistence.GetWorkflowExecutionRequest{
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(request.GetExecution().GetWorkflowId()),
+			RunId:      common.StringPtr(request.GetExecution().GetRunId()),
+		},
+	}
+
+	response, err := e.historyService.GetWorkflowExecution(r)
+	if err != nil {
+		return nil, err
+	}
+
+	builder := newHistoryBuilder(e.logger)
+	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
+		return nil, err
+	}
+
+	result := workflow.NewGetWorkflowExecutionHistoryResponse()
+	result.History = builder.getHistory()
+
+	return result, nil
 }
 
 func createPersistanceRetryPolicy() backoff.RetryPolicy {

@@ -8855,3 +8855,207 @@ func (p *RespondActivityTaskFailedRequest) String() string {
 	}
 	return fmt.Sprintf("RespondActivityTaskFailedRequest(%+v)", *p)
 }
+
+// Attributes:
+//  - Execution
+type GetWorkflowExecutionHistoryRequest struct {
+	// unused fields # 1 to 9
+	Execution *WorkflowExecution `thrift:"execution,10" db:"execution" json:"execution,omitempty"`
+}
+
+func NewGetWorkflowExecutionHistoryRequest() *GetWorkflowExecutionHistoryRequest {
+	return &GetWorkflowExecutionHistoryRequest{}
+}
+
+var GetWorkflowExecutionHistoryRequest_Execution_DEFAULT *WorkflowExecution
+
+func (p *GetWorkflowExecutionHistoryRequest) GetExecution() *WorkflowExecution {
+	if !p.IsSetExecution() {
+		return GetWorkflowExecutionHistoryRequest_Execution_DEFAULT
+	}
+	return p.Execution
+}
+func (p *GetWorkflowExecutionHistoryRequest) IsSetExecution() bool {
+	return p.Execution != nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) Read(iprot thrift.TProtocol) error {
+	if _, err := iprot.ReadStructBegin(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+		if err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 10:
+			if err := p.ReadField10(iprot); err != nil {
+				return err
+			}
+		default:
+			if err := iprot.Skip(fieldTypeId); err != nil {
+				return err
+			}
+		}
+		if err := iprot.ReadFieldEnd(); err != nil {
+			return err
+		}
+	}
+	if err := iprot.ReadStructEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) ReadField10(iprot thrift.TProtocol) error {
+	p.Execution = &WorkflowExecution{}
+	if err := p.Execution.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Execution), err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) Write(oprot thrift.TProtocol) error {
+	if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryRequest"); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+	}
+	if err := p.writeField10(oprot); err != nil {
+		return err
+	}
+	if err := oprot.WriteFieldStop(); err != nil {
+		return thrift.PrependError("write field stop error: ", err)
+	}
+	if err := oprot.WriteStructEnd(); err != nil {
+		return thrift.PrependError("write struct stop error: ", err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) writeField10(oprot thrift.TProtocol) (err error) {
+	if p.IsSetExecution() {
+		if err := oprot.WriteFieldBegin("execution", thrift.STRUCT, 10); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:execution: ", p), err)
+		}
+		if err := p.Execution.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Execution), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 10:execution: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetWorkflowExecutionHistoryRequest(%+v)", *p)
+}
+
+// Attributes:
+//  - History
+type GetWorkflowExecutionHistoryResponse struct {
+	// unused fields # 1 to 9
+	History *History `thrift:"history,10" db:"history" json:"history,omitempty"`
+}
+
+func NewGetWorkflowExecutionHistoryResponse() *GetWorkflowExecutionHistoryResponse {
+	return &GetWorkflowExecutionHistoryResponse{}
+}
+
+var GetWorkflowExecutionHistoryResponse_History_DEFAULT *History
+
+func (p *GetWorkflowExecutionHistoryResponse) GetHistory() *History {
+	if !p.IsSetHistory() {
+		return GetWorkflowExecutionHistoryResponse_History_DEFAULT
+	}
+	return p.History
+}
+func (p *GetWorkflowExecutionHistoryResponse) IsSetHistory() bool {
+	return p.History != nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) Read(iprot thrift.TProtocol) error {
+	if _, err := iprot.ReadStructBegin(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+		if err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 10:
+			if err := p.ReadField10(iprot); err != nil {
+				return err
+			}
+		default:
+			if err := iprot.Skip(fieldTypeId); err != nil {
+				return err
+			}
+		}
+		if err := iprot.ReadFieldEnd(); err != nil {
+			return err
+		}
+	}
+	if err := iprot.ReadStructEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) ReadField10(iprot thrift.TProtocol) error {
+	p.History = &History{}
+	if err := p.History.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.History), err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) Write(oprot thrift.TProtocol) error {
+	if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryResponse"); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+	}
+	if err := p.writeField10(oprot); err != nil {
+		return err
+	}
+	if err := oprot.WriteFieldStop(); err != nil {
+		return thrift.PrependError("write field stop error: ", err)
+	}
+	if err := oprot.WriteStructEnd(); err != nil {
+		return thrift.PrependError("write struct stop error: ", err)
+	}
+	return nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) writeField10(oprot thrift.TProtocol) (err error) {
+	if p.IsSetHistory() {
+		if err := oprot.WriteFieldBegin("history", thrift.STRUCT, 10); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:history: ", p), err)
+		}
+		if err := p.History.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.History), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 10:history: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetWorkflowExecutionHistoryResponse(%+v)", *p)
+}

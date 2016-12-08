@@ -104,8 +104,7 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
-		Execution workflow.WorkflowExecution
-		Condition int64
+		ExecutionInfo *WorkflowExecutionInfo
 	}
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue

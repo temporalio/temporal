@@ -14,6 +14,7 @@ import (
 
 // TChanWorkflowService is the interface that defines the server handler and client interface.
 type TChanWorkflowService interface {
+	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
 	PollForActivityTask(ctx thrift.Context, pollRequest *PollForActivityTaskRequest) (*PollForActivityTaskResponse, error)
 	PollForDecisionTask(ctx thrift.Context, pollRequest *PollForDecisionTaskRequest) (*PollForDecisionTaskResponse, error)
 	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *RecordActivityTaskHeartbeatRequest) (*RecordActivityTaskHeartbeatResponse, error)
@@ -40,6 +41,27 @@ func NewTChanWorkflowServiceInheritedClient(thriftService string, client thrift.
 // NewTChanWorkflowServiceClient creates a client that can be used to make remote calls.
 func NewTChanWorkflowServiceClient(client thrift.TChanClient) TChanWorkflowService {
 	return NewTChanWorkflowServiceInheritedClient("WorkflowService", client)
+}
+
+func (c *tchanWorkflowServiceClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {
+	var resp WorkflowServiceGetWorkflowExecutionHistoryResult
+	args := WorkflowServiceGetWorkflowExecutionHistoryArgs{
+		GetRequest: getRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "GetWorkflowExecutionHistory", &args, &resp)
+	if err == nil && !success {
+		if e := resp.BadRequestError; e != nil {
+			err = e
+		}
+		if e := resp.InternalServiceError; e != nil {
+			err = e
+		}
+		if e := resp.EntityNotExistError; e != nil {
+			err = e
+		}
+	}
+
+	return resp.GetSuccess(), err
 }
 
 func (c *tchanWorkflowServiceClient) PollForActivityTask(ctx thrift.Context, pollRequest *PollForActivityTaskRequest) (*PollForActivityTaskResponse, error) {
@@ -198,6 +220,7 @@ func (s *tchanWorkflowServiceServer) Service() string {
 
 func (s *tchanWorkflowServiceServer) Methods() []string {
 	return []string{
+		"GetWorkflowExecutionHistory",
 		"PollForActivityTask",
 		"PollForDecisionTask",
 		"RecordActivityTaskHeartbeat",
@@ -210,6 +233,8 @@ func (s *tchanWorkflowServiceServer) Methods() []string {
 
 func (s *tchanWorkflowServiceServer) Handle(ctx thrift.Context, methodName string, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
 	switch methodName {
+	case "GetWorkflowExecutionHistory":
+		return s.handleGetWorkflowExecutionHistory(ctx, protocol)
 	case "PollForActivityTask":
 		return s.handlePollForActivityTask(ctx, protocol)
 	case "PollForDecisionTask":
@@ -228,6 +253,44 @@ func (s *tchanWorkflowServiceServer) Handle(ctx thrift.Context, methodName strin
 	default:
 		return false, nil, fmt.Errorf("method %v not found in service %v", methodName, s.Service())
 	}
+}
+
+func (s *tchanWorkflowServiceServer) handleGetWorkflowExecutionHistory(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req WorkflowServiceGetWorkflowExecutionHistoryArgs
+	var res WorkflowServiceGetWorkflowExecutionHistoryResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	r, err :=
+		s.handler.GetWorkflowExecutionHistory(ctx, req.GetRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+		res.Success = r
+	}
+
+	return err == nil, &res, nil
 }
 
 func (s *tchanWorkflowServiceServer) handlePollForActivityTask(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {

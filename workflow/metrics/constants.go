@@ -46,6 +46,7 @@ const (
 	RespondDecisionTaskCompletedScope
 	RespondActivityTaskCompletedScope
 	RespondActivityTaskFailedScope
+	GetWorkflowExecutionHistoryScope
 )
 
 // ScopeToTags record the scope name for all services
@@ -67,6 +68,7 @@ var ScopeToTags = [NumServices][]map[string]string{
 		{OperationTagName: RespondDecisionTaskCompletedOperationTagValue},
 		{OperationTagName: RespondActivityTaskCompletedOperationTagValue},
 		{OperationTagName: RespondActivityTaskFailedOperationTagValue},
+		{OperationTagName: GetWorkflowExecutionHistoryOperationTagValue},
 	},
 }
 
@@ -120,4 +122,5 @@ const (
 	RespondDecisionTaskCompletedOperationTagValue = "RespondDecisionTaskCompleted"
 	RespondActivityTaskCompletedOperationTagValue = "RespondActivityTaskCompleted"
 	RespondActivityTaskFailedOperationTagValue    = "RespondActivityTaskFailed"
+	GetWorkflowExecutionHistoryOperationTagValue  = "GetWorkflowExecutionHistory"
 )

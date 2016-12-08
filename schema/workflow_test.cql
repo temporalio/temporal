@@ -32,12 +32,14 @@ CREATE TABLE executions (
   shard_id           int,
   type               int, -- enum RowType { Execution, TransferTask, TimerTask}
   workflow_id        text,
+  run_id             uuid,
+  current_run_id     uuid,
   task_id            uuid, -- unique identifier for transfer and timer tasks for an execution
   execution          frozen<workflow_execution>,
   transfer           frozen<task>,
   next_event_id      bigint,  -- This is needed to make conditional updates on session history
   lock_token         uuid,
-  PRIMARY KEY  (shard_id, type, workflow_id, task_id)
+  PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 
 CREATE TABLE tasks (

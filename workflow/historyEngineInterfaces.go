@@ -12,7 +12,8 @@ type (
 		common.Daemon
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error)
-		GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
+		GetWorkflowExecution(
+			request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
 		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
 		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error

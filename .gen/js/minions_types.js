@@ -3708,3 +3708,111 @@ RespondActivityTaskFailedRequest.prototype.write = function(output) {
   return;
 };
 
+var GetWorkflowExecutionHistoryRequest = module.exports.GetWorkflowExecutionHistoryRequest = function(args) {
+  this.execution = null;
+  if (args) {
+    if (args.execution !== undefined && args.execution !== null) {
+      this.execution = new ttypes.WorkflowExecution(args.execution);
+    }
+  }
+};
+GetWorkflowExecutionHistoryRequest.prototype = {};
+GetWorkflowExecutionHistoryRequest.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.execution = new ttypes.WorkflowExecution();
+        this.execution.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+GetWorkflowExecutionHistoryRequest.prototype.write = function(output) {
+  output.writeStructBegin('GetWorkflowExecutionHistoryRequest');
+  if (this.execution !== null && this.execution !== undefined) {
+    output.writeFieldBegin('execution', Thrift.Type.STRUCT, 10);
+    this.execution.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var GetWorkflowExecutionHistoryResponse = module.exports.GetWorkflowExecutionHistoryResponse = function(args) {
+  this.history = null;
+  if (args) {
+    if (args.history !== undefined && args.history !== null) {
+      this.history = new ttypes.History(args.history);
+    }
+  }
+};
+GetWorkflowExecutionHistoryResponse.prototype = {};
+GetWorkflowExecutionHistoryResponse.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.history = new ttypes.History();
+        this.history.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+GetWorkflowExecutionHistoryResponse.prototype.write = function(output) {
+  output.writeStructBegin('GetWorkflowExecutionHistoryResponse');
+  if (this.history !== null && this.history !== undefined) {
+    output.writeFieldBegin('history', Thrift.Type.STRUCT, 10);
+    this.history.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+

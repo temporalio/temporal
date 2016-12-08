@@ -422,8 +422,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 
 func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 	err := c.historyService.deleteWorkflowExecutionWithRetry(&persistence.DeleteWorkflowExecutionRequest{
-		Execution: c.workflowExecution,
-		Condition: c.updateCondition,
+		ExecutionInfo: c.executionInfo,
 	})
 	if err != nil {
 		// TODO: We will be needing a background job to delete all leaking workflow executions due to failed delete

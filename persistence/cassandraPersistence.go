@@ -16,6 +16,8 @@ const (
 	cassandraProtoVersion    = 4
 	defaultSessionTimeout    = 10 * time.Second
 	rowTypeExecutionTaskUUID = "1e26b948-4fc9-f203-f5a7-ac2109dbfbe4"
+	permanentRunID           = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
+	defaultDeleteTTLSeconds  = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
 )
 
 // Row types for table executions
@@ -52,18 +54,23 @@ const (
 		`}`
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, workflow_id, type, execution, next_event_id, task_id) ` +
-		`VALUES(?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
+		`shard_id, type, workflow_id, run_id, task_id, current_run_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+
+	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
+		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
+		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
-		`shard_id, workflow_id, type, transfer, task_id, lock_token) ` +
-		`VALUES(?, ?, ?, ` + templateTaskType + `, ?, ?)`
+		`shard_id, type, workflow_id, run_id, transfer, task_id, lock_token) ` +
+		`VALUES(?, ?, ?, ?, ` + templateTaskType + `, ?, ?)`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and task_id = ?`
 
 	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
@@ -71,6 +78,7 @@ const (
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
@@ -78,8 +86,12 @@ const (
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`and run_id = ? ` +
+		`and task_id = ? `
+
+	templateDeleteWorkflowExecutionTTLQuery = `INSERT INTO executions (` +
+		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
+		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) USING TTL ?`
 
 	templateGetTransferTasksQuery = `SELECT transfer ` +
 		`FROM executions ` +
@@ -91,6 +103,7 @@ const (
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and task_id = ? ` +
 		`IF lock_token = ?`
 
@@ -98,6 +111,7 @@ const (
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and task_id = ?` +
 		`IF lock_token = ?`
 
@@ -174,7 +188,16 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateWorkflowExecutionQuery,
 		d.shardID,
+		rowTypeExecution,
 		request.Execution.GetWorkflowId(),
+		permanentRunID,
+		rowTypeExecutionTaskUUID,
+		request.Execution.GetRunId())
+
+	batch.Query(templateCreateWorkflowExecutionQuery2,
+		d.shardID,
+		request.Execution.GetWorkflowId(),
+		request.Execution.GetRunId(),
 		rowTypeExecution,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
@@ -218,6 +241,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 		d.shardID,
 		rowTypeExecution,
 		execution.GetWorkflowId(),
+		execution.GetRunId(),
 		rowTypeExecutionTaskUUID).Consistency(d.lowConslevel)
 
 	result := make(map[string]interface{})
@@ -259,6 +283,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		d.shardID,
 		rowTypeExecution,
 		executionInfo.WorkflowID,
+		executionInfo.RunID,
 		rowTypeExecutionTaskUUID,
 		request.Condition)
 
@@ -288,30 +313,39 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 }
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
-	execution := request.Execution
-	query := d.session.Query(templateDeleteWorkflowExecutionQuery,
+	info := request.ExecutionInfo
+	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	batch := d.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(templateDeleteWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
-		execution.GetWorkflowId(),
-		rowTypeExecutionTaskUUID,
-		request.Condition)
+		info.WorkflowID,
+		permanentRunID,
+		rowTypeExecutionTaskUUID)
 
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
+	batch.Query(templateDeleteWorkflowExecutionTTLQuery,
+		d.shardID,
+		info.WorkflowID,
+		info.RunID,
+		rowTypeExecution,
+		info.WorkflowID,
+		info.RunID,
+		info.TaskList,
+		info.History,
+		info.ExecutionContext,
+		info.State,
+		info.NextEventID,
+		info.LastProcessedEvent,
+		cqlNowTimestamp,
+		info.DecisionPending,
+		info.NextEventID,
+		rowTypeExecutionTaskUUID,
+		defaultDeleteTTLSeconds)
+
+	err := d.session.ExecuteBatch(batch)
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err),
-		}
-	}
-
-	if !applied {
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-		return &ConditionFailedError{
-			msg: fmt.Sprintf("Failed to delete workflow execution.  condition: %v, columns: (%v)", request.Condition,
-				strings.Join(columns, ",")),
 		}
 	}
 
@@ -363,6 +397,7 @@ PopulateTasks:
 			d.shardID,
 			rowTypeTransferTask,
 			t.WorkflowID,
+			t.RunID,
 			t.TaskID,
 			t.LockToken)
 
@@ -397,6 +432,7 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 		d.shardID,
 		rowTypeTransferTask,
 		execution.GetWorkflowId(),
+		execution.GetRunId(),
 		request.TaskID,
 		request.LockToken)
 
@@ -596,8 +632,9 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		lockToken := uuid.New()
 		batch.Query(templateCreateTransferTaskQuery,
 			d.shardID,
-			workflowID,
 			rowTypeTransferTask,
+			workflowID,
+			runID,
 			workflowID,
 			runID,
 			transferTaskID,

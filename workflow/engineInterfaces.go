@@ -20,5 +20,7 @@ type (
 		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
 		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error
+		GetWorkflowExecutionHistory(
+			request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
 	}
 )

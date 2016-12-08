@@ -166,17 +166,8 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	s.Equal(true, validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
-	updatedInfo := copyWorkflowExecutionInfo(info0)
-	updatedInfo.History = []byte(`event2`)
-	updatedInfo.NextEventID = int64(5)
-	updatedInfo.LastProcessedEvent = int64(2)
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3))
-	s.Nil(err2, "No error expected.")
-
-	err4 := s.DeleteWorkflowExecution(workflowExecution, info0.NextEventID)
-	s.NotNil(err4, "conflict expected.")
-	s.IsType(&ConditionFailedError{}, err4)
-	log.Infof("Conditional update failed with error: %v", err4)
+	err4 := s.DeleteWorkflowExecution(info0)
+	s.Nil(err4, "No error expected.")
 
 	info1, err3 := s.GetWorkflowExecutionInfo(workflowExecution)
 	s.Nil(err3, "No error expected.")
@@ -184,23 +175,17 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	s.Equal("delete-workflow-test", info1.WorkflowID)
 	s.Equal("4e0917f2-9361-4a14-b16f-1fafe09b287a", info1.RunID)
 	s.Equal("queue1", info1.TaskList)
-	s.Equal("event2", string(info1.History))
+	s.Equal("event1", string(info1.History))
 	s.Equal([]byte(nil), info1.ExecutionContext)
 	s.Equal(WorkflowStateCreated, info1.State)
-	s.Equal(int64(5), info1.NextEventID)
-	s.Equal(int64(2), info1.LastProcessedEvent)
+	s.Equal(int64(3), info1.NextEventID)
+	s.Equal(int64(0), info1.LastProcessedEvent)
 	s.Equal(true, info1.DecisionPending)
 	s.Equal(true, validateTimeRange(info1.LastUpdatedTimestamp, time.Hour))
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
-	err5 := s.DeleteWorkflowExecution(workflowExecution, info1.NextEventID)
+	err5 := s.DeleteWorkflowExecution(info1)
 	s.Nil(err5, "No error expected.")
-
-	info2, err6 := s.GetWorkflowExecutionInfo(workflowExecution)
-	s.Nil(info2, "No result expected.")
-	s.NotNil(err6, "Workflow execution should not exist.")
-	s.IsType(&gen.EntityNotExistsError{}, err6)
-	log.Infof("Workflow execution not found: %v", err6)
 }
 
 func (s *cassandraPersistenceSuite) TestTransferTasks() {

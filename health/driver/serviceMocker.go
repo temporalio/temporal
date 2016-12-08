@@ -65,3 +65,9 @@ func (se *ServiceMockEngine) StartWorkflowExecution(ctx thrift.Context, startReq
 func (se *ServiceMockEngine) Start() {
 	go se.engine.Start()
 }
+
+// GetWorkflowExecutionHistory retrieves the history for given workflow execution
+func (se *ServiceMockEngine) GetWorkflowExecutionHistory(ctx thrift.Context,
+	request *m.GetWorkflowExecutionHistoryRequest) (*m.GetWorkflowExecutionHistoryResponse, error) {
+	return se.engine.GetWorkflowExecutionHistory(request)
+}
