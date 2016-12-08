@@ -40,6 +40,17 @@ class Iface:
     """
     pass
 
+  def GetWorkflowExecutionHistory(self, getRequest):
+    """
+    Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+    execution in unknown to the service.
+
+
+    Parameters:
+     - getRequest
+    """
+    pass
+
   def PollForDecisionTask(self, pollRequest):
     """
     PollForDecisionTask is called by application worker to process DecisionTask from a specific taskList.  A
@@ -126,17 +137,6 @@ class Iface:
     """
     pass
 
-  def GetWorkflowExecutionHistory(self, getRequest):
-    """
-    Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-    execution in unknown to the service.
-
-
-    Parameters:
-     - getRequest
-    """
-    pass
-
 
 class Client(Iface):
   """
@@ -196,6 +196,47 @@ class Client(Iface):
     if result.sessionAlreadyExistError is not None:
       raise result.sessionAlreadyExistError
     raise TApplicationException(TApplicationException.MISSING_RESULT, "StartWorkflowExecution failed: unknown result");
+
+  def GetWorkflowExecutionHistory(self, getRequest):
+    """
+    Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+    execution in unknown to the service.
+
+
+    Parameters:
+     - getRequest
+    """
+    self.send_GetWorkflowExecutionHistory(getRequest)
+    return self.recv_GetWorkflowExecutionHistory()
+
+  def send_GetWorkflowExecutionHistory(self, getRequest):
+    self._oprot.writeMessageBegin('GetWorkflowExecutionHistory', TMessageType.CALL, self._seqid)
+    args = GetWorkflowExecutionHistory_args()
+    args.getRequest = getRequest
+    args.write(self._oprot)
+    self._oprot.writeMessageEnd()
+    self._oprot.trans.flush()
+
+  def recv_GetWorkflowExecutionHistory(self):
+    iprot = self._iprot
+    (fname, mtype, rseqid) = iprot.readMessageBegin()
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      raise x
+    result = GetWorkflowExecutionHistory_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.success is not None:
+      return result.success
+    if result.badRequestError is not None:
+      raise result.badRequestError
+    if result.internalServiceError is not None:
+      raise result.internalServiceError
+    if result.entityNotExistError is not None:
+      raise result.entityNotExistError
+    raise TApplicationException(TApplicationException.MISSING_RESULT, "GetWorkflowExecutionHistory failed: unknown result");
 
   def PollForDecisionTask(self, pollRequest):
     """
@@ -451,60 +492,19 @@ class Client(Iface):
       raise result.entityNotExistError
     return
 
-  def GetWorkflowExecutionHistory(self, getRequest):
-    """
-    Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-    execution in unknown to the service.
-
-
-    Parameters:
-     - getRequest
-    """
-    self.send_GetWorkflowExecutionHistory(getRequest)
-    return self.recv_GetWorkflowExecutionHistory()
-
-  def send_GetWorkflowExecutionHistory(self, getRequest):
-    self._oprot.writeMessageBegin('GetWorkflowExecutionHistory', TMessageType.CALL, self._seqid)
-    args = GetWorkflowExecutionHistory_args()
-    args.getRequest = getRequest
-    args.write(self._oprot)
-    self._oprot.writeMessageEnd()
-    self._oprot.trans.flush()
-
-  def recv_GetWorkflowExecutionHistory(self):
-    iprot = self._iprot
-    (fname, mtype, rseqid) = iprot.readMessageBegin()
-    if mtype == TMessageType.EXCEPTION:
-      x = TApplicationException()
-      x.read(iprot)
-      iprot.readMessageEnd()
-      raise x
-    result = GetWorkflowExecutionHistory_result()
-    result.read(iprot)
-    iprot.readMessageEnd()
-    if result.success is not None:
-      return result.success
-    if result.badRequestError is not None:
-      raise result.badRequestError
-    if result.internalServiceError is not None:
-      raise result.internalServiceError
-    if result.entityNotExistError is not None:
-      raise result.entityNotExistError
-    raise TApplicationException(TApplicationException.MISSING_RESULT, "GetWorkflowExecutionHistory failed: unknown result");
-
 
 class Processor(Iface, TProcessor):
   def __init__(self, handler):
     self._handler = handler
     self._processMap = {}
     self._processMap["StartWorkflowExecution"] = Processor.process_StartWorkflowExecution
+    self._processMap["GetWorkflowExecutionHistory"] = Processor.process_GetWorkflowExecutionHistory
     self._processMap["PollForDecisionTask"] = Processor.process_PollForDecisionTask
     self._processMap["RespondDecisionTaskCompleted"] = Processor.process_RespondDecisionTaskCompleted
     self._processMap["PollForActivityTask"] = Processor.process_PollForActivityTask
     self._processMap["RecordActivityTaskHeartbeat"] = Processor.process_RecordActivityTaskHeartbeat
     self._processMap["RespondActivityTaskCompleted"] = Processor.process_RespondActivityTaskCompleted
     self._processMap["RespondActivityTaskFailed"] = Processor.process_RespondActivityTaskFailed
-    self._processMap["GetWorkflowExecutionHistory"] = Processor.process_GetWorkflowExecutionHistory
 
   def process(self, iprot, oprot):
     (name, type, seqid) = iprot.readMessageBegin()
@@ -528,13 +528,31 @@ class Processor(Iface, TProcessor):
     result = StartWorkflowExecution_result()
     try:
       result.success = self._handler.StartWorkflowExecution(args.startRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
-    except WorkflowExecutionAlreadyStartedError, sessionAlreadyExistError:
+    except shared.ttypes.WorkflowExecutionAlreadyStartedError, sessionAlreadyExistError:
       result.sessionAlreadyExistError = sessionAlreadyExistError
     oprot.writeMessageBegin("StartWorkflowExecution", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def process_GetWorkflowExecutionHistory(self, seqid, iprot, oprot):
+    args = GetWorkflowExecutionHistory_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = GetWorkflowExecutionHistory_result()
+    try:
+      result.success = self._handler.GetWorkflowExecutionHistory(args.getRequest)
+    except shared.ttypes.BadRequestError, badRequestError:
+      result.badRequestError = badRequestError
+    except shared.ttypes.InternalServiceError, internalServiceError:
+      result.internalServiceError = internalServiceError
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
+      result.entityNotExistError = entityNotExistError
+    oprot.writeMessageBegin("GetWorkflowExecutionHistory", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -546,9 +564,9 @@ class Processor(Iface, TProcessor):
     result = PollForDecisionTask_result()
     try:
       result.success = self._handler.PollForDecisionTask(args.pollRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
     oprot.writeMessageBegin("PollForDecisionTask", TMessageType.REPLY, seqid)
     result.write(oprot)
@@ -562,9 +580,9 @@ class Processor(Iface, TProcessor):
     result = RespondDecisionTaskCompleted_result()
     try:
       self._handler.RespondDecisionTaskCompleted(args.completeRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
     oprot.writeMessageBegin("RespondDecisionTaskCompleted", TMessageType.REPLY, seqid)
     result.write(oprot)
@@ -578,9 +596,9 @@ class Processor(Iface, TProcessor):
     result = PollForActivityTask_result()
     try:
       result.success = self._handler.PollForActivityTask(args.pollRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
     oprot.writeMessageBegin("PollForActivityTask", TMessageType.REPLY, seqid)
     result.write(oprot)
@@ -594,11 +612,11 @@ class Processor(Iface, TProcessor):
     result = RecordActivityTaskHeartbeat_result()
     try:
       result.success = self._handler.RecordActivityTaskHeartbeat(args.heartbeatRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
-    except EntityNotExistsError, entityNotExistError:
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
       result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RecordActivityTaskHeartbeat", TMessageType.REPLY, seqid)
     result.write(oprot)
@@ -612,11 +630,11 @@ class Processor(Iface, TProcessor):
     result = RespondActivityTaskCompleted_result()
     try:
       self._handler.RespondActivityTaskCompleted(args.completeRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
-    except EntityNotExistsError, entityNotExistError:
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
       result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RespondActivityTaskCompleted", TMessageType.REPLY, seqid)
     result.write(oprot)
@@ -630,31 +648,13 @@ class Processor(Iface, TProcessor):
     result = RespondActivityTaskFailed_result()
     try:
       self._handler.RespondActivityTaskFailed(args.failRequest)
-    except BadRequestError, badRequestError:
+    except shared.ttypes.BadRequestError, badRequestError:
       result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
+    except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
-    except EntityNotExistsError, entityNotExistError:
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
       result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RespondActivityTaskFailed", TMessageType.REPLY, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-
-  def process_GetWorkflowExecutionHistory(self, seqid, iprot, oprot):
-    args = GetWorkflowExecutionHistory_args()
-    args.read(iprot)
-    iprot.readMessageEnd()
-    result = GetWorkflowExecutionHistory_result()
-    try:
-      result.success = self._handler.GetWorkflowExecutionHistory(args.getRequest)
-    except BadRequestError, badRequestError:
-      result.badRequestError = badRequestError
-    except InternalServiceError, internalServiceError:
-      result.internalServiceError = internalServiceError
-    except EntityNotExistsError, entityNotExistError:
-      result.entityNotExistError = entityNotExistError
-    oprot.writeMessageBegin("GetWorkflowExecutionHistory", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -670,7 +670,7 @@ class StartWorkflowExecution_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'startRequest', (StartWorkflowExecutionRequest, StartWorkflowExecutionRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'startRequest', (shared.ttypes.StartWorkflowExecutionRequest, shared.ttypes.StartWorkflowExecutionRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, startRequest=None,):
@@ -687,7 +687,7 @@ class StartWorkflowExecution_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.startRequest = StartWorkflowExecutionRequest()
+          self.startRequest = shared.ttypes.StartWorkflowExecutionRequest()
           self.startRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -738,10 +738,10 @@ class StartWorkflowExecution_result:
   """
 
   thrift_spec = (
-    (0, TType.STRUCT, 'success', (StartWorkflowExecutionResponse, StartWorkflowExecutionResponse.thrift_spec), None, ), # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'sessionAlreadyExistError', (WorkflowExecutionAlreadyStartedError, WorkflowExecutionAlreadyStartedError.thrift_spec), None, ), # 3
+    (0, TType.STRUCT, 'success', (shared.ttypes.StartWorkflowExecutionResponse, shared.ttypes.StartWorkflowExecutionResponse.thrift_spec), None, ), # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'sessionAlreadyExistError', (shared.ttypes.WorkflowExecutionAlreadyStartedError, shared.ttypes.WorkflowExecutionAlreadyStartedError.thrift_spec), None, ), # 3
   )
 
   def __init__(self, success=None, badRequestError=None, internalServiceError=None, sessionAlreadyExistError=None,):
@@ -761,25 +761,25 @@ class StartWorkflowExecution_result:
         break
       if fid == 0:
         if ftype == TType.STRUCT:
-          self.success = StartWorkflowExecutionResponse()
+          self.success = shared.ttypes.StartWorkflowExecutionResponse()
           self.success.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 3:
         if ftype == TType.STRUCT:
-          self.sessionAlreadyExistError = WorkflowExecutionAlreadyStartedError()
+          self.sessionAlreadyExistError = shared.ttypes.WorkflowExecutionAlreadyStartedError()
           self.sessionAlreadyExistError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -835,6 +835,179 @@ class StartWorkflowExecution_result:
   def __ne__(self, other):
     return not (self == other)
 
+class GetWorkflowExecutionHistory_args:
+  """
+  Attributes:
+   - getRequest
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'getRequest', (shared.ttypes.GetWorkflowExecutionHistoryRequest, shared.ttypes.GetWorkflowExecutionHistoryRequest.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, getRequest=None,):
+    self.getRequest = getRequest
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.getRequest = shared.ttypes.GetWorkflowExecutionHistoryRequest()
+          self.getRequest.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('GetWorkflowExecutionHistory_args')
+    if self.getRequest is not None:
+      oprot.writeFieldBegin('getRequest', TType.STRUCT, 1)
+      self.getRequest.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.getRequest)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class GetWorkflowExecutionHistory_result:
+  """
+  Attributes:
+   - success
+   - badRequestError
+   - internalServiceError
+   - entityNotExistError
+  """
+
+  thrift_spec = (
+    (0, TType.STRUCT, 'success', (shared.ttypes.GetWorkflowExecutionHistoryResponse, shared.ttypes.GetWorkflowExecutionHistoryResponse.thrift_spec), None, ), # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
+  )
+
+  def __init__(self, success=None, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
+    self.success = success
+    self.badRequestError = badRequestError
+    self.internalServiceError = internalServiceError
+    self.entityNotExistError = entityNotExistError
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 0:
+        if ftype == TType.STRUCT:
+          self.success = shared.ttypes.GetWorkflowExecutionHistoryResponse()
+          self.success.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 1:
+        if ftype == TType.STRUCT:
+          self.badRequestError = shared.ttypes.BadRequestError()
+          self.badRequestError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.STRUCT:
+          self.internalServiceError = shared.ttypes.InternalServiceError()
+          self.internalServiceError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 3:
+        if ftype == TType.STRUCT:
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
+          self.entityNotExistError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('GetWorkflowExecutionHistory_result')
+    if self.success is not None:
+      oprot.writeFieldBegin('success', TType.STRUCT, 0)
+      self.success.write(oprot)
+      oprot.writeFieldEnd()
+    if self.badRequestError is not None:
+      oprot.writeFieldBegin('badRequestError', TType.STRUCT, 1)
+      self.badRequestError.write(oprot)
+      oprot.writeFieldEnd()
+    if self.internalServiceError is not None:
+      oprot.writeFieldBegin('internalServiceError', TType.STRUCT, 2)
+      self.internalServiceError.write(oprot)
+      oprot.writeFieldEnd()
+    if self.entityNotExistError is not None:
+      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 3)
+      self.entityNotExistError.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.success)
+    value = (value * 31) ^ hash(self.badRequestError)
+    value = (value * 31) ^ hash(self.internalServiceError)
+    value = (value * 31) ^ hash(self.entityNotExistError)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
 class PollForDecisionTask_args:
   """
   Attributes:
@@ -843,7 +1016,7 @@ class PollForDecisionTask_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'pollRequest', (PollForDecisionTaskRequest, PollForDecisionTaskRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'pollRequest', (shared.ttypes.PollForDecisionTaskRequest, shared.ttypes.PollForDecisionTaskRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, pollRequest=None,):
@@ -860,7 +1033,7 @@ class PollForDecisionTask_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.pollRequest = PollForDecisionTaskRequest()
+          self.pollRequest = shared.ttypes.PollForDecisionTaskRequest()
           self.pollRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -910,9 +1083,9 @@ class PollForDecisionTask_result:
   """
 
   thrift_spec = (
-    (0, TType.STRUCT, 'success', (PollForDecisionTaskResponse, PollForDecisionTaskResponse.thrift_spec), None, ), # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
+    (0, TType.STRUCT, 'success', (shared.ttypes.PollForDecisionTaskResponse, shared.ttypes.PollForDecisionTaskResponse.thrift_spec), None, ), # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
   )
 
   def __init__(self, success=None, badRequestError=None, internalServiceError=None,):
@@ -931,19 +1104,19 @@ class PollForDecisionTask_result:
         break
       if fid == 0:
         if ftype == TType.STRUCT:
-          self.success = PollForDecisionTaskResponse()
+          self.success = shared.ttypes.PollForDecisionTaskResponse()
           self.success.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1002,7 +1175,7 @@ class RespondDecisionTaskCompleted_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'completeRequest', (RespondDecisionTaskCompletedRequest, RespondDecisionTaskCompletedRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'completeRequest', (shared.ttypes.RespondDecisionTaskCompletedRequest, shared.ttypes.RespondDecisionTaskCompletedRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, completeRequest=None,):
@@ -1019,7 +1192,7 @@ class RespondDecisionTaskCompleted_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.completeRequest = RespondDecisionTaskCompletedRequest()
+          self.completeRequest = shared.ttypes.RespondDecisionTaskCompletedRequest()
           self.completeRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1069,8 +1242,8 @@ class RespondDecisionTaskCompleted_result:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
   )
 
   def __init__(self, badRequestError=None, internalServiceError=None,):
@@ -1088,13 +1261,13 @@ class RespondDecisionTaskCompleted_result:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1148,7 +1321,7 @@ class PollForActivityTask_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'pollRequest', (PollForActivityTaskRequest, PollForActivityTaskRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'pollRequest', (shared.ttypes.PollForActivityTaskRequest, shared.ttypes.PollForActivityTaskRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, pollRequest=None,):
@@ -1165,7 +1338,7 @@ class PollForActivityTask_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.pollRequest = PollForActivityTaskRequest()
+          self.pollRequest = shared.ttypes.PollForActivityTaskRequest()
           self.pollRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1215,9 +1388,9 @@ class PollForActivityTask_result:
   """
 
   thrift_spec = (
-    (0, TType.STRUCT, 'success', (PollForActivityTaskResponse, PollForActivityTaskResponse.thrift_spec), None, ), # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
+    (0, TType.STRUCT, 'success', (shared.ttypes.PollForActivityTaskResponse, shared.ttypes.PollForActivityTaskResponse.thrift_spec), None, ), # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
   )
 
   def __init__(self, success=None, badRequestError=None, internalServiceError=None,):
@@ -1236,19 +1409,19 @@ class PollForActivityTask_result:
         break
       if fid == 0:
         if ftype == TType.STRUCT:
-          self.success = PollForActivityTaskResponse()
+          self.success = shared.ttypes.PollForActivityTaskResponse()
           self.success.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1307,7 +1480,7 @@ class RecordActivityTaskHeartbeat_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'heartbeatRequest', (RecordActivityTaskHeartbeatRequest, RecordActivityTaskHeartbeatRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'heartbeatRequest', (shared.ttypes.RecordActivityTaskHeartbeatRequest, shared.ttypes.RecordActivityTaskHeartbeatRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, heartbeatRequest=None,):
@@ -1324,7 +1497,7 @@ class RecordActivityTaskHeartbeat_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.heartbeatRequest = RecordActivityTaskHeartbeatRequest()
+          self.heartbeatRequest = shared.ttypes.RecordActivityTaskHeartbeatRequest()
           self.heartbeatRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1375,10 +1548,10 @@ class RecordActivityTaskHeartbeat_result:
   """
 
   thrift_spec = (
-    (0, TType.STRUCT, 'success', (RecordActivityTaskHeartbeatResponse, RecordActivityTaskHeartbeatResponse.thrift_spec), None, ), # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'entityNotExistError', (EntityNotExistsError, EntityNotExistsError.thrift_spec), None, ), # 3
+    (0, TType.STRUCT, 'success', (shared.ttypes.RecordActivityTaskHeartbeatResponse, shared.ttypes.RecordActivityTaskHeartbeatResponse.thrift_spec), None, ), # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
   )
 
   def __init__(self, success=None, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
@@ -1398,25 +1571,25 @@ class RecordActivityTaskHeartbeat_result:
         break
       if fid == 0:
         if ftype == TType.STRUCT:
-          self.success = RecordActivityTaskHeartbeatResponse()
+          self.success = shared.ttypes.RecordActivityTaskHeartbeatResponse()
           self.success.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 3:
         if ftype == TType.STRUCT:
-          self.entityNotExistError = EntityNotExistsError()
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
           self.entityNotExistError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1480,7 +1653,7 @@ class RespondActivityTaskCompleted_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'completeRequest', (RespondActivityTaskCompletedRequest, RespondActivityTaskCompletedRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'completeRequest', (shared.ttypes.RespondActivityTaskCompletedRequest, shared.ttypes.RespondActivityTaskCompletedRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, completeRequest=None,):
@@ -1497,7 +1670,7 @@ class RespondActivityTaskCompleted_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.completeRequest = RespondActivityTaskCompletedRequest()
+          self.completeRequest = shared.ttypes.RespondActivityTaskCompletedRequest()
           self.completeRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1548,9 +1721,9 @@ class RespondActivityTaskCompleted_result:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'entityNotExistError', (EntityNotExistsError, EntityNotExistsError.thrift_spec), None, ), # 3
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
   )
 
   def __init__(self, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
@@ -1569,19 +1742,19 @@ class RespondActivityTaskCompleted_result:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 3:
         if ftype == TType.STRUCT:
-          self.entityNotExistError = EntityNotExistsError()
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
           self.entityNotExistError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1640,7 +1813,7 @@ class RespondActivityTaskFailed_args:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'failRequest', (RespondActivityTaskFailedRequest, RespondActivityTaskFailedRequest.thrift_spec), None, ), # 1
+    (1, TType.STRUCT, 'failRequest', (shared.ttypes.RespondActivityTaskFailedRequest, shared.ttypes.RespondActivityTaskFailedRequest.thrift_spec), None, ), # 1
   )
 
   def __init__(self, failRequest=None,):
@@ -1657,7 +1830,7 @@ class RespondActivityTaskFailed_args:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.failRequest = RespondActivityTaskFailedRequest()
+          self.failRequest = shared.ttypes.RespondActivityTaskFailedRequest()
           self.failRequest.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1708,9 +1881,9 @@ class RespondActivityTaskFailed_result:
 
   thrift_spec = (
     None, # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'entityNotExistError', (EntityNotExistsError, EntityNotExistsError.thrift_spec), None, ), # 3
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
   )
 
   def __init__(self, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
@@ -1729,19 +1902,19 @@ class RespondActivityTaskFailed_result:
         break
       if fid == 1:
         if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
+          self.badRequestError = shared.ttypes.BadRequestError()
           self.badRequestError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 2:
         if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
+          self.internalServiceError = shared.ttypes.InternalServiceError()
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 3:
         if ftype == TType.STRUCT:
-          self.entityNotExistError = EntityNotExistsError()
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
           self.entityNotExistError.read(iprot)
         else:
           iprot.skip(ftype)
@@ -1776,179 +1949,6 @@ class RespondActivityTaskFailed_result:
 
   def __hash__(self):
     value = 17
-    value = (value * 31) ^ hash(self.badRequestError)
-    value = (value * 31) ^ hash(self.internalServiceError)
-    value = (value * 31) ^ hash(self.entityNotExistError)
-    return value
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
-class GetWorkflowExecutionHistory_args:
-  """
-  Attributes:
-   - getRequest
-  """
-
-  thrift_spec = (
-    None, # 0
-    (1, TType.STRUCT, 'getRequest', (GetWorkflowExecutionHistoryRequest, GetWorkflowExecutionHistoryRequest.thrift_spec), None, ), # 1
-  )
-
-  def __init__(self, getRequest=None,):
-    self.getRequest = getRequest
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 1:
-        if ftype == TType.STRUCT:
-          self.getRequest = GetWorkflowExecutionHistoryRequest()
-          self.getRequest.read(iprot)
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('GetWorkflowExecutionHistory_args')
-    if self.getRequest is not None:
-      oprot.writeFieldBegin('getRequest', TType.STRUCT, 1)
-      self.getRequest.write(oprot)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def validate(self):
-    return
-
-
-  def __hash__(self):
-    value = 17
-    value = (value * 31) ^ hash(self.getRequest)
-    return value
-
-  def __repr__(self):
-    L = ['%s=%r' % (key, value)
-      for key, value in self.__dict__.iteritems()]
-    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-  def __eq__(self, other):
-    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-  def __ne__(self, other):
-    return not (self == other)
-
-class GetWorkflowExecutionHistory_result:
-  """
-  Attributes:
-   - success
-   - badRequestError
-   - internalServiceError
-   - entityNotExistError
-  """
-
-  thrift_spec = (
-    (0, TType.STRUCT, 'success', (GetWorkflowExecutionHistoryResponse, GetWorkflowExecutionHistoryResponse.thrift_spec), None, ), # 0
-    (1, TType.STRUCT, 'badRequestError', (BadRequestError, BadRequestError.thrift_spec), None, ), # 1
-    (2, TType.STRUCT, 'internalServiceError', (InternalServiceError, InternalServiceError.thrift_spec), None, ), # 2
-    (3, TType.STRUCT, 'entityNotExistError', (EntityNotExistsError, EntityNotExistsError.thrift_spec), None, ), # 3
-  )
-
-  def __init__(self, success=None, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
-    self.success = success
-    self.badRequestError = badRequestError
-    self.internalServiceError = internalServiceError
-    self.entityNotExistError = entityNotExistError
-
-  def read(self, iprot):
-    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
-      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
-      return
-    iprot.readStructBegin()
-    while True:
-      (fname, ftype, fid) = iprot.readFieldBegin()
-      if ftype == TType.STOP:
-        break
-      if fid == 0:
-        if ftype == TType.STRUCT:
-          self.success = GetWorkflowExecutionHistoryResponse()
-          self.success.read(iprot)
-        else:
-          iprot.skip(ftype)
-      elif fid == 1:
-        if ftype == TType.STRUCT:
-          self.badRequestError = BadRequestError()
-          self.badRequestError.read(iprot)
-        else:
-          iprot.skip(ftype)
-      elif fid == 2:
-        if ftype == TType.STRUCT:
-          self.internalServiceError = InternalServiceError()
-          self.internalServiceError.read(iprot)
-        else:
-          iprot.skip(ftype)
-      elif fid == 3:
-        if ftype == TType.STRUCT:
-          self.entityNotExistError = EntityNotExistsError()
-          self.entityNotExistError.read(iprot)
-        else:
-          iprot.skip(ftype)
-      else:
-        iprot.skip(ftype)
-      iprot.readFieldEnd()
-    iprot.readStructEnd()
-
-  def write(self, oprot):
-    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
-      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
-      return
-    oprot.writeStructBegin('GetWorkflowExecutionHistory_result')
-    if self.success is not None:
-      oprot.writeFieldBegin('success', TType.STRUCT, 0)
-      self.success.write(oprot)
-      oprot.writeFieldEnd()
-    if self.badRequestError is not None:
-      oprot.writeFieldBegin('badRequestError', TType.STRUCT, 1)
-      self.badRequestError.write(oprot)
-      oprot.writeFieldEnd()
-    if self.internalServiceError is not None:
-      oprot.writeFieldBegin('internalServiceError', TType.STRUCT, 2)
-      self.internalServiceError.write(oprot)
-      oprot.writeFieldEnd()
-    if self.entityNotExistError is not None:
-      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 3)
-      self.entityNotExistError.write(oprot)
-      oprot.writeFieldEnd()
-    oprot.writeFieldStop()
-    oprot.writeStructEnd()
-
-  def validate(self):
-    return
-
-
-  def __hash__(self):
-    value = 17
-    value = (value * 31) ^ hash(self.success)
     value = (value * 31) ^ hash(self.badRequestError)
     value = (value * 31) ^ hash(self.internalServiceError)
     value = (value * 31) ^ hash(self.entityNotExistError)

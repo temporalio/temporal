@@ -10,6 +10,7 @@ import (
 	"github.com/pborman/uuid"
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	s "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/test/flow"
 	"code.uber.internal/devexp/minions/test/workflow"
@@ -78,7 +79,7 @@ func (wf stressWorkflow) Execute(ctx workflow.Context, input []byte) (result []b
 
 	activityParameters := flow.ExecuteActivityParameters{
 		TaskListName: "testTaskList",
-		ActivityType: m.ActivityType{Name: common.StringPtr("sleepActivity")},
+		ActivityType: s.ActivityType{Name: common.StringPtr("sleepActivity")},
 		Input:        activityInput,
 	}
 
@@ -120,10 +121,10 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 	workflowExecutionParameters.TaskListName = "testTaskList"
 	workflowExecutionParameters.ConcurrentPollRoutineSize = 4
 
-	workflowFactory := func(wt m.WorkflowType) (flow.WorkflowDefinition, flow.Error) {
+	workflowFactory := func(wt s.WorkflowType) (flow.WorkflowDefinition, flow.Error) {
 		return workflow.NewWorkflowDefinition(stressWorkflow{}), nil
 	}
-	activityFactory := func(at m.ActivityType) (flow.ActivityImplementation, flow.Error) {
+	activityFactory := func(at s.ActivityType) (flow.ActivityImplementation, flow.Error) {
 		return &stressSleepActivity{}, nil
 	}
 
@@ -147,7 +148,7 @@ func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParam
 		return err
 	}
 	workflowOptions := flow.StartWorkflowOptions{
-		WorkflowType:                           m.WorkflowType{Name: common.StringPtr("stressWorkfow")},
+		WorkflowType:                           s.WorkflowType{Name: common.StringPtr("stressWorkfow")},
 		TaskListName:                           "testTaskList",
 		WorkflowInput:                          workflowInput,
 		ExecutionStartToCloseTimeoutSeconds:    10,

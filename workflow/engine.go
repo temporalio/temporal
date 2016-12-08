@@ -6,8 +6,7 @@ import (
 
 	"github.com/uber-common/bark"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
-	"code.uber.internal/devexp/minions/common"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/persistence"
 )
@@ -102,27 +101,7 @@ func (e *EngineImpl) RespondActivityTaskFailed(request *workflow.RespondActivity
 // GetWorkflowExecutionHistory retrieves the history for given workflow execution
 func (e *EngineImpl) GetWorkflowExecutionHistory(
 	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
-	r := &persistence.GetWorkflowExecutionRequest{
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(request.GetExecution().GetWorkflowId()),
-			RunId:      common.StringPtr(request.GetExecution().GetRunId()),
-		},
-	}
-
-	response, err := e.historyService.GetWorkflowExecution(r)
-	if err != nil {
-		return nil, err
-	}
-
-	builder := newHistoryBuilder(e.logger)
-	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
-		return nil, err
-	}
-
-	result := workflow.NewGetWorkflowExecutionHistoryResponse()
-	result.History = builder.getHistory()
-
-	return result, nil
+	return e.historyService.GetWorkflowExecutionHistory(request)
 }
 
 func createPersistanceRetryPolicy() backoff.RetryPolicy {

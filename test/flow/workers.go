@@ -2,6 +2,7 @@ package flow
 
 import (
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	log "github.com/Sirupsen/logrus"
@@ -182,18 +183,18 @@ func NewWorkflowClient(options StartWorkflowOptions, service m.TChanWorkflowServ
 }
 
 // StartWorkflowExecution starts a workflow execution
-func (wc *WorkflowClient) StartWorkflowExecution() (*m.WorkflowExecution, error) {
+func (wc *WorkflowClient) StartWorkflowExecution() (*gen.WorkflowExecution, error) {
 
-	startRequest := &m.StartWorkflowExecutionRequest{
+	startRequest := &gen.StartWorkflowExecutionRequest{
 		WorkflowId:   common.StringPtr(wc.options.WorkflowID),
 		WorkflowType: common.WorkflowTypePtr(wc.options.WorkflowType),
-		TaskList:     common.TaskListPtr(m.TaskList{Name: common.StringPtr(wc.options.TaskListName)}),
+		TaskList:     common.TaskListPtr(gen.TaskList{Name: common.StringPtr(wc.options.TaskListName)}),
 		Input:        wc.options.WorkflowInput,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(wc.options.ExecutionStartToCloseTimeoutSeconds),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(wc.options.DecisionTaskStartToCloseTimeoutSeconds),
 		Identity:                            common.StringPtr(wc.Identity)}
 
-	var response *m.StartWorkflowExecutionResponse
+	var response *gen.StartWorkflowExecutionResponse
 
 	// Start creating workflow request.
 	err := backoff.Retry(
@@ -211,7 +212,7 @@ func (wc *WorkflowClient) StartWorkflowExecution() (*m.WorkflowExecution, error)
 	}
 
 	wc.reporter.IncCounter(common.WorkflowsStartTotalCounter, nil, 1)
-	executionInfo := &m.WorkflowExecution{
+	executionInfo := &gen.WorkflowExecution{
 		// TODO: StartWorkflowExecution should return workflow ID as well along with run Id
 		WorkflowId: common.StringPtr(wc.options.WorkflowID),
 		RunId:      response.RunId}

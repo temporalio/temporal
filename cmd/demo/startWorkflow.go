@@ -5,6 +5,7 @@ import (
 	"time"
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/test/flow"
 	"code.uber.internal/devexp/minions/test/workflow"
@@ -55,7 +56,7 @@ func activityInfoWithInput(activityName string, request *sayGreetingActivityRequ
 func serializeParams(activityName string, input []byte) flow.ExecuteActivityParameters {
 	return flow.ExecuteActivityParameters{
 		TaskListName: "testTaskList" + "-" + activityName,
-		ActivityType: m.ActivityType{Name: common.StringPtr(activityName)},
+		ActivityType: gen.ActivityType{Name: common.StringPtr(activityName)},
 		Input:        input}
 }
 
@@ -89,11 +90,11 @@ func replayWorkflow(service m.TChanWorkflowService, reporter common.Reporter, co
 		ctx, cancel := thrift.NewContext(10 * time.Second)
 		defer cancel()
 
-		executionInfo := &m.WorkflowExecution{
+		executionInfo := &gen.WorkflowExecution{
 			WorkflowId: common.StringPtr(config.useWorkflowID),
 			RunId:      common.StringPtr(config.useRunID)}
 
-		request := &m.GetWorkflowExecutionHistoryRequest{
+		request := &gen.GetWorkflowExecutionHistoryRequest{
 			Execution: executionInfo}
 		_, err := service.GetWorkflowExecutionHistory(ctx, request)
 		if err != nil {
@@ -126,7 +127,7 @@ func launchDemoWorkflow(service m.TChanWorkflowService, reporter common.Reporter
 	workflowExecutionParameters.TaskListName = "testTaskList"
 	workflowExecutionParameters.ConcurrentPollRoutineSize = 4
 
-	workflowFactory := func(wt m.WorkflowType) (flow.WorkflowDefinition, flow.Error) {
+	workflowFactory := func(wt gen.WorkflowType) (flow.WorkflowDefinition, flow.Error) {
 		switch wt.GetName() {
 		case "greetingsWorkflow":
 			return workflow.NewWorkflowDefinition(greetingsWorkflow{}), nil
@@ -136,7 +137,7 @@ func launchDemoWorkflow(service m.TChanWorkflowService, reporter common.Reporter
 		panic("Invalid workflow type")
 	}
 
-	activityFactory := func(at m.ActivityType) (flow.ActivityImplementation, flow.Error) {
+	activityFactory := func(at gen.ActivityType) (flow.ActivityImplementation, flow.Error) {
 		switch at.GetName() {
 		case "getGreetingActivity":
 			return getGreetingActivity{}, nil
@@ -194,7 +195,7 @@ func launchDemoWorkflow(service m.TChanWorkflowService, reporter common.Reporter
 		}
 		workflowOptions := flow.StartWorkflowOptions{
 			WorkflowID:                             workflowID,
-			WorkflowType:                           m.WorkflowType{Name: common.StringPtr(workflowName)},
+			WorkflowType:                           gen.WorkflowType{Name: common.StringPtr(workflowName)},
 			TaskListName:                           "testTaskList",
 			WorkflowInput:                          nil,
 			ExecutionStartToCloseTimeoutSeconds:    10,

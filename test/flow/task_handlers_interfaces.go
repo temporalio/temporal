@@ -3,14 +3,14 @@ package flow
 import (
 	"golang.org/x/net/context"
 
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 )
 
 type (
 	// WorkflowTaskHandler represents workflow task handlers.
 	WorkflowTaskHandler interface {
 		// Process the workflow task
-		ProcessWorkflowTask(workflowTask *WorkflowTask) (*m.RespondDecisionTaskCompletedRequest, error)
+		ProcessWorkflowTask(workflowTask *WorkflowTask) (*gen.RespondDecisionTaskCompletedRequest, error)
 	}
 
 	// ActivityTaskHandler represents activity task handlers.
@@ -26,7 +26,7 @@ type (
 	// WorkflowExecutionEventHandler process a single event.
 	WorkflowExecutionEventHandler interface {
 		// Process a single event and return the assosciated decisions.
-		ProcessEvent(event *m.HistoryEvent) ([]*m.Decision, error)
+		ProcessEvent(event *gen.HistoryEvent) ([]*gen.Decision, error)
 
 		// Close for cleaning up resources on this event handler
 		Close()
@@ -34,11 +34,11 @@ type (
 
 	// WorkflowTask wraps a decision task.
 	WorkflowTask struct {
-		task *m.PollForDecisionTaskResponse
+		task *gen.PollForDecisionTaskResponse
 	}
 
 	// ActivityTask wraps a activity task.
 	ActivityTask struct {
-		task *m.PollForActivityTaskResponse
+		task *gen.PollForActivityTaskResponse
 	}
 )

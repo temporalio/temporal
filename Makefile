@@ -2,7 +2,10 @@ PROJECT_ROOT = code.uber.internal/devexp/minions
 
 # define the list of thrift files the service depends on
 # (if you have some)
-THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift
+THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift \
+	idl/code.uber.internal/devexp/minions/shared.thrift \
+        idl/code.uber.internal/devexp/minions/history.thrift \
+        idl/code.uber.internal/devexp/minions/matching.thrift \
 
 # list all executables
 PROGS = minions \

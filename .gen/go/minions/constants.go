@@ -5,6 +5,7 @@ package minions
 
 import (
 	"bytes"
+	"code.uber.internal/devexp/minions/.gen/go/shared"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
 )
@@ -13,6 +14,8 @@ import (
 var _ = thrift.ZERO
 var _ = fmt.Printf
 var _ = bytes.Equal
+
+var _ = shared.GoUnusedProtection__
 
 func init() {
 }

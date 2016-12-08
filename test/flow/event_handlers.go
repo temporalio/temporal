@@ -3,7 +3,7 @@ package flow
 import (
 	"fmt"
 
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	log "github.com/Sirupsen/logrus"
 )
@@ -26,7 +26,7 @@ type (
 		scheduledActivites           map[string]ResultHandler // Map of Activities(activity ID ->) and their response handlers
 		scheduledEventIDToActivityID map[int64]string         // Mapping from scheduled event ID to activity ID
 		counterID                    int32                    // To generate activity IDs
-		executeDecisions             []*m.Decision            // Decisions made during the execute of the workflow
+		executeDecisions             []*gen.Decision          // Decisions made during the execute of the workflow
 		completeHandler              CompletionHandler        // events completion handler
 		contextLogger                *log.Entry
 	}
@@ -39,7 +39,7 @@ func newWorkflowExecutionEventHandler(workflowInfo *WorkflowInfo, workflowDefini
 		workflowDefinitionFactory:    workflowDefinitionFactory,
 		scheduledActivites:           make(map[string]ResultHandler),
 		scheduledEventIDToActivityID: make(map[int64]string),
-		executeDecisions:             make([]*m.Decision, 0),
+		executeDecisions:             make([]*gen.Decision, 0),
 		completeHandler:              completionHandler,
 		contextLogger:                logger}
 	return &workflowExecutionEventHandler{context, logger}
@@ -59,33 +59,33 @@ func (wc *workflowContext) GenerateActivityID() string {
 	return fmt.Sprintf("%d", activityID)
 }
 
-func (wc *workflowContext) SwapExecuteDecisions(decisions []*m.Decision) []*m.Decision {
+func (wc *workflowContext) SwapExecuteDecisions(decisions []*gen.Decision) []*gen.Decision {
 	oldDecisions := wc.executeDecisions
 	wc.executeDecisions = decisions
 	return oldDecisions
 }
 
-func (wc *workflowContext) CreateNewDecision(decisionType m.DecisionType) *m.Decision {
-	return &m.Decision{
+func (wc *workflowContext) CreateNewDecision(decisionType gen.DecisionType) *gen.Decision {
+	return &gen.Decision{
 		DecisionType: common.DecisionTypePtr(decisionType),
 	}
 }
 
 func (wc *workflowContext) ExecuteActivity(parameters ExecuteActivityParameters, callback ResultHandler) {
-	scheduleTaskAttr := &m.ScheduleActivityTaskDecisionAttributes{}
+	scheduleTaskAttr := &gen.ScheduleActivityTaskDecisionAttributes{}
 	if parameters.ActivityID == nil {
 		scheduleTaskAttr.ActivityId = common.StringPtr(wc.GenerateActivityID())
 	} else {
 		scheduleTaskAttr.ActivityId = parameters.ActivityID
 	}
 	scheduleTaskAttr.ActivityType = common.ActivityTypePtr(parameters.ActivityType)
-	scheduleTaskAttr.TaskList = common.TaskListPtr(m.TaskList{Name: common.StringPtr(parameters.TaskListName)})
+	scheduleTaskAttr.TaskList = common.TaskListPtr(gen.TaskList{Name: common.StringPtr(parameters.TaskListName)})
 	scheduleTaskAttr.Input = parameters.Input
 	scheduleTaskAttr.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(parameters.ScheduleToCloseTimeoutSeconds)
 	scheduleTaskAttr.StartToCloseTimeoutSeconds = common.Int32Ptr(parameters.StartToCloseTimeoutSeconds)
 	scheduleTaskAttr.ScheduleToStartTimeoutSeconds = common.Int32Ptr(parameters.ScheduleToStartTimeoutSeconds)
 
-	decision := wc.CreateNewDecision(m.DecisionType_ScheduleActivityTask)
+	decision := wc.CreateNewDecision(gen.DecisionType_ScheduleActivityTask)
 	decision.ScheduleActivityTaskDecisionAttributes = scheduleTaskAttr
 
 	wc.executeDecisions = append(wc.executeDecisions, decision)
@@ -93,47 +93,47 @@ func (wc *workflowContext) ExecuteActivity(parameters ExecuteActivityParameters,
 	// wc.contextLogger.Infof("Scheduling Activity: %+v", parameters.ActivityType.GetName())
 }
 
-func (weh *workflowExecutionEventHandler) ProcessEvent(event *m.HistoryEvent) ([]*m.Decision, error) {
+func (weh *workflowExecutionEventHandler) ProcessEvent(event *gen.HistoryEvent) ([]*gen.Decision, error) {
 	if event == nil {
 		return nil, fmt.Errorf("nil event provided")
 	}
 
 	switch event.GetEventType() {
-	case m.EventType_WorkflowExecutionStarted:
+	case gen.EventType_WorkflowExecutionStarted:
 		return weh.handleWorkflowExecutionStarted(event.WorkflowExecutionStartedEventAttributes)
 
-	case m.EventType_WorkflowExecutionCompleted:
+	case gen.EventType_WorkflowExecutionCompleted:
 		// No Operation
-	case m.EventType_WorkflowExecutionFailed:
+	case gen.EventType_WorkflowExecutionFailed:
 		// No Operation
-	case m.EventType_WorkflowExecutionTimedOut:
+	case gen.EventType_WorkflowExecutionTimedOut:
 		// TODO:
-	case m.EventType_DecisionTaskScheduled:
+	case gen.EventType_DecisionTaskScheduled:
 		// No Operation
-	case m.EventType_DecisionTaskStarted:
+	case gen.EventType_DecisionTaskStarted:
 		// No Operation
-	case m.EventType_DecisionTaskTimedOut:
+	case gen.EventType_DecisionTaskTimedOut:
 		// TODO:
-	case m.EventType_DecisionTaskCompleted:
+	case gen.EventType_DecisionTaskCompleted:
 		// TODO:
-	case m.EventType_ActivityTaskScheduled:
+	case gen.EventType_ActivityTaskScheduled:
 		attributes := event.ActivityTaskScheduledEventAttributes
 		weh.scheduledEventIDToActivityID[event.GetEventId()] = attributes.GetActivityId()
 
-	case m.EventType_ActivityTaskStarted:
+	case gen.EventType_ActivityTaskStarted:
 		// No Operation
-	case m.EventType_ActivityTaskCompleted:
+	case gen.EventType_ActivityTaskCompleted:
 		return weh.handleActivityTaskCompleted(event.ActivityTaskCompletedEventAttributes)
 
-	case m.EventType_ActivityTaskFailed:
+	case gen.EventType_ActivityTaskFailed:
 		return weh.handleActivityTaskFailed(event.ActivityTaskFailedEventAttributes)
 
-	case m.EventType_ActivityTaskTimedOut:
+	case gen.EventType_ActivityTaskTimedOut:
 		return weh.handleActivityTaskTimedOut(event.ActivityTaskTimedOutEventAttributes)
 
-	case m.EventType_TimerStarted:
+	case gen.EventType_TimerStarted:
 		// TODO:
-	case m.EventType_TimerFired:
+	case gen.EventType_TimerFired:
 		// TODO:
 	default:
 		return nil, fmt.Errorf("missing event handler for event type: %v", event)
@@ -145,7 +145,7 @@ func (weh *workflowExecutionEventHandler) Close() {
 }
 
 func (weh *workflowExecutionEventHandler) handleWorkflowExecutionStarted(
-	attributes *m.WorkflowExecutionStartedEventAttributes) ([]*m.Decision, error) {
+	attributes *gen.WorkflowExecutionStartedEventAttributes) ([]*gen.Decision, error) {
 	workflowDefinition, err := weh.workflowDefinitionFactory(weh.workflowInfo.workflowType)
 	if err != nil {
 		return nil, err
@@ -153,11 +153,11 @@ func (weh *workflowExecutionEventHandler) handleWorkflowExecutionStarted(
 
 	// Invoke the workflow.
 	workflowDefinition.Execute(weh, attributes.Input)
-	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
+	return weh.SwapExecuteDecisions([]*gen.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskCompleted(
-	attributes *m.ActivityTaskCompletedEventAttributes) ([]*m.Decision, error) {
+	attributes *gen.ActivityTaskCompletedEventAttributes) ([]*gen.Decision, error) {
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
@@ -172,11 +172,11 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskCompleted(
 		// Invoke the callback
 		handler(attributes.GetResult_(), nil)
 	}
-	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
+	return weh.SwapExecuteDecisions([]*gen.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskFailed(
-	attributes *m.ActivityTaskFailedEventAttributes) ([]*m.Decision, error) {
+	attributes *gen.ActivityTaskFailedEventAttributes) ([]*gen.Decision, error) {
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
@@ -194,11 +194,11 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskFailed(
 		// Invoke the callback
 		handler(nil, err)
 	}
-	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
+	return weh.SwapExecuteDecisions([]*gen.Decision{}), nil
 }
 
 func (weh *workflowExecutionEventHandler) handleActivityTaskTimedOut(
-	attributes *m.ActivityTaskTimedOutEventAttributes) ([]*m.Decision, error) {
+	attributes *gen.ActivityTaskTimedOutEventAttributes) ([]*gen.Decision, error) {
 
 	activityID, ok := weh.scheduledEventIDToActivityID[attributes.GetScheduledEventId()]
 	if !ok {
@@ -214,5 +214,5 @@ func (weh *workflowExecutionEventHandler) handleActivityTaskTimedOut(
 		// Invoke the callback
 		handler(nil, err)
 	}
-	return weh.SwapExecuteDecisions([]*m.Decision{}), nil
+	return weh.SwapExecuteDecisions([]*gen.Decision{}), nil
 }

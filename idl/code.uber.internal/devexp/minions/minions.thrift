@@ -1,306 +1,6 @@
+include "shared.thrift"
+
 namespace java com.uber.devexp.minions
-
-exception BadRequestError {
-  1: required string message
-}
-
-exception InternalServiceError {
-  1: required string message
-}
-
-exception WorkflowExecutionAlreadyStartedError {
-  1: required string message
-}
-
-exception EntityNotExistsError {
-  1: required string message
-}
-
-enum TimeoutType {
-  START_TO_CLOSE,
-  SCHEDULE_TO_START,
-  SCHEDULE_TO_CLOSE,
-  HEARTBEAT,
-}
-
-enum DecisionType {
-  ScheduleActivityTask,
-  StartTimer,
-  CompleteWorkflowExecution,
-  FailWorkflowExecution,
-}
-
-enum EventType {
-  WorkflowExecutionStarted,
-  WorkflowExecutionCompleted,
-  WorkflowExecutionFailed,
-  WorkflowExecutionTimedOut,
-  DecisionTaskScheduled,
-  DecisionTaskStarted,
-  DecisionTaskCompleted,
-  DecisionTaskTimedOut
-  ActivityTaskScheduled,
-  ActivityTaskStarted,
-  ActivityTaskCompleted,
-  ActivityTaskFailed,
-  ActivityTaskTimedOut,
-  TimerStarted,
-  TimerFired,
-  CompleteWorkflowExecutionFailed,
-}
-
-enum WorkflowCompleteFailedCause {
-  UNHANDLED_DECISION,
-}
-
-struct WorkflowType {
-  10: optional string name
-}
-
-struct ActivityType {
-  10: optional string name
-}
-
-struct TaskList {
-  10: optional string name
-}
-
-struct WorkflowExecution {
-  10: optional string workflowId
-  20: optional string runId
-}
-
-struct ScheduleActivityTaskDecisionAttributes {
-  10: optional string activityId
-  20: optional ActivityType activityType
-  30: optional TaskList taskList
-  40: optional binary input
-  45: optional i32 scheduleToCloseTimeoutSeconds
-  50: optional i32 scheduleToStartTimeoutSeconds
-  55: optional i32 startToCloseTimeoutSeconds
-  60: optional i32 heartbeatTimeoutSeconds
-}
-
-struct StartTimerDecisionAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
-}
-
-struct CompleteWorkflowExecutionDecisionAttributes {
-  10: optional binary result
-}
-
-struct FailWorkflowExecutionDecisionAttributes {
-  10: optional string reason
-  20: optional binary details
-}
-
-struct Decision {
-  10: optional DecisionType decisionType
-  20: optional ScheduleActivityTaskDecisionAttributes scheduleActivityTaskDecisionAttributes
-  25: optional StartTimerDecisionAttributes startTimerDecisionAttributes
-  30: optional CompleteWorkflowExecutionDecisionAttributes completeWorkflowExecutionDecisionAttributes
-  35: optional FailWorkflowExecutionDecisionAttributes failWorkflowExecutionDecisionAttributes
-}
-
-struct WorkflowExecutionStartedEventAttributes {
-  10: optional WorkflowType workflowType
-  20: optional TaskList taskList
-  30: optional binary input
-  40: optional i32 executionStartToCloseTimeoutSeconds
-  50: optional i32 taskStartToCloseTimeoutSeconds
-  60: optional string identity
-}
-
-struct WorkflowExecutionCompletedEventAttributes {
-  10: optional binary result
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct WorkflowExecutionFailedEventAttributes {
-  10: optional string reason
-  20: optional binary details
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct WorkflowExecutionTimedOutEventAttributes {
-  10: optional TimeoutType timeoutType
-}
-
-struct CompleteWorkflowExecutionFailedEventAttributes {
-  10: optional WorkflowCompleteFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct DecisionTaskScheduledEventAttributes {
-  10: optional TaskList taskList
-  20: optional i32 startToCloseTimeoutSeconds
-}
-
-struct DecisionTaskStartedEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional string identity
-}
-
-struct DecisionTaskCompletedEventAttributes {
-  10: optional binary executionContext
-  20: optional i64 (js.type = "Long") scheduledEventId
-  30: optional i64 (js.type = "Long") startedEventId
-  40: optional string identity
-}
-
-struct ActivityTaskScheduledEventAttributes {
-  10: optional string activityId
-  20: optional ActivityType activityType
-  30: optional TaskList taskList
-  40: optional binary input
-  45: optional i32 scheduleToCloseTimeoutSeconds
-  50: optional i32 scheduleToStartTimeoutSeconds
-  55: optional i32 startToCloseTimeoutSeconds
-  60: optional i32 heartbeatTimeoutSeconds
-  90: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct ActivityTaskStartedEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional string identity
-}
-
-struct ActivityTaskCompletedEventAttributes {
-  10: optional binary result
-  20: optional i64 (js.type = "Long") scheduledEventId
-  30: optional i64 (js.type = "Long") startedEventId
-  40: optional string identity
-}
-
-struct ActivityTaskFailedEventAttributes {
-  10: optional string reason
-  20: optional binary details
-  30: optional i64 (js.type = "Long") scheduledEventId
-  40: optional i64 (js.type = "Long") startedEventId
-  50: optional string identity
-}
-
-struct ActivityTaskTimedOutEventAttributes {
-  10: optional i64 (js.type = "Long") scheduledEventId
-  20: optional i64 (js.type = "Long") startedEventId
-  30: optional TimeoutType timeoutType
-}
-
-struct TimerStartedEventAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
-  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct TimerFiredEventAttributes {
-  10: optional string timerId
-  20: optional i64 (js.type = "Long") startedEventId
-}
-
-struct HistoryEvent {
-  10:  optional i64 (js.type = "Long") eventId
-  20:  optional i64 (js.type = "Long") timestamp
-  30:  optional EventType eventType
-  35:  optional WorkflowExecutionStartedEventAttributes workflowExecutionStartedEventAttributes
-  40:  optional WorkflowExecutionCompletedEventAttributes workflowExecutionCompletedEventAttributes
-  45:  optional WorkflowExecutionFailedEventAttributes workflowExecutionFailedEventAttributes
-  50:  optional WorkflowExecutionTimedOutEventAttributes workflowExecutionTimedOutEventAttributes
-  55:  optional DecisionTaskScheduledEventAttributes decisionTaskScheduledEventAttributes
-  60:  optional DecisionTaskStartedEventAttributes decisionTaskStartedEventAttributes
-  65:  optional DecisionTaskCompletedEventAttributes decisionTaskCompletedEventAttributes
-  70:  optional ActivityTaskScheduledEventAttributes activityTaskScheduledEventAttributes
-  75:  optional ActivityTaskStartedEventAttributes activityTaskStartedEventAttributes
-  80:  optional ActivityTaskCompletedEventAttributes activityTaskCompletedEventAttributes
-  85:  optional ActivityTaskFailedEventAttributes activityTaskFailedEventAttributes
-  90:  optional ActivityTaskTimedOutEventAttributes activityTaskTimedOutEventAttributes
-  95:  optional TimerStartedEventAttributes timerStartedEventAttributes
-  100: optional TimerFiredEventAttributes timerFiredEventAttributes
-  105: optional CompleteWorkflowExecutionFailedEventAttributes completeWorkflowExecutionFailedEventAttributes
-}
-
-struct History {
-  10: optional list<HistoryEvent> events
-}
-
-struct StartWorkflowExecutionRequest {
-  10: optional string workflowId
-  20: optional WorkflowType workflowType
-  30: optional TaskList taskList
-  40: optional binary input
-  50: optional i32 executionStartToCloseTimeoutSeconds
-  60: optional i32 taskStartToCloseTimeoutSeconds
-  70: optional string identity
-}
-
-struct StartWorkflowExecutionResponse {
-  10: optional string runId
-}
-
-struct PollForDecisionTaskRequest {
-  10: optional TaskList taskList
-  20: optional string identity
-}
-
-struct PollForDecisionTaskResponse {
-  10: optional binary taskToken
-  20: optional WorkflowExecution workflowExecution
-  30: optional WorkflowType workflowType
-  40: optional i64 (js.type = "Long") previousStartedEventId
-  50: optional i64 (js.type = "Long") startedEventId
-  60: optional History history
-}
-
-struct RespondDecisionTaskCompletedRequest {
-  10: optional binary taskToken
-  20: optional list<Decision> decisions
-  30: optional binary executionContext
-  40: optional string identity
-}
-
-struct PollForActivityTaskRequest {
-  10: optional TaskList taskList
-  20: optional string identity
-}
-
-struct PollForActivityTaskResponse {
-  10: optional binary taskToken
-  20: optional WorkflowExecution workflowExecution
-  30: optional string activityId
-  40: optional ActivityType activityType
-  50: optional binary input
-  60: optional i64 (js.type = "Long") startedEventId
-}
-
-struct RecordActivityTaskHeartbeatRequest {
-  10: optional binary taskToken
-  20: optional binary details
-  30: optional string identity
-}
-
-struct RecordActivityTaskHeartbeatResponse {
-}
-
-struct RespondActivityTaskCompletedRequest {
-  10: optional binary taskToken
-  20: optional binary result
-  30: optional string identity
-}
-
-struct RespondActivityTaskFailedRequest {
-  10: optional binary taskToken
-  20: optional string reason
-  30: optional binary details
-  40: optional string identity
-}
-
-struct GetWorkflowExecutionHistoryRequest {
-  10: optional WorkflowExecution execution
-}
-
-struct GetWorkflowExecutionHistoryResponse {
-  10: optional History history
-}
 
 /**
 * WorkflowService API is exposed to provide support for long running applications.  Application is expected to call
@@ -317,11 +17,22 @@ service WorkflowService {
   * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
   * exists with same workflowId.
   **/
-  StartWorkflowExecutionResponse StartWorkflowExecution(1: StartWorkflowExecutionRequest startRequest)
+  shared.StartWorkflowExecutionResponse StartWorkflowExecution(1: shared.StartWorkflowExecutionRequest startRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
-      3: WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,
+    )
+
+  /**
+  * Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+  * execution in unknown to the service.
+  **/
+  shared.GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(1: shared.GetWorkflowExecutionHistoryRequest getRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**
@@ -331,10 +42,10 @@ service WorkflowService {
   * It will also create a 'DecisionTaskStarted' event in the history for that session before handing off DecisionTask to
   * application worker.
   **/
-  PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)
+  shared.PollForDecisionTaskResponse PollForDecisionTask(1: shared.PollForDecisionTaskRequest pollRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
     )
 
   /**
@@ -344,10 +55,10 @@ service WorkflowService {
   * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
   * for completing the DecisionTask.
   **/
-  void RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)
+  void RespondDecisionTaskCompleted(1: shared.RespondDecisionTaskCompletedRequest completeRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
     )
 
   /**
@@ -359,10 +70,10 @@ service WorkflowService {
   * prevent the task from getting timed out.  An event 'ActivityTaskStarted' event is also written to workflow execution
   * history before the ActivityTask is dispatched to application worker.
   **/
-  PollForActivityTaskResponse PollForActivityTask(1: PollForActivityTaskRequest pollRequest)
+  shared.PollForActivityTaskResponse PollForActivityTask(1: shared.PollForActivityTaskRequest pollRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
     )
 
   /**
@@ -372,11 +83,11 @@ service WorkflowService {
   * fail with 'EntityNotExistsError' in such situations.  Use the 'taskToken' provided as response of
   * PollForActivityTask API call for heartbeating.
   **/
-  RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: RecordActivityTaskHeartbeatRequest heartbeatRequest)
+  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(1: shared.RecordActivityTaskHeartbeatRequest heartbeatRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
-      3: EntityNotExistsError entityNotExistError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**
@@ -386,11 +97,11 @@ service WorkflowService {
   * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
   * anymore due to activity timeout.
   **/
-  void RespondActivityTaskCompleted(1: RespondActivityTaskCompletedRequest completeRequest)
+  void  RespondActivityTaskCompleted(1: shared.RespondActivityTaskCompletedRequest completeRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
-      3: EntityNotExistsError entityNotExistError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**
@@ -400,21 +111,10 @@ service WorkflowService {
   * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
   * anymore due to activity timeout.
   **/
-  void RespondActivityTaskFailed(1: RespondActivityTaskFailedRequest failRequest)
+  void  RespondActivityTaskFailed(1: shared.RespondActivityTaskFailedRequest failRequest)
     throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
-      3: EntityNotExistsError entityNotExistError,
-    )
-
-  /**
-  * Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-  * execution in unknown to the service.
-  **/
-  GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(1: GetWorkflowExecutionHistoryRequest getRequest)
-    throws (
-      1: BadRequestError badRequestError,
-      2: InternalServiceError internalServiceError,
-      3: EntityNotExistsError entityNotExistError,
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
     )
 }

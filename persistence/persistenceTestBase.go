@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/go-common.git/x/log"
 	"github.com/gocql/gocql"

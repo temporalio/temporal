@@ -1,11 +1,11 @@
 package workflow
 
 import (
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 )
 
-var nilWorkflowExecution = workflow.WorkflowExecution{}
+var nilWorkflowExecution = gen.WorkflowExecution{}
 
 type (
 	// Engine represents an interface for workflow engine
@@ -14,13 +14,13 @@ type (
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		// TODO: This is only needed temporarily because it is used by thrift handler.
 		// The handler will be changed to rely on the HistoryEngine and MatchingEngine interfaces directly, so this can be removed.
-		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error)
-		PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error)
-		PollForActivityTask(request *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
-		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
-		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
-		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error
+		StartWorkflowExecution(request *gen.StartWorkflowExecutionRequest) (gen.WorkflowExecution, error)
 		GetWorkflowExecutionHistory(
-			request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
+			request *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error)
+		PollForDecisionTask(request *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error)
+		PollForActivityTask(request *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error)
+		RespondDecisionTaskCompleted(request *gen.RespondDecisionTaskCompletedRequest) error
+		RespondActivityTaskCompleted(request *gen.RespondActivityTaskCompletedRequest) error
+		RespondActivityTaskFailed(request *gen.RespondActivityTaskFailedRequest) error
 	}
 )

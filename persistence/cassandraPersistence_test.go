@@ -9,7 +9,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
-	gen "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 )
 

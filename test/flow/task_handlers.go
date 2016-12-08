@@ -7,6 +7,7 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	log "github.com/Sirupsen/logrus"
@@ -53,7 +54,7 @@ type (
 
 	// ActivityTaskTimeoutError wraps the details of the timeout of activity
 	ActivityTaskTimeoutError struct {
-		TimeoutType m.TimeoutType
+		TimeoutType gen.TimeoutType
 	}
 )
 
@@ -107,7 +108,7 @@ func newWorkflowTaskHandler(taskListName string, identity string, factory Workfl
 }
 
 // ProcessWorkflowTask processes each all the events of the workflow task.
-func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) (*m.RespondDecisionTaskCompletedRequest, error) {
+func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) (*gen.RespondDecisionTaskCompletedRequest, error) {
 	if workflowTask == nil {
 		return nil, fmt.Errorf("nil workflowtask provided")
 	}
@@ -137,14 +138,14 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 		workflowInfo, wth.workflowDefFactory, completionHandler, wth.contextLogger)
 	helperEvents := &eventsHelper{workflowTask: workflowTask}
 	history := workflowTask.task.History
-	decisions := []*m.Decision{}
+	decisions := []*gen.Decision{}
 
 	startTime := time.Now()
 
 	// Process events
 	for _, event := range history.Events {
 		// wth.contextLogger.Debugf("ProcessWorkflowTask: Id=%d, Event=%+v", event.GetEventId(), event)
-		if event.GetEventType() == m.EventType_WorkflowExecutionStarted {
+		if event.GetEventType() == gen.EventType_WorkflowExecutionStarted {
 			startTime = time.Unix(0, event.GetTimestamp())
 		}
 		eventDecisions, err := eventHandler.ProcessEvent(event)
@@ -155,7 +156,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 			if eventDecisions != nil {
 				decisions = append(decisions, eventDecisions...)
 				for _, d := range decisions {
-					if d.GetDecisionType() == m.DecisionType_ScheduleActivityTask {
+					if d.GetDecisionType() == gen.DecisionType_ScheduleActivityTask {
 						wth.contextLogger.Infof("[WorkflowID: %s] Scheduling Activity: %s",
 							workflowTask.task.GetWorkflowExecution().GetWorkflowId(),
 							d.GetScheduleActivityTaskDecisionAttributes().GetActivityType().GetName())
@@ -175,7 +176,7 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 	}
 
 	// Fill the response.
-	taskCompletionRequest := &m.RespondDecisionTaskCompletedRequest{
+	taskCompletionRequest := &gen.RespondDecisionTaskCompletedRequest{
 		TaskToken: workflowTask.task.TaskToken,
 		Decisions: decisions,
 		Identity:  common.StringPtr(wth.identity),
@@ -185,20 +186,20 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 }
 
 func (wth *workflowTaskHandler) completeWorkflow(isWorkflowCompleted bool, completionResult []byte,
-	err Error) []*m.Decision {
-	decisions := []*m.Decision{}
+	err Error) []*gen.Decision {
+	decisions := []*gen.Decision{}
 	if err != nil {
 		// Workflow failures
-		failDecision := createNewDecision(m.DecisionType_FailWorkflowExecution)
-		failDecision.FailWorkflowExecutionDecisionAttributes = &m.FailWorkflowExecutionDecisionAttributes{
+		failDecision := createNewDecision(gen.DecisionType_FailWorkflowExecution)
+		failDecision.FailWorkflowExecutionDecisionAttributes = &gen.FailWorkflowExecutionDecisionAttributes{
 			Reason:  common.StringPtr(err.Reason()),
 			Details: err.Details(),
 		}
 		decisions = append(decisions, failDecision)
 	} else if isWorkflowCompleted {
 		// Workflow completion
-		completeDecision := createNewDecision(m.DecisionType_CompleteWorkflowExecution)
-		completeDecision.CompleteWorkflowExecutionDecisionAttributes = &m.CompleteWorkflowExecutionDecisionAttributes{
+		completeDecision := createNewDecision(gen.DecisionType_CompleteWorkflowExecution)
+		completeDecision.CompleteWorkflowExecutionDecisionAttributes = &gen.CompleteWorkflowExecutionDecisionAttributes{
 			Result_: completionResult,
 		}
 		decisions = append(decisions, completeDecision)
@@ -235,7 +236,7 @@ func (ath *activityTaskHandler) Execute(context context.Context, activityTask *A
 
 	output, err := activityImplementation.Execute(activityExecutionContext, activityTask.task.GetInput())
 	if err != nil {
-		responseFailure := &m.RespondActivityTaskFailedRequest{
+		responseFailure := &gen.RespondActivityTaskFailedRequest{
 			TaskToken: activityTask.task.TaskToken,
 			Reason:    common.StringPtr(err.Reason()),
 			Details:   err.Details(),
@@ -243,7 +244,7 @@ func (ath *activityTaskHandler) Execute(context context.Context, activityTask *A
 		return responseFailure, nil
 	}
 
-	responseComplete := &m.RespondActivityTaskCompletedRequest{
+	responseComplete := &gen.RespondActivityTaskCompletedRequest{
 		TaskToken: activityTask.task.TaskToken,
 		Result_:   output,
 		Identity:  common.StringPtr(ath.identity)}
@@ -255,7 +256,7 @@ func (aec *activityExecutionContext) TaskToken() []byte {
 }
 
 func (aec *activityExecutionContext) RecordActivityHeartbeat(details []byte) error {
-	request := &m.RecordActivityTaskHeartbeatRequest{
+	request := &gen.RecordActivityTaskHeartbeatRequest{
 		TaskToken: aec.TaskToken(),
 		Details:   details,
 		Identity:  common.StringPtr(aec.identity)}
@@ -272,8 +273,8 @@ func (aec *activityExecutionContext) RecordActivityHeartbeat(details []byte) err
 	return err
 }
 
-func createNewDecision(decisionType m.DecisionType) *m.Decision {
-	return &m.Decision{
+func createNewDecision(decisionType gen.DecisionType) *gen.Decision {
+	return &gen.Decision{
 		DecisionType: common.DecisionTypePtr(decisionType),
 	}
 }

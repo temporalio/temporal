@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 )
 

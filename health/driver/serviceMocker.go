@@ -1,7 +1,7 @@
 package driver
 
 import (
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	m "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/workflow"
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"

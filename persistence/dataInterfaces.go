@@ -3,7 +3,7 @@ package persistence
 import (
 	"time"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 )
 
 // Workflow execution states

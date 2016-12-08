@@ -1,8 +1,6 @@
 package common
 
-import (
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
-)
+import s "code.uber.internal/devexp/minions/.gen/go/shared"
 
 // IntPtr makes a copy and returns the pointer to an int.
 func IntPtr(v int) *int {
@@ -45,26 +43,26 @@ func StringPtr(v string) *string {
 }
 
 // TaskListPtr makes a copy and returns the pointer to a TaskList.
-func TaskListPtr(v m.TaskList) *m.TaskList {
+func TaskListPtr(v s.TaskList) *s.TaskList {
 	return &v
 }
 
 // ActivityTypePtr makes a copy and returns the pointer to a ActivityType.
-func ActivityTypePtr(v m.ActivityType) *m.ActivityType {
+func ActivityTypePtr(v s.ActivityType) *s.ActivityType {
 	return &v
 }
 
 // DecisionTypePtr makes a copy and returns the pointer to a DecisionType.
-func DecisionTypePtr(t m.DecisionType) *m.DecisionType {
+func DecisionTypePtr(t s.DecisionType) *s.DecisionType {
 	return &t
 }
 
 // EventTypePtr makes a copy and returns the pointer to a EventType.
-func EventTypePtr(t m.EventType) *m.EventType {
+func EventTypePtr(t s.EventType) *s.EventType {
 	return &t
 }
 
 // WorkflowTypePtr makes a copy and returns the pointer to a WorkflowType.
-func WorkflowTypePtr(t m.WorkflowType) *m.WorkflowType {
+func WorkflowTypePtr(t s.WorkflowType) *s.WorkflowType {
 	return &t
 }

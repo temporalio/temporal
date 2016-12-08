@@ -1,9 +1,9 @@
 package workflow
 
 import (
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	h "code.uber.internal/devexp/minions/.gen/go/history"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/persistence"
 )
 
 type (
@@ -12,9 +12,10 @@ type (
 		common.Daemon
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error)
-		GetWorkflowExecution(
-			request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
-		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
+		GetWorkflowExecutionHistory(
+			request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
+		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
+		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
 		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
 		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error

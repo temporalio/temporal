@@ -3,7 +3,8 @@ package workflow
 import (
 	"fmt"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	h "code.uber.internal/devexp/minions/.gen/go/history"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/persistence"
@@ -21,8 +22,6 @@ type matchingEngineImpl struct {
 type taskContext struct {
 	info              *persistence.TaskInfo
 	workflowExecution workflow.WorkflowExecution
-	executionInfo     *persistence.WorkflowExecutionInfo
-	builder           *historyBuilder
 	matchingEngine    *matchingEngineImpl
 	logger            bark.Logger
 }
@@ -82,40 +81,18 @@ func (e *matchingEngineImpl) pollForDecisionTaskOperation(request *workflow.Poll
 	}
 	defer context.completeTask()
 
-	scheduleID := context.info.ScheduleID
-Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return nil, err1
-		}
+	resp, err := e.historyService.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		WorkflowExecution: &context.workflowExecution,
+		ScheduleId:        &context.info.ScheduleID,
+		TaskId:            &context.info.TaskID,
+		PollRequest:       request,
+	})
 
-		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-		// task is not outstanding than it is most probably a duplicate and complete the task.
-		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, context.info.TaskID, scheduleID, startedID, isRunning)
-			return nil, errDuplicate
-		}
-
-		event := builder.AddDecisionTaskStartedEvent(scheduleID, request)
-		if event == nil {
-			return nil, errCreateEvent
-		}
-
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-		// the history and try the operation again.
-		if err2 := context.updateWorkflowExecution(); err2 != nil {
-			if err2 == errConflict {
-				continue Update_History_Loop
-			}
-
-			return nil, err2
-		}
-
-		return e.createPollForDecisionTaskResponse(context, event), nil
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errMaxAttemptsExceeded
+	return e.createPollForDecisionTaskResponse(context, resp), nil
 }
 
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
@@ -129,40 +106,19 @@ func (e *matchingEngineImpl) pollForActivityTaskOperation(request *workflow.Poll
 	}
 	defer context.completeTask()
 
-	scheduleID := context.info.ScheduleID
-Update_History_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return nil, err1
-		}
+	resp, err := e.historyService.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
+		WorkflowExecution: &context.workflowExecution,
+		ScheduleId:        &context.info.ScheduleID,
+		TaskId:            &context.info.TaskID,
+		PollRequest:       request,
+	})
 
-		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-		// task is not outstanding than it is most probably a duplicate and complete the task.
-		if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, context.info.TaskID, scheduleID, startedID, isRunning)
-			return nil, errDuplicate
-		}
-
-		event := builder.AddActivityTaskStartedEvent(scheduleID, request)
-		if event == nil {
-			return nil, errCreateEvent
-		}
-
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-		// the history and try the operationi again.
-		if err2 := context.updateWorkflowExecution(); err2 != nil {
-			if err2 == errConflict {
-				continue Update_History_Loop
-			}
-
-			return nil, err2
-		}
-
-		return e.createPollForActivityTaskResponse(context, event), nil
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errMaxAttemptsExceeded
+	return e.createPollForActivityTaskResponse(context, resp), nil
+
 }
 
 // Creates a task context for a given task list and type.
@@ -221,9 +177,8 @@ func (e *matchingEngineImpl) completeTaskWithRetry(request *persistence.Complete
 }
 
 func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskContext,
-	startedEvent *workflow.HistoryEvent) *workflow.PollForDecisionTaskResponse {
+	historyResponse *h.RecordDecisionTaskStartedResponse) *workflow.PollForDecisionTaskResponse {
 	task := context.info
-	builder := context.builder
 
 	response := workflow.NewPollForDecisionTaskResponse()
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
@@ -233,23 +188,23 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		ScheduleID: task.ScheduleID,
 	}
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
-	response.WorkflowType = builder.getWorkflowType()
-	if builder.previousDecisionStartedEvent() != emptyEventID {
-		response.PreviousStartedEventId = common.Int64Ptr(builder.previousDecisionStartedEvent())
+	response.WorkflowType = historyResponse.GetWorkflowType()
+	if historyResponse.GetPreviousStartedEventId() != emptyEventID {
+		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
-	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
-	response.History = builder.getHistory()
+	response.StartedEventId = historyResponse.StartedEventId
+	response.History = historyResponse.History
 
 	return response
 }
 
 // Populate the activity task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskContext,
-	startedEvent *workflow.HistoryEvent) *workflow.PollForActivityTaskResponse {
+	historyResponse *h.RecordActivityTaskStartedResponse) *workflow.PollForActivityTaskResponse {
 	task := context.info
-	builder := context.builder
 
-	scheduledEvent := builder.GetEvent(task.ScheduleID)
+	startedEvent := historyResponse.StartedEvent
+	scheduledEvent := historyResponse.ScheduledEvent
 	attributes := scheduledEvent.GetActivityTaskScheduledEventAttributes()
 
 	response := workflow.NewPollForActivityTaskResponse()
@@ -285,51 +240,6 @@ func (c *taskContext) completeTask() error {
 	}
 
 	return err
-}
-
-func (c *taskContext) loadWorkflowExecution() (*historyBuilder, error) {
-	resp, err := c.matchingEngine.historyService.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{Execution: c.workflowExecution})
-	if err != nil {
-		return nil, err
-	}
-	builder := newHistoryBuilder(c.logger)
-	if err := builder.loadExecutionInfo(resp.ExecutionInfo); err != nil {
-		return nil, err
-	}
-	c.builder = builder
-	c.executionInfo = resp.ExecutionInfo
-	return builder, nil
-}
-
-func (c *taskContext) updateWorkflowExecution() error {
-	updateCondition := c.executionInfo.NextEventID
-
-	updatedHistory, err := c.builder.Serialize()
-	if err != nil {
-		logHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
-		return err
-	}
-
-	c.executionInfo.NextEventID = c.builder.nextEventID
-	c.executionInfo.LastProcessedEvent = c.builder.previousDecisionStartedEvent()
-	c.executionInfo.History = updatedHistory
-	c.executionInfo.DecisionPending = c.builder.hasPendingDecisionTask()
-	c.executionInfo.State = c.builder.getWorklowState()
-
-	err1 := c.matchingEngine.historyService.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
-		ExecutionInfo: c.executionInfo,
-		Condition:     updateCondition,
-	})
-	if err1 != nil {
-		switch err1.(type) {
-		case *persistence.ConditionFailedError:
-			return errConflict
-		}
-
-		return err1
-	}
-
-	return nil
 }
 
 func newTaskContext(matchingEngine *matchingEngineImpl, info *persistence.TaskInfo, execution workflow.WorkflowExecution, logger bark.Logger) *taskContext {

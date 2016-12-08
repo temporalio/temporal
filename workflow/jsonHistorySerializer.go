@@ -3,7 +3,7 @@ package workflow
 import (
 	"encoding/json"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 )
 
 type (

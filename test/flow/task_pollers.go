@@ -5,6 +5,7 @@ import (
 	"time"
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	log "github.com/Sirupsen/logrus"
@@ -61,15 +62,15 @@ func createServiceRetryPolicy() backoff.RetryPolicy {
 func isServiceTransientError(err error) bool {
 	// Retrying by default so it covers all transport errors.
 	switch err.(type) {
-	case *m.BadRequestError:
+	case *gen.BadRequestError:
 		return false
-	case *m.EntityNotExistsError:
+	case *gen.EntityNotExistsError:
 		return false
-	case *m.WorkflowExecutionAlreadyStartedError:
+	case *gen.WorkflowExecutionAlreadyStartedError:
 		return false
 	}
 
-	// m.InternalServiceError
+	// gen.InternalServiceError
 	return true
 }
 
@@ -127,8 +128,8 @@ func (wtp *workflowTaskPoller) PollAndProcessSingleTask(routineID int) error {
 // Poll for a single workflow task from the service
 func (wtp *workflowTaskPoller) poll(routineID int) (*WorkflowTask, error) {
 	wtp.contextLogger.Debugf("[%d]workflowTaskPoller::Poll", routineID)
-	request := &m.PollForDecisionTaskRequest{
-		TaskList: common.TaskListPtr(m.TaskList{Name: common.StringPtr(wtp.taskListName)}),
+	request := &gen.PollForDecisionTaskRequest{
+		TaskList: common.TaskListPtr(gen.TaskList{Name: common.StringPtr(wtp.taskListName)}),
 		Identity: common.StringPtr(wtp.identity),
 	}
 
@@ -159,8 +160,8 @@ func newActivityTaskPoller(service m.TChanWorkflowService, taskListName string, 
 // Poll for a single activity task from the service
 func (atp *activityTaskPoller) poll(routineID int) (*ActivityTask, error) {
 	atp.contextLogger.Debugf("[%d]activityTaskPoller::Poll", routineID)
-	request := &m.PollForActivityTaskRequest{
-		TaskList: common.TaskListPtr(m.TaskList{Name: common.StringPtr(atp.taskListName)}),
+	request := &gen.PollForActivityTaskRequest{
+		TaskList: common.TaskListPtr(gen.TaskList{Name: common.StringPtr(atp.taskListName)}),
 		Identity: common.StringPtr(atp.identity),
 	}
 
@@ -208,26 +209,26 @@ func (atp *activityTaskPoller) PollAndProcessSingleTask(routineID int) error {
 	// TODO: Handle Cancel of the activity after the thrift method is introduced.
 	switch result.(type) {
 	// Report success untill we succeed
-	case *m.RespondActivityTaskCompletedRequest:
+	case *gen.RespondActivityTaskCompletedRequest:
 		err = backoff.Retry(
 			func() error {
 				ctx, cancel := thrift.NewContext(serviceTimeOut)
 				defer cancel()
 
-				return atp.service.RespondActivityTaskCompleted(ctx, result.(*m.RespondActivityTaskCompletedRequest))
+				return atp.service.RespondActivityTaskCompleted(ctx, result.(*gen.RespondActivityTaskCompletedRequest))
 			}, serviceOperationRetryPolicy, isServiceTransientError)
 
 		if err != nil {
 			return err
 		}
 		// Report failure untill we succeed
-	case *m.RespondActivityTaskFailedRequest:
+	case *gen.RespondActivityTaskFailedRequest:
 		err = backoff.Retry(
 			func() error {
 				ctx, cancel := thrift.NewContext(serviceTimeOut)
 				defer cancel()
 
-				return atp.service.RespondActivityTaskFailed(ctx, result.(*m.RespondActivityTaskFailedRequest))
+				return atp.service.RespondActivityTaskFailed(ctx, result.(*gen.RespondActivityTaskFailedRequest))
 			}, serviceOperationRetryPolicy, isServiceTransientError)
 		if err != nil {
 			return err

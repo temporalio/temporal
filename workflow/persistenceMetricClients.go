@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/workflow/metrics"

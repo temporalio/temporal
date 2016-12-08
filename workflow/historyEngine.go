@@ -3,7 +3,8 @@ package workflow
 import (
 	"fmt"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	h "code.uber.internal/devexp/minions/.gen/go/history"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/persistence"
@@ -90,15 +91,111 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 	return workflowExecution, nil
 }
 
-// GetWorkflowExecution returns a workflow execution's info
-func (e *historyEngineImpl) GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (
-	*persistence.GetWorkflowExecutionResponse, error) {
-	return e.getWorkflowExecutionWithRetry(request)
+// GetWorkflowExecutionHistory retrieves the history for given workflow execution
+func (e *historyEngineImpl) GetWorkflowExecutionHistory(
+	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
+	r := &persistence.GetWorkflowExecutionRequest{
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(request.GetExecution().GetWorkflowId()),
+			RunId:      common.StringPtr(request.GetExecution().GetRunId()),
+		},
+	}
+
+	response, err := e.getWorkflowExecutionWithRetry(r)
+	if err != nil {
+		return nil, err
+	}
+
+	builder := newHistoryBuilder(e.logger)
+	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
+		return nil, err
+	}
+
+	result := workflow.NewGetWorkflowExecutionHistoryResponse()
+	result.History = builder.getHistory()
+
+	return result, nil
 }
 
-// UpdateWorkflowExecution updates the workflow execution's state
-func (e *historyEngineImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
-	return e.updateWorkflowExecutionWithRetry(request)
+func (e *historyEngineImpl) RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
+	scheduleID := *request.ScheduleId
+
+Update_History_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		builder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			return nil, err1
+		}
+
+		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
+		// task is not outstanding than it is most probably a duplicate and complete the task.
+		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
+			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID, isRunning)
+			return nil, errDuplicate
+		}
+
+		event := builder.AddDecisionTaskStartedEvent(scheduleID, request.PollRequest)
+		if event == nil {
+			return nil, errCreateEvent
+		}
+
+		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
+		// the history and try the operation again.
+		if err2 := context.updateWorkflowExecution(nil); err2 != nil {
+			if err2 == errConflict {
+				continue Update_History_Loop
+			}
+
+			return nil, err2
+		}
+
+		return e.createRecordDecisionTaskStartedResponse(context, event), nil
+	}
+
+	return nil, errMaxAttemptsExceeded
+}
+
+func (e *historyEngineImpl) RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
+	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
+	scheduleID := *request.ScheduleId
+
+Update_History_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		builder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			return nil, err1
+		}
+
+		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
+		// task is not outstanding than it is most probably a duplicate and complete the task.
+		if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
+			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, startedID, isRunning)
+			return nil, errDuplicate
+		}
+
+		event := builder.AddActivityTaskStartedEvent(scheduleID, request.PollRequest)
+		if event == nil {
+			return nil, errCreateEvent
+		}
+
+		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
+		// the history and try the operationi again.
+		if err2 := context.updateWorkflowExecution(nil); err2 != nil {
+			if err2 == errConflict {
+				continue Update_History_Loop
+			}
+
+			return nil, err2
+		}
+
+		response := h.NewRecordActivityTaskStartedResponse()
+		response.StartedEvent = event
+		response.ScheduledEvent = builder.GetEvent(scheduleID)
+		return response, nil
+	}
+
+	return nil, errMaxAttemptsExceeded
 }
 
 // RespondDecisionTaskCompleted completes a decision task
@@ -350,6 +447,21 @@ func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(request *persistenc
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+}
+
+func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(context *workflowExecutionContext,
+	startedEvent *workflow.HistoryEvent) *h.RecordDecisionTaskStartedResponse {
+	builder := context.builder
+
+	response := h.NewRecordDecisionTaskStartedResponse()
+	response.WorkflowType = builder.getWorkflowType()
+	if builder.previousDecisionStartedEvent() != emptyEventID {
+		response.PreviousStartedEventId = common.Int64Ptr(builder.previousDecisionStartedEvent())
+	}
+	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
+	response.History = builder.getHistory()
+
+	return response
 }
 
 func newWorkflowExecutionContext(historyService *historyEngineImpl, execution workflow.WorkflowExecution) *workflowExecutionContext {

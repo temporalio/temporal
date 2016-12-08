@@ -8,7 +8,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 )
 

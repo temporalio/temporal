@@ -1,6 +1,6 @@
 package workflow
 
-import workflow "code.uber.internal/devexp/minions/.gen/go/minions"
+import workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 
 type (
 	// MatchingEngine exposes interfaces for clients to poll for activity and decision tasks.
