@@ -4,8 +4,12 @@ import (
 	"sync"
 	"time"
 
+	tchannel "github.com/uber/tchannel-go"
+	"github.com/uber/tchannel-go/thrift"
+
 	"code.uber.internal/go-common.git/x/log"
 
+	m "code.uber.internal/devexp/minions/.gen/go/minions"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/health/driver"
 	"code.uber.internal/devexp/minions/workflow"
@@ -18,8 +22,9 @@ type Host struct {
 	engine   workflow.Engine
 	reporter common.Reporter
 
-	instancesWG sync.WaitGroup
-	doneCh      chan struct{}
+	instancesWG            sync.WaitGroup
+	doneCh                 chan struct{}
+	runOnMinionsProduction bool
 }
 
 var stressMetrics = map[common.MetricName]common.MetricType{
@@ -33,17 +38,25 @@ var stressMetrics = map[common.MetricName]common.MetricType{
 }
 
 // NewStressHost creates an instance of stress host
-func NewStressHost(engine workflow.Engine, instanceName string, config Configuration, reporter common.Reporter) *Host {
+func NewStressHost(engine workflow.Engine, instanceName string, config Configuration,
+	reporter common.Reporter, runOnMinionsProduction bool) *Host {
 	h := &Host{
-		engine:   engine,
-		hostName: instanceName,
-		config:   config,
-		reporter: reporter,
-		doneCh:   make(chan struct{}),
+		engine:                 engine,
+		hostName:               instanceName,
+		config:                 config,
+		reporter:               reporter,
+		doneCh:                 make(chan struct{}),
+		runOnMinionsProduction: runOnMinionsProduction,
 	}
 
 	h.reporter.InitMetrics(stressMetrics)
 	return h
+}
+
+// GetThriftClient gets thrift client.
+func (s *Host) GetThriftClient(tchan *tchannel.Channel) m.TChanWorkflowService {
+	tclient := thrift.NewClient(tchan, "uber-minions", nil)
+	return m.NewTChanWorkflowServiceClient(tclient)
 }
 
 // Start is used the start the stress host
@@ -54,8 +67,21 @@ func (s *Host) Start() {
 	log.Infof("Launching stress workflow with configuration: %+v", workflowConfig)
 
 	go func() {
-		service := driver.NewServiceMockEngine(s.engine)
-		service.Start()
+
+		var service m.TChanWorkflowService
+
+		if s.runOnMinionsProduction {
+			// TChannel to production.
+			tchan, err := s.config.TChannel.NewClient("stress-client", nil)
+			if err != nil {
+				log.Panicf("Failed to get a client for the uber-minions: %s\n", err.Error())
+			}
+			service = s.GetThriftClient(tchan)
+		} else {
+			serviceMockEngine := driver.NewServiceMockEngine(s.engine)
+			serviceMockEngine.Start()
+			service = serviceMockEngine
+		}
 
 		workflowPrams := &driver.WorkflowParams{
 			ChainSequence:    workflowConfig.ChainSequence,

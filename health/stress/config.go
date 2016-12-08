@@ -3,10 +3,12 @@ package stress
 import (
 	"code.uber.internal/go-common.git/x/log"
 	"code.uber.internal/go-common.git/x/metrics"
+	"code.uber.internal/go-common.git/x/tchannel"
 )
 
 // Configuration is the configuration used by cherami-stress
 type Configuration struct {
+	TChannel     xtchannel.Configuration
 	Logging      log.Configuration
 	Metrics      metrics.Configuration       `yaml:"metrics"`
 	StressConfig WorkflowStressConfiguration `yaml:"stress"`

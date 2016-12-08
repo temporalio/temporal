@@ -111,7 +111,7 @@ func (sa stressSleepActivity) Execute(context flow.ActivityExecutionContext, inp
 
 // LaunchWorkflows starts workflows.
 func LaunchWorkflows(countOfWorkflows int, goRoutineCount int, wp *WorkflowParams,
-	service *ServiceMockEngine, reporter common.Reporter) error {
+	service m.TChanWorkflowService, reporter common.Reporter) error {
 	logrusSettings()
 	logger := log.WithFields(log.Fields{})
 

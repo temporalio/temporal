@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	serviceTimeOut  = 10 * time.Second
+	serviceTimeOut  = 3 * time.Minute
 	tagTaskListName = "taskListName"
 
 	retryServiceOperationInitialInterval    = time.Millisecond

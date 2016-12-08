@@ -22,9 +22,11 @@ import (
 func main() {
 	var host string
 	var emitMetric string
+	var runOnMinionsProduction bool
 
 	flag.StringVar(&host, "host", "", "Cassandra host to use.")
 	flag.StringVar(&emitMetric, "emitMetric", "local", "Metric source: m3 | local")
+	flag.BoolVar(&runOnMinionsProduction, "runOnMinionsProduction", false, "Run against the minions production")
 
 	flag.Parse()
 
@@ -71,34 +73,40 @@ func main() {
 
 	var engine workflow.Engine
 
-	if host == "127.0.0.1" {
-		testBase := workflow.TestBase{}
-		options := workflow.TestBaseOptions{}
-		options.ClusterHost = host
-		options.DropKeySpace = true
-		testBase.SetupWorkflowStoreWithOptions(options.TestBaseOptions)
-		engine = workflow.NewWorkflowEngine(testBase.WorkflowMgr, testBase.TaskMgr, log.WithField("host", "workflow_host"))
+	if !runOnMinionsProduction {
+		if host == "127.0.0.1" {
+			testBase := workflow.TestBase{}
+			options := workflow.TestBaseOptions{}
+			options.ClusterHost = host
+			options.DropKeySpace = true
+			testBase.SetupWorkflowStoreWithOptions(options.TestBaseOptions)
+			engine = workflow.NewWorkflowEngine(testBase.WorkflowMgr, testBase.TaskMgr, log.WithField("host", "workflow_host"))
+		} else {
+			executionPersistence, err2 := persistence.NewCassandraWorkflowExecutionPersistence(host, "workflow")
+			if err2 != nil {
+				panic(err2)
+			}
+
+			executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
+
+			taskPersistence, err3 := persistence.NewCassandraTaskPersistence(host, "workflow")
+			if err3 != nil {
+				panic(err3)
+			}
+
+			taskPersistenceClient := workflow.NewTaskPersistenceClient(taskPersistence, m3ReporterClient)
+
+			engine = workflow.NewEngineWithMetricsImpl(
+				workflow.NewWorkflowEngine(executionPersistenceClient, taskPersistenceClient, log.WithField("host", "workflow_host")),
+				m3ReporterClient)
+		}
+		h := s.NewStressHost(engine, instanceName, cfg, reporter, false /* runOnMinionsProduction */)
+		h.Start()
 	} else {
-		executionPersistence, err2 := persistence.NewCassandraWorkflowExecutionPersistence(host, "workflow")
-		if err2 != nil {
-			panic(err2)
-		}
-
-		executionPersistenceClient := workflow.NewWorkflowExecutionPersistenceClient(executionPersistence, m3ReporterClient)
-
-		taskPersistence, err3 := persistence.NewCassandraTaskPersistence(host, "workflow")
-		if err3 != nil {
-			panic(err3)
-		}
-
-		taskPersistenceClient := workflow.NewTaskPersistenceClient(taskPersistence, m3ReporterClient)
-
-		engine = workflow.NewEngineWithMetricsImpl(
-			workflow.NewWorkflowEngine(executionPersistenceClient, taskPersistenceClient, log.WithField("host", "workflow_host")),
-			m3ReporterClient)
+		// Running against production.
+		h := s.NewStressHost(nil, instanceName, cfg, reporter, runOnMinionsProduction)
+		h.Start()
 	}
-	h := s.NewStressHost(engine, instanceName, cfg, reporter)
-	h.Start()
 }
 
 func generateRandomKeyspace(n int) string {

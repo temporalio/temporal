@@ -1,9 +1,10 @@
 # Add your development configuration here
 tchannel:
   # Use a fixed port during development.
-  port: 9876
+  port: 0
   # Use the local Hyperbahn nodes during development.
-  routers: ["127.0.0.1:21300", "127.0.0.1:21301"]
+  routers: ["127.0.0.1:21300", "127.0.0.1:21300"]
+  # disableHyperbahn: true
 
 jaeger:
   # This tells Jaeger to sample and capture every trace in the service.
