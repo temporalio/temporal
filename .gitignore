@@ -9,7 +9,9 @@
 .tmp/
 /vendor
 /minions
+.DS_Store
 
 # Executables produced by minions repo
 cmd/stress/stress
+cmd/demo/demo
 workflow/workflow

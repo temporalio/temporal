@@ -17,16 +17,20 @@ cmd/stress/stress: cmd/stress/main.go \
         $(wildcard health/driver/*.go) \
         $(wildcard health/stress/*.go) \
 				$(wildcard test/flow/*.go) \
+				$(wildcard test/workflow/*.go) \
 				$(wildcard common/*.go) \
 				$(wildcard common/**/*.go) \
 				$(wildcard workflow/*.go) \
+				$(wildcard persistence/*.go) \
 				$(wildcard store/*.go) \
 
 cmd/demo/demo: cmd/demo/*.go \
 				$(wildcard test/flow/*.go) \
+				$(wildcard test/workflow/*.go) \
 				$(wildcard common/*.go) \
 				$(wildcard common/**/*.go) \
 				$(wildcard workflow/*.go) \
+				$(wildcard persistence/*.go) \
 				$(wildcard store/*.go) \
 
 -include go-build/rules.mk

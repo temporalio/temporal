@@ -4,7 +4,9 @@ tchannel:
   port: 0
   # Use the local Hyperbahn nodes during development.
   routers: ["127.0.0.1:21300", "127.0.0.1:21300"]
-  # disableHyperbahn: true
+  #disableHyperbahn: true
+  #disableLogging: true
+  #logLevel: warn
 
 jaeger:
   # This tells Jaeger to sample and capture every trace in the service.

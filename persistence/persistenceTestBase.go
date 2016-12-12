@@ -306,11 +306,11 @@ func (s *CassandraTestCluster) dropKeyspace() {
 
 func (s *CassandraTestCluster) loadSchema(fileName string) {
 	err := common.LoadCassandraSchema("./cassandra/bin/cqlsh", "./schema/"+fileName, s.keyspace)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		err = common.LoadCassandraSchema("../cassandra/bin/cqlsh", "../schema/"+fileName, s.keyspace)
 	}
 
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
 }

@@ -4,81 +4,40 @@ import (
 	"encoding/json"
 	"fmt"
 
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
-	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/test/flow"
 	"code.uber.internal/devexp/minions/test/workflow"
 )
 
 type (
-	greetingsWorkflow struct {
-	}
-
-	getNameActivity struct {
-	}
-
-	getGreetingActivity struct {
-	}
-
-	sayGreetingActivity struct {
-	}
+	// Workflow Deciders and Activities.
+	greetingsWorkflow   struct{}
+	getNameActivity     struct{}
+	getGreetingActivity struct{}
+	sayGreetingActivity struct{}
 
 	sayGreetingActivityRequest struct {
 		Name     string
 		Greeting string
 	}
-
-	workflowError struct {
-		reason  string
-		details []byte
-	}
 )
-
-func serializeParams(activityName string, input []byte) flow.ExecuteActivityParameters {
-	return flow.ExecuteActivityParameters{
-		TaskListName: "testTaskList",
-		ActivityType: m.ActivityType{Name: common.StringPtr(activityName)},
-		Input:        input}
-}
-
-func (we *workflowError) Reason() string {
-	return we.reason
-}
-
-func (we *workflowError) Details() []byte {
-	return we.details
-}
-
-func (we *workflowError) Error() string {
-	return we.reason
-}
 
 // Greetings Workflow Decider.
 func (w greetingsWorkflow) Execute(ctx workflow.Context, input []byte) (result []byte, err workflow.Error) {
-
 	// Get Greeting.
-	greetActivityParams := serializeParams("getGreetingActivity", nil)
-	greetResult, err := ctx.ExecuteActivity(greetActivityParams)
+	greetResult, err := ctx.ExecuteActivity(activityInfo("getGreetingActivity"))
 	if err != nil {
 		return nil, err
 	}
 
 	// Get Name.
-	nameActivityParams := serializeParams("getNameActivity", nil)
-	nameResult, err := ctx.ExecuteActivity(nameActivityParams)
+	nameResult, err := ctx.ExecuteActivity(activityInfo("getNameActivity"))
 	if err != nil {
 		return nil, err
 	}
 
 	// Say Greeting.
 	request := &sayGreetingActivityRequest{Name: string(nameResult), Greeting: string(greetResult)}
-	sayGreetInput, err1 := json.Marshal(request)
-	if err != nil {
-		return nil, &workflowError{reason: err1.Error()}
-	}
-
-	sayGreetingActivityParams := serializeParams("sayGreetingActivity", sayGreetInput)
-	_, err = ctx.ExecuteActivity(sayGreetingActivityParams)
+	_, err = ctx.ExecuteActivity(activityInfoWithInput("sayGreetingActivity", request))
 	if err != nil {
 		return nil, err
 	}

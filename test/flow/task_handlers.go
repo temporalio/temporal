@@ -156,7 +156,8 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 				decisions = append(decisions, eventDecisions...)
 				for _, d := range decisions {
 					if d.GetDecisionType() == m.DecisionType_ScheduleActivityTask {
-						wth.contextLogger.Infof("Scheduling Activity: %s",
+						wth.contextLogger.Infof("[WorkflowID: %s] Scheduling Activity: %s",
+							workflowTask.task.GetWorkflowExecution().GetWorkflowId(),
 							d.GetScheduleActivityTaskDecisionAttributes().GetActivityType().GetName())
 					}
 				}
@@ -218,7 +219,8 @@ func newActivityTaskHandler(taskListName string, identity string, factory Activi
 
 // Execute executes an implementation of the activity.
 func (ath *activityTaskHandler) Execute(context context.Context, activityTask *ActivityTask) (interface{}, error) {
-	ath.contextLogger.Infof("Execute Activity: %s", activityTask.task.GetActivityType().GetName())
+	ath.contextLogger.Infof("[WorkflowID: %s] Execute Activity: %s",
+		activityTask.task.GetWorkflowExecution().GetWorkflowId(), activityTask.task.GetActivityType().GetName())
 	//ath.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
 
 	activityExecutionContext := &activityExecutionContext{
@@ -233,11 +235,10 @@ func (ath *activityTaskHandler) Execute(context context.Context, activityTask *A
 
 	output, err := activityImplementation.Execute(activityExecutionContext, activityTask.task.GetInput())
 	if err != nil {
-		failureErr := err.(ActivityTaskFailedError)
 		responseFailure := &m.RespondActivityTaskFailedRequest{
 			TaskToken: activityTask.task.TaskToken,
-			Reason:    common.StringPtr(failureErr.Reason()),
-			Details:   failureErr.Details(),
+			Reason:    common.StringPtr(err.Reason()),
+			Details:   err.Details(),
 			Identity:  common.StringPtr(ath.identity)}
 		return responseFailure, nil
 	}

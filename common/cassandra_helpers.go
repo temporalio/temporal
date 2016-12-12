@@ -37,7 +37,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 		log.WithField(TagErr, err).Error(`create keyspace error`)
 		return
 	}
-	log.WithField(`keyspace`, keyspace).Info(`created namespace`)
+	log.WithField(`keyspace`, keyspace).Debug(`created namespace`)
 
 	return
 }
