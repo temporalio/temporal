@@ -4,15 +4,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"code.uber.internal/go-common.git/x/log"
-	"code.uber.internal/go-common.git/x/metrics"
+	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 )
 
 type (
 	// SimpleReporter is the reporter used to dump metric to console for stress runs
 	SimpleReporter struct {
-		scope metrics.Scope
+		scope tally.Scope
 		tags  map[string]string
+
+		logger bark.Logger
 
 		startTime                 time.Time
 		workflowsStartCount       int64
@@ -53,7 +55,7 @@ const (
 )
 
 // NewSimpleReporter create an instance of Reporter which can be used for driver to emit metric to console
-func NewSimpleReporter(scope metrics.Scope, tags map[string]string) Reporter {
+func NewSimpleReporter(scope tally.Scope, tags map[string]string, logger bark.Logger) Reporter {
 	reporter := &SimpleReporter{
 		scope: scope,
 		tags:  make(map[string]string),
@@ -83,7 +85,7 @@ func (r *SimpleReporter) InitMetrics(metricMap map[MetricName]MetricType) {
 
 // GetChildReporter creates the child reporter for this parent reporter
 func (r *SimpleReporter) GetChildReporter(tags map[string]string) Reporter {
-	sr := NewSimpleReporter(r.GetScope(), tags)
+	sr := NewSimpleReporter(r.GetScope(), tags, r.logger)
 
 	// copy the parent tags as well
 	copyMap(r.GetTags(), sr.GetTags())
@@ -97,7 +99,7 @@ func (r *SimpleReporter) GetTags() map[string]string {
 }
 
 // GetScope returns the metrics scope for this reporter
-func (r *SimpleReporter) GetScope() metrics.Scope {
+func (r *SimpleReporter) GetScope() tally.Scope {
 	return r.scope
 }
 
@@ -119,7 +121,7 @@ func (r *SimpleReporter) IncCounter(name string, tags map[string]string, delta i
 	case DecisionsEndToEndLatency:
 		atomic.AddInt64(&r.decisionsEndToEndLatency, delta)
 	default:
-		log.WithField(`name`, name).Error(`Unknown metric`)
+		r.logger.WithField(`name`, name).Error(`Unknown metric`)
 	}
 }
 
@@ -197,13 +199,13 @@ func (r *SimpleReporter) PrintStressMetric() {
 		latency = currentLatency / totalWorkflowsCompleted
 	}
 
-	log.Infof("Workflows Started(Count=%v, Throughput=%v)",
+	r.logger.Infof("Workflows Started(Count=%v, Throughput=%v)",
 		totalWorkflowStarted, creationThroughput)
-	log.Infof("Workflows Completed(Count=%v, Throughput=%v, Average Latency: %v)",
+	r.logger.Infof("Workflows Completed(Count=%v, Throughput=%v, Average Latency: %v)",
 		totalWorkflowsCompleted, completionThroughput, latency)
-	log.Infof("Activites(Count=%v, Throughput=%v, Average Latency: %v)",
+	r.logger.Infof("Activites(Count=%v, Throughput=%v, Average Latency: %v)",
 		totalActivitiesCount, activitiesThroughput, activityLatency)
-	log.Infof("Decisions(Count=%v, Throughput=%v, Average Latency: %v)",
+	r.logger.Infof("Decisions(Count=%v, Throughput=%v, Average Latency: %v)",
 		totalDecisionsCount, decisionsThroughput, decisionsLatency)
 
 	r.previousWorkflowsStartCount = totalWorkflowStarted
@@ -249,11 +251,11 @@ func (r *SimpleReporter) PrintFinalMetric() {
 		decisionLatency = totalDecisionsLatency / decisionsCount
 	}
 
-	log.Infof("Total Workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
+	r.logger.Infof("Total Workflows processed:(Started=%v, Completed=%v), Throughput: %v, Average Latency: %v",
 		workflowsCount, workflowsCompletedCount, throughput, time.Duration(latency))
-	log.Infof("Total Activites processed:(Count=%v, Throughput=%v, Average Latency=%v)",
+	r.logger.Infof("Total Activites processed:(Count=%v, Throughput=%v, Average Latency=%v)",
 		activitiesCount, activityThroughput, activityLatency)
-	log.Infof("Total Decisions processed:(Count=%v, Throughput=%v, Average Latency=%v)",
+	r.logger.Infof("Total Decisions processed:(Count=%v, Throughput=%v, Average Latency=%v)",
 		decisionsCount, decisionsThroughput, decisionLatency)
 }
 

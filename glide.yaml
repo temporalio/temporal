@@ -1,12 +1,5 @@
 package: code.uber.internal/devexp/minions
 import:
-- package: code.uber.internal/go-common.git
-  version: master
-  subpackages:
-  - x/config
-  - x/log
-  - x/metrics
-  - x/tchannel
 - package: github.com/uber/tchannel-go
   subpackages:
   - thrift

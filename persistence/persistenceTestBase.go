@@ -7,7 +7,7 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/go-common.git/x/log"
+	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 )
 

@@ -1,12 +1,11 @@
-hash: f15cbe176d457e37df646a4cbf1999aef75ce89e1522f3b02ce750d4d85257d0
-updated: 2016-12-05T15:47:18.099871848-08:00
+hash: 7a8e6af1aaecc54a4e19126a0c5b6d101c0b1e1385f79b5f73a48e5f8a5162e8
+updated: 2016-12-15T12:53:35.566424608-08:00
 imports:
 - name: code.uber.internal/go-common.git
   version: 4b349844a2c93b3c125ebff6d62b12ab73621e9f
   subpackages:
   - x/backoff
   - x/config
-  - x/jaeger
   - x/kafka
   - x/log
   - x/metrics
@@ -21,7 +20,7 @@ imports:
   - x/tchannel/metrics
   - x/time
 - name: github.com/apache/thrift
-  version: 84d6af4cf903571319e0ebddd7beb12bc93fb752
+  version: 0d9b713b173f35ce02552b2f4372899440a99b25
   subpackages:
   - lib/go/thrift
 - name: github.com/cactus/go-statsd-client
@@ -30,6 +29,10 @@ imports:
   - statsd
 - name: github.com/codahale/hdrhistogram
   version: f8ad88b59a584afeee9d334eff879b104439117b
+- name: github.com/davecgh/go-spew
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
+  subpackages:
+  - spew
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/getsentry/raven-go
@@ -56,8 +59,21 @@ imports:
   - log
 - name: github.com/pborman/uuid
   version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
+- name: github.com/pmezard/go-difflib
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
+  subpackages:
+  - difflib
 - name: github.com/Sirupsen/logrus
   version: 08a8a7c27e3d058a8989316a850daad1c10bf4ab
+- name: github.com/stretchr/objx
+  version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
+- name: github.com/stretchr/testify
+  version: 18a02ba4a312f95da08ff4cfc0055750ce50ae9e
+  subpackages:
+  - assert
+  - mock
+  - require
+  - suite
 - name: github.com/uber-common/bark
   version: d52ffa061726911f47fcd3d9e8b9b55f22794772
 - name: github.com/uber-go/atomic
@@ -91,7 +107,7 @@ imports:
   - trand
   - typed
 - name: golang.org/x/net
-  version: 4971afdc2f162e82d185353533d3cf16188a9f4e
+  version: cfae461cedfdcab6e261a26eb77db53695623303
   subpackages:
   - context
 - name: golang.org/x/sys
@@ -104,21 +120,4 @@ imports:
   version: 3e4f037f12a1221a0864cf0dd2e81c452ab22448
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
-testImports:
-- name: github.com/davecgh/go-spew
-  version: 346938d642f2ec3594ed81d874461961cd0faa76
-  subpackages:
-  - spew
-- name: github.com/pmezard/go-difflib
-  version: 792786c7400a136282c1664665ae0a8db921c6c2
-  subpackages:
-  - difflib
-- name: github.com/stretchr/objx
-  version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
-- name: github.com/stretchr/testify
-  version: 18a02ba4a312f95da08ff4cfc0055750ce50ae9e
-  subpackages:
-  - assert
-  - mock
-  - require
-  - suite
+testImports: []

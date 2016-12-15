@@ -8,33 +8,11 @@ THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift \
         idl/code.uber.internal/devexp/minions/matching.thrift \
 
 # list all executables
-PROGS = minions \
-	cmd/stress/stress \
-	cmd/demo/demo \
+PROGS = minions
 
 minions: main.go \
 	$(wildcard config/*.go)  \
 	$(wildcard service/*.go) \
-
-cmd/stress/stress: cmd/stress/main.go \
-        $(wildcard health/driver/*.go) \
-        $(wildcard health/stress/*.go) \
-				$(wildcard test/flow/*.go) \
-				$(wildcard test/workflow/*.go) \
-				$(wildcard common/*.go) \
-				$(wildcard common/**/*.go) \
-				$(wildcard workflow/*.go) \
-				$(wildcard persistence/*.go) \
-				$(wildcard store/*.go) \
-
-cmd/demo/demo: cmd/demo/*.go \
-				$(wildcard test/flow/*.go) \
-				$(wildcard test/workflow/*.go) \
-				$(wildcard common/*.go) \
-				$(wildcard common/**/*.go) \
-				$(wildcard workflow/*.go) \
-				$(wildcard persistence/*.go) \
-				$(wildcard store/*.go) \
 
 -include go-build/rules.mk
 
