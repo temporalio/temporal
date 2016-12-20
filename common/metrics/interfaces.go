@@ -1,19 +1,6 @@
-package common
+package metrics
 
 import "time"
-
-// MetricName is the name of the metric
-type MetricName string
-
-// MetricType is the type of the metric, which can be one of the 3 below
-type MetricType int
-
-// MetricTypes which are supported
-const (
-	Counter MetricType = iota
-	Timer
-	Gauge
-)
 
 type (
 	// Reporter is the the interface used to report stats.

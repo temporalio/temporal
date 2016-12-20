@@ -2,13 +2,12 @@ package workflow
 
 import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/workflow/metrics"
+	"code.uber.internal/devexp/minions/common/metrics"
 )
 
 type (
 	engineWithMetricsImpl struct {
-		m3Client common.Client
+		m3Client metrics.Client
 		engine   Engine
 	}
 )
@@ -17,7 +16,7 @@ type (
 var _ Engine = (*engineWithMetricsImpl)(nil)
 
 // NewEngineWithMetricsImpl creates an engine with metrics
-func NewEngineWithMetricsImpl(engine Engine, m3Client common.Client) Engine {
+func NewEngineWithMetricsImpl(engine Engine, m3Client metrics.Client) Engine {
 	return &engineWithMetricsImpl{
 		engine:   engine,
 		m3Client: m3Client,

@@ -1,18 +1,14 @@
 package metrics
 
-import (
-	"code.uber.internal/devexp/minions/common"
-)
-
 // MetricName is the name of the metric
-//type MetricName string
+type MetricName string
 
 // MetricType is the type of the metric, which can be one of the 3 below
-//type MetricType int
+type MetricType int
 
 // MetricTypes which are supported
 const (
-	Counter common.MetricType = iota
+	Counter MetricType = iota
 	Timer
 	Gauge
 )
@@ -23,13 +19,50 @@ const (
 	OperationTagName = "operation"
 )
 
+// This package should hold all the metrics and tags for cherami
+const (
+	UnknownDirectoryTagValue = "Unknown"
+)
+
+// Common service base metrics
+const (
+	RestartCount         = "restarts"
+	NumGoRoutinesGauge   = "num-goroutines"
+	GoMaxProcsGauge      = "gomaxprocs"
+	MemoryAllocatedGauge = "memory.allocated"
+	MemoryHeapGauge      = "memory.heap"
+	MemoryHeapIdleGauge  = "memory.heapidle"
+	MemoryHeapInuseGauge = "memory.heapinuse"
+	MemoryStackGauge     = "memory.stack"
+	NumGCCounter         = "memory.num-gc"
+	GcPauseMsTimer       = "memory.gc-pause-ms"
+)
+
+// ServiceMetrics are types for common service base metrics
+var ServiceMetrics = map[MetricName]MetricType{
+	RestartCount: Counter,
+}
+
+// GoRuntimeMetrics represent the runtime stats from go runtime
+var GoRuntimeMetrics = map[MetricName]MetricType{
+	NumGoRoutinesGauge:   Gauge,
+	GoMaxProcsGauge:      Gauge,
+	MemoryAllocatedGauge: Gauge,
+	MemoryHeapGauge:      Gauge,
+	MemoryHeapIdleGauge:  Gauge,
+	MemoryHeapInuseGauge: Gauge,
+	MemoryStackGauge:     Gauge,
+	NumGCCounter:         Counter,
+	GcPauseMsTimer:       Timer,
+}
+
 // Service names for all service who emit m3 Please keep them in sync with the {Counter,Timer,Gauge}Names below.  Order matters
 const (
-	Workflow = iota
+	Frontend = iota
 	NumServices
 )
 
-// operation scopes  for workflow service
+// operation scopes for frontend
 const (
 	CreateWorkflowExecutionScope = iota
 	GetWorkflowExecutionScope
@@ -51,7 +84,7 @@ const (
 
 // ScopeToTags record the scope name for all services
 var ScopeToTags = [NumServices][]map[string]string{
-	// Worfklow Scope Names
+	// frontend Scope Names
 	{
 		{OperationTagName: CreateWorkflowExecutionOperationTagValue},
 		{OperationTagName: GetWorkflowExecutionOperationTagValue},
@@ -72,14 +105,14 @@ var ScopeToTags = [NumServices][]map[string]string{
 	},
 }
 
-// Counter enums for workflow.  Please keep them in sync with the Workflow Service counter names below.
+// Counter enums for frontend.  Please keep them in sync with the Frontend Service counter names below.
 // Order between the two also matters.
 const (
 	WorkflowRequests = iota
 	WorkflowFailures
 )
 
-// Timer enums for workflow.  Please keep them in sync with the Workflow Service timers below.  Order between the
+// Timer enums for frontend.  Please keep them in sync with the Workflow Service timers below.  Order between the
 // two also matters.
 const (
 	WorkflowLatencyTimer = iota
@@ -87,7 +120,7 @@ const (
 
 // CounterNames is counter names for metrics
 var CounterNames = [NumServices]map[int]string{
-	// Workflow Counter Names
+	// Frontend Counter Names
 	{
 		WorkflowRequests: "workflow.requests",
 		WorkflowFailures: "workflow.errors",
@@ -96,7 +129,7 @@ var CounterNames = [NumServices]map[int]string{
 
 // TimerNames is timer names for metrics
 var TimerNames = [NumServices]map[int]string{
-	// Workflow Timer Names
+	// Frontend Timer Names
 	{
 		WorkflowLatencyTimer: "workflow.latency",
 	},
@@ -105,7 +138,7 @@ var TimerNames = [NumServices]map[int]string{
 // GaugeNames is gauge names for metrics
 var GaugeNames = [NumServices]map[int]string{}
 
-// Workflow operation tag values as seen by the M3 backend
+// Frontend operation tag values as seen by the M3 backend
 const (
 	CreateWorkflowExecutionOperationTagValue      = "CreateWorkflowExecution"
 	GetWorkflowExecutionOperationTagValue         = "GetWorkflowExecution"
@@ -123,4 +156,16 @@ const (
 	RespondActivityTaskCompletedOperationTagValue = "RespondActivityTaskCompleted"
 	RespondActivityTaskFailedOperationTagValue    = "RespondActivityTaskFailed"
 	GetWorkflowExecutionHistoryOperationTagValue  = "GetWorkflowExecutionHistory"
+)
+
+// ErrorClass is an enum to help with classifying SLA vs. non-SLA errors (SLA = "service level agreement")
+type ErrorClass uint8
+
+const (
+	// NoError indicates that there is no error (error should be nil)
+	NoError = ErrorClass(iota)
+	// UserError indicates that this is NOT an SLA-reportable error
+	UserError
+	// InternalError indicates that this is an SLA-reportable error
+	InternalError
 )

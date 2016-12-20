@@ -2,25 +2,24 @@ package workflow
 
 import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/metrics"
 	"code.uber.internal/devexp/minions/persistence"
-	"code.uber.internal/devexp/minions/workflow/metrics"
 )
 
 type (
 	workflowExecutionPersistenceClient struct {
-		m3Client    common.Client
+		m3Client    metrics.Client
 		persistence persistence.ExecutionManager
 	}
 
 	taskPersistenceClient struct {
-		m3Client    common.Client
+		m3Client    metrics.Client
 		persistence persistence.TaskManager
 	}
 )
 
 // NewWorkflowExecutionPersistenceClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceClient(persistence persistence.ExecutionManager, m3Client common.Client) persistence.ExecutionManager {
+func NewWorkflowExecutionPersistenceClient(persistence persistence.ExecutionManager, m3Client metrics.Client) persistence.ExecutionManager {
 	return &workflowExecutionPersistenceClient{
 		persistence: persistence,
 		m3Client:    m3Client,
@@ -28,7 +27,7 @@ func NewWorkflowExecutionPersistenceClient(persistence persistence.ExecutionMana
 }
 
 // NewTaskPersistenceClient creates a client to manage tasks
-func NewTaskPersistenceClient(persistence persistence.TaskManager, m3Client common.Client) persistence.TaskManager {
+func NewTaskPersistenceClient(persistence persistence.TaskManager, m3Client metrics.Client) persistence.TaskManager {
 	return &taskPersistenceClient{
 		persistence: persistence,
 		m3Client:    m3Client,

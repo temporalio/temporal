@@ -1,17 +1,13 @@
 package metrics
 
-import (
-	"time"
-
-	"code.uber.internal/devexp/minions/common"
-)
+import "time"
 
 // ClientImpl is for m3 emits within inputhost
 type ClientImpl struct {
 	//parentReporter is the parent for the metrics Reporters
-	parentReporter common.Reporter
+	parentReporter Reporter
 	// childReporters is the children for the metrics Reporters
-	childReporters []common.Reporter
+	childReporters []Reporter
 
 	// timerName is the map of all TimerName for  metrics
 	timerName map[int]string
@@ -27,21 +23,21 @@ type ClientImpl struct {
 // Client implementation
 // reporter holds the common tags for the servcie
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(reporter common.Reporter, serviceIdx int) common.Client {
+func NewClient(reporter Reporter, serviceIdx int) Client {
 	counterName := CounterNames[serviceIdx]
 	timerName := TimerNames[serviceIdx]
 	gaugeName := GaugeNames[serviceIdx]
 	scopeTagsMap := ScopeToTags[serviceIdx]
 	size := len(counterName) + len(timerName) + len(gaugeName)
-	metricsMap := make(map[common.MetricName]common.MetricType, size)
+	metricsMap := make(map[MetricName]MetricType, size)
 	for _, val := range counterName {
-		metricsMap[common.MetricName(val)] = Counter
+		metricsMap[MetricName(val)] = Counter
 	}
 	for _, val := range timerName {
-		metricsMap[common.MetricName(val)] = Timer
+		metricsMap[MetricName(val)] = Timer
 	}
 	for _, val := range gaugeName {
-		metricsMap[common.MetricName(val)] = Gauge
+		metricsMap[MetricName(val)] = Gauge
 	}
 	metricsClient := &ClientImpl{
 		parentReporter: reporter,
@@ -49,7 +45,7 @@ func NewClient(reporter common.Reporter, serviceIdx int) common.Client {
 		timerName:      timerName,
 		gaugeName:      gaugeName,
 	}
-	metricsClient.childReporters = make([]common.Reporter, len(scopeTagsMap))
+	metricsClient.childReporters = make([]Reporter, len(scopeTagsMap))
 	for i := 0; i < len(scopeTagsMap); i++ {
 		metricsClient.childReporters[i] = reporter.GetChildReporter(scopeTagsMap[i])
 		metricsClient.childReporters[i].InitMetrics(metricsMap)
@@ -71,7 +67,7 @@ func (m *ClientImpl) AddCounter(scopeIdx int, counterIdx int, delta int64) {
 
 // StartTimer starts a timer for the given
 // metric name
-func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) common.Stopwatch {
+func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
 	return m.childReporters[scopeIdx].StartTimer(m.timerName[timerIdx], nil)
 }
 
@@ -87,6 +83,6 @@ func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta int64) {
 }
 
 // GetParentReporter return the parentReporter
-func (m *ClientImpl) GetParentReporter() common.Reporter {
+func (m *ClientImpl) GetParentReporter() Reporter {
 	return m.parentReporter
 }

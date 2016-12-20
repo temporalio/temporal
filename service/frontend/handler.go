@@ -1,10 +1,11 @@
-package service
+package frontend
 
 import (
 	"log"
 
 	"code.uber.internal/devexp/minions/.gen/go/minions"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/workflow"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -14,13 +15,22 @@ var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
 	engine workflow.Engine
+	common.Service
 }
 
 // NewWorkflowHandler creates a thrift handler for the minions service
-func NewWorkflowHandler(engine workflow.Engine) *WorkflowHandler {
-	return &WorkflowHandler{
-		engine: engine,
+func NewWorkflowHandler(engine workflow.Engine, sVice common.Service) (*WorkflowHandler, []thrift.TChanServer) {
+	handler := &WorkflowHandler{
+		Service: sVice,
+		engine:  engine,
 	}
+	return handler, []thrift.TChanServer{minions.NewTChanWorkflowServiceServer(handler)}
+}
+
+// Start starts the handler
+func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) {
+	wh.engine.Start()
+	wh.Service.Start(thriftService)
 }
 
 // IsHealthy - Health endpoint.

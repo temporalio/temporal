@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-func copyMap(src map[string]string, dest map[string]string) {
+// CopyMap copies the contents of src to dest
+func CopyMap(src map[string]string, dest map[string]string) {
 	for k, v := range src {
 		dest[k] = v
 	}
