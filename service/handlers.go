@@ -3,10 +3,13 @@ package service
 import (
 	"log"
 
+	"code.uber.internal/devexp/minions/.gen/go/minions"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/workflow"
 	"github.com/uber/tchannel-go/thrift"
 )
+
+var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
@@ -80,4 +83,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	return &gen.StartWorkflowExecutionResponse{
 		RunId: wf.RunId,
 	}, err
+}
+
+// GetWorkflowExecutionHistory - retrieves the hisotry of workflow execution
+func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
+	ctx thrift.Context,
+	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+	return wh.engine.GetWorkflowExecutionHistory(getRequest)
 }
