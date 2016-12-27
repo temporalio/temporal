@@ -10,6 +10,7 @@ import (
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
+	"code.uber.internal/devexp/minions/common/metrics"
 	log "github.com/Sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -21,7 +22,7 @@ type (
 		identity           string
 		workflowDefFactory WorkflowDefinitionFactory
 		contextLogger      *log.Entry
-		reporter           common.Reporter
+		reporter           metrics.Reporter
 	}
 
 	// activityTaskHandler is the implementation of ActivityTaskHandler
@@ -31,7 +32,7 @@ type (
 		activityImplFactory ActivityImplementationFactory
 		service             m.TChanWorkflowService
 		contextLogger       *log.Entry
-		reporter            common.Reporter
+		reporter            metrics.Reporter
 	}
 
 	// eventsHelper wrapper method to help information about events.
@@ -98,7 +99,7 @@ func (eh eventsHelper) LastNonReplayedID() int64 {
 
 // newWorkflowTaskHandler returns an implementation of workflow task handler.
 func newWorkflowTaskHandler(taskListName string, identity string, factory WorkflowDefinitionFactory,
-	contextLogger *log.Entry, reporter common.Reporter) *workflowTaskHandler {
+	contextLogger *log.Entry, reporter metrics.Reporter) *workflowTaskHandler {
 	return &workflowTaskHandler{
 		taskListName:       taskListName,
 		identity:           identity,
@@ -208,7 +209,7 @@ func (wth *workflowTaskHandler) completeWorkflow(isWorkflowCompleted bool, compl
 }
 
 func newActivityTaskHandler(taskListName string, identity string, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, contextLogger *log.Entry, reporter common.Reporter) ActivityTaskHandler {
+	service m.TChanWorkflowService, contextLogger *log.Entry, reporter metrics.Reporter) ActivityTaskHandler {
 	return &activityTaskHandler{
 		taskListName:        taskListName,
 		identity:            identity,

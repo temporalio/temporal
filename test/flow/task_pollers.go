@@ -8,6 +8,7 @@ import (
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
+	"code.uber.internal/devexp/minions/common/metrics"
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -38,7 +39,7 @@ type (
 		service       m.TChanWorkflowService
 		taskHandler   WorkflowTaskHandler
 		contextLogger *log.Entry
-		reporter      common.Reporter
+		reporter      metrics.Reporter
 	}
 
 	// activityTaskPoller implements polling/processing a workflow task
@@ -48,7 +49,7 @@ type (
 		service       m.TChanWorkflowService
 		taskHandler   ActivityTaskHandler
 		contextLogger *log.Entry
-		reporter      common.Reporter
+		reporter      metrics.Reporter
 	}
 )
 
@@ -75,7 +76,7 @@ func isServiceTransientError(err error) bool {
 }
 
 func newWorkflowTaskPoller(service m.TChanWorkflowService, taskListName string, identity string,
-	taskHandler WorkflowTaskHandler, logger *log.Entry, reporter common.Reporter) *workflowTaskPoller {
+	taskHandler WorkflowTaskHandler, logger *log.Entry, reporter metrics.Reporter) *workflowTaskPoller {
 	return &workflowTaskPoller{
 		service:       service,
 		taskListName:  taskListName,
@@ -147,7 +148,7 @@ func (wtp *workflowTaskPoller) poll(routineID int) (*WorkflowTask, error) {
 }
 
 func newActivityTaskPoller(service m.TChanWorkflowService, taskListName string, identity string,
-	taskHandler ActivityTaskHandler, logger *log.Entry, reporter common.Reporter) *activityTaskPoller {
+	taskHandler ActivityTaskHandler, logger *log.Entry, reporter metrics.Reporter) *activityTaskPoller {
 	return &activityTaskPoller{
 		service:       service,
 		taskListName:  taskListName,

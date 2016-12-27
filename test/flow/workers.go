@@ -5,6 +5,7 @@ import (
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
+	"code.uber.internal/devexp/minions/common/metrics"
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -64,12 +65,12 @@ type (
 
 // NewWorkflowWorker returns an instance of the workflow worker.
 func NewWorkflowWorker(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
-	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter) *WorkflowWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter metrics.Reporter) *WorkflowWorker {
 	return newWorkflowWorkerInternal(params, factory, service, logger, reporter, nil)
 }
 
 func newWorkflowWorkerInternal(params WorkerExecutionParameters, factory WorkflowDefinitionFactory,
-	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter, overrides *workerOverrides) *WorkflowWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter metrics.Reporter, overrides *workerOverrides) *WorkflowWorker {
 	// Get an identity.
 	identity := params.Identity
 	if identity == "" {
@@ -119,12 +120,12 @@ func (ww *WorkflowWorker) Shutdown() {
 
 // NewActivityWorker returns an instance of the activity worker.
 func NewActivityWorker(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter) *ActivityWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter metrics.Reporter) *ActivityWorker {
 	return newActivityWorkerInternal(executionParameters, factory, service, logger, reporter, nil)
 }
 
 func newActivityWorkerInternal(executionParameters WorkerExecutionParameters, factory ActivityImplementationFactory,
-	service m.TChanWorkflowService, logger *log.Entry, reporter common.Reporter, overrides *workerOverrides) *ActivityWorker {
+	service m.TChanWorkflowService, logger *log.Entry, reporter metrics.Reporter, overrides *workerOverrides) *ActivityWorker {
 	// Get an identity.
 	identity := executionParameters.Identity
 	if identity == "" {
@@ -173,7 +174,7 @@ func (aw *ActivityWorker) Shutdown() {
 }
 
 // NewWorkflowClient creates an instance of workflow client that users can start a workflow
-func NewWorkflowClient(options StartWorkflowOptions, service m.TChanWorkflowService, reporter common.Reporter) *WorkflowClient {
+func NewWorkflowClient(options StartWorkflowOptions, service m.TChanWorkflowService, reporter metrics.Reporter) *WorkflowClient {
 	// Get an identity.
 	identity := options.Identity
 	if identity == "" {
@@ -211,7 +212,7 @@ func (wc *WorkflowClient) StartWorkflowExecution() (*gen.WorkflowExecution, erro
 		return nil, err
 	}
 
-	wc.reporter.IncCounter(common.WorkflowsStartTotalCounter, nil, 1)
+	//wc.reporter.IncCounter(common.WorkflowsStartTotalCounter, nil, 1)
 	executionInfo := &gen.WorkflowExecution{
 		// TODO: StartWorkflowExecution should return workflow ID as well along with run Id
 		WorkflowId: common.StringPtr(wc.options.WorkflowID),
