@@ -9,6 +9,7 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/util"
 	"code.uber.internal/devexp/minions/persistence"
 )
 
@@ -61,7 +62,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		close(t.shutdownCh)
 	}
 
-	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
+	if success := util.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Transfer queue processor timed out on shutdown.")
 	}
 

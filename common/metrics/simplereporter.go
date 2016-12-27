@@ -1,6 +1,10 @@
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"code.uber.internal/devexp/minions/common/util"
+)
 
 type (
 	// SimpleReporter is the reporter used to dump metric to console for stress runs
@@ -23,7 +27,7 @@ func NewSimpleReporter(tags map[string]string) Reporter {
 	}
 
 	if tags != nil {
-		mergeDictoRight(tags, reporter.tags)
+		util.MergeDictoRight(tags, reporter.tags)
 	}
 
 	return reporter
@@ -42,10 +46,10 @@ func (r *SimpleReporter) GetChildReporter(tags map[string]string) Reporter {
 	}
 
 	// copy the parent tags as well
-	mergeDictoRight(r.GetTags(), sr.GetTags())
+	util.MergeDictoRight(r.GetTags(), sr.GetTags())
 
 	if tags != nil {
-		mergeDictoRight(tags, sr.tags)
+		util.MergeDictoRight(tags, sr.tags)
 	}
 
 	return sr

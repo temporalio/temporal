@@ -1,15 +1,23 @@
-package common
+package util
 
 import (
 	"sync"
 	"time"
 )
 
-// CopyMap copies the contents of src to dest
-func CopyMap(src map[string]string, dest map[string]string) {
+// MergeDictoRight copies the contents of src to dest
+func MergeDictoRight(src map[string]string, dest map[string]string) {
 	for k, v := range src {
 		dest[k] = v
 	}
+}
+
+// MergeDicts creates a union of the two dicts
+func MergeDicts(dic1 map[string]string, dic2 map[string]string) (resultDict map[string]string) {
+	resultDict = make(map[string]string)
+	MergeDictoRight(dic1, resultDict)
+	MergeDictoRight(dic2, resultDict)
+	return
 }
 
 // AwaitWaitGroup calls Wait on the given wait
