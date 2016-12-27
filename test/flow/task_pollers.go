@@ -91,8 +91,8 @@ func (wtp *workflowTaskPoller) PollAndProcessSingleTask(routineID int) error {
 	startTime := time.Now()
 	defer func() {
 		deltaTime := time.Now().Sub(startTime)
-		wtp.reporter.IncCounter(common.DecisionsTotalCounter, nil, 1)
-		wtp.reporter.RecordTimer(common.DecisionsEndToEndLatency, nil, deltaTime)
+		wtp.reporter.IncCounter(metrics.DecisionsTotalCounter, nil, 1)
+		wtp.reporter.RecordTimer(metrics.DecisionsEndToEndLatency, nil, deltaTime)
 	}()
 
 	// Get the task.
@@ -184,8 +184,8 @@ func (atp *activityTaskPoller) PollAndProcessSingleTask(routineID int) error {
 	startTime := time.Now()
 	defer func() {
 		deltaTime := time.Now().Sub(startTime)
-		atp.reporter.IncCounter(common.ActivitiesTotalCounter, nil, 1)
-		atp.reporter.RecordTimer(common.ActivityEndToEndLatency, nil, deltaTime)
+		atp.reporter.IncCounter(metrics.ActivitiesTotalCounter, nil, 1)
+		atp.reporter.RecordTimer(metrics.ActivityEndToEndLatency, nil, deltaTime)
 	}()
 
 	// Get the task.

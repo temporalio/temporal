@@ -212,7 +212,7 @@ func (wc *WorkflowClient) StartWorkflowExecution() (*gen.WorkflowExecution, erro
 		return nil, err
 	}
 
-	//wc.reporter.IncCounter(common.WorkflowsStartTotalCounter, nil, 1)
+	wc.reporter.IncCounter(metrics.WorkflowsStartTotalCounter, nil, 1)
 	executionInfo := &gen.WorkflowExecution{
 		// TODO: StartWorkflowExecution should return workflow ID as well along with run Id
 		WorkflowId: common.StringPtr(wc.options.WorkflowID),

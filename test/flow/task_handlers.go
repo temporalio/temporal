@@ -171,9 +171,9 @@ func (wth *workflowTaskHandler) ProcessWorkflowTask(workflowTask *WorkflowTask) 
 	if len(eventDecisions) > 0 {
 		decisions = append(decisions, eventDecisions...)
 
-		wth.reporter.IncCounter(common.WorkflowsCompletionTotalCounter, nil, 1)
+		wth.reporter.IncCounter(metrics.WorkflowsCompletionTotalCounter, nil, 1)
 		elapsed := time.Now().Sub(startTime)
-		wth.reporter.RecordTimer(common.WorkflowEndToEndLatency, nil, elapsed)
+		wth.reporter.RecordTimer(metrics.WorkflowEndToEndLatency, nil, elapsed)
 	}
 
 	// Fill the response.
