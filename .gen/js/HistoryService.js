@@ -181,6 +181,174 @@ HistoryService_StartWorkflowExecution_result.prototype.write = function(output) 
   return;
 };
 
+var HistoryService_GetWorkflowExecutionHistory_args = function(args) {
+  this.getRequest = null;
+  if (args) {
+    if (args.getRequest !== undefined && args.getRequest !== null) {
+      this.getRequest = new shared_ttypes.GetWorkflowExecutionHistoryRequest(args.getRequest);
+    }
+  }
+};
+HistoryService_GetWorkflowExecutionHistory_args.prototype = {};
+HistoryService_GetWorkflowExecutionHistory_args.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.getRequest = new shared_ttypes.GetWorkflowExecutionHistoryRequest();
+        this.getRequest.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+HistoryService_GetWorkflowExecutionHistory_args.prototype.write = function(output) {
+  output.writeStructBegin('HistoryService_GetWorkflowExecutionHistory_args');
+  if (this.getRequest !== null && this.getRequest !== undefined) {
+    output.writeFieldBegin('getRequest', Thrift.Type.STRUCT, 1);
+    this.getRequest.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var HistoryService_GetWorkflowExecutionHistory_result = function(args) {
+  this.success = null;
+  this.badRequestError = null;
+  this.internalServiceError = null;
+  this.entityNotExistError = null;
+  if (args instanceof shared_ttypes.BadRequestError) {
+    this.badRequestError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.InternalServiceError) {
+    this.internalServiceError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.EntityNotExistsError) {
+    this.entityNotExistError = args;
+    return;
+  }
+  if (args) {
+    if (args.success !== undefined && args.success !== null) {
+      this.success = new shared_ttypes.GetWorkflowExecutionHistoryResponse(args.success);
+    }
+    if (args.badRequestError !== undefined && args.badRequestError !== null) {
+      this.badRequestError = args.badRequestError;
+    }
+    if (args.internalServiceError !== undefined && args.internalServiceError !== null) {
+      this.internalServiceError = args.internalServiceError;
+    }
+    if (args.entityNotExistError !== undefined && args.entityNotExistError !== null) {
+      this.entityNotExistError = args.entityNotExistError;
+    }
+  }
+};
+HistoryService_GetWorkflowExecutionHistory_result.prototype = {};
+HistoryService_GetWorkflowExecutionHistory_result.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 0:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.success = new shared_ttypes.GetWorkflowExecutionHistoryResponse();
+        this.success.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 1:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.badRequestError = new shared_ttypes.BadRequestError();
+        this.badRequestError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 2:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.internalServiceError = new shared_ttypes.InternalServiceError();
+        this.internalServiceError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 3:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.entityNotExistError = new shared_ttypes.EntityNotExistsError();
+        this.entityNotExistError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+HistoryService_GetWorkflowExecutionHistory_result.prototype.write = function(output) {
+  output.writeStructBegin('HistoryService_GetWorkflowExecutionHistory_result');
+  if (this.success !== null && this.success !== undefined) {
+    output.writeFieldBegin('success', Thrift.Type.STRUCT, 0);
+    this.success.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.badRequestError !== null && this.badRequestError !== undefined) {
+    output.writeFieldBegin('badRequestError', Thrift.Type.STRUCT, 1);
+    this.badRequestError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.internalServiceError !== null && this.internalServiceError !== undefined) {
+    output.writeFieldBegin('internalServiceError', Thrift.Type.STRUCT, 2);
+    this.internalServiceError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.entityNotExistError !== null && this.entityNotExistError !== undefined) {
+    output.writeFieldBegin('entityNotExistError', Thrift.Type.STRUCT, 3);
+    this.entityNotExistError.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
 var HistoryService_RecordDecisionTaskStarted_args = function(args) {
   this.addRequest = null;
   if (args) {
@@ -1182,6 +1350,62 @@ HistoryServiceClient.prototype.recv_StartWorkflowExecution = function(input,mtyp
   }
   return callback('StartWorkflowExecution failed: unknown result');
 };
+HistoryServiceClient.prototype.GetWorkflowExecutionHistory = function(getRequest, callback) {
+  this._seqid = this.new_seqid();
+  if (callback === undefined) {
+    var _defer = Q.defer();
+    this._reqs[this.seqid()] = function(error, result) {
+      if (error) {
+        _defer.reject(error);
+      } else {
+        _defer.resolve(result);
+      }
+    };
+    this.send_GetWorkflowExecutionHistory(getRequest);
+    return _defer.promise;
+  } else {
+    this._reqs[this.seqid()] = callback;
+    this.send_GetWorkflowExecutionHistory(getRequest);
+  }
+};
+
+HistoryServiceClient.prototype.send_GetWorkflowExecutionHistory = function(getRequest) {
+  var output = new this.pClass(this.output);
+  output.writeMessageBegin('GetWorkflowExecutionHistory', Thrift.MessageType.CALL, this.seqid());
+  var args = new HistoryService_GetWorkflowExecutionHistory_args();
+  args.getRequest = getRequest;
+  args.write(output);
+  output.writeMessageEnd();
+  return this.output.flush();
+};
+
+HistoryServiceClient.prototype.recv_GetWorkflowExecutionHistory = function(input,mtype,rseqid) {
+  var callback = this._reqs[rseqid] || function() {};
+  delete this._reqs[rseqid];
+  if (mtype == Thrift.MessageType.EXCEPTION) {
+    var x = new Thrift.TApplicationException();
+    x.read(input);
+    input.readMessageEnd();
+    return callback(x);
+  }
+  var result = new HistoryService_GetWorkflowExecutionHistory_result();
+  result.read(input);
+  input.readMessageEnd();
+
+  if (null !== result.badRequestError) {
+    return callback(result.badRequestError);
+  }
+  if (null !== result.internalServiceError) {
+    return callback(result.internalServiceError);
+  }
+  if (null !== result.entityNotExistError) {
+    return callback(result.entityNotExistError);
+  }
+  if (null !== result.success) {
+    return callback(null, result.success);
+  }
+  return callback('GetWorkflowExecutionHistory failed: unknown result');
+};
 HistoryServiceClient.prototype.RecordDecisionTaskStarted = function(addRequest, callback) {
   this._seqid = this.new_seqid();
   if (callback === undefined) {
@@ -1556,6 +1780,46 @@ HistoryServiceProcessor.prototype.process_StartWorkflowExecution = function(seqi
       } else {
         var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
         output.writeMessageBegin("StartWorkflowExecution", Thrift.MessageType.EXCEPTION, seqid);
+      }
+      result.write(output);
+      output.writeMessageEnd();
+      output.flush();
+    });
+  }
+}
+
+HistoryServiceProcessor.prototype.process_GetWorkflowExecutionHistory = function(seqid, input, output) {
+  var args = new HistoryService_GetWorkflowExecutionHistory_args();
+  args.read(input);
+  input.readMessageEnd();
+  if (this._handler.GetWorkflowExecutionHistory.length === 1) {
+    Q.fcall(this._handler.GetWorkflowExecutionHistory, args.getRequest)
+      .then(function(result) {
+        var result = new HistoryService_GetWorkflowExecutionHistory_result({success: result});
+        output.writeMessageBegin("GetWorkflowExecutionHistory", Thrift.MessageType.REPLY, seqid);
+        result.write(output);
+        output.writeMessageEnd();
+        output.flush();
+      }, function (err) {
+        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
+          var result = new HistoryService_GetWorkflowExecutionHistory_result(err);
+          output.writeMessageBegin("GetWorkflowExecutionHistory", Thrift.MessageType.REPLY, seqid);
+        } else {
+          var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
+          output.writeMessageBegin("GetWorkflowExecutionHistory", Thrift.MessageType.EXCEPTION, seqid);
+        }
+        result.write(output);
+        output.writeMessageEnd();
+        output.flush();
+      });
+  } else {
+    this._handler.GetWorkflowExecutionHistory(args.getRequest, function (err, result) {
+      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
+        var result = new HistoryService_GetWorkflowExecutionHistory_result((err != null ? err : {success: result}));
+        output.writeMessageBegin("GetWorkflowExecutionHistory", Thrift.MessageType.REPLY, seqid);
+      } else {
+        var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
+        output.writeMessageBegin("GetWorkflowExecutionHistory", Thrift.MessageType.EXCEPTION, seqid);
       }
       result.write(output);
       output.writeMessageEnd();

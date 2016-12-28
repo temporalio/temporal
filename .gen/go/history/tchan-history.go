@@ -18,6 +18,7 @@ var _ = shared.GoUnusedProtection__
 
 // TChanHistoryService is the interface that defines the server handler and client interface.
 type TChanHistoryService interface {
+	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
 	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
 	RecordActivityTaskStarted(ctx thrift.Context, addRequest *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	RecordDecisionTaskStarted(ctx thrift.Context, addRequest *RecordDecisionTaskStartedRequest) (*RecordDecisionTaskStartedResponse, error)
@@ -44,6 +45,27 @@ func NewTChanHistoryServiceInheritedClient(thriftService string, client thrift.T
 // NewTChanHistoryServiceClient creates a client that can be used to make remote calls.
 func NewTChanHistoryServiceClient(client thrift.TChanClient) TChanHistoryService {
 	return NewTChanHistoryServiceInheritedClient("HistoryService", client)
+}
+
+func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
+	var resp HistoryServiceGetWorkflowExecutionHistoryResult
+	args := HistoryServiceGetWorkflowExecutionHistoryArgs{
+		GetRequest: getRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "GetWorkflowExecutionHistory", &args, &resp)
+	if err == nil && !success {
+		if e := resp.BadRequestError; e != nil {
+			err = e
+		}
+		if e := resp.InternalServiceError; e != nil {
+			err = e
+		}
+		if e := resp.EntityNotExistError; e != nil {
+			err = e
+		}
+	}
+
+	return resp.GetSuccess(), err
 }
 
 func (c *tchanHistoryServiceClient) RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
@@ -208,6 +230,7 @@ func (s *tchanHistoryServiceServer) Service() string {
 
 func (s *tchanHistoryServiceServer) Methods() []string {
 	return []string{
+		"GetWorkflowExecutionHistory",
 		"RecordActivityTaskHeartbeat",
 		"RecordActivityTaskStarted",
 		"RecordDecisionTaskStarted",
@@ -220,6 +243,8 @@ func (s *tchanHistoryServiceServer) Methods() []string {
 
 func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
 	switch methodName {
+	case "GetWorkflowExecutionHistory":
+		return s.handleGetWorkflowExecutionHistory(ctx, protocol)
 	case "RecordActivityTaskHeartbeat":
 		return s.handleRecordActivityTaskHeartbeat(ctx, protocol)
 	case "RecordActivityTaskStarted":
@@ -238,6 +263,44 @@ func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string
 	default:
 		return false, nil, fmt.Errorf("method %v not found in service %v", methodName, s.Service())
 	}
+}
+
+func (s *tchanHistoryServiceServer) handleGetWorkflowExecutionHistory(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req HistoryServiceGetWorkflowExecutionHistoryArgs
+	var res HistoryServiceGetWorkflowExecutionHistoryResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	r, err :=
+		s.handler.GetWorkflowExecutionHistory(ctx, req.GetRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+		res.Success = r
+	}
+
+	return err == nil, &res, nil
 }
 
 func (s *tchanHistoryServiceServer) handleRecordActivityTaskHeartbeat(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {

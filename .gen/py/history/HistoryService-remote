@@ -25,6 +25,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print('')
   print('Functions:')
   print('  StartWorkflowExecutionResponse StartWorkflowExecution(StartWorkflowExecutionRequest startRequest)')
+  print('  GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(GetWorkflowExecutionHistoryRequest getRequest)')
   print('  RecordDecisionTaskStartedResponse RecordDecisionTaskStarted(RecordDecisionTaskStartedRequest addRequest)')
   print('  RecordActivityTaskStartedResponse RecordActivityTaskStarted(RecordActivityTaskStartedRequest addRequest)')
   print('  void RespondDecisionTaskCompleted(RespondDecisionTaskCompletedRequest completeRequest)')
@@ -92,6 +93,12 @@ if cmd == 'StartWorkflowExecution':
     print('StartWorkflowExecution requires 1 args')
     sys.exit(1)
   pp.pprint(client.StartWorkflowExecution(eval(args[0]),))
+
+elif cmd == 'GetWorkflowExecutionHistory':
+  if len(args) != 1:
+    print('GetWorkflowExecutionHistory requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.GetWorkflowExecutionHistory(eval(args[0]),))
 
 elif cmd == 'RecordDecisionTaskStarted':
   if len(args) != 1:
