@@ -31,8 +31,13 @@ type (
 	}
 )
 
-func newHistoryEngine(shard *shardContext, executionManager persistence.ExecutionManager,
+// NewHistoryEngine creates an instance of history engine
+func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
+	shard, err := acquireShard(shardID, executionManager)
+	if err != nil {
+		return nil
+	}
 	return &historyEngineImpl{
 		shard:            shard,
 		executionManager: executionManager,
