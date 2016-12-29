@@ -25,6 +25,18 @@ type (
 		msg string
 	}
 
+	// ShardAlreadyExistError is returned when conditionally creating a shard fails
+	ShardAlreadyExistError struct {
+		msg string
+	}
+
+	// ShardInfo describes a shard
+	ShardInfo struct {
+		ShardID          int
+		RangeID          int64
+		TransferAckLevel int64
+	}
+
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
 		WorkflowID           string
@@ -43,13 +55,19 @@ type (
 	TaskInfo struct {
 		WorkflowID     string
 		RunID          string
-		TaskID         string
+		TaskID         int64
 		TaskList       string
 		TaskType       int
 		ScheduleID     int64
 		VisibilityTime time.Time
 		LockToken      string
 		DeliveryCount  int
+	}
+
+	// TaskInfoWithID describes a task from tasks table
+	TaskInfoWithID struct {
+		TaskUUID string
+		Info     *TaskInfo
 	}
 
 	// Task is the generic interface for workflow tasks
@@ -59,14 +77,37 @@ type (
 
 	// ActivityTask identifies an activity task
 	ActivityTask struct {
+		TaskID     int64
 		TaskList   string
 		ScheduleID int64
 	}
 
 	// DecisionTask identifies a decision task
 	DecisionTask struct {
+		TaskID     int64
 		TaskList   string
 		ScheduleID int64
+	}
+
+	// CreateShardRequest is used to create a shard in executions table
+	CreateShardRequest struct {
+		ShardInfo *ShardInfo
+	}
+
+	// GetShardRequest is used to get shard information
+	GetShardRequest struct {
+		ShardID int
+	}
+
+	// GetShardResponse is the response to GetShard
+	GetShardResponse struct {
+		ShardInfo *ShardInfo
+	}
+
+	// UpdateShardRequest  is used to update shard information
+	UpdateShardRequest struct {
+		ShardInfo       *ShardInfo
+		PreviousRangeID int64
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -78,6 +119,7 @@ type (
 		NextEventID        int64
 		LastProcessedEvent int64
 		TransferTasks      []Task
+		RangeID            int64
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -100,6 +142,7 @@ type (
 		ExecutionInfo *WorkflowExecutionInfo
 		TransferTasks []Task
 		Condition     int64
+		RangeID       int64
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -121,7 +164,7 @@ type (
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
 	CompleteTransferTaskRequest struct {
 		Execution workflow.WorkflowExecution
-		TaskID    string
+		TaskID    int64
 		LockToken string
 	}
 
@@ -147,7 +190,7 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*TaskInfo
+		Tasks []*TaskInfoWithID
 	}
 
 	// CompleteTaskRequest is used to complete a task
@@ -161,6 +204,9 @@ type (
 
 	// ExecutionManager is the used to manage workflow executions
 	ExecutionManager interface {
+		CreateShard(request *CreateShardRequest) error
+		GetShard(request *GetShardRequest) (*GetShardResponse, error)
+		UpdateShard(request *UpdateShardRequest) error
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error
@@ -178,6 +224,10 @@ type (
 )
 
 func (e *ConditionFailedError) Error() string {
+	return e.msg
+}
+
+func (e *ShardAlreadyExistError) Error() string {
 	return e.msg
 }
 

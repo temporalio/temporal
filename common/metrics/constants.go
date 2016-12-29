@@ -64,7 +64,10 @@ const (
 
 // operation scopes for frontend
 const (
-	CreateWorkflowExecutionScope = iota
+	CreateShardScope = iota
+	GetShardScope
+	UpdateShardScope
+	CreateWorkflowExecutionScope
 	GetWorkflowExecutionScope
 	UpdateWorkflowExecutionScope
 	DeleteWorkflowExecutionScope
@@ -86,6 +89,9 @@ const (
 var ScopeToTags = [NumServices][]map[string]string{
 	// frontend Scope Names
 	{
+		{OperationTagName: CreateShardOperationTagValue},
+		{OperationTagName: GetShardOperationTagValue},
+		{OperationTagName: UpdateShardOperationTagValue},
 		{OperationTagName: CreateWorkflowExecutionOperationTagValue},
 		{OperationTagName: GetWorkflowExecutionOperationTagValue},
 		{OperationTagName: UpdateWorkflowExecutionOperationTagValue},
@@ -140,6 +146,9 @@ var GaugeNames = [NumServices]map[int]string{}
 
 // Frontend operation tag values as seen by the M3 backend
 const (
+	CreateShardOperationTagValue                  = "CreateShard"
+	GetShardOperationTagValue                     = "GetShard"
+	UpdateShardOperationTagValue                  = "UpdateShard"
 	CreateWorkflowExecutionOperationTagValue      = "CreateWorkflowExecution"
 	GetWorkflowExecutionOperationTagValue         = "GetWorkflowExecution"
 	UpdateWorkflowExecutionOperationTagValue      = "UpdateWorkflowExecution"

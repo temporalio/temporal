@@ -119,8 +119,8 @@ RecordActivityTaskStartedRequest.prototype.read = function(input) {
       }
       break;
       case 30:
-      if (ftype == Thrift.Type.STRING) {
-        this.taskId = input.readString();
+      if (ftype == Thrift.Type.I64) {
+        this.taskId = input.readI64();
       } else {
         input.skip(ftype);
       }
@@ -155,8 +155,8 @@ RecordActivityTaskStartedRequest.prototype.write = function(output) {
     output.writeFieldEnd();
   }
   if (this.taskId !== null && this.taskId !== undefined) {
-    output.writeFieldBegin('taskId', Thrift.Type.STRING, 30);
-    output.writeString(this.taskId);
+    output.writeFieldBegin('taskId', Thrift.Type.I64, 30);
+    output.writeI64(this.taskId);
     output.writeFieldEnd();
   }
   if (this.pollRequest !== null && this.pollRequest !== undefined) {
@@ -287,8 +287,8 @@ RecordDecisionTaskStartedRequest.prototype.read = function(input) {
       }
       break;
       case 30:
-      if (ftype == Thrift.Type.STRING) {
-        this.taskId = input.readString();
+      if (ftype == Thrift.Type.I64) {
+        this.taskId = input.readI64();
       } else {
         input.skip(ftype);
       }
@@ -323,8 +323,8 @@ RecordDecisionTaskStartedRequest.prototype.write = function(output) {
     output.writeFieldEnd();
   }
   if (this.taskId !== null && this.taskId !== undefined) {
-    output.writeFieldBegin('taskId', Thrift.Type.STRING, 30);
-    output.writeString(this.taskId);
+    output.writeFieldBegin('taskId', Thrift.Type.I64, 30);
+    output.writeI64(this.taskId);
     output.writeFieldEnd();
   }
   if (this.pollRequest !== null && this.pollRequest !== undefined) {

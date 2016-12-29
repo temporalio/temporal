@@ -73,7 +73,7 @@ func logPersistantStoreErrorEvent(logger bark.Logger, operation string, err erro
 	}).Errorf("Persistent store operation failed. Operation Details: %v", details)
 }
 
-func logDuplicateTaskEvent(logger bark.Logger, taskType int, taskID string, scheduleID, startedID int64,
+func logDuplicateTaskEvent(logger bark.Logger, taskType int, taskID int64, scheduleID, startedID int64,
 	isRunning bool) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: duplicateTaskEventID,

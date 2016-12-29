@@ -53,7 +53,13 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockTaskMgr = &mocks.TaskManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 
+	mockShard := &shardContext{
+		shardInfo:              &persistence.ShardInfo{ShardID: 1, RangeID: 1, TransferAckLevel: 0},
+		transferSequenceNumber: 1,
+	}
+
 	history := &historyEngineImpl{
+		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      newTransferQueueProcessor(s.mockExecutionMgr, s.mockTaskMgr, s.logger),
 		logger:           s.logger,
@@ -101,7 +107,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 
 	// Lets do something
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
 	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 	actType := workflow.NewActivityType()
@@ -173,7 +179,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasksIfTaskAlreadyStarted() {
 
 	taskRequest := &persistence.GetTasksRequest{TaskList: "makeBreakfast", TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, 1, 2 + firstEventID, time.Time{}, "lock", 0}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 2 + firstEventID, time.Time{}, "lock", 0}}}}
 	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 
 	request := &workflow.StartWorkflowExecutionRequest{
@@ -236,7 +242,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasksOnConditionalUpdateFail() 
 
 	taskRequest := &persistence.GetTasksRequest{TaskList: tl, TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
 	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 
@@ -378,7 +384,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfNoExecution() {
 	}
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, 2, time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, 2, time.Time{}, "lock", 0}}},
 	}
 
 	s.mockTaskMgr.On("GetTasks", taskRequest).Return(taskResponse, nil)
@@ -414,7 +420,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyStarted() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -465,7 +471,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyCompleted() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -513,7 +519,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksConflict() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
 	}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -584,7 +590,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksMaxAttemptsExceeded() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"rId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
 	}
 
 	s.mockTaskMgr.On("GetTasks", taskRequest).Return(taskResponse, nil)
@@ -635,7 +641,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksSuccess() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfo{{"wId", "rId", "tId", tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{

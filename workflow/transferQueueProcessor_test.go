@@ -70,7 +70,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	s.Equal(1, len(tasks1))
 
 	dTask := tasks1[0]
-	s.Equal(int64(2), dTask.ScheduleID)
+	s.Equal(int64(2), dTask.Info.ScheduleID)
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
@@ -95,13 +95,13 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	s.Equal(len(activityTaskScheduleIds), len(tasks1))
 
 	for _, t := range tasks1 {
-		s.True(containsID(activityTaskScheduleIds, t.ScheduleID),
-			fmt.Sprintf("ScheduleID: %v, TaskList: %v", string(t.ScheduleID), t.TaskList))
-		s.Equal(workflowExecution.GetWorkflowId(), t.WorkflowID)
-		s.Equal(workflowExecution.GetRunId(), t.RunID)
-		s.Equal(taskList, t.TaskList)
-		s.Equal(1, t.DeliveryCount)
-		s.Equal(persistence.TaskTypeActivity, t.TaskType)
+		s.True(containsID(activityTaskScheduleIds, t.Info.ScheduleID),
+			fmt.Sprintf("ScheduleID: %v, TaskList: %v", string(t.Info.ScheduleID), t.Info.TaskList))
+		s.Equal(workflowExecution.GetWorkflowId(), t.Info.WorkflowID)
+		s.Equal(workflowExecution.GetRunId(), t.Info.RunID)
+		s.Equal(taskList, t.Info.TaskList)
+		s.Equal(1, t.Info.DeliveryCount)
+		s.Equal(persistence.TaskTypeActivity, t.Info.TaskType)
 	}
 }
 

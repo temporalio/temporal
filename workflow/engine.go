@@ -50,7 +50,12 @@ var (
 // NewWorkflowEngine creates an instannce of engine.
 func NewWorkflowEngine(executionManager persistence.ExecutionManager, taskManager persistence.TaskManager,
 	logger bark.Logger) Engine {
-	history := newHistoryEngine(executionManager, taskManager, logger)
+	shard, err := acquireShard(1, executionManager)
+	if err != nil {
+		return nil
+	}
+
+	history := newHistoryEngine(shard, executionManager, taskManager, logger)
 	return &EngineImpl{
 		historyService: history,
 		matchingEngine: newMatchingEngine(taskManager, history, logger),

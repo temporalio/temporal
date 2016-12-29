@@ -34,6 +34,55 @@ func NewTaskPersistenceClient(persistence persistence.TaskManager, m3Client metr
 	}
 }
 
+func (p *workflowExecutionPersistenceClient) CreateShard(request *persistence.CreateShardRequest) error {
+	p.m3Client.IncCounter(metrics.CreateShardScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.CreateShardScope, metrics.WorkflowLatencyTimer)
+	err := p.persistence.CreateShard(request)
+	sw.Stop()
+
+	if err != nil {
+		if _, ok := err.(*persistence.ShardAlreadyExistError); !ok {
+			p.m3Client.IncCounter(metrics.CreateShardScope, metrics.WorkflowFailures)
+		}
+	}
+
+	return err
+}
+
+func (p *workflowExecutionPersistenceClient) GetShard(
+	request *persistence.GetShardRequest) (*persistence.GetShardResponse, error) {
+	p.m3Client.IncCounter(metrics.GetShardScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.GetShardScope, metrics.WorkflowLatencyTimer)
+	response, err := p.persistence.GetShard(request)
+	sw.Stop()
+
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			p.m3Client.IncCounter(metrics.GetShardScope, metrics.WorkflowFailures)
+		}
+	}
+
+	return response, err
+}
+
+func (p *workflowExecutionPersistenceClient) UpdateShard(request *persistence.UpdateShardRequest) error {
+	p.m3Client.IncCounter(metrics.UpdateShardScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.UpdateShardScope, metrics.WorkflowLatencyTimer)
+	err := p.persistence.UpdateShard(request)
+	sw.Stop()
+
+	if err != nil {
+		if _, ok := err.(*persistence.ConditionFailedError); !ok {
+			p.m3Client.IncCounter(metrics.UpdateShardScope, metrics.WorkflowFailures)
+		}
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.WorkflowRequests)
 

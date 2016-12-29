@@ -294,15 +294,16 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasks1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 5)
+	tasksWithID1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 5)
 	s.Nil(err1, "No error expected.")
-	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.NotNil(tasksWithID1, "expected valid list of tasks.")
 
-	s.Equal(5, len(tasks1), "Expected 5 activity tasks.")
-	for _, t := range tasks1 {
+	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
+	for _, tWrapped := range tasksWithID1 {
+		t := tWrapped.Info
 		s.Equal(workflowExecution.GetWorkflowId(), t.WorkflowID)
 		s.Equal(workflowExecution.GetRunId(), t.RunID)
-		s.NotEmpty(t.TaskID)
+		s.NotEmpty(tWrapped.TaskUUID)
 		s.Equal(taskList, t.TaskList)
 		s.Equal(TaskTypeActivity, t.TaskType)
 		s.True(t.VisibilityTime.Before(startTime.Add(10 * time.Minute)))
@@ -310,12 +311,13 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t.LockToken)
 		s.Equal(1, t.DeliveryCount)
 
-		err2 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, t.TaskID, t.LockToken)
+		err2 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, t.LockToken)
 		s.Nil(err2)
 	}
 
-	for _, t := range tasks1 {
-		err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, t.TaskID, t.LockToken)
+	for _, tWrapped := range tasksWithID1 {
+		t := tWrapped.Info
+		err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, t.LockToken)
 		s.NotNil(err3)
 		log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", t.TaskID, t.LockToken, err3)
 		s.IsType(&gen.EntityNotExistsError{}, err3)
@@ -337,13 +339,14 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTaskConflict() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasks1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 1)
+	tasksWrapped1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 1)
 	s.Nil(err1, "No error expected.")
-	s.NotNil(tasks1, "expected valid list of tasks.")
-	s.Equal(1, len(tasks1), "Expected 1 activity task.")
+	s.NotNil(tasksWrapped1, "expected valid list of tasks.")
+	s.Equal(1, len(tasksWrapped1), "Expected 1 activity task.")
 
-	t := tasks1[0]
-	err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, t.TaskID, badToken)
+	tWrapped := tasksWrapped1[0]
+	t := tWrapped.Info
+	err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, badToken)
 	s.NotNil(err3)
 	log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", t.TaskID, badToken, err3)
 	s.IsType(&ConditionFailedError{}, err3)

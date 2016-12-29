@@ -9,7 +9,7 @@ exception EventAlreadyStartedError {
 struct RecordActivityTaskStartedRequest {
   10: optional shared.WorkflowExecution workflowExecution
   20: optional i64 (js.type = "Long") scheduleId
-  30: optional string taskId
+  30: optional i64 (js.type = "Long") taskId
   40: optional shared.PollForActivityTaskRequest pollRequest
 }
 
@@ -21,7 +21,7 @@ struct RecordActivityTaskStartedResponse {
 struct RecordDecisionTaskStartedRequest {
   10: optional shared.WorkflowExecution workflowExecution
   20: optional i64 (js.type = "Long") scheduleId
-  30: optional string taskId
+  30: optional i64 (js.type = "Long") taskId
   40: optional shared.PollForDecisionTaskRequest pollRequest
 }
 

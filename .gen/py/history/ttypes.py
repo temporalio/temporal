@@ -129,7 +129,7 @@ class RecordActivityTaskStartedRequest:
     None, # 27
     None, # 28
     None, # 29
-    (30, TType.STRING, 'taskId', unicode, None, ), # 30
+    (30, TType.I64, 'taskId', None, None, ), # 30
     None, # 31
     None, # 32
     None, # 33
@@ -169,8 +169,8 @@ class RecordActivityTaskStartedRequest:
         else:
           iprot.skip(ftype)
       elif fid == 30:
-        if ftype == TType.STRING:
-          self.taskId = iprot.readString().decode('utf-8')
+        if ftype == TType.I64:
+          self.taskId = iprot.readI64();
         else:
           iprot.skip(ftype)
       elif fid == 40:
@@ -198,8 +198,8 @@ class RecordActivityTaskStartedRequest:
       oprot.writeI64(self.scheduleId)
       oprot.writeFieldEnd()
     if self.taskId is not None:
-      oprot.writeFieldBegin('taskId', TType.STRING, 30)
-      oprot.writeString(self.taskId.encode('utf-8'))
+      oprot.writeFieldBegin('taskId', TType.I64, 30)
+      oprot.writeI64(self.taskId)
       oprot.writeFieldEnd()
     if self.pollRequest is not None:
       oprot.writeFieldBegin('pollRequest', TType.STRUCT, 40)
@@ -369,7 +369,7 @@ class RecordDecisionTaskStartedRequest:
     None, # 27
     None, # 28
     None, # 29
-    (30, TType.STRING, 'taskId', unicode, None, ), # 30
+    (30, TType.I64, 'taskId', None, None, ), # 30
     None, # 31
     None, # 32
     None, # 33
@@ -409,8 +409,8 @@ class RecordDecisionTaskStartedRequest:
         else:
           iprot.skip(ftype)
       elif fid == 30:
-        if ftype == TType.STRING:
-          self.taskId = iprot.readString().decode('utf-8')
+        if ftype == TType.I64:
+          self.taskId = iprot.readI64();
         else:
           iprot.skip(ftype)
       elif fid == 40:
@@ -438,8 +438,8 @@ class RecordDecisionTaskStartedRequest:
       oprot.writeI64(self.scheduleId)
       oprot.writeFieldEnd()
     if self.taskId is not None:
-      oprot.writeFieldBegin('taskId', TType.STRING, 30)
-      oprot.writeString(self.taskId.encode('utf-8'))
+      oprot.writeFieldBegin('taskId', TType.I64, 30)
+      oprot.writeI64(self.taskId)
       oprot.writeFieldEnd()
     if self.pollRequest is not None:
       oprot.writeFieldBegin('pollRequest', TType.STRUCT, 40)

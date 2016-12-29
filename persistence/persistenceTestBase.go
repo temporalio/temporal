@@ -3,6 +3,7 @@ package persistence
 import (
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -25,8 +26,10 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
 	TestBase struct {
-		WorkflowMgr ExecutionManager
-		TaskMgr     TaskManager
+		WorkflowMgr     ExecutionManager
+		TaskMgr         TaskManager
+		rangeID         int64
+		sequenceCounter int64
 		CassandraTestCluster
 	}
 
@@ -44,10 +47,22 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace)
 	var err error
 	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
-		s.CassandraTestCluster.keyspace)
+		s.CassandraTestCluster.keyspace, 1)
 	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
 	if err != nil {
 		log.Fatal(err)
+	}
+	// Create a shard for test
+	s.rangeID = 100
+	err1 := s.WorkflowMgr.CreateShard(&CreateShardRequest{
+		ShardInfo: &ShardInfo{
+			ShardID:          1,
+			RangeID:          s.rangeID,
+			TransferAckLevel: 0,
+		},
+	})
+	if err1 != nil {
+		log.Fatal(err1)
 	}
 }
 
@@ -62,7 +77,10 @@ func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowEx
 		ExecutionContext:   executionContext,
 		NextEventID:        nextEventID,
 		LastProcessedEvent: lastProcessedEventID,
-		TransferTasks:      []Task{&DecisionTask{TaskList: taskList, ScheduleID: decisionScheduleID}}})
+		RangeID:            s.rangeID,
+		TransferTasks: []Task{
+			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: decisionScheduleID},
+		}})
 
 	if err != nil {
 		return "", err
@@ -78,11 +96,13 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
-		transferTasks = append(transferTasks, &DecisionTask{TaskList: taskList, ScheduleID: int64(decisionScheduleID)})
+		transferTasks = append(transferTasks,
+			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: int64(decisionScheduleID)})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
-		transferTasks = append(transferTasks, &ActivityTask{TaskList: taskList, ScheduleID: int64(activityScheduleID)})
+		transferTasks = append(transferTasks,
+			&ActivityTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: int64(activityScheduleID)})
 	}
 
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
@@ -92,7 +112,8 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 		ExecutionContext:   executionContext,
 		NextEventID:        nextEventID,
 		LastProcessedEvent: lastProcessedEventID,
-		TransferTasks:      transferTasks})
+		TransferTasks:      transferTasks,
+		RangeID:            s.rangeID})
 
 	if err != nil {
 		return "", err
@@ -132,6 +153,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		ExecutionInfo: updatedInfo,
 		TransferTasks: transferTasks,
 		Condition:     int64(3),
+		RangeID:       s.rangeID,
 	})
 }
 
@@ -157,7 +179,7 @@ func (s *TestBase) GetTransferTasks(timeout time.Duration, batchSize int) ([]*Ta
 }
 
 // CompleteTransferTask is a utility method to complete a transfer task
-func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecution, taskID string,
+func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecution, taskID int64,
 	lockToken string) error {
 
 	return s.WorkflowMgr.CompleteTransferTask(&CompleteTransferTaskRequest{
@@ -174,6 +196,7 @@ func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecuti
 		Execution: workflowExecution,
 		TaskList:  taskList,
 		Data: &DecisionTask{
+			TaskID:     s.GetNextSequenceNumber(),
 			TaskList:   taskList,
 			ScheduleID: decisionScheduleID,
 		},
@@ -195,6 +218,7 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 			Execution: workflowExecution,
 			TaskList:  taskList,
 			Data: &ActivityTask{
+				TaskID:     s.GetNextSequenceNumber(),
 				TaskList:   taskList,
 				ScheduleID: activityScheduleID,
 			},
@@ -211,7 +235,7 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(taskList string, taskType int, timeout time.Duration, batchSize int) ([]*TaskInfo,
+func (s *TestBase) GetTasks(taskList string, taskType int, timeout time.Duration, batchSize int) ([]*TaskInfoWithID,
 	error) {
 	response, err := s.TaskMgr.GetTasks(&GetTasksRequest{
 		TaskList:    taskList,
@@ -259,6 +283,11 @@ func (s *TestBase) SetupWorkflowStore() {
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
 	s.CassandraTestCluster.tearDownTestCluster()
+}
+
+// GetNextSequenceNumber generates a unique sequence number for can be used for transfer queue taskId
+func (s *TestBase) GetNextSequenceNumber() int64 {
+	return atomic.AddInt64(&s.sequenceCounter, 1)
 }
 
 func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool) {

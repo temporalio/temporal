@@ -1,6 +1,12 @@
 CREATE TABLE shards (
-  shard_id int,
+  shard_id           int,
   PRIMARY KEY (shard_id)
+);
+
+CREATE TYPE shard (
+  shard_id            int,
+  range_id            bigint,
+  transfer_ack_level  bigint,
 );
 
 CREATE TYPE workflow_execution (
@@ -19,7 +25,7 @@ CREATE TYPE workflow_execution (
 CREATE TYPE task (
   workflow_id      text,
   run_id           uuid,
-  task_id          uuid,
+  task_id          bigint,
   task_list        text,
   type             int,  -- enum TaskType {ActivityTask, DecisionTask}
   schedule_id      bigint,
@@ -30,14 +36,16 @@ CREATE TYPE task (
 
 CREATE TABLE executions (
   shard_id           int,
-  type               int, -- enum RowType { Execution, TransferTask, TimerTask}
+  type               int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
   workflow_id        text,
   run_id             uuid,
   current_run_id     uuid,
-  task_id            uuid, -- unique identifier for transfer and timer tasks for an execution
+  task_id            bigint, -- unique identifier for transfer and timer tasks for an execution
+  shard              frozen<shard>,
   execution          frozen<workflow_execution>,
   transfer           frozen<task>,
   next_event_id      bigint,  -- This is needed to make conditional updates on session history
+  range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   lock_token         uuid,
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );

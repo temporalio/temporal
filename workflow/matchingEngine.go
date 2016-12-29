@@ -20,6 +20,7 @@ type matchingEngineImpl struct {
 
 // Contains information needed for current task transition from Activity queue to Workflow execution history.
 type taskContext struct {
+	taskUUID          string
 	info              *persistence.TaskInfo
 	workflowExecution workflow.WorkflowExecution
 	matchingEngine    *matchingEngineImpl
@@ -140,13 +141,14 @@ func (e *matchingEngineImpl) buildTaskContext(taskList string, taskType int) (*t
 		return nil, errNoTasks
 	}
 
-	t := getTaskResponse.Tasks[0]
+	tWrapped := getTaskResponse.Tasks[0]
+	t := tWrapped.Info
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(t.WorkflowID),
 		RunId:      common.StringPtr(t.RunID),
 	}
 
-	context := newTaskContext(e, t, workflowExecution, e.logger)
+	context := newTaskContext(e, tWrapped.TaskUUID, t, workflowExecution, e.logger)
 
 	return context, nil
 }
@@ -229,7 +231,7 @@ func (c *taskContext) completeTask() error {
 		Execution: c.workflowExecution,
 		TaskList:  c.info.TaskList,
 		TaskType:  c.info.TaskType,
-		TaskID:    c.info.TaskID,
+		TaskID:    c.taskUUID,
 		LockToken: c.info.LockToken,
 	}
 
@@ -242,8 +244,10 @@ func (c *taskContext) completeTask() error {
 	return err
 }
 
-func newTaskContext(matchingEngine *matchingEngineImpl, info *persistence.TaskInfo, execution workflow.WorkflowExecution, logger bark.Logger) *taskContext {
+func newTaskContext(matchingEngine *matchingEngineImpl, taskUUID string, info *persistence.TaskInfo,
+	execution workflow.WorkflowExecution, logger bark.Logger) *taskContext {
 	return &taskContext{
+		taskUUID:          taskUUID,
 		info:              info,
 		matchingEngine:    matchingEngine,
 		workflowExecution: execution,

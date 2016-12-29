@@ -130,7 +130,7 @@ type RecordActivityTaskStartedRequest struct {
 	// unused fields # 11 to 19
 	ScheduleId *int64 `thrift:"scheduleId,20" db:"scheduleId" json:"scheduleId,omitempty"`
 	// unused fields # 21 to 29
-	TaskId *string `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
+	TaskId *int64 `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
 	// unused fields # 31 to 39
 	PollRequest *shared.PollForActivityTaskRequest `thrift:"pollRequest,40" db:"pollRequest" json:"pollRequest,omitempty"`
 }
@@ -157,9 +157,9 @@ func (p *RecordActivityTaskStartedRequest) GetScheduleId() int64 {
 	return *p.ScheduleId
 }
 
-var RecordActivityTaskStartedRequest_TaskId_DEFAULT string
+var RecordActivityTaskStartedRequest_TaskId_DEFAULT int64
 
-func (p *RecordActivityTaskStartedRequest) GetTaskId() string {
+func (p *RecordActivityTaskStartedRequest) GetTaskId() int64 {
 	if !p.IsSetTaskId() {
 		return RecordActivityTaskStartedRequest_TaskId_DEFAULT
 	}
@@ -253,7 +253,7 @@ func (p *RecordActivityTaskStartedRequest) ReadField20(iprot thrift.TProtocol) e
 }
 
 func (p *RecordActivityTaskStartedRequest) ReadField30(iprot thrift.TProtocol) error {
-	if v, err := iprot.ReadString(); err != nil {
+	if v, err := iprot.ReadI64(); err != nil {
 		return thrift.PrependError("error reading field 30: ", err)
 	} else {
 		p.TaskId = &v
@@ -326,10 +326,10 @@ func (p *RecordActivityTaskStartedRequest) writeField20(oprot thrift.TProtocol) 
 
 func (p *RecordActivityTaskStartedRequest) writeField30(oprot thrift.TProtocol) (err error) {
 	if p.IsSetTaskId() {
-		if err := oprot.WriteFieldBegin("taskId", thrift.STRING, 30); err != nil {
+		if err := oprot.WriteFieldBegin("taskId", thrift.I64, 30); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:taskId: ", p), err)
 		}
-		if err := oprot.WriteString(string(*p.TaskId)); err != nil {
+		if err := oprot.WriteI64(int64(*p.TaskId)); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T.taskId (30) field write error: ", p), err)
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
@@ -520,7 +520,7 @@ type RecordDecisionTaskStartedRequest struct {
 	// unused fields # 11 to 19
 	ScheduleId *int64 `thrift:"scheduleId,20" db:"scheduleId" json:"scheduleId,omitempty"`
 	// unused fields # 21 to 29
-	TaskId *string `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
+	TaskId *int64 `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
 	// unused fields # 31 to 39
 	PollRequest *shared.PollForDecisionTaskRequest `thrift:"pollRequest,40" db:"pollRequest" json:"pollRequest,omitempty"`
 }
@@ -547,9 +547,9 @@ func (p *RecordDecisionTaskStartedRequest) GetScheduleId() int64 {
 	return *p.ScheduleId
 }
 
-var RecordDecisionTaskStartedRequest_TaskId_DEFAULT string
+var RecordDecisionTaskStartedRequest_TaskId_DEFAULT int64
 
-func (p *RecordDecisionTaskStartedRequest) GetTaskId() string {
+func (p *RecordDecisionTaskStartedRequest) GetTaskId() int64 {
 	if !p.IsSetTaskId() {
 		return RecordDecisionTaskStartedRequest_TaskId_DEFAULT
 	}
@@ -643,7 +643,7 @@ func (p *RecordDecisionTaskStartedRequest) ReadField20(iprot thrift.TProtocol) e
 }
 
 func (p *RecordDecisionTaskStartedRequest) ReadField30(iprot thrift.TProtocol) error {
-	if v, err := iprot.ReadString(); err != nil {
+	if v, err := iprot.ReadI64(); err != nil {
 		return thrift.PrependError("error reading field 30: ", err)
 	} else {
 		p.TaskId = &v
@@ -716,10 +716,10 @@ func (p *RecordDecisionTaskStartedRequest) writeField20(oprot thrift.TProtocol) 
 
 func (p *RecordDecisionTaskStartedRequest) writeField30(oprot thrift.TProtocol) (err error) {
 	if p.IsSetTaskId() {
-		if err := oprot.WriteFieldBegin("taskId", thrift.STRING, 30); err != nil {
+		if err := oprot.WriteFieldBegin("taskId", thrift.I64, 30); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:taskId: ", p), err)
 		}
-		if err := oprot.WriteString(string(*p.TaskId)); err != nil {
+		if err := oprot.WriteI64(int64(*p.TaskId)); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T.taskId (30) field write error: ", p), err)
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {

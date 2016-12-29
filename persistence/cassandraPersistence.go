@@ -13,21 +13,31 @@ import (
 )
 
 const (
-	cassandraProtoVersion    = 4
-	defaultSessionTimeout    = 10 * time.Second
-	rowTypeExecutionTaskUUID = "1e26b948-4fc9-f203-f5a7-ac2109dbfbe4"
-	permanentRunID           = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
-	defaultDeleteTTLSeconds  = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
+	cassandraProtoVersion   = 4
+	defaultSessionTimeout   = 10 * time.Second
+	rowTypeExecutionTaskID  = int64(77)
+	permanentRunID          = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
+	rowTypeShardWorkflowID  = "3fe89dad-8326-fac5-fd40-fe08cfa25dec"
+	rowTypeShardRunID       = "228ce20b-af54-fe2f-ff17-be728a00f785"
+	rowTypeShardTaskID      = int64(23)
+	defaultDeleteTTLSeconds = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
 )
 
 // Row types for table executions
 const (
-	rowTypeExecution = iota
+	rowTypeShard = iota
+	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
 )
 
 const (
+	templateShardType = `{` +
+		`shard_id: ?, ` +
+		`range_id: ?, ` +
+		`transfer_ack_level: ?` +
+		`}`
+
 	templateWorkflowExecutionType = `{` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
@@ -53,6 +63,27 @@ const (
 		`delivery_count: ?` +
 		`}`
 
+	templateCreateShardQuery = `INSERT INTO executions (` +
+		`shard_id, type, workflow_id, run_id, task_id, shard, range_id)` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateShardType + `, ?) IF NOT EXISTS`
+
+	templateGetShardQuery = `SELECT shard ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ?`
+
+	templateUpdateShardQuery = `UPDATE executions ` +
+		`SET shard = ` + templateShardType + `, range_id = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
+
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, type, workflow_id, run_id, task_id, current_run_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
@@ -64,6 +95,11 @@ const (
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, workflow_id, run_id, transfer, task_id, lock_token) ` +
 		`VALUES(?, ?, ?, ?, ` + templateTaskType + `, ?, ?)`
+
+	templateUpdateLeaseQuery = `UPDATE executions ` +
+		`SET range_id = ? ` +
+		`WHERE shard_id = ? ` +
+		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution ` +
 		`FROM executions ` +
@@ -80,7 +116,7 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ?`
+		`IF next_event_id = ? and range_id = ?`
 
 	templateDeleteWorkflowExecutionQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -119,7 +155,7 @@ const (
 		`task_list, type, workflow_id, run_id, task_id, task, lock_token) ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `, ?)`
 
-	templateGetTasksQuery = `SELECT task ` +
+	templateGetTasksQuery = `SELECT task_id, task ` +
 		`FROM tasks ` +
 		`WHERE task_list = ? ` +
 		`and type = ? `
@@ -151,7 +187,7 @@ type (
 )
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string) (ExecutionManager, error) {
+func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string, shardID int) (ExecutionManager, error) {
 	cluster := common.NewCassandraCluster(hosts)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -162,7 +198,7 @@ func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string) (Ex
 	if err != nil {
 		return nil, err
 	}
-	return &cassandraPersistence{shardID: 1, session: session, lowConslevel: gocql.One}, nil
+	return &cassandraPersistence{shardID: shardID, session: session, lowConslevel: gocql.One}, nil
 }
 
 // NewCassandraTaskPersistence is used to create an instance of TaskManager implementation
@@ -180,6 +216,102 @@ func NewCassandraTaskPersistence(hosts string, keyspace string) (TaskManager, er
 	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One}, nil
 }
 
+func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
+	shardInfo := request.ShardInfo
+	query := d.session.Query(templateCreateShardQuery,
+		shardInfo.ShardID,
+		rowTypeShard,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		rowTypeShardTaskID,
+		shardInfo.ShardID,
+		shardInfo.RangeID,
+		shardInfo.TransferAckLevel,
+		shardInfo.RangeID)
+
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("CreateShard operation failed. Error : %v", err),
+		}
+	}
+
+	if !applied {
+		shard := previous["shard"].(map[string]interface{})
+		return &ShardAlreadyExistError{
+			msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
+				shard["shard_id"], shard["range_id"]),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResponse, error) {
+	shardID := request.ShardID
+	query := d.session.Query(templateGetShardQuery,
+		shardID,
+		rowTypeShard,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		rowTypeShardTaskID).Consistency(d.lowConslevel)
+
+	result := make(map[string]interface{})
+	if err := query.MapScan(result); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, &workflow.EntityNotExistsError{
+				Message: fmt.Sprintf("Shard not found.  ShardId: %v", shardID),
+			}
+		}
+
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetShard operation failed. Error: %v", err),
+		}
+	}
+
+	info := createShardInfo(result["shard"].(map[string]interface{}))
+	return &GetShardResponse{ShardInfo: info}, nil
+}
+
+func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
+	shardInfo := request.ShardInfo
+
+	query := d.session.Query(templateUpdateShardQuery,
+		shardInfo.ShardID,
+		shardInfo.RangeID,
+		shardInfo.TransferAckLevel,
+		shardInfo.RangeID,
+		shardInfo.ShardID,
+		rowTypeShard,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		rowTypeShardTaskID,
+		request.PreviousRangeID)
+
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
+		}
+	}
+
+	if !applied {
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
+
+		return &ConditionFailedError{
+			msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",
+				request.PreviousRangeID, strings.Join(columns, ",")),
+		}
+	}
+
+	return nil
+}
+
 func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (
 	*CreateWorkflowExecutionResponse, error) {
 	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
@@ -191,7 +323,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		rowTypeExecution,
 		request.Execution.GetWorkflowId(),
 		permanentRunID,
-		rowTypeExecutionTaskUUID,
+		rowTypeExecutionTaskID,
 		request.Execution.GetRunId())
 
 	batch.Query(templateCreateWorkflowExecutionQuery2,
@@ -210,10 +342,16 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		cqlNowTimestamp,
 		true,
 		request.NextEventID,
-		rowTypeExecutionTaskUUID)
+		rowTypeExecutionTaskID)
 
 	d.createTransferTasks(batch, request.TransferTasks, request.Execution.GetWorkflowId(), request.Execution.GetRunId(),
 		cqlNowTimestamp)
+
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		d.shardID,
+		request.RangeID,
+	)
 
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
@@ -224,10 +362,15 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	}
 
 	if !applied {
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
+
 		execution := previous["execution"].(map[string]interface{})
 		return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-			Message: fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v",
-				execution["workflow_id"], execution["run_id"]),
+			Message: fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
+				execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
@@ -242,7 +385,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 		rowTypeExecution,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
-		rowTypeExecutionTaskUUID).Consistency(d.lowConslevel)
+		rowTypeExecutionTaskID).Consistency(d.lowConslevel)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
@@ -284,8 +427,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		rowTypeExecution,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
-		rowTypeExecutionTaskUUID,
-		request.Condition)
+		rowTypeExecutionTaskID,
+		request.Condition,
+		request.RangeID)
 
 	d.createTransferTasks(batch, request.TransferTasks, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
@@ -321,7 +465,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 		rowTypeExecution,
 		info.WorkflowID,
 		permanentRunID,
-		rowTypeExecutionTaskUUID)
+		rowTypeExecutionTaskID)
 
 	batch.Query(templateDeleteWorkflowExecutionTTLQuery,
 		d.shardID,
@@ -339,7 +483,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 		cqlNowTimestamp,
 		info.DecisionPending,
 		info.NextEventID,
-		rowTypeExecutionTaskUUID,
+		rowTypeExecutionTaskID,
 		defaultDeleteTTLSeconds)
 
 	err := d.session.ExecuteBatch(batch)
@@ -464,16 +608,19 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 
 func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
 	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
-	taskID := uuid.New()
+	taskUUID := uuid.New()
 	lockToken := uuid.New()
 
+	var taskID int64
 	var taskList string
 	var scheduleID int64
 	switch request.Data.GetType() {
 	case TaskTypeActivity:
+		taskID = request.Data.(*ActivityTask).TaskID
 		taskList = request.Data.(*ActivityTask).TaskList
 		scheduleID = request.Data.(*ActivityTask).ScheduleID
 	case TaskTypeDecision:
+		taskID = request.Data.(*DecisionTask).TaskID
 		taskList = request.Data.(*DecisionTask).TaskList
 		scheduleID = request.Data.(*DecisionTask).ScheduleID
 	}
@@ -483,7 +630,7 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 		request.Data.GetType(),
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
-		taskID,
+		taskUUID,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
 		taskID,
@@ -501,7 +648,7 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 		}
 	}
 
-	return &CreateTaskResponse{TaskID: taskID}, nil
+	return &CreateTaskResponse{TaskID: taskUUID}, nil
 }
 
 func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
@@ -522,6 +669,8 @@ func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResp
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
+
+		taskUUID := task["task_id"].(gocql.UUID).String()
 		t := createTaskInfo(task["task"].(map[string]interface{}))
 		// Reset task map to get it ready for next scan
 		task = make(map[string]interface{})
@@ -550,7 +699,7 @@ PopulateTasks:
 			t.TaskType,
 			t.WorkflowID,
 			t.RunID,
-			t.TaskID,
+			taskUUID,
 			t.LockToken)
 
 		previous := make(map[string]interface{})
@@ -563,7 +712,7 @@ PopulateTasks:
 		t.VisibilityTime = newVisibilityTime
 		t.LockToken = newLockToken
 		t.DeliveryCount = newDeliveryCount
-		response.Tasks = append(response.Tasks, t)
+		response.Tasks = append(response.Tasks, &TaskInfoWithID{TaskUUID: taskUUID, Info: t})
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
 		}
@@ -617,18 +766,20 @@ func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error 
 func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, workflowID string,
 	runID string, cqlNowTimestamp int64) {
 	for _, task := range transferTasks {
+		var transferTaskID int64
 		var taskList string
 		var scheduleID int64
 		switch task.GetType() {
 		case TaskTypeActivity:
+			transferTaskID = task.(*ActivityTask).TaskID
 			taskList = task.(*ActivityTask).TaskList
 			scheduleID = task.(*ActivityTask).ScheduleID
 		case TaskTypeDecision:
+			transferTaskID = task.(*DecisionTask).TaskID
 			taskList = task.(*DecisionTask).TaskList
 			scheduleID = task.(*DecisionTask).ScheduleID
 		}
 
-		transferTaskID := uuid.New()
 		lockToken := uuid.New()
 		batch.Query(templateCreateTransferTaskQuery,
 			d.shardID,
@@ -647,6 +798,22 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			transferTaskID,
 			lockToken)
 	}
+}
+
+func createShardInfo(result map[string]interface{}) *ShardInfo {
+	info := &ShardInfo{}
+	for k, v := range result {
+		switch k {
+		case "shard_id":
+			info.ShardID = v.(int)
+		case "range_id":
+			info.RangeID = v.(int64)
+		case "transfer_ack_level":
+			info.TransferAckLevel = v.(int64)
+		}
+	}
+
+	return info
 }
 
 func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecutionInfo {
@@ -688,7 +855,7 @@ func createTaskInfo(result map[string]interface{}) *TaskInfo {
 		case "run_id":
 			info.RunID = v.(gocql.UUID).String()
 		case "task_id":
-			info.TaskID = v.(gocql.UUID).String()
+			info.TaskID = v.(int64)
 		case "task_list":
 			info.TaskList = v.(string)
 		case "type":

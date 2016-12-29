@@ -14,6 +14,7 @@ import (
 
 type (
 	historyEngineImpl struct {
+		shard            *shardContext
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
 		tokenSerializer  taskTokenSerializer
@@ -30,8 +31,10 @@ type (
 	}
 )
 
-func newHistoryEngine(executionManager persistence.ExecutionManager, taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
+func newHistoryEngine(shard *shardContext, executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
 	return &historyEngineImpl{
+		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      newTransferQueueProcessor(executionManager, taskManager, logger),
 		tokenSerializer:  newJSONTaskTokenSerializer(),
@@ -79,7 +82,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		ExecutionContext:   nil,
 		NextEventID:        builder.nextEventID,
 		LastProcessedEvent: 0,
-		TransferTasks:      []persistence.Task{&persistence.DecisionTask{TaskList: taskList, ScheduleID: dt.GetEventId()}},
+		TransferTasks: []persistence.Task{&persistence.DecisionTask{
+			TaskID:   e.shard.GetTransferTaskID(),
+			TaskList: taskList, ScheduleID: dt.GetEventId(),
+		}},
+		RangeID: e.shard.GetRangeID(),
 	})
 
 	if err != nil {
@@ -117,7 +124,8 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	return result, nil
 }
 
-func (e *historyEngineImpl) RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+func (e *historyEngineImpl) RecordDecisionTaskStarted(
+	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
 	scheduleID := *request.ScheduleId
 
@@ -131,7 +139,8 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID, isRunning)
+			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID,
+				isRunning)
 			return nil, errDuplicate
 		}
 
@@ -156,7 +165,8 @@ Update_History_Loop:
 	return nil, errMaxAttemptsExceeded
 }
 
-func (e *historyEngineImpl) RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
+func (e *historyEngineImpl) RecordActivityTaskStarted(
+	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
 	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
 	scheduleID := *request.ScheduleId
 
@@ -170,7 +180,8 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, startedID, isRunning)
+			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, startedID,
+				isRunning)
 			return nil, errDuplicate
 		}
 
@@ -414,8 +425,8 @@ Update_History_Loop:
 	return errMaxAttemptsExceeded
 }
 
-func (e *historyEngineImpl) getWorkflowExecutionWithRetry(request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse,
-	error) {
+func (e *historyEngineImpl) getWorkflowExecutionWithRetry(
+	request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
 	var response *persistence.GetWorkflowExecutionResponse
 	op := func() error {
 		var err error
@@ -432,7 +443,8 @@ func (e *historyEngineImpl) getWorkflowExecutionWithRetry(request *persistence.G
 	return response, nil
 }
 
-func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(request *persistence.DeleteWorkflowExecutionRequest) error {
+func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(
+	request *persistence.DeleteWorkflowExecutionRequest) error {
 	op := func() error {
 		return e.executionManager.DeleteWorkflowExecution(request)
 	}
@@ -440,7 +452,8 @@ func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(request *persistenc
 	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
 }
 
-func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(request *persistence.UpdateWorkflowExecutionRequest) error {
+func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
+	request *persistence.UpdateWorkflowExecutionRequest) error {
 	op := func() error {
 		return e.executionManager.UpdateWorkflowExecution(request)
 
@@ -464,7 +477,8 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(context *wor
 	return response
 }
 
-func newWorkflowExecutionContext(historyService *historyEngineImpl, execution workflow.WorkflowExecution) *workflowExecutionContext {
+func newWorkflowExecutionContext(historyService *historyEngineImpl,
+	execution workflow.WorkflowExecution) *workflowExecutionContext {
 	return &workflowExecutionContext{
 		workflowExecution: execution,
 		historyService:    historyService,
@@ -478,7 +492,8 @@ func newWorkflowExecutionContext(historyService *historyEngineImpl, execution wo
 // Used to either create or update the execution context for the task context.
 // Update can happen when conditional write fails.
 func (c *workflowExecutionContext) loadWorkflowExecution() (*historyBuilder, error) {
-	response, err := c.historyService.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{Execution: c.workflowExecution})
+	response, err := c.historyService.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
+		Execution: c.workflowExecution})
 	if err != nil {
 		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetWorkflowExecution, err, "")
 		return nil, err
@@ -516,6 +531,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		ExecutionInfo: c.executionInfo,
 		TransferTasks: transferTasks,
 		Condition:     c.updateCondition,
+		RangeID:       c.historyService.shard.GetRangeID(),
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
