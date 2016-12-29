@@ -78,13 +78,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 // StartWorkflowExecution - creates a new workflow execution
 func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
-	wf, err := h.engine.StartWorkflowExecution(startRequest)
-	if err != nil {
-		return nil, err
-	}
-	return &gen.StartWorkflowExecutionResponse{
-		RunId: wf.RunId,
-	}, err
+	return h.engine.StartWorkflowExecution(startRequest)
 }
 
 // GetWorkflowExecutionHistory - returns the complete history of a workflow execution

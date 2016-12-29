@@ -70,7 +70,7 @@ func (e *EngineImpl) Stop() {
 }
 
 // StartWorkflowExecution starts a workflow.
-func (e *EngineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error) {
+func (e *EngineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
 	return e.historyService.StartWorkflowExecution(request)
 }
 

@@ -24,7 +24,7 @@ func NewEngineWithMetricsImpl(engine Engine, m3Client metrics.Client) Engine {
 }
 
 func (e *engineWithMetricsImpl) StartWorkflowExecution(
-	request *workflow.StartWorkflowExecutionRequest) (workflow.WorkflowExecution, error) {
+	request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
 	e.m3Client.IncCounter(metrics.StartWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := e.m3Client.StartTimer(metrics.StartWorkflowExecutionScope, metrics.WorkflowLatencyTimer)

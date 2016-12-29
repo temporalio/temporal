@@ -97,16 +97,14 @@ func (s *engineSuite) TestStartWorkflowExecution() {
 		Identity:                            common.StringPtr(identity),
 	}
 
-	we0, err0 := s.engine.StartWorkflowExecution(request)
+	_, err0 := s.engine.StartWorkflowExecution(request)
 	s.Nil(err0)
-	s.Equal(id, we0.GetWorkflowId())
 
 	we1, err1 := s.engine.StartWorkflowExecution(request)
 	s.NotNil(err1)
 	s.IsType(workflow.NewWorkflowExecutionAlreadyStartedError(), err1)
 	log.Infof("Start workflow execution failed with error: %v", err1.Error())
-	s.Empty(we1.GetWorkflowId())
-	s.Empty(we1.GetRunId())
+	s.Nil(we1)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {

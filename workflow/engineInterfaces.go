@@ -11,10 +11,9 @@ type (
 	// Engine represents an interface for workflow engine
 	Engine interface {
 		common.Daemon
-		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		// TODO: This is only needed temporarily because it is used by thrift handler.
 		// The handler will be changed to rely on the HistoryEngine and MatchingEngine interfaces directly, so this can be removed.
-		StartWorkflowExecution(request *gen.StartWorkflowExecutionRequest) (gen.WorkflowExecution, error)
+		StartWorkflowExecution(request *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error)
 		GetWorkflowExecutionHistory(
 			request *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error)
 		PollForDecisionTask(request *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error)

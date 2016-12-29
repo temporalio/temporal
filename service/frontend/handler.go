@@ -5,8 +5,9 @@ import (
 
 	"code.uber.internal/devexp/minions/.gen/go/minions"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/history"
+	"code.uber.internal/devexp/minions/client/matching"
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/workflow"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -14,22 +15,23 @@ var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
-	engine workflow.Engine
+	history  history.Client
+	matching matching.Client
 	common.Service
 }
 
 // NewWorkflowHandler creates a thrift handler for the minions service
-func NewWorkflowHandler(engine workflow.Engine, sVice common.Service) (*WorkflowHandler, []thrift.TChanServer) {
+func NewWorkflowHandler(sVice common.Service, history history.Client, matching matching.Client) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
-		Service: sVice,
-		engine:  engine,
+		Service:  sVice,
+		history:  history,
+		matching: matching,
 	}
 	return handler, []thrift.TChanServer{minions.NewTChanWorkflowServiceServer(handler)}
 }
 
 // Start starts the handler
 func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) {
-	wh.engine.Start()
 	wh.Service.Start(thriftService)
 }
 
@@ -43,14 +45,14 @@ func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 func (wh *WorkflowHandler) PollForActivityTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
-	return wh.engine.PollForActivityTask(pollRequest)
+	return wh.matching.PollForActivityTask(pollRequest)
 }
 
 // PollForDecisionTask - Poll for a decision task.
 func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
-	return wh.engine.PollForDecisionTask(pollRequest)
+	return wh.matching.PollForDecisionTask(pollRequest)
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -64,14 +66,14 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
-	return wh.engine.RespondActivityTaskCompleted(completeRequest)
+	return wh.history.RespondActivityTaskCompleted(completeRequest)
 }
 
 // RespondActivityTaskFailed - Record Activity Task Heart beat
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx thrift.Context,
 	failRequest *gen.RespondActivityTaskFailedRequest) error {
-	return wh.engine.RespondActivityTaskFailed(failRequest)
+	return wh.history.RespondActivityTaskFailed(failRequest)
 
 }
 
@@ -79,25 +81,19 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
-	return wh.engine.RespondDecisionTaskCompleted(completeRequest)
+	return wh.history.RespondDecisionTaskCompleted(completeRequest)
 }
 
 // StartWorkflowExecution - Record Activity Task Heart beat
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
-	wf, err := wh.engine.StartWorkflowExecution(startRequest)
-	if err != nil {
-		return nil, err
-	}
-	return &gen.StartWorkflowExecutionResponse{
-		RunId: wf.RunId,
-	}, err
+	return wh.history.StartWorkflowExecution(startRequest)
 }
 
 // GetWorkflowExecutionHistory - retrieves the hisotry of workflow execution
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx thrift.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
-	return wh.engine.GetWorkflowExecutionHistory(getRequest)
+	return wh.history.GetWorkflowExecutionHistory(getRequest)
 }

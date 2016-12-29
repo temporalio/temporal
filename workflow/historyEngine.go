@@ -39,6 +39,7 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
 	shard, err := acquireShard(shardID, executionManager)
 	if err != nil {
+		logger.WithField("error", err).Error("failed to acquire shard")
 		return nil
 	}
 	historyEngImpl := &historyEngineImpl{
@@ -68,7 +69,7 @@ func (e *historyEngineImpl) Stop() {
 
 // StartWorkflowExecution starts a workflow execution
 func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (
-	workflow.WorkflowExecution, error) {
+	*workflow.StartWorkflowExecutionResponse, error) {
 	executionID := request.GetWorkflowId()
 	runID := uuid.New()
 	workflowExecution := workflow.WorkflowExecution{
@@ -87,7 +88,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 	if serializedError != nil {
 		logHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
 			"History serialization error on start workflow.  WorkflowID: %v, RunID: %v", executionID, runID))
-		return nilWorkflowExecution, serializedError
+		return nil, serializedError
 	}
 
 	_, err := e.executionManager.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
@@ -107,10 +108,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 	if err != nil {
 		logPersistantStoreErrorEvent(e.logger, tagValueStoreOperationCreateWorkflowExecution, err,
 			fmt.Sprintf("{WorkflowID: %v, RunID: %v}", executionID, runID))
-		return nilWorkflowExecution, err
+		return nil, err
 	}
 
-	return workflowExecution, nil
+	return &workflow.StartWorkflowExecutionResponse{
+		RunId: workflowExecution.RunId,
+	}, nil
 }
 
 // GetWorkflowExecutionHistory retrieves the history for given workflow execution

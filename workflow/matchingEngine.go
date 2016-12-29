@@ -5,6 +5,7 @@ import (
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/history"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/persistence"
@@ -13,7 +14,7 @@ import (
 
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
-	historyService  HistoryEngine
+	historyService  history.Client
 	tokenSerializer taskTokenSerializer
 	logger          bark.Logger
 }
@@ -27,7 +28,7 @@ type taskContext struct {
 	logger            bark.Logger
 }
 
-func newMatchingEngine(taskManager persistence.TaskManager, historyService HistoryEngine, logger bark.Logger) MatchingEngine {
+func newMatchingEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) MatchingEngine {
 	return &matchingEngineImpl{
 		taskManager:     taskManager,
 		historyService:  historyService,
