@@ -11,7 +11,7 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 )
 
-const historyServiceName = "History"
+const historyServiceName = "uber-minions-history"
 
 var _ Client = (*clientImpl)(nil)
 

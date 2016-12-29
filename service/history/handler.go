@@ -86,3 +86,9 @@ func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 		RunId: wf.RunId,
 	}, err
 }
+
+// GetWorkflowExecutionHistory - returns the complete history of a workflow execution
+func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
+	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+	return h.engine.GetWorkflowExecutionHistory(getRequest)
+}
