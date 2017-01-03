@@ -34,6 +34,15 @@ CREATE TYPE task (
   delivery_count   int,
 );
 
+CREATE TYPE timer_task (
+  workflow_id      text,
+  run_id           uuid,
+  task_id          bigint,
+  type             int,  -- enum TaskType {DecisionTaskTimeout, ActivityTaskTimeout, UserTimer}
+  timeoutType      int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
+  event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
+);
+
 CREATE TABLE executions (
   shard_id           int,
   type               int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
@@ -44,6 +53,7 @@ CREATE TABLE executions (
   shard              frozen<shard>,
   execution          frozen<workflow_execution>,
   transfer           frozen<task>,
+  timer              frozen<timer_task>,
   next_event_id      bigint,  -- This is needed to make conditional updates on session history
   range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   lock_token         uuid,

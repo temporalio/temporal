@@ -57,7 +57,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "decisiontask-scheduled", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "decisiontask-scheduled", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 

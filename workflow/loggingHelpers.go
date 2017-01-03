@@ -41,6 +41,8 @@ const (
 	tagValueActionCompleteWorkflow      = "add-complete-workflow-event"
 	tagValueActionFailWorkflow          = "add-fail-workflow-event"
 	tagValueActionUnknownEvent          = "add-unknown-event"
+	tagValueActionTimerStarted          = "add-timer-started-event"
+	tagValueActionTimerFired            = "add-timer-fired-event"
 
 	// tagStoreOperation values
 	tagValueStoreOperationGetTasks                = "get-tasks"

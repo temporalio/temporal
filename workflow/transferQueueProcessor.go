@@ -107,9 +107,9 @@ func (t *transferQueueProcessorImpl) processTransferTasks(prevPollInterval time.
 		var transferTask persistence.Task
 		switch tsk.TaskType {
 		case persistence.TaskTypeActivity:
-			transferTask = &persistence.ActivityTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID}
+			transferTask = &persistence.ActivityTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID, TaskID: tsk.TaskID}
 		case persistence.TaskTypeDecision:
-			transferTask = &persistence.DecisionTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID}
+			transferTask = &persistence.DecisionTask{TaskList: tsk.TaskList, ScheduleID: tsk.ScheduleID, TaskID: tsk.TaskID}
 		}
 		execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(tsk.WorkflowID),
 			RunId: common.StringPtr(tsk.RunID)}

@@ -45,7 +45,7 @@ func (s *engineSuite) SetupSuite() {
 	s.engine = NewWorkflowEngine(s.WorkflowMgr, s.TaskMgr, bark.NewLoggerFromLogrus(log.New()))
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.builder = newHistoryBuilder(s.logger)
+	s.builder = newHistoryBuilder(nil, s.logger)
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -168,15 +168,24 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			WorkflowID:           "wId",
+			RunID:                "rId",
+			TaskList:             tl,
+			History:              history,
+			ExecutionContext:     nil,
+			State:                persistence.WorkflowStateRunning,
+			NextEventID:          builder.nextEventID,
+			LastProcessedEvent:   emptyEventID,
+			LastUpdatedTimestamp: time.Time{},
+			DecisionPending:      true},
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -199,7 +208,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -207,8 +216,17 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
 	history, _ := builder.Serialize()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			WorkflowID:           "wId",
+			RunID:                "rId",
+			TaskList:             tl,
+			History:              history,
+			ExecutionContext:     nil,
+			State:                persistence.WorkflowStateRunning,
+			NextEventID:          builder.nextEventID,
+			LastProcessedEvent:   emptyEventID,
+			LastUpdatedTimestamp: time.Time{},
+			DecisionPending:      true},
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -230,14 +248,15 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 100)
 
 	history, _ := builder.Serialize()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning,
+			NextEventID: builder.nextEventID, LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true},
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -266,7 +285,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	activity3Type := "activity_type3"
 	activity3Input := []byte("input3")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -304,8 +323,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	}}
 
 	history, _ := builder.Serialize()
-	info1 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
@@ -313,8 +332,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	addActivityTaskCompletedEvent(builder, activity2ScheduledEvent.GetEventId(),
 		activity2StartedEvent.GetEventId(), activity2Result, identity)
 	history2, _ := builder.Serialize()
-	info2 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history2, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
@@ -331,7 +350,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(16), info2.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info2.LastProcessedEvent)
@@ -370,7 +389,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	context := []byte("context")
 	input := []byte("input")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -391,8 +410,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
-		info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true}
+		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
@@ -423,7 +442,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2Input := []byte("input2")
 	workflowResult := []byte("workflow result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -454,8 +473,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	}}
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -470,7 +489,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(14), info.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info.LastProcessedEvent)
@@ -502,7 +521,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	reason := "workflow fail reason"
 	details := []byte("workflow fail details")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -534,8 +553,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	}}
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -550,7 +569,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(14), info.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info.LastProcessedEvent)
@@ -579,14 +598,14 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	context := []byte("context")
 	input := []byte("input")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -615,7 +634,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -650,14 +669,14 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	context := []byte("context")
 	workflowResult := []byte("success")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -680,7 +699,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -709,14 +728,14 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	details := []byte("fail workflow details")
 	reason := "fail workflow reason"
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -740,7 +759,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -820,7 +839,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -831,8 +850,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -861,7 +880,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -875,8 +894,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -905,7 +924,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -916,8 +935,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 
 	history, _ := builder.Serialize()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true},
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -948,7 +967,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -962,8 +981,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2StartedEvent := addActivityTaskStartedEvent(builder, activity2ScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info1 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
@@ -972,8 +991,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		activity2StartedEvent.GetEventId(), activity2Result, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 	history2, _ := builder.Serialize()
-	info2 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history2, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
@@ -989,7 +1008,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		Identity:  &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(12), info2.NextEventID)
 	s.Equal(int64(3), info2.LastProcessedEvent)
@@ -1016,7 +1035,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1028,8 +1047,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
-		info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			decisionStartedEvent.GetEventId(), time.Time{}, true}
+		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
@@ -1058,7 +1077,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1069,8 +1088,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityStartedEvent := addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -1084,7 +1103,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		Identity:  &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(9), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -1164,7 +1183,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1175,8 +1194,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -1205,7 +1225,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	failReason := "fail reason"
 	details := []byte("fail details")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1219,8 +1239,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -1249,7 +1269,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1260,8 +1280,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 
 	history, _ := builder.Serialize()
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			emptyEventID, time.Time{}, true},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true},
 	}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -1292,7 +1312,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -1306,8 +1326,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2StartedEvent := addActivityTaskStartedEvent(builder, activity2ScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info1 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
@@ -1316,8 +1336,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		activity2StartedEvent.GetEventId(), activity2Result, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 	history2, _ := builder.Serialize()
-	info2 := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history2, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		decisionStartedEvent1.GetEventId(), time.Time{}, true}
+	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
@@ -1334,7 +1354,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		Identity:  &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(12), info2.NextEventID)
 	s.Equal(int64(3), info2.LastProcessedEvent)
@@ -1361,7 +1381,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1373,8 +1393,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
-		info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-			decisionStartedEvent.GetEventId(), time.Time{}, true}
+		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
@@ -1403,7 +1423,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	failReason := "failed"
 	failDetails := []byte("fail details.")
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1414,8 +1434,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	activityStartedEvent := addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
-	info := &persistence.WorkflowExecutionInfo{"wId", "rId", tl, history, nil, persistence.WorkflowStateRunning, builder.nextEventID,
-		emptyEventID, time.Time{}, true}
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -1430,7 +1450,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		Identity:  &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(9), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)

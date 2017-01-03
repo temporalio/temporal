@@ -39,3 +39,9 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 		return false
 	}
 }
+
+// AddSecondsToBaseTime - Gets the UnixNano with given duration and base time.
+func AddSecondsToBaseTime(baseTimeInNanoSec int64, durationInSeconds int64) int64 {
+	timeOut := time.Duration(durationInSeconds) * time.Second
+	return time.Unix(0, baseTimeInNanoSec).Add(timeOut).UnixNano()
+}

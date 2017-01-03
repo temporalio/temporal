@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -22,6 +23,7 @@ type (
 		ClusterHost  string
 		KeySpace     string
 		DropKeySpace bool
+		SchemaDir    string
 	}
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
@@ -44,10 +46,13 @@ type (
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
-	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace)
+	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	var err error
 	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
 		s.CassandraTestCluster.keyspace, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
 	if err != nil {
 		log.Fatal(err)
@@ -68,7 +73,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 
 // CreateWorkflowExecution is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList string,
-	history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64) (
+	history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64,
+	timerTasks []Task) (
 	string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		Execution:          workflowExecution,
@@ -80,7 +86,8 @@ func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowEx
 		RangeID:            s.rangeID,
 		TransferTasks: []Task{
 			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: decisionScheduleID},
-		}})
+		},
+		TimerTasks: timerTasks})
 
 	if err != nil {
 		return "", err
@@ -137,7 +144,7 @@ func (s *TestBase) GetWorkflowExecutionInfo(workflowExecution workflow.WorkflowE
 
 // UpdateWorkflowExecution is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
-	activityScheduleIDs []int64, condition int64) error {
+	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{TaskList: updatedInfo.TaskList,
@@ -150,10 +157,12 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	}
 
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo: updatedInfo,
-		TransferTasks: transferTasks,
-		Condition:     int64(3),
-		RangeID:       s.rangeID,
+		ExecutionInfo:   updatedInfo,
+		TransferTasks:   transferTasks,
+		TimerTasks:      timerTasks,
+		Condition:       condition,
+		DeleteTimerTask: deleteTimerTask,
+		RangeID:         s.rangeID,
 	})
 }
 
@@ -189,6 +198,18 @@ func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecu
 	})
 }
 
+// GetTimerIndexTasks is a utility method to get tasks from transfer task queue
+func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerInfo, error) {
+	response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
+		MinKey: minKey, MaxKey: maxKey, BatchSize: 10})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Timers, nil
+}
+
 // CreateDecisionTask is a utility method to create a task
 func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecution, taskList string,
 	decisionScheduleID int64) (string, error) {
@@ -213,6 +234,7 @@ func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecuti
 func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecution, activities map[int64]string) (
 	[]string, error) {
 	var taskIDs []string
+	sequenceNum := 1
 	for activityScheduleID, taskList := range activities {
 		response, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
 			Execution: workflowExecution,
@@ -229,6 +251,7 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 		}
 
 		taskIDs = append(taskIDs, response.TaskID)
+		sequenceNum++
 	}
 
 	return taskIDs, nil
@@ -290,13 +313,13 @@ func (s *TestBase) GetNextSequenceNumber() int64 {
 	return atomic.AddInt64(&s.sequenceCounter, 1)
 }
 
-func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool) {
+func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool, schemaDir string) {
 	if keySpace == "" {
 		keySpace = generateRandomKeyspace(10)
 	}
 	s.createCluster(testWorkflowClusterHosts, gocql.Consistency(1), keySpace)
 	s.createKeyspace(1, dropKeySpace)
-	s.loadSchema("workflow_test.cql")
+	s.loadSchema("workflow_test.cql", schemaDir)
 }
 
 func (s *CassandraTestCluster) tearDownTestCluster() {
@@ -333,8 +356,20 @@ func (s *CassandraTestCluster) dropKeyspace() {
 	}
 }
 
-func (s *CassandraTestCluster) loadSchema(fileName string) {
-	err := common.LoadCassandraSchema("./cassandra/bin/cqlsh", "./schema/"+fileName, s.keyspace)
+func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
+
+	cqlshDir := "./cassandra/bin/cqlsh"
+	workflowSchemaDir := "./schema/"
+
+	if schemaDir != "" {
+		cqlshDir = schemaDir + "/cassandra/bin/cqlsh"
+		workflowSchemaDir = schemaDir + "/schema/"
+	}
+
+	fmt.Printf("schemaDir: %s, cqlshDir: %s, workflowSchemaDir: %s \n", schemaDir, cqlshDir, workflowSchemaDir)
+
+	err := common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
+
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		err = common.LoadCassandraSchema("../cassandra/bin/cqlsh", "../schema/"+fileName, s.keyspace)
 	}

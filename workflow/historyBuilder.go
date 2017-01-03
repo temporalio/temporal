@@ -6,6 +6,7 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/util"
 	"code.uber.internal/devexp/minions/persistence"
 
 	"github.com/uber-common/bark"
@@ -26,22 +27,26 @@ type (
 		history                          []*workflow.HistoryEvent
 		outstandingActivities            map[int64]int64
 		outstandingDecisionTask          map[int64]int64
+		outstandingTimerTask             map[int64]string // Timer started event ID -> Timer User ID.
 		previousDecisionTaskStartedEvent int64
 		nextEventID                      int64
 		state                            int
 		logger                           bark.Logger
+		tBuilder                         *timerBuilder
 	}
 )
 
-func newHistoryBuilder(logger bark.Logger) *historyBuilder {
+func newHistoryBuilder(tBuilder *timerBuilder, logger bark.Logger) *historyBuilder {
 	return &historyBuilder{
 		serializer:                       newJSONHistorySerializer(),
 		history:                          []*workflow.HistoryEvent{},
 		outstandingActivities:            make(map[int64]int64),
 		outstandingDecisionTask:          make(map[int64]int64),
+		outstandingTimerTask:             make(map[int64]string),
 		previousDecisionTaskStartedEvent: emptyEventID,
 		nextEventID:                      firstEventID,
 		state:                            persistence.WorkflowStateCreated,
+		tBuilder:                         tBuilder,
 		logger:                           logger.WithField(tagWorkflowComponent, tagValueHistoryBuilderComponent),
 	}
 }
@@ -56,6 +61,20 @@ func (b *historyBuilder) loadExecutionInfo(executionInfo *persistence.WorkflowEx
 		for _, event := range h {
 			if b.addEventToHistory(event) == nil {
 				return errInvalidHistory
+			}
+
+			// Load timer information.
+			switch event.GetEventType() {
+			case workflow.EventType_TimerStarted:
+				startTimerAttr := event.GetTimerStartedEventAttributes()
+				expires := util.AddSecondsToBaseTime(event.GetTimestamp(), startTimerAttr.GetStartToFireTimeoutSeconds())
+				b.tBuilder.LoadUserTimer(expires, &persistence.UserTimerTask{
+					EventID: event.GetEventId(),
+				})
+
+			case workflow.EventType_TimerFired:
+				fireTimerAttr := event.GetTimerFiredEventAttributes()
+				b.tBuilder.UnLoadUserTimer(fireTimerAttr.GetStartedEventId())
 			}
 		}
 	}
@@ -81,6 +100,11 @@ func (b *historyBuilder) isActivityTaskRunning(scheduleID int64) (bool, int64) {
 func (b *historyBuilder) isDecisionTaskRunning(scheduleID int64) (bool, int64) {
 	startedID, ok := b.outstandingDecisionTask[scheduleID]
 	return ok, startedID
+}
+
+func (b *historyBuilder) isTimerTaskRunning(startedID int64) (bool, string) {
+	timerID, ok := b.outstandingTimerTask[startedID]
+	return ok, timerID
 }
 
 func (b *historyBuilder) previousDecisionStartedEvent() int64 {
@@ -195,6 +219,33 @@ func (b *historyBuilder) AddCompleteWorkflowExecutionFailedEvent(decisionComplet
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
+	request *workflow.StartTimerDecisionAttributes) *workflow.HistoryEvent {
+
+	attributes := workflow.NewTimerStartedEventAttributes()
+	attributes.TimerId = common.StringPtr(request.GetTimerId())
+	attributes.StartToFireTimeoutSeconds = common.Int64Ptr(request.GetStartToFireTimeoutSeconds())
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_TimerStarted)
+	event.TimerStartedEventAttributes = attributes
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
+	timerID string, sequenceID int64) (*workflow.HistoryEvent, error) {
+
+	attributes := workflow.NewTimerFiredEventAttributes()
+	attributes.TimerId = common.StringPtr(timerID)
+	attributes.StartedEventId = common.Int64Ptr(startedEventID)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_TimerFired)
+	event.TimerFiredEventAttributes = attributes
+
+	return b.addEventToHistory(event), nil
+}
+
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	eventID := event.GetEventId()
 	switch event.GetEventType() {
@@ -286,6 +337,25 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 		}
 		b.state = persistence.WorkflowStateCompleted
 	case workflow.EventType_CompleteWorkflowExecutionFailed:
+	case workflow.EventType_TimerStarted:
+		e, ok := b.outstandingTimerTask[eventID]
+		if ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionTimerStarted, eventID, fmt.Sprintf(
+				"{Exist: %v, Value: %v}", ok, e))
+			return nil
+		}
+		b.outstandingTimerTask[eventID] = event.GetTimerStartedEventAttributes().GetTimerId()
+
+	case workflow.EventType_TimerFired:
+		startedEventID := event.GetTimerFiredEventAttributes().GetStartedEventId()
+		e, ok := b.outstandingTimerTask[startedEventID]
+		if !ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionTimerFired, eventID, fmt.Sprintf(
+				"{startedEventID: %v, Exist: %v, Value: %v}", startedEventID, ok, e))
+			return nil
+		}
+		delete(b.outstandingTimerTask, startedEventID)
+
 	default:
 		logInvalidHistoryActionEvent(b.logger, tagValueActionUnknownEvent, eventID, fmt.Sprintf(
 			"{EventType: %v}", event.GetEventType()))

@@ -59,8 +59,9 @@ const (
 // NewSimpleReporter create an instance of Reporter which can be used for driver to emit metric to console
 func NewSimpleReporter(scope tally.Scope, tags map[string]string, logger bark.Logger) Reporter {
 	reporter := &SimpleReporter{
-		scope: scope,
-		tags:  make(map[string]string),
+		scope:  scope,
+		tags:   make(map[string]string),
+		logger: logger,
 	}
 
 	if tags != nil {

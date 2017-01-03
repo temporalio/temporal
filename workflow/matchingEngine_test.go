@@ -42,7 +42,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 	s.SetupWorkflowStore()
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.builder = newHistoryBuilder(s.logger)
+	s.builder = newHistoryBuilder(nil, s.logger)
 }
 
 func (s *matchingEngineSuite) TearDownSuite() {
@@ -108,7 +108,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 
 	// Lets do something
 	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 	actType := workflow.NewActivityType()
 	actType.Name = common.StringPtr("Dynamic type")
@@ -180,7 +180,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasksIfTaskAlreadyStarted() {
 	taskRequest := &persistence.GetTasksRequest{TaskList: "makeBreakfast", TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
 	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 2 + firstEventID, time.Time{}, "lock", 0}}}}
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 
 	request := &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:   common.StringPtr(id),
@@ -243,7 +243,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasksOnConditionalUpdateFail() 
 	taskRequest := &persistence.GetTasksRequest{TaskList: tl, TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
 	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 
 	activity := workflow.NewScheduleActivityTaskDecisionAttributes()
@@ -413,7 +413,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyStarted() {
 		BatchSize:   1,
 	}
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -462,7 +462,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyCompleted() {
 		BatchSize:   1,
 	}
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -513,7 +513,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksConflict() {
 		BatchSize:   1,
 	}
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	history, _ := builder.Serialize()
@@ -584,7 +584,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksMaxAttemptsExceeded() {
 		BatchSize:   1,
 	}
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	history, _ := builder.Serialize()
@@ -635,7 +635,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksSuccess() {
 		BatchSize:   1,
 	}
 
-	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	history, _ := builder.Serialize()

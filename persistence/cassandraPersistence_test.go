@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -40,11 +41,11 @@ func (s *cassandraPersistenceSuite) TearDownSuite() {
 func (s *cassandraPersistenceSuite) TestStartWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("start-workflow-test"),
 		RunId: common.StringPtr("7f9fe8a0-9237-11e6-ae22-56b6b6499611")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.NotNil(err1, "Expected workflow creation to fail.")
 	s.Empty(task1, "Expected empty task identifier.")
 	log.Infof("Workflow execution failed with error: %v", err1)
@@ -53,7 +54,7 @@ func (s *cassandraPersistenceSuite) TestStartWorkflow() {
 func (s *cassandraPersistenceSuite) TestGetWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-workflow-test"),
 		RunId: common.StringPtr("918e7b1d-bfa4-4fe0-86cb-604858f90ce4")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -77,7 +78,7 @@ func (s *cassandraPersistenceSuite) TestGetWorkflow() {
 func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("update-workflow-test"),
 		RunId: common.StringPtr("5ba5e531-e46b-48d9-b4b3-859919839553")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -100,7 +101,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	updatedInfo.History = []byte(`event2`)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3))
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	info1, err3 := s.GetWorkflowExecutionInfo(workflowExecution)
@@ -122,7 +123,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo.History = []byte(`event3`)
 	failedUpdatedInfo.NextEventID = int64(6)
 	failedUpdatedInfo.LastProcessedEvent = int64(3)
-	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3))
+	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil)
 	s.NotNil(err4, "No error expected.")
 	s.IsType(&ConditionFailedError{}, err4)
 	log.Infof("Conditional update failed with error: %v", err4)
@@ -147,7 +148,7 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("delete-workflow-test"),
 		RunId:      common.StringPtr("4e0917f2-9361-4a14-b16f-1fafe09b287a")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -196,7 +197,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-test"),
 		RunId: common.StringPtr("93c87aff-ed89-4ecb-b0fd-d5d1e25dc46d")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -350,6 +351,38 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTaskConflict() {
 	s.NotNil(err3)
 	log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", t.TaskID, badToken, err3)
 	s.IsType(&ConditionFailedError{}, err3)
+}
+
+func (s *cassandraPersistenceSuite) TestTimerTasks() {
+	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-timer-tasks-test"),
+		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
+
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", "history", nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	info0, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.History = []byte(`event2`)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	tasks := []Task{&DecisionTimeoutTask{1, 2}}
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil)
+	s.Nil(err2, "No error expected.")
+
+	timerTasks, err1 := s.GetTimerIndexTasks(-1, math.MaxInt64)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(timerTasks, "expected valid list of tasks.")
+
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, &DecisionTimeoutTask{TaskID: timerTasks[0].TaskID})
+	s.Nil(err2, "No error expected.")
+
+	timerTasks2, err2 := s.GetTimerIndexTasks(-1, math.MaxInt64)
+	s.Nil(err2, "No error expected.")
+	s.Empty(timerTasks2, "expected empty task list.")
 }
 
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {

@@ -29,4 +29,8 @@ type (
 	transferQueueProcessor interface {
 		common.Daemon
 	}
+
+	timerQueueProcessor interface {
+		common.Daemon
+	}
 )

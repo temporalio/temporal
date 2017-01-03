@@ -19,6 +19,13 @@ const (
 	TaskTypeActivity
 )
 
+// Types of timers
+const (
+	TaskTypeDecisionTimeout = iota
+	TaskTypeActivityTimeout
+	TaskTypeUserTimer
+)
+
 type (
 	// ConditionFailedError represents a failed conditional put
 	ConditionFailedError struct {
@@ -64,6 +71,16 @@ type (
 		DeliveryCount  int
 	}
 
+	// TimerInfo describes a timer.
+	TimerInfo struct {
+		WorkflowID  string
+		RunID       string
+		TaskID      int64
+		TaskType    int
+		TimeoutType int
+		EventID     int64
+	}
+
 	// TaskInfoWithID describes a task from tasks table
 	TaskInfoWithID struct {
 		TaskUUID string
@@ -73,6 +90,7 @@ type (
 	// Task is the generic interface for workflow tasks
 	Task interface {
 		GetType() int
+		GetTaskID() int64
 	}
 
 	// ActivityTask identifies an activity task
@@ -87,6 +105,26 @@ type (
 		TaskID     int64
 		TaskList   string
 		ScheduleID int64
+	}
+
+	// DecisionTimeoutTask identifies a timeout task.
+	DecisionTimeoutTask struct {
+		TaskID  int64
+		EventID int64
+	}
+
+	// ActivityTimeoutTask identifies a timeout task.
+	ActivityTimeoutTask struct {
+		TaskID      int64
+		TimeoutType int
+		EventID     int64
+	}
+
+	// UserTimerTask identifies a timeout task.
+	UserTimerTask struct {
+		TaskID   int64
+		TaskList string
+		EventID  int64
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -119,6 +157,7 @@ type (
 		NextEventID        int64
 		LastProcessedEvent int64
 		TransferTasks      []Task
+		TimerTasks         []Task
 		RangeID            int64
 	}
 
@@ -139,10 +178,12 @@ type (
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
-		ExecutionInfo *WorkflowExecutionInfo
-		TransferTasks []Task
-		Condition     int64
-		RangeID       int64
+		ExecutionInfo   *WorkflowExecutionInfo
+		TransferTasks   []Task
+		TimerTasks      []Task
+		DeleteTimerTask Task
+		Condition       int64
+		RangeID         int64
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -202,6 +243,19 @@ type (
 		LockToken string
 	}
 
+	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
+	// TODO: replace this with an iterator that can configure min and max index.
+	GetTimerIndexTasksRequest struct {
+		MinKey    int64
+		MaxKey    int64
+		BatchSize int
+	}
+
+	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
+	GetTimerIndexTasksResponse struct {
+		Timers []*TimerInfo
+	}
+
 	// ExecutionManager is the used to manage workflow executions
 	ExecutionManager interface {
 		CreateShard(request *CreateShardRequest) error
@@ -213,6 +267,9 @@ type (
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
+
+		// Timer related methods.
+		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 	}
 
 	// TaskManager is used to manage tasks
@@ -236,7 +293,47 @@ func (a *ActivityTask) GetType() int {
 	return TaskTypeActivity
 }
 
+// GetTaskID returns the sequence ID of the activity task
+func (a *ActivityTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
 // GetType returns the type of the decision task
 func (d *DecisionTask) GetType() int {
 	return TaskTypeDecision
+}
+
+// GetTaskID returns the sequence ID of the decision task.
+func (d *DecisionTask) GetTaskID() int64 {
+	return d.TaskID
+}
+
+// GetType returns the type of the timer task
+func (d *DecisionTimeoutTask) GetType() int {
+	return TaskTypeDecisionTimeout
+}
+
+// GetTaskID returns the sequence ID.
+func (d *DecisionTimeoutTask) GetTaskID() int64 {
+	return d.TaskID
+}
+
+// GetType returns the type of the timer task
+func (a *ActivityTimeoutTask) GetType() int {
+	return TaskTypeActivityTimeout
+}
+
+// GetTaskID returns the sequence ID.
+func (a *ActivityTimeoutTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// GetType returns the type of the timer task
+func (u *UserTimerTask) GetType() int {
+	return TaskTypeUserTimer
+}
+
+// GetTaskID returns the sequence ID of the decision task.
+func (u *UserTimerTask) GetTaskID() int64 {
+	return u.TaskID
 }

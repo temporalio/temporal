@@ -17,6 +17,7 @@ type (
 		shard            *shardContext
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
+		timerProcessor   timerQueueProcessor
 		tokenSerializer  taskTokenSerializer
 		logger           bark.Logger
 	}
@@ -28,6 +29,8 @@ type (
 		historyService    *historyEngineImpl
 		updateCondition   int64
 		logger            bark.Logger
+		tBuilder          *timerBuilder
+		deleteTimerTask   persistence.Task
 	}
 )
 
@@ -38,7 +41,7 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 	if err != nil {
 		return nil
 	}
-	return &historyEngineImpl{
+	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      newTransferQueueProcessor(executionManager, taskManager, logger),
@@ -47,16 +50,20 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
 	}
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)
+	return historyEngImpl
 }
 
 // Start the service.
 func (e *historyEngineImpl) Start() {
 	e.txProcessor.Start()
+	e.timerProcessor.Start()
 }
 
 // Stop the service.
 func (e *historyEngineImpl) Stop() {
 	e.txProcessor.Stop()
+	e.timerProcessor.Stop()
 }
 
 // StartWorkflowExecution starts a workflow execution
@@ -69,10 +76,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		RunId:      common.StringPtr(runID),
 	}
 
+	// Generate first decision task event.
 	taskList := request.GetTaskList().GetName()
-	builder := newHistoryBuilder(e.logger)
+	builder := newHistoryBuilder(nil, e.logger)
 	builder.AddWorkflowExecutionStartedEvent(request)
 	dt := builder.AddDecisionTaskScheduledEvent(taskList, request.GetTaskStartToCloseTimeoutSeconds())
+
+	// Serialize the history
 	h, serializedError := builder.Serialize()
 	if serializedError != nil {
 		logHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
@@ -118,7 +128,8 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 		return nil, err
 	}
 
-	builder := newHistoryBuilder(e.logger)
+	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: e.shard}, e.logger)
+	builder := newHistoryBuilder(tBuilder, e.logger)
 	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
 		return nil, err
 	}
@@ -154,9 +165,15 @@ Update_History_Loop:
 			return nil, errCreateEvent
 		}
 
+		// Start a timer for the decision task.
+		startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
+		startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
+		timeOutTask := context.tBuilder.CreateDecisionTimeoutTask(startAttributes.GetTaskStartToCloseTimeoutSeconds())
+		timerTasks := []persistence.Task{timeOutTask}
+
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		if err2 := context.updateWorkflowExecution(nil); err2 != nil {
+		if err2 := context.updateWorkflowExecution(nil, timerTasks); err2 != nil {
 			if err2 == errConflict {
 				continue Update_History_Loop
 			}
@@ -197,7 +214,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operationi again.
-		if err2 := context.updateWorkflowExecution(nil); err2 != nil {
+		if err2 := context.updateWorkflowExecution(nil, nil); err2 != nil {
 			if err2 == errConflict {
 				continue Update_History_Loop
 			}
@@ -255,6 +272,7 @@ Update_History_Loop:
 					TaskList:   attributes.GetTaskList().GetName(),
 					ScheduleID: scheduleEvent.GetEventId(),
 				})
+
 			case workflow.DecisionType_CompleteWorkflowExecution:
 				if isComplete || builder.hasPendingTasks() {
 					builder.AddCompleteWorkflowExecutionFailedEvent(completedID,
@@ -357,7 +375,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks); err != nil {
+		if err := context.updateWorkflowExecution(transferTasks, nil); err != nil {
 			if err == errConflict {
 				continue Update_History_Loop
 			}
@@ -416,7 +434,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks); err != nil {
+		if err := context.updateWorkflowExecution(transferTasks, nil); err != nil {
 			if err == errConflict {
 				continue Update_History_Loop
 			}
@@ -504,23 +522,33 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*historyBuilder, err
 		return nil, err
 	}
 
+	c.tBuilder = newTimerBuilder(&shardSeqNumGenerator{context: c.historyService.shard}, c.logger)
+
 	c.executionInfo = response.ExecutionInfo
 	c.updateCondition = response.ExecutionInfo.NextEventID
-	builder := newHistoryBuilder(c.logger)
+	builder := newHistoryBuilder(c.tBuilder, c.logger)
 	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
 		return nil, err
 	}
 	c.builder = builder
+
 	return builder, nil
 }
 
 func (c *workflowExecutionContext) updateWorkflowExecutionWithContext(context []byte, transferTasks []persistence.Task) error {
 	c.executionInfo.ExecutionContext = context
 
-	return c.updateWorkflowExecution(transferTasks)
+	return c.updateWorkflowExecution(transferTasks, nil)
 }
 
-func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task) error {
+func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transferTasks []persistence.Task,
+	timerTasks []persistence.Task, deleteTimerTask persistence.Task) error {
+	c.deleteTimerTask = deleteTimerTask
+
+	return c.updateWorkflowExecution(transferTasks, timerTasks)
+}
+
+func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task, timerTasks []persistence.Task) error {
 	updatedHistory, err := c.builder.Serialize()
 	if err != nil {
 		logHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
@@ -532,11 +560,14 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	c.executionInfo.History = updatedHistory
 	c.executionInfo.DecisionPending = c.builder.hasPendingDecisionTask()
 	c.executionInfo.State = c.builder.getWorklowState()
+
 	if err1 := c.historyService.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
-		ExecutionInfo: c.executionInfo,
-		TransferTasks: transferTasks,
-		Condition:     c.updateCondition,
-		RangeID:       c.historyService.shard.GetRangeID(),
+		ExecutionInfo:   c.executionInfo,
+		TransferTasks:   transferTasks,
+		TimerTasks:      timerTasks,
+		Condition:       c.updateCondition,
+		DeleteTimerTask: c.deleteTimerTask,
+		RangeID:         c.historyService.shard.GetRangeID(),
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:

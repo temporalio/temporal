@@ -177,6 +177,11 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *persi
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
+	// TODO:
+	return nil, nil
+}
+
 func (p *taskPersistenceClient) CreateTask(request *persistence.CreateTaskRequest) (*persistence.CreateTaskResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateTaskScope, metrics.WorkflowRequests)
 

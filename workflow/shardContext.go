@@ -11,8 +11,13 @@ type (
 		executionManager       persistence.ExecutionManager
 		shardInfo              *persistence.ShardInfo
 		transferSequenceNumber int64
+		timerSequeceNumber     int64
 	}
 )
+
+func (s *shardContext) GetTimerSequenceNumber() int64 {
+	return atomic.AddInt64(&s.timerSequeceNumber, 1)
+}
 
 func (s *shardContext) GetTransferTaskID() int64 {
 	return atomic.AddInt64(&s.transferSequenceNumber, 1)
