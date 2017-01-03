@@ -3,14 +3,6 @@ serviceName: minions
 jaeger:
   disabled: false
 
-stress:
-  workflow:
-    totalLaunchCount: 100000
-    routineCount: 100
-    chainSequence: 4
-    activitySleepMin: 1
-    activitySleepMax: 60
-
 logging:
   level: info
   stdout: true
