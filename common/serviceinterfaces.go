@@ -18,5 +18,7 @@ type (
 		Stop()
 
 		GetLogger() bark.Logger
+
+		GetClientFactory() ClientFactory
 	}
 )

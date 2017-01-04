@@ -54,7 +54,7 @@ func NewWorkflowEngine(executionManager persistence.ExecutionManager, taskManage
 	history := NewHistoryEngine(1, executionManager, taskManager, logger)
 	return &EngineImpl{
 		historyService: history,
-		matchingEngine: newMatchingEngine(taskManager, history, logger),
+		matchingEngine: NewMatchingEngine(taskManager, history, logger),
 		logger:         logger,
 	}
 }

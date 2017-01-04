@@ -21,18 +21,26 @@ type WorkflowHandler struct {
 }
 
 // NewWorkflowHandler creates a thrift handler for the minions service
-func NewWorkflowHandler(sVice common.Service, history history.Client, matching matching.Client) (*WorkflowHandler, []thrift.TChanServer) {
+func NewWorkflowHandler(sVice common.Service) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
-		Service:  sVice,
-		history:  history,
-		matching: matching,
+		Service: sVice,
 	}
 	return handler, []thrift.TChanServer{minions.NewTChanWorkflowServiceServer(handler)}
 }
 
 // Start starts the handler
-func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) {
+func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) error {
 	wh.Service.Start(thriftService)
+	var err error
+	wh.history, err = wh.Service.GetClientFactory().NewHistoryClient()
+	if err != nil {
+		return err
+	}
+	wh.matching, err = wh.Service.GetClientFactory().NewMatchingClient()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // IsHealthy - Health endpoint.

@@ -22,6 +22,7 @@ type serviceImpl struct {
 	server          *thrift.Server
 	ch              *tchannel.Channel
 	tchannelFactory TChannelFactory
+	clientFactory   ClientFactory
 	logger          bark.Logger
 }
 
@@ -67,6 +68,8 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
 	h.hostPort = h.ch.PeerInfo().HostPort
 
+	h.clientFactory = newTChannelClientFactory(h.ch)
+
 	// The service is now started up and registered with hyperbahn
 	log.Info("service started")
 
@@ -84,4 +87,8 @@ func (h *serviceImpl) Stop() {
 // GetLogger returns the service logger
 func (h *serviceImpl) GetLogger() bark.Logger {
 	return h.logger
+}
+
+func (h *serviceImpl) GetClientFactory() ClientFactory {
+	return h.clientFactory
 }

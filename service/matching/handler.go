@@ -4,6 +4,7 @@ import (
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/workflow"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -12,22 +13,29 @@ var _ m.TChanMatchingService = (*Handler)(nil)
 
 // Handler - Thrift handler inteface for history service
 type Handler struct {
-	engine workflow.MatchingEngine
+	taskPersistence persistence.TaskManager
+	engine          workflow.MatchingEngine
 	common.Service
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(engine workflow.MatchingEngine, sVice common.Service) (*Handler, []thrift.TChanServer) {
+func NewHandler(taskPersistence persistence.TaskManager, sVice common.Service) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
-		Service: sVice,
-		engine:  engine,
+		Service:         sVice,
+		taskPersistence: taskPersistence,
 	}
 	return handler, []thrift.TChanServer{m.NewTChanMatchingServiceServer(handler)}
 }
 
 // Start starts the handler
-func (h *Handler) Start(thriftService []thrift.TChanServer) {
+func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	h.Service.Start(thriftService)
+	history, err := h.Service.GetClientFactory().NewHistoryClient()
+	if err != nil {
+		return err
+	}
+	h.engine = workflow.NewMatchingEngine(h.taskPersistence, history, h.Service.GetLogger())
+	return nil
 }
 
 // IsHealthy - Health endpoint.

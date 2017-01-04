@@ -6,6 +6,7 @@ import (
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/workflow"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -19,7 +20,8 @@ type Handler struct {
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(engine workflow.HistoryEngine, sVice common.Service) (*Handler, []thrift.TChanServer) {
+func NewHandler(sVice common.Service, executionPersistence persistence.ExecutionManager, taskPersistence persistence.TaskManager) (*Handler, []thrift.TChanServer) {
+	engine := workflow.NewHistoryEngine(1, executionPersistence, taskPersistence, sVice.GetLogger())
 	handler := &Handler{
 		Service: sVice,
 		engine:  engine,

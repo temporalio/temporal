@@ -28,7 +28,8 @@ type taskContext struct {
 	logger            bark.Logger
 }
 
-func newMatchingEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) MatchingEngine {
+// NewMatchingEngine creates an instance of matching engine
+func NewMatchingEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) MatchingEngine {
 	return &matchingEngineImpl{
 		taskManager:     taskManager,
 		historyService:  historyService,
