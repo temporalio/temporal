@@ -1,8 +1,8 @@
-hash: 7a8e6af1aaecc54a4e19126a0c5b6d101c0b1e1385f79b5f73a48e5f8a5162e8
-updated: 2016-12-15T12:53:35.566424608-08:00
+hash: ad670d72a4e5312bc52f6ae19e7ddb5b83b0895b34acab6f1eab21080a975971
+updated: 2017-01-03T16:19:29.633200715-08:00
 imports:
 - name: code.uber.internal/go-common.git
-  version: 4b349844a2c93b3c125ebff6d62b12ab73621e9f
+  version: 3eda30aa4057e008a280acef42e35a59a4ddcafe
   subpackages:
   - x/backoff
   - x/config
@@ -20,23 +20,29 @@ imports:
   - x/tchannel/metrics
   - x/time
 - name: github.com/apache/thrift
-  version: 0d9b713b173f35ce02552b2f4372899440a99b25
+  version: d8bb0e3b9ff7e6cecfc85c01a81280dc3d046430
   subpackages:
   - lib/go/thrift
+- name: github.com/benbjohnson/clock
+  version: 7dc76406b6d3c05b5f71a86293cbcf3c4ea03b19
 - name: github.com/cactus/go-statsd-client
   version: d8eabe07bc70ff9ba6a56836cde99d1ea3d005f7
   subpackages:
   - statsd
+- name: github.com/certifi/gocertifi
+  version: a61bf5eafa3aee233ec8043e9da052447e5463dd
 - name: github.com/codahale/hdrhistogram
-  version: f8ad88b59a584afeee9d334eff879b104439117b
+  version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
   - spew
+- name: github.com/dgryski/go-farm
+  version: 83948bc0eb076b6b72c28abe5282fa8cf5240db6
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/getsentry/raven-go
-  version: e39495fea085e98d1281fac0ff4d6eb8dc56f86d
+  version: 3f7439d3e74d88e21d196ba20eb61a5a958bc118
 - name: github.com/gocql/gocql
   version: 8e63066b8432f0fbc02d63b7b04de8da132f0b21
   repo: gitolite@code.uber.internal:odp/cherami-gocql.git
@@ -53,35 +59,37 @@ imports:
 - name: github.com/hailocab/go-hostpool
   version: e80d13ce29ede4452c43dea11e79b9bc8a15b478
 - name: github.com/opentracing/opentracing-go
-  version: 0c3154a3c2ce79d3271985848659870599dfb77c
+  version: ac5446f53f2c0fc68dc16dc5f426eae1cd288b34
   subpackages:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: 3d4f2ba23642d3cfd06bd4b54cf03d99d95c0f1b
+  version: 5007efa264d92316c43112bc573e754bc889b7b1
 - name: github.com/pmezard/go-difflib
   version: 792786c7400a136282c1664665ae0a8db921c6c2
   subpackages:
   - difflib
+- name: github.com/rcrowley/go-metrics
+  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
 - name: github.com/Sirupsen/logrus
-  version: 08a8a7c27e3d058a8989316a850daad1c10bf4ab
+  version: 881bee4e20a5d11a6a88a5667c6f292072ac1963
 - name: github.com/stretchr/objx
   version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
 - name: github.com/stretchr/testify
-  version: 18a02ba4a312f95da08ff4cfc0055750ce50ae9e
+  version: 2402e8e7a02fc811447d11f881aa9746cdc57983
   subpackages:
   - assert
   - mock
   - require
   - suite
 - name: github.com/uber-common/bark
-  version: d52ffa061726911f47fcd3d9e8b9b55f22794772
+  version: 8841a0f8e7ca869284ccb29c08a14cf3f4310f46
 - name: github.com/uber-go/atomic
-  version: 0c9e689d64f004564b79d9a663634756df322902
+  version: 3b8db5e93c4c02efbc313e17b2e796b0914a01fb
 - name: github.com/uber-go/tally
-  version: 13a01a2a0dd2ade06c307ccc0ca4e83196c88422
+  version: 2750b4ae690cbeb294016efe18ceaeb80c4ce17c
 - name: github.com/uber/jaeger-client-go
-  version: e39d0f1b622558cae3d9db0062a739cc6ffa700f
+  version: f424dfca4cd0a040ee8a28976f422aed25771b4a
   subpackages:
   - config
   - internal/spanlog
@@ -91,6 +99,18 @@ imports:
   - transport
   - transport/udp
   - utils
+- name: github.com/uber/ringpop-go
+  version: 33075b67ee125f2d5bbe79a99c081a138a61427e
+  subpackages:
+  - discovery
+  - events
+  - forward
+  - hashring
+  - logging
+  - membership
+  - shared
+  - swim
+  - util
 - name: github.com/uber/tchannel-go
   version: 4a23f3aae76694b21107f118ece763a61b98ea07
   subpackages:
@@ -99,6 +119,7 @@ imports:
   - hyperbahn/gen-go/hyperbahn
   - json
   - pprof
+  - raw
   - relay
   - stats
   - thrift
@@ -107,17 +128,17 @@ imports:
   - trand
   - typed
 - name: golang.org/x/net
-  version: cfae461cedfdcab6e261a26eb77db53695623303
+  version: 69d4b8aa71caaaa75c3dfc11211d1be495abec7c
   subpackages:
   - context
 - name: golang.org/x/sys
-  version: d4feaf1a7e61e1d9e79e6c4e76c6349e9cab0a03
+  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
   - unix
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/validator.v2
-  version: 3e4f037f12a1221a0864cf0dd2e81c452ab22448
+  version: 0a9835d809fb647a62611d30cb792e0b5dd65b11
 - name: gopkg.in/yaml.v2
   version: a5b47d31c556af34a302ce5d659e6fea44d90de0
 testImports: []
