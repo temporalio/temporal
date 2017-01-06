@@ -245,11 +245,11 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TaskInfo, error) {
 }
 
 func (a *ackManager) completeTask(taskID int64) {
-	a.lk.RLock()
+	a.lk.Lock()
 	if _, ok := a.outstandingTasks[taskID]; ok {
 		a.outstandingTasks[taskID] = true
 	}
-	a.lk.RUnlock()
+	a.lk.Unlock()
 }
 
 func (a *ackManager) updateAckLevel() {
