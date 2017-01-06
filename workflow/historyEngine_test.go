@@ -56,7 +56,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockTaskMgr = &mocks.TaskManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 
-	mockShard := &shardContext{
+	mockShard := &shardContextImpl{
 		shardInfo:              &persistence.ShardInfo{ShardID: 1, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber: 1,
 	}
@@ -64,7 +64,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockHistoryEngine = &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
-		txProcessor:      newTransferQueueProcessor(s.mockExecutionMgr, s.mockTaskMgr, s.logger),
+		txProcessor:      newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockTaskMgr, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 	}

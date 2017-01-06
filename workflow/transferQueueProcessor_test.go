@@ -34,7 +34,7 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	}
 
 	s.SetupWorkflowStore()
-	s.processor = newTransferQueueProcessor(s.WorkflowMgr, s.TaskMgr,
+	s.processor = newTransferQueueProcessor(s.ShardContext, s.WorkflowMgr, s.TaskMgr,
 		bark.NewLoggerFromLogrus(log.New())).(*transferQueueProcessorImpl)
 }
 
@@ -42,18 +42,18 @@ func (s *transferQueueProcessorSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
-func (s *transferQueueProcessorSuite) TestNoTransferTask() {
-	// First cleanup transfer tasks from other tests
+func (s *transferQueueProcessorSuite) SetupTest() {
+	// First cleanup transfer tasks from other tests and reset shard context
 	s.ClearTransferQueue()
+}
 
-	newPollInterval := s.processor.processTransferTasks(transferProcessorMinPollInterval)
+func (s *transferQueueProcessorSuite) TestNoTransferTask() {
+	tasksCh := make(chan *persistence.TaskInfo)
+	newPollInterval := s.processor.processTransferTasks(tasksCh, transferProcessorMinPollInterval)
 	s.Equal(2*transferProcessorMinPollInterval, newPollInterval)
 }
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
-	// First cleanup transfer tasks from other tests
-	s.ClearTransferQueue()
-
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
@@ -61,8 +61,18 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	newPollInterval := s.processor.processTransferTasks(time.Second)
+	tasksCh := make(chan *persistence.TaskInfo, 10)
+	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
 	s.Equal(transferProcessorMinPollInterval, newPollInterval)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
 
 	tasks1, err1 := s.GetTasks(taskList, persistence.TaskTypeDecision, time.Second, 1)
 	s.Nil(err1)
@@ -74,9 +84,6 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
-	// First cleanup transfer tasks from other tests
-	s.ClearTransferQueue()
-
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("many-transfertasks-test"),
 		RunId: common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
 	taskList := "many-transfertasks-queue"
@@ -86,8 +93,18 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	newPollInterval := s.processor.processTransferTasks(time.Second)
+	tasksCh := make(chan *persistence.TaskInfo, 10)
+	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
 	s.Equal(transferProcessorMinPollInterval, newPollInterval)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
 
 	tasks1, err1 := s.GetTasks(taskList, persistence.TaskTypeActivity, time.Second, 10)
 	s.Nil(err1)

@@ -193,8 +193,9 @@ type (
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
-		LockTimeout time.Duration
-		BatchSize   int
+		ReadLevel int64
+		BatchSize int
+		RangeID   int64
 	}
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
@@ -206,7 +207,6 @@ type (
 	CompleteTransferTaskRequest struct {
 		Execution workflow.WorkflowExecution
 		TaskID    int64
-		LockToken string
 	}
 
 	// CreateTaskRequest is used to create a new task for a workflow exectution

@@ -28,10 +28,11 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
 	TestBase struct {
-		WorkflowMgr     ExecutionManager
-		TaskMgr         TaskManager
-		rangeID         int64
-		sequenceCounter int64
+		WorkflowMgr  ExecutionManager
+		TaskMgr      TaskManager
+		ShardInfo    *ShardInfo
+		ShardContext *testShardContext
+		readLevel    int64
 		CassandraTestCluster
 	}
 
@@ -41,7 +42,46 @@ type (
 		cluster  *gocql.ClusterConfig
 		session  *gocql.Session
 	}
+
+	testShardContext struct {
+		shardInfo              *ShardInfo
+		transferSequenceNumber int64
+		timerSequeceNumber     int64
+	}
 )
+
+func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64) *testShardContext {
+	return &testShardContext{
+		shardInfo:              shardInfo,
+		transferSequenceNumber: transferSequenceNumber,
+	}
+}
+
+func (s *testShardContext) GetTransferTaskID() int64 {
+	return atomic.AddInt64(&s.transferSequenceNumber, 1)
+}
+
+func (s *testShardContext) GetRangeID() int64 {
+	return atomic.LoadInt64(&s.shardInfo.RangeID)
+}
+
+func (s *testShardContext) GetTransferAckLevel() int64 {
+	return atomic.LoadInt64(&s.shardInfo.TransferAckLevel)
+}
+
+func (s *testShardContext) GetTimerSequenceNumber() int64 {
+	return atomic.AddInt64(&s.timerSequeceNumber, 1)
+}
+
+func (s *testShardContext) UpdateAckLevel(ackLevel int64) error {
+	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, ackLevel)
+	return nil
+}
+
+func (s *testShardContext) Reset() {
+	atomic.StoreInt64(&s.shardInfo.RangeID, 100)
+	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
+}
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
@@ -58,13 +98,15 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		log.Fatal(err)
 	}
 	// Create a shard for test
-	s.rangeID = 100
+	s.readLevel = 0
+	s.ShardInfo = &ShardInfo{
+		ShardID:          1,
+		RangeID:          100,
+		TransferAckLevel: 0,
+	}
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0)
 	err1 := s.WorkflowMgr.CreateShard(&CreateShardRequest{
-		ShardInfo: &ShardInfo{
-			ShardID:          1,
-			RangeID:          s.rangeID,
-			TransferAckLevel: 0,
-		},
+		ShardInfo: s.ShardInfo,
 	})
 	if err1 != nil {
 		log.Fatal(err1)
@@ -83,7 +125,7 @@ func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowEx
 		ExecutionContext:   executionContext,
 		NextEventID:        nextEventID,
 		LastProcessedEvent: lastProcessedEventID,
-		RangeID:            s.rangeID,
+		RangeID:            s.ShardContext.GetRangeID(),
 		TransferTasks: []Task{
 			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: decisionScheduleID},
 		},
@@ -120,7 +162,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 		NextEventID:        nextEventID,
 		LastProcessedEvent: lastProcessedEventID,
 		TransferTasks:      transferTasks,
-		RangeID:            s.rangeID})
+		RangeID:            s.ShardContext.GetRangeID()})
 
 	if err != nil {
 		return "", err
@@ -162,7 +204,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		TimerTasks:      timerTasks,
 		Condition:       condition,
 		DeleteTimerTask: deleteTimerTask,
-		RangeID:         s.rangeID,
+		RangeID:         s.ShardContext.GetRangeID(),
 	})
 }
 
@@ -174,27 +216,30 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(timeout time.Duration, batchSize int) ([]*TaskInfo, error) {
+func (s *TestBase) GetTransferTasks(batchSize int) ([]*TaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		LockTimeout: timeout,
-		BatchSize:   batchSize,
+		ReadLevel: s.GetReadLevel(),
+		BatchSize: batchSize,
+		RangeID:   s.ShardContext.GetRangeID(),
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
+	for _, task := range response.Tasks {
+		atomic.StoreInt64(&s.readLevel, task.TaskID)
+	}
+
 	return response.Tasks, nil
 }
 
 // CompleteTransferTask is a utility method to complete a transfer task
-func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecution, taskID int64,
-	lockToken string) error {
+func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecution, taskID int64) error {
 
 	return s.WorkflowMgr.CompleteTransferTask(&CompleteTransferTaskRequest{
 		Execution: workflowExecution,
 		TaskID:    taskID,
-		LockToken: lockToken,
 	})
 }
 
@@ -289,13 +334,24 @@ func (s *TestBase) CompleteTask(workflowExecution workflow.WorkflowExecution, ta
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
-	tasks, err := s.GetTransferTasks(time.Minute, 100)
+	log.Infof("Clearing transfer tasks (RangeID: %v, ReadLevel: %v, AckLevel: %v)", s.ShardContext.GetRangeID(),
+		s.GetReadLevel(), s.ShardContext.GetTransferAckLevel())
+	tasks, err := s.GetTransferTasks(100)
 	if err != nil {
-		for _, t := range tasks {
-			e := workflow.WorkflowExecution{WorkflowId: common.StringPtr(t.WorkflowID), RunId: common.StringPtr(t.RunID)}
-			s.CompleteTransferTask(e, t.TaskID, t.LockToken)
-		}
+		log.Fatalf("Error during cleanup: %v", err)
 	}
+
+	counter := 0
+	for _, t := range tasks {
+		log.Infof("Deleting transfer task with ID: %v", t.TaskID)
+		e := workflow.WorkflowExecution{WorkflowId: common.StringPtr(t.WorkflowID), RunId: common.StringPtr(t.RunID)}
+		s.CompleteTransferTask(e, t.TaskID)
+		counter++
+	}
+
+	log.Infof("Deleted '%v' transfer tasks.", counter)
+	s.ShardContext.Reset()
+	atomic.StoreInt64(&s.readLevel, 0)
 }
 
 // SetupWorkflowStore to setup workflow test base
@@ -310,7 +366,12 @@ func (s *TestBase) TearDownWorkflowStore() {
 
 // GetNextSequenceNumber generates a unique sequence number for can be used for transfer queue taskId
 func (s *TestBase) GetNextSequenceNumber() int64 {
-	return atomic.AddInt64(&s.sequenceCounter, 1)
+	return s.ShardContext.GetTransferTaskID()
+}
+
+// GetReadLevel returns the current read level for shard
+func (s *TestBase) GetReadLevel() int64 {
+	return atomic.LoadInt64(&s.readLevel)
 }
 
 func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool, schemaDir string) {

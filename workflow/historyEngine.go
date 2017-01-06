@@ -14,7 +14,7 @@ import (
 
 type (
 	historyEngineImpl struct {
-		shard            *shardContext
+		shard            ShardContext
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
 		timerProcessor   timerQueueProcessor
@@ -45,7 +45,7 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		executionManager: executionManager,
-		txProcessor:      newTransferQueueProcessor(executionManager, taskManager, logger),
+		txProcessor:      newTransferQueueProcessor(shard, executionManager, taskManager, logger),
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,

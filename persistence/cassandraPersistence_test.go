@@ -7,7 +7,6 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -36,6 +35,10 @@ func (s *cassandraPersistenceSuite) SetupSuite() {
 
 func (s *cassandraPersistenceSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
+}
+
+func (s *cassandraPersistenceSuite) SetupTest() {
+	s.ClearTransferQueue()
 }
 
 func (s *cassandraPersistenceSuite) TestStartWorkflow() {
@@ -190,9 +193,6 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 }
 
 func (s *cassandraPersistenceSuite) TestTransferTasks() {
-	// First cleanup transfer tasks from other tests
-	s.ClearTransferQueue()
-
 	startTime := time.Now()
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-test"),
 		RunId: common.StringPtr("93c87aff-ed89-4ecb-b0fd-d5d1e25dc46d")}
@@ -201,7 +201,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasks1, err1 := s.GetTransferTasks(time.Minute, 1)
+	tasks1, err1 := s.GetTransferTasks(1)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
@@ -213,21 +213,14 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Equal(int64(2), task1.ScheduleID)
 	s.NotNil(task1.LockToken)
 	s.True(task1.VisibilityTime.Before(startTime.Add(10 * time.Minute)))
-	s.True(time.Now().Before(task1.VisibilityTime))
 	s.Equal(1, task1.DeliveryCount)
 
-	badToken := uuid.New()
-	err2 := s.CompleteTransferTask(workflowExecution, task1.TaskID, badToken)
-	s.NotNil(err2)
-	log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", task1.TaskID, badToken, err2)
-	s.IsType(&ConditionFailedError{}, err2, err2.Error())
-
-	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID, task1.LockToken)
+	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
 	s.Nil(err3)
 
-	err4 := s.CompleteTransferTask(workflowExecution, task1.TaskID, task1.LockToken)
+	err4 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
 	s.NotNil(err4)
-	log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", task1.TaskID, task1.LockToken, err4)
+	log.Infof("Failed to complete task '%v'.  Error: %v", task1.TaskID, err4)
 	s.IsType(&gen.EntityNotExistsError{}, err4)
 }
 

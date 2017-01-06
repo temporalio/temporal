@@ -50,7 +50,7 @@ type (
 	}
 
 	shardSeqNumGenerator struct {
-		context *shardContext
+		context ShardContext
 	}
 )
 

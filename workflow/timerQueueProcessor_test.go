@@ -41,10 +41,11 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		log.Fatal(err)
 	}
 
+	shard := &shardContextImpl{shardInfo: resp.ShardInfo}
 	s.engineImpl = &historyEngineImpl{
-		shard:            &shardContext{shardInfo: resp.ShardInfo},
+		shard:            shard,
 		executionManager: s.WorkflowMgr,
-		txProcessor:      newTransferQueueProcessor(s.WorkflowMgr, s.TaskMgr, s.logger),
+		txProcessor:      newTransferQueueProcessor(shard, s.WorkflowMgr, s.TaskMgr, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 	}
