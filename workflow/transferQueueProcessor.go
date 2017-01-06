@@ -57,7 +57,7 @@ type (
 func newTransferQueueProcessor(shard ShardContext, executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager, logger bark.Logger) transferQueueProcessor {
 	return &transferQueueProcessorImpl{
-		ackMgr:           newAckManager(shard, executionManager),
+		ackMgr:           newAckManager(shard, executionManager, logger),
 		executionManager: executionManager,
 		taskManager:      taskManager,
 		shutdownCh:       make(chan struct{}),
@@ -65,7 +65,7 @@ func newTransferQueueProcessor(shard ShardContext, executionManager persistence.
 	}
 }
 
-func newAckManager(shard ShardContext, executionMgr persistence.ExecutionManager) *ackManager {
+func newAckManager(shard ShardContext, executionMgr persistence.ExecutionManager, logger bark.Logger) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
 		shard:            shard,
@@ -73,6 +73,7 @@ func newAckManager(shard ShardContext, executionMgr persistence.ExecutionManager
 		outstandingTasks: make(map[int64]bool),
 		readLevel:        ackLevel,
 		ackLevel:         ackLevel,
+		logger:           logger,
 	}
 }
 
@@ -84,7 +85,7 @@ func (t *transferQueueProcessorImpl) Start() {
 	t.shutdownWG.Add(1)
 	go t.processorPump()
 
-	// t.logger.Info("Transfer queue processor started.")
+	t.logger.Info("Transfer queue processor started.")
 }
 
 func (t *transferQueueProcessorImpl) Stop() {
@@ -172,6 +173,7 @@ func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.Task
 }
 
 func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TaskInfo) {
+	t.logger.Debugf("Processing transfer task: %v", task.TaskID)
 ProcessRetryLoop:
 	for retryCount := 0; retryCount < 10; retryCount++ {
 		select {
@@ -233,6 +235,7 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TaskInfo, error) {
 			a.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", task.TaskID,
 				a.readLevel)
 		}
+		a.logger.Debugf("Moving read level: %v", task.TaskID)
 		a.readLevel = task.TaskID
 		a.outstandingTasks[a.readLevel] = false
 	}
@@ -268,6 +271,7 @@ MoveAckLevelLoop:
 					a.logger.Warnf("Processor unable to complete transfer task '%v': %v", current, err)
 					break MoveAckLevelLoop
 				}
+				a.logger.Debugf("Updating ack level: %v", current)
 				a.ackLevel = current
 				updatedAckLevel = current
 				delete(a.outstandingTasks, current)

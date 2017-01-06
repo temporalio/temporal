@@ -34,6 +34,24 @@ type (
 	}
 )
 
+// NewHistoryEngineWithShardContext creates an instance of history engine
+func NewHistoryEngineWithShardContext(shard ShardContext,
+	executionManager persistence.ExecutionManager, taskManager persistence.TaskManager,
+	logger bark.Logger) HistoryEngine {
+
+	historyEngImpl := &historyEngineImpl{
+		shard:            shard,
+		executionManager: executionManager,
+		txProcessor:      newTransferQueueProcessor(shard, executionManager, taskManager, logger),
+		tokenSerializer:  newJSONTaskTokenSerializer(),
+		logger: logger.WithFields(bark.Fields{
+			tagWorkflowComponent: tagValueWorkflowEngineComponent,
+		}),
+	}
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)
+	return historyEngImpl
+}
+
 // NewHistoryEngine creates an instance of history engine
 func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
@@ -273,6 +291,7 @@ Update_History_Loop:
 				attributes := d.GetScheduleActivityTaskDecisionAttributes()
 				scheduleEvent := builder.AddActivityTaskScheduledEvent(completedID, attributes)
 				transferTasks = append(transferTasks, &persistence.ActivityTask{
+					TaskID:     e.shard.GetTransferTaskID(),
 					TaskList:   attributes.GetTaskList().GetName(),
 					ScheduleID: scheduleEvent.GetEventId(),
 				})
@@ -307,6 +326,7 @@ Update_History_Loop:
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
+				TaskID:     e.shard.GetTransferTaskID(),
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			})
@@ -372,6 +392,7 @@ Update_History_Loop:
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
+				TaskID:     e.shard.GetTransferTaskID(),
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
@@ -431,6 +452,7 @@ Update_History_Loop:
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
+				TaskID:     e.shard.GetTransferTaskID(),
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}

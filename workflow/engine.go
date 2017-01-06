@@ -47,6 +47,18 @@ var (
 	errMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
 )
 
+// NewWorkflowEngineWithShard creates an instannce of engine.
+func NewWorkflowEngineWithShard(shard ShardContext, executionManager persistence.ExecutionManager, taskManager persistence.TaskManager,
+	logger bark.Logger) Engine {
+
+	history := NewHistoryEngineWithShardContext(shard, executionManager, taskManager, logger)
+	return &EngineImpl{
+		historyService: history,
+		matchingEngine: NewMatchingEngine(taskManager, history, logger),
+		logger:         logger,
+	}
+}
+
 // NewWorkflowEngine creates an instannce of engine.
 func NewWorkflowEngine(executionManager persistence.ExecutionManager, taskManager persistence.TaskManager,
 	logger bark.Logger) Engine {
