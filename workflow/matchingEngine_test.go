@@ -65,6 +65,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		logger:           s.logger,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 	}
+	history.timerProcessor = newTimerQueueProcessor(history, s.mockExecutionMgr, s.logger)
 
 	s.mockMatchingEngine = &matchingEngineImpl{
 		taskManager:     s.mockTaskMgr,

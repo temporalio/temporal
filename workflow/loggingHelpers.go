@@ -34,6 +34,7 @@ const (
 	tagValueActionDecisionTaskScheduled = "add-decisiontask-scheduled-event"
 	tagValueActionDecisionTaskStarted   = "add-decisiontask-started-event"
 	tagValueActionDecisionTaskCompleted = "add-decisiontask-completed-event"
+	tagValueActionDecisionTaskTimedOut  = "add-decisiontask-timedout-event"
 	tagValueActionActivityTaskScheduled = "add-activitytask-scheduled-event"
 	tagValueActionActivityTaskStarted   = "add-activitytask-started-event"
 	tagValueActionActivityTaskCompleted = "add-activitytask-completed-event"

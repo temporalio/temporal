@@ -1,7 +1,6 @@
 package persistence
 
 import (
-	"fmt"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -426,8 +425,6 @@ func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
 		cqlshDir = schemaDir + "/cassandra/bin/cqlsh"
 		workflowSchemaDir = schemaDir + "/schema/"
 	}
-
-	fmt.Printf("schemaDir: %s, cqlshDir: %s, workflowSchemaDir: %s \n", schemaDir, cqlshDir, workflowSchemaDir)
 
 	err := common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
 

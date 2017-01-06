@@ -1596,6 +1596,88 @@ DecisionTaskCompletedEventAttributes.prototype.write = function(output) {
   return;
 };
 
+var DecisionTaskTimedOutEventAttributes = module.exports.DecisionTaskTimedOutEventAttributes = function(args) {
+  this.scheduledEventId = null;
+  this.startedEventId = null;
+  this.timeoutType = null;
+  if (args) {
+    if (args.scheduledEventId !== undefined && args.scheduledEventId !== null) {
+      this.scheduledEventId = args.scheduledEventId;
+    }
+    if (args.startedEventId !== undefined && args.startedEventId !== null) {
+      this.startedEventId = args.startedEventId;
+    }
+    if (args.timeoutType !== undefined && args.timeoutType !== null) {
+      this.timeoutType = args.timeoutType;
+    }
+  }
+};
+DecisionTaskTimedOutEventAttributes.prototype = {};
+DecisionTaskTimedOutEventAttributes.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.I64) {
+        this.scheduledEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 20:
+      if (ftype == Thrift.Type.I64) {
+        this.startedEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 30:
+      if (ftype == Thrift.Type.I32) {
+        this.timeoutType = input.readI32();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+DecisionTaskTimedOutEventAttributes.prototype.write = function(output) {
+  output.writeStructBegin('DecisionTaskTimedOutEventAttributes');
+  if (this.scheduledEventId !== null && this.scheduledEventId !== undefined) {
+    output.writeFieldBegin('scheduledEventId', Thrift.Type.I64, 10);
+    output.writeI64(this.scheduledEventId);
+    output.writeFieldEnd();
+  }
+  if (this.startedEventId !== null && this.startedEventId !== undefined) {
+    output.writeFieldBegin('startedEventId', Thrift.Type.I64, 20);
+    output.writeI64(this.startedEventId);
+    output.writeFieldEnd();
+  }
+  if (this.timeoutType !== null && this.timeoutType !== undefined) {
+    output.writeFieldBegin('timeoutType', Thrift.Type.I32, 30);
+    output.writeI32(this.timeoutType);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
 var ActivityTaskScheduledEventAttributes = module.exports.ActivityTaskScheduledEventAttributes = function(args) {
   this.activityId = null;
   this.activityType = null;
@@ -2294,6 +2376,7 @@ var HistoryEvent = module.exports.HistoryEvent = function(args) {
   this.workflowExecutionTimedOutEventAttributes = null;
   this.decisionTaskScheduledEventAttributes = null;
   this.decisionTaskStartedEventAttributes = null;
+  this.decisionTaskTimedOutEventAttributes = null;
   this.decisionTaskCompletedEventAttributes = null;
   this.activityTaskScheduledEventAttributes = null;
   this.activityTaskStartedEventAttributes = null;
@@ -2330,6 +2413,9 @@ var HistoryEvent = module.exports.HistoryEvent = function(args) {
     }
     if (args.decisionTaskStartedEventAttributes !== undefined && args.decisionTaskStartedEventAttributes !== null) {
       this.decisionTaskStartedEventAttributes = new ttypes.DecisionTaskStartedEventAttributes(args.decisionTaskStartedEventAttributes);
+    }
+    if (args.decisionTaskTimedOutEventAttributes !== undefined && args.decisionTaskTimedOutEventAttributes !== null) {
+      this.decisionTaskTimedOutEventAttributes = new ttypes.DecisionTaskTimedOutEventAttributes(args.decisionTaskTimedOutEventAttributes);
     }
     if (args.decisionTaskCompletedEventAttributes !== undefined && args.decisionTaskCompletedEventAttributes !== null) {
       this.decisionTaskCompletedEventAttributes = new ttypes.DecisionTaskCompletedEventAttributes(args.decisionTaskCompletedEventAttributes);
@@ -2439,6 +2525,14 @@ HistoryEvent.prototype.read = function(input) {
       if (ftype == Thrift.Type.STRUCT) {
         this.decisionTaskStartedEventAttributes = new ttypes.DecisionTaskStartedEventAttributes();
         this.decisionTaskStartedEventAttributes.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 63:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.decisionTaskTimedOutEventAttributes = new ttypes.DecisionTaskTimedOutEventAttributes();
+        this.decisionTaskTimedOutEventAttributes.read(input);
       } else {
         input.skip(ftype);
       }
@@ -2569,6 +2663,11 @@ HistoryEvent.prototype.write = function(output) {
   if (this.decisionTaskStartedEventAttributes !== null && this.decisionTaskStartedEventAttributes !== undefined) {
     output.writeFieldBegin('decisionTaskStartedEventAttributes', Thrift.Type.STRUCT, 60);
     this.decisionTaskStartedEventAttributes.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.decisionTaskTimedOutEventAttributes !== null && this.decisionTaskTimedOutEventAttributes !== undefined) {
+    output.writeFieldBegin('decisionTaskTimedOutEventAttributes', Thrift.Type.STRUCT, 63);
+    this.decisionTaskTimedOutEventAttributes.write(output);
     output.writeFieldEnd();
   }
   if (this.decisionTaskCompletedEventAttributes !== null && this.decisionTaskCompletedEventAttributes !== undefined) {

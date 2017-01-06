@@ -108,7 +108,7 @@ func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager 
 		executionManager: executionManager,
 		shutdownCh:       make(chan struct{}),
 		newTimerCh:       make(chan struct{}, 1),
-		logger:           logger,
+		logger:           logger.WithFields(bark.Fields{"component": "TimerProcessor"}),
 	}
 }
 
@@ -157,7 +157,7 @@ func (t *timerQueueProcessorImpl) processorPump() {
 	if err != nil {
 		t.logger.Error("processor pump failed with error: ", err)
 	}
-	t.logger.Info("timer processor exiting.")
+	t.logger.Info("Timer processor exiting.")
 }
 
 func (t *timerQueueProcessorImpl) internalProcessor() error {
@@ -173,9 +173,9 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 		gate.setNext(nextKey)
 	}
 
-	t.logger.Infof("InitialSeed Key: %s", nextKey)
+	t.logger.Debugf("InitialSeed Key: %s", nextKey)
 
-	for i := 0; i < 4; i++ {
+	for {
 		isWokeByNewTimer := false
 
 		if nextKey == MaxTimerKey || gate.engaged() {
@@ -189,8 +189,8 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 			select {
 
 			case <-t.shutdownCh:
-				t.logger.Info("Timer queue processor pump shutting down.")
-				break
+				t.logger.Debug("Timer queue processor pump shutting down.")
+				return nil
 
 			case <-gateC:
 				// Timer Fired.
@@ -205,6 +205,7 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 		// Either we have timer to be fired (or) we have a new timer.
 
 		if isWokeByNewTimer {
+			t.logger.Debugf("Woke up by the timer")
 			// We have a new timer msg, see if it is earlier than what we know.
 			earlyTimeKey := SequenceID(time.Now().UnixNano() - int64(time.Second))
 			tempKey, err := t.getNextKey(earlyTimeKey, nextKey)
@@ -230,14 +231,13 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 				return err
 			}
 
-			t.logger.Infof("GetNextKey: %s", nextKey)
+			t.logger.Debugf("GetNextKey: %s", nextKey)
 
 			if nextKey != MaxTimerKey {
 				gate.setNext(nextKey)
 			}
 		}
 	}
-	return nil
 }
 
 func (t *timerQueueProcessorImpl) getInitialSeed() (SequenceID, error) {
@@ -273,7 +273,7 @@ func (t *timerQueueProcessorImpl) getTimerTasks(minKey SequenceID, maxKey Sequen
 }
 
 func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
-	t.logger.Infof("Processing timer with SequenceID: %s", key)
+	t.logger.Debugf("Processing timer with SequenceID: %s", key)
 
 	tasks, err := t.getTimerTasks(key, key+1, 1)
 	if err != nil {
@@ -304,6 +304,7 @@ Update_History_Loop:
 			return err1
 		}
 
+		var transferTasks []persistence.Task
 		var timerTasks []persistence.Task
 		var clearTimerTask persistence.Task
 
@@ -336,18 +337,23 @@ Update_History_Loop:
 
 		case persistence.TaskTypeDecisionTimeout:
 			clearTimerTask = &persistence.DecisionTimeoutTask{TaskID: timerTask.TaskID}
-		}
 
-		var transferTasks []persistence.Task
-		if !builder.hasPendingDecisionTask() {
-			startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
-			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
-			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
-				startAttributes.GetTaskStartToCloseTimeoutSeconds())
-			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskList:   startAttributes.GetTaskList().GetName(),
-				ScheduleID: newDecisionEvent.GetEventId(),
-			}}
+			scheduleID := timerTask.EventID
+			isRunning, startedID := builder.isDecisionTaskRunning(scheduleID)
+			if isRunning && startedID != emptyEventID {
+				// Add a decision task timeout event.
+				builder.AddDecisionTaskTimedOutEvent(scheduleID, startedID)
+
+				// Schedule a new decision.
+				startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
+				startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
+				newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
+					startAttributes.GetTaskStartToCloseTimeoutSeconds())
+				transferTasks = []persistence.Task{&persistence.DecisionTask{
+					TaskList:   startAttributes.GetTaskList().GetName(),
+					ScheduleID: newDecisionEvent.GetEventId(),
+				}}
+			}
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload

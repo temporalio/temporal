@@ -106,20 +106,22 @@ func newTimerBuilder(seqNumGen SequenceNumberGenerator, logger bark.Logger) *tim
 }
 
 // CreateDecisionTimeoutTask - Creates a decision timeout task.
-func (tb *timerBuilder) CreateDecisionTimeoutTask(fireTimeOut int32) *persistence.DecisionTimeoutTask {
+func (tb *timerBuilder) CreateDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
 	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.DecisionTimeoutTask{
-		TaskID: int64(seqID),
+		TaskID:  int64(seqID),
+		EventID: eventID,
 	}
 }
 
 // CreateActivityTimeoutTask - Creates a activity timeout task.
-func (tb *timerBuilder) CreateActivityTimeoutTask(fireTimeOut int32) *persistence.ActivityTimeoutTask {
+func (tb *timerBuilder) CreateActivityTimeoutTask(fireTimeOut int32, eventID int64) *persistence.ActivityTimeoutTask {
 	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.ActivityTimeoutTask{
-		TaskID: int64(seqID),
+		TaskID:  int64(seqID),
+		EventID: eventID,
 	}
 }
 

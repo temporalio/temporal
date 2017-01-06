@@ -149,6 +149,12 @@ struct DecisionTaskCompletedEventAttributes {
   40: optional string identity
 }
 
+struct DecisionTaskTimedOutEventAttributes {
+  10: optional i64 (js.type = "Long") scheduledEventId
+  20: optional i64 (js.type = "Long") startedEventId
+  30: optional TimeoutType timeoutType
+}
+
 struct ActivityTaskScheduledEventAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
@@ -208,6 +214,7 @@ struct HistoryEvent {
   50:  optional WorkflowExecutionTimedOutEventAttributes workflowExecutionTimedOutEventAttributes
   55:  optional DecisionTaskScheduledEventAttributes decisionTaskScheduledEventAttributes
   60:  optional DecisionTaskStartedEventAttributes decisionTaskStartedEventAttributes
+  63:  optional DecisionTaskTimedOutEventAttributes decisionTaskTimedOutEventAttributes
   65:  optional DecisionTaskCompletedEventAttributes decisionTaskCompletedEventAttributes
   70:  optional ActivityTaskScheduledEventAttributes activityTaskScheduledEventAttributes
   75:  optional ActivityTaskStartedEventAttributes activityTaskStartedEventAttributes

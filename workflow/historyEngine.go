@@ -169,9 +169,10 @@ Update_History_Loop:
 		}
 
 		// Start a timer for the decision task.
+		defer e.timerProcessor.NotifyNewTimer()
 		startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
 		startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
-		timeOutTask := context.tBuilder.CreateDecisionTimeoutTask(startAttributes.GetTaskStartToCloseTimeoutSeconds())
+		timeOutTask := context.tBuilder.CreateDecisionTimeoutTask(startAttributes.GetTaskStartToCloseTimeoutSeconds(), scheduleID)
 		timerTasks := []persistence.Task{timeOutTask}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload

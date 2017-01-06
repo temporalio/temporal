@@ -3782,6 +3782,204 @@ func (p *DecisionTaskCompletedEventAttributes) String() string {
 }
 
 // Attributes:
+//  - ScheduledEventId
+//  - StartedEventId
+//  - TimeoutType
+type DecisionTaskTimedOutEventAttributes struct {
+	// unused fields # 1 to 9
+	ScheduledEventId *int64 `thrift:"scheduledEventId,10" db:"scheduledEventId" json:"scheduledEventId,omitempty"`
+	// unused fields # 11 to 19
+	StartedEventId *int64 `thrift:"startedEventId,20" db:"startedEventId" json:"startedEventId,omitempty"`
+	// unused fields # 21 to 29
+	TimeoutType *TimeoutType `thrift:"timeoutType,30" db:"timeoutType" json:"timeoutType,omitempty"`
+}
+
+func NewDecisionTaskTimedOutEventAttributes() *DecisionTaskTimedOutEventAttributes {
+	return &DecisionTaskTimedOutEventAttributes{}
+}
+
+var DecisionTaskTimedOutEventAttributes_ScheduledEventId_DEFAULT int64
+
+func (p *DecisionTaskTimedOutEventAttributes) GetScheduledEventId() int64 {
+	if !p.IsSetScheduledEventId() {
+		return DecisionTaskTimedOutEventAttributes_ScheduledEventId_DEFAULT
+	}
+	return *p.ScheduledEventId
+}
+
+var DecisionTaskTimedOutEventAttributes_StartedEventId_DEFAULT int64
+
+func (p *DecisionTaskTimedOutEventAttributes) GetStartedEventId() int64 {
+	if !p.IsSetStartedEventId() {
+		return DecisionTaskTimedOutEventAttributes_StartedEventId_DEFAULT
+	}
+	return *p.StartedEventId
+}
+
+var DecisionTaskTimedOutEventAttributes_TimeoutType_DEFAULT TimeoutType
+
+func (p *DecisionTaskTimedOutEventAttributes) GetTimeoutType() TimeoutType {
+	if !p.IsSetTimeoutType() {
+		return DecisionTaskTimedOutEventAttributes_TimeoutType_DEFAULT
+	}
+	return *p.TimeoutType
+}
+func (p *DecisionTaskTimedOutEventAttributes) IsSetScheduledEventId() bool {
+	return p.ScheduledEventId != nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) IsSetStartedEventId() bool {
+	return p.StartedEventId != nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) IsSetTimeoutType() bool {
+	return p.TimeoutType != nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) Read(iprot thrift.TProtocol) error {
+	if _, err := iprot.ReadStructBegin(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+		if err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 10:
+			if err := p.ReadField10(iprot); err != nil {
+				return err
+			}
+		case 20:
+			if err := p.ReadField20(iprot); err != nil {
+				return err
+			}
+		case 30:
+			if err := p.ReadField30(iprot); err != nil {
+				return err
+			}
+		default:
+			if err := iprot.Skip(fieldTypeId); err != nil {
+				return err
+			}
+		}
+		if err := iprot.ReadFieldEnd(); err != nil {
+			return err
+		}
+	}
+	if err := iprot.ReadStructEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) ReadField10(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadI64(); err != nil {
+		return thrift.PrependError("error reading field 10: ", err)
+	} else {
+		p.ScheduledEventId = &v
+	}
+	return nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) ReadField20(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadI64(); err != nil {
+		return thrift.PrependError("error reading field 20: ", err)
+	} else {
+		p.StartedEventId = &v
+	}
+	return nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) ReadField30(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadI32(); err != nil {
+		return thrift.PrependError("error reading field 30: ", err)
+	} else {
+		temp := TimeoutType(v)
+		p.TimeoutType = &temp
+	}
+	return nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) Write(oprot thrift.TProtocol) error {
+	if err := oprot.WriteStructBegin("DecisionTaskTimedOutEventAttributes"); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+	}
+	if err := p.writeField10(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField20(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField30(oprot); err != nil {
+		return err
+	}
+	if err := oprot.WriteFieldStop(); err != nil {
+		return thrift.PrependError("write field stop error: ", err)
+	}
+	if err := oprot.WriteStructEnd(); err != nil {
+		return thrift.PrependError("write struct stop error: ", err)
+	}
+	return nil
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) writeField10(oprot thrift.TProtocol) (err error) {
+	if p.IsSetScheduledEventId() {
+		if err := oprot.WriteFieldBegin("scheduledEventId", thrift.I64, 10); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:scheduledEventId: ", p), err)
+		}
+		if err := oprot.WriteI64(int64(*p.ScheduledEventId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.scheduledEventId (10) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 10:scheduledEventId: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) writeField20(oprot thrift.TProtocol) (err error) {
+	if p.IsSetStartedEventId() {
+		if err := oprot.WriteFieldBegin("startedEventId", thrift.I64, 20); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:startedEventId: ", p), err)
+		}
+		if err := oprot.WriteI64(int64(*p.StartedEventId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.startedEventId (20) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 20:startedEventId: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) writeField30(oprot thrift.TProtocol) (err error) {
+	if p.IsSetTimeoutType() {
+		if err := oprot.WriteFieldBegin("timeoutType", thrift.I32, 30); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:timeoutType: ", p), err)
+		}
+		if err := oprot.WriteI32(int32(*p.TimeoutType)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.timeoutType (30) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:timeoutType: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *DecisionTaskTimedOutEventAttributes) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("DecisionTaskTimedOutEventAttributes(%+v)", *p)
+}
+
+// Attributes:
 //  - ActivityId
 //  - ActivityType
 //  - TaskList
@@ -5489,6 +5687,7 @@ func (p *TimerFiredEventAttributes) String() string {
 //  - WorkflowExecutionTimedOutEventAttributes
 //  - DecisionTaskScheduledEventAttributes
 //  - DecisionTaskStartedEventAttributes
+//  - DecisionTaskTimedOutEventAttributes
 //  - DecisionTaskCompletedEventAttributes
 //  - ActivityTaskScheduledEventAttributes
 //  - ActivityTaskStartedEventAttributes
@@ -5517,7 +5716,9 @@ type HistoryEvent struct {
 	DecisionTaskScheduledEventAttributes *DecisionTaskScheduledEventAttributes `thrift:"decisionTaskScheduledEventAttributes,55" db:"decisionTaskScheduledEventAttributes" json:"decisionTaskScheduledEventAttributes,omitempty"`
 	// unused fields # 56 to 59
 	DecisionTaskStartedEventAttributes *DecisionTaskStartedEventAttributes `thrift:"decisionTaskStartedEventAttributes,60" db:"decisionTaskStartedEventAttributes" json:"decisionTaskStartedEventAttributes,omitempty"`
-	// unused fields # 61 to 64
+	// unused fields # 61 to 62
+	DecisionTaskTimedOutEventAttributes *DecisionTaskTimedOutEventAttributes `thrift:"decisionTaskTimedOutEventAttributes,63" db:"decisionTaskTimedOutEventAttributes" json:"decisionTaskTimedOutEventAttributes,omitempty"`
+	// unused field # 64
 	DecisionTaskCompletedEventAttributes *DecisionTaskCompletedEventAttributes `thrift:"decisionTaskCompletedEventAttributes,65" db:"decisionTaskCompletedEventAttributes" json:"decisionTaskCompletedEventAttributes,omitempty"`
 	// unused fields # 66 to 69
 	ActivityTaskScheduledEventAttributes *ActivityTaskScheduledEventAttributes `thrift:"activityTaskScheduledEventAttributes,70" db:"activityTaskScheduledEventAttributes" json:"activityTaskScheduledEventAttributes,omitempty"`
@@ -5620,6 +5821,15 @@ func (p *HistoryEvent) GetDecisionTaskStartedEventAttributes() *DecisionTaskStar
 		return HistoryEvent_DecisionTaskStartedEventAttributes_DEFAULT
 	}
 	return p.DecisionTaskStartedEventAttributes
+}
+
+var HistoryEvent_DecisionTaskTimedOutEventAttributes_DEFAULT *DecisionTaskTimedOutEventAttributes
+
+func (p *HistoryEvent) GetDecisionTaskTimedOutEventAttributes() *DecisionTaskTimedOutEventAttributes {
+	if !p.IsSetDecisionTaskTimedOutEventAttributes() {
+		return HistoryEvent_DecisionTaskTimedOutEventAttributes_DEFAULT
+	}
+	return p.DecisionTaskTimedOutEventAttributes
 }
 
 var HistoryEvent_DecisionTaskCompletedEventAttributes_DEFAULT *DecisionTaskCompletedEventAttributes
@@ -5738,6 +5948,10 @@ func (p *HistoryEvent) IsSetDecisionTaskStartedEventAttributes() bool {
 	return p.DecisionTaskStartedEventAttributes != nil
 }
 
+func (p *HistoryEvent) IsSetDecisionTaskTimedOutEventAttributes() bool {
+	return p.DecisionTaskTimedOutEventAttributes != nil
+}
+
 func (p *HistoryEvent) IsSetDecisionTaskCompletedEventAttributes() bool {
 	return p.DecisionTaskCompletedEventAttributes != nil
 }
@@ -5822,6 +6036,10 @@ func (p *HistoryEvent) Read(iprot thrift.TProtocol) error {
 			}
 		case 60:
 			if err := p.ReadField60(iprot); err != nil {
+				return err
+			}
+		case 63:
+			if err := p.ReadField63(iprot); err != nil {
 				return err
 			}
 		case 65:
@@ -5951,6 +6169,14 @@ func (p *HistoryEvent) ReadField60(iprot thrift.TProtocol) error {
 	return nil
 }
 
+func (p *HistoryEvent) ReadField63(iprot thrift.TProtocol) error {
+	p.DecisionTaskTimedOutEventAttributes = &DecisionTaskTimedOutEventAttributes{}
+	if err := p.DecisionTaskTimedOutEventAttributes.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.DecisionTaskTimedOutEventAttributes), err)
+	}
+	return nil
+}
+
 func (p *HistoryEvent) ReadField65(iprot thrift.TProtocol) error {
 	p.DecisionTaskCompletedEventAttributes = &DecisionTaskCompletedEventAttributes{}
 	if err := p.DecisionTaskCompletedEventAttributes.Read(iprot); err != nil {
@@ -6052,6 +6278,9 @@ func (p *HistoryEvent) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField60(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField63(oprot); err != nil {
 		return err
 	}
 	if err := p.writeField65(oprot); err != nil {
@@ -6220,6 +6449,21 @@ func (p *HistoryEvent) writeField60(oprot thrift.TProtocol) (err error) {
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 60:decisionTaskStartedEventAttributes: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryEvent) writeField63(oprot thrift.TProtocol) (err error) {
+	if p.IsSetDecisionTaskTimedOutEventAttributes() {
+		if err := oprot.WriteFieldBegin("decisionTaskTimedOutEventAttributes", thrift.STRUCT, 63); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 63:decisionTaskTimedOutEventAttributes: ", p), err)
+		}
+		if err := p.DecisionTaskTimedOutEventAttributes.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.DecisionTaskTimedOutEventAttributes), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 63:decisionTaskTimedOutEventAttributes: ", p), err)
 		}
 	}
 	return err

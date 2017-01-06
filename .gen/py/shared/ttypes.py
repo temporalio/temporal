@@ -2252,6 +2252,124 @@ class DecisionTaskCompletedEventAttributes:
   def __ne__(self, other):
     return not (self == other)
 
+class DecisionTaskTimedOutEventAttributes:
+  """
+  Attributes:
+   - scheduledEventId
+   - startedEventId
+   - timeoutType
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.I64, 'scheduledEventId', None, None, ), # 10
+    None, # 11
+    None, # 12
+    None, # 13
+    None, # 14
+    None, # 15
+    None, # 16
+    None, # 17
+    None, # 18
+    None, # 19
+    (20, TType.I64, 'startedEventId', None, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.I32, 'timeoutType', None, None, ), # 30
+  )
+
+  def __init__(self, scheduledEventId=None, startedEventId=None, timeoutType=None,):
+    self.scheduledEventId = scheduledEventId
+    self.startedEventId = startedEventId
+    self.timeoutType = timeoutType
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.I64:
+          self.scheduledEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.I64:
+          self.startedEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.I32:
+          self.timeoutType = iprot.readI32();
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('DecisionTaskTimedOutEventAttributes')
+    if self.scheduledEventId is not None:
+      oprot.writeFieldBegin('scheduledEventId', TType.I64, 10)
+      oprot.writeI64(self.scheduledEventId)
+      oprot.writeFieldEnd()
+    if self.startedEventId is not None:
+      oprot.writeFieldBegin('startedEventId', TType.I64, 20)
+      oprot.writeI64(self.startedEventId)
+      oprot.writeFieldEnd()
+    if self.timeoutType is not None:
+      oprot.writeFieldBegin('timeoutType', TType.I32, 30)
+      oprot.writeI32(self.timeoutType)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.scheduledEventId)
+    value = (value * 31) ^ hash(self.startedEventId)
+    value = (value * 31) ^ hash(self.timeoutType)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
 class ActivityTaskScheduledEventAttributes:
   """
   Attributes:
@@ -3246,6 +3364,7 @@ class HistoryEvent:
    - workflowExecutionTimedOutEventAttributes
    - decisionTaskScheduledEventAttributes
    - decisionTaskStartedEventAttributes
+   - decisionTaskTimedOutEventAttributes
    - decisionTaskCompletedEventAttributes
    - activityTaskScheduledEventAttributes
    - activityTaskStartedEventAttributes
@@ -3321,7 +3440,7 @@ class HistoryEvent:
     (60, TType.STRUCT, 'decisionTaskStartedEventAttributes', (DecisionTaskStartedEventAttributes, DecisionTaskStartedEventAttributes.thrift_spec), None, ), # 60
     None, # 61
     None, # 62
-    None, # 63
+    (63, TType.STRUCT, 'decisionTaskTimedOutEventAttributes', (DecisionTaskTimedOutEventAttributes, DecisionTaskTimedOutEventAttributes.thrift_spec), None, ), # 63
     None, # 64
     (65, TType.STRUCT, 'decisionTaskCompletedEventAttributes', (DecisionTaskCompletedEventAttributes, DecisionTaskCompletedEventAttributes.thrift_spec), None, ), # 65
     None, # 66
@@ -3366,7 +3485,7 @@ class HistoryEvent:
     (105, TType.STRUCT, 'completeWorkflowExecutionFailedEventAttributes', (CompleteWorkflowExecutionFailedEventAttributes, CompleteWorkflowExecutionFailedEventAttributes.thrift_spec), None, ), # 105
   )
 
-  def __init__(self, eventId=None, timestamp=None, eventType=None, workflowExecutionStartedEventAttributes=None, workflowExecutionCompletedEventAttributes=None, workflowExecutionFailedEventAttributes=None, workflowExecutionTimedOutEventAttributes=None, decisionTaskScheduledEventAttributes=None, decisionTaskStartedEventAttributes=None, decisionTaskCompletedEventAttributes=None, activityTaskScheduledEventAttributes=None, activityTaskStartedEventAttributes=None, activityTaskCompletedEventAttributes=None, activityTaskFailedEventAttributes=None, activityTaskTimedOutEventAttributes=None, timerStartedEventAttributes=None, timerFiredEventAttributes=None, completeWorkflowExecutionFailedEventAttributes=None,):
+  def __init__(self, eventId=None, timestamp=None, eventType=None, workflowExecutionStartedEventAttributes=None, workflowExecutionCompletedEventAttributes=None, workflowExecutionFailedEventAttributes=None, workflowExecutionTimedOutEventAttributes=None, decisionTaskScheduledEventAttributes=None, decisionTaskStartedEventAttributes=None, decisionTaskTimedOutEventAttributes=None, decisionTaskCompletedEventAttributes=None, activityTaskScheduledEventAttributes=None, activityTaskStartedEventAttributes=None, activityTaskCompletedEventAttributes=None, activityTaskFailedEventAttributes=None, activityTaskTimedOutEventAttributes=None, timerStartedEventAttributes=None, timerFiredEventAttributes=None, completeWorkflowExecutionFailedEventAttributes=None,):
     self.eventId = eventId
     self.timestamp = timestamp
     self.eventType = eventType
@@ -3376,6 +3495,7 @@ class HistoryEvent:
     self.workflowExecutionTimedOutEventAttributes = workflowExecutionTimedOutEventAttributes
     self.decisionTaskScheduledEventAttributes = decisionTaskScheduledEventAttributes
     self.decisionTaskStartedEventAttributes = decisionTaskStartedEventAttributes
+    self.decisionTaskTimedOutEventAttributes = decisionTaskTimedOutEventAttributes
     self.decisionTaskCompletedEventAttributes = decisionTaskCompletedEventAttributes
     self.activityTaskScheduledEventAttributes = activityTaskScheduledEventAttributes
     self.activityTaskStartedEventAttributes = activityTaskStartedEventAttributes
@@ -3444,6 +3564,12 @@ class HistoryEvent:
         if ftype == TType.STRUCT:
           self.decisionTaskStartedEventAttributes = DecisionTaskStartedEventAttributes()
           self.decisionTaskStartedEventAttributes.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 63:
+        if ftype == TType.STRUCT:
+          self.decisionTaskTimedOutEventAttributes = DecisionTaskTimedOutEventAttributes()
+          self.decisionTaskTimedOutEventAttributes.read(iprot)
         else:
           iprot.skip(ftype)
       elif fid == 65:
@@ -3546,6 +3672,10 @@ class HistoryEvent:
       oprot.writeFieldBegin('decisionTaskStartedEventAttributes', TType.STRUCT, 60)
       self.decisionTaskStartedEventAttributes.write(oprot)
       oprot.writeFieldEnd()
+    if self.decisionTaskTimedOutEventAttributes is not None:
+      oprot.writeFieldBegin('decisionTaskTimedOutEventAttributes', TType.STRUCT, 63)
+      self.decisionTaskTimedOutEventAttributes.write(oprot)
+      oprot.writeFieldEnd()
     if self.decisionTaskCompletedEventAttributes is not None:
       oprot.writeFieldBegin('decisionTaskCompletedEventAttributes', TType.STRUCT, 65)
       self.decisionTaskCompletedEventAttributes.write(oprot)
@@ -3600,6 +3730,7 @@ class HistoryEvent:
     value = (value * 31) ^ hash(self.workflowExecutionTimedOutEventAttributes)
     value = (value * 31) ^ hash(self.decisionTaskScheduledEventAttributes)
     value = (value * 31) ^ hash(self.decisionTaskStartedEventAttributes)
+    value = (value * 31) ^ hash(self.decisionTaskTimedOutEventAttributes)
     value = (value * 31) ^ hash(self.decisionTaskCompletedEventAttributes)
     value = (value * 31) ^ hash(self.activityTaskScheduledEventAttributes)
     value = (value * 31) ^ hash(self.activityTaskStartedEventAttributes)

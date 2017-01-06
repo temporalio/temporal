@@ -170,6 +170,13 @@ func (b *historyBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, startedE
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
+	startedEventID int64) *workflow.HistoryEvent {
+	event := newDecisionTaskTimedOutEvent(b.nextEventID, scheduleEventID, startedEventID)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID int64,
 	attributes *workflow.ScheduleActivityTaskDecisionAttributes) *workflow.HistoryEvent {
 	event := newActivityTaskScheduledEvent(b.nextEventID, decisionCompletedEventID, attributes)
@@ -247,6 +254,7 @@ func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
 }
 
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
+	//b.logger.Debugf("Adding EventId: %v, Event: %+v", event.GetEventId(), *event)
 	eventID := event.GetEventId()
 	switch event.GetEventType() {
 	case workflow.EventType_WorkflowExecutionStarted:
@@ -281,6 +289,19 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 		if !ok || e != startedEventID {
 			logInvalidHistoryActionEvent(b.logger, tagValueActionDecisionTaskCompleted, eventID, fmt.Sprintf(
 				"{DecisionCount: %v, ScheduleID: %v, StartedID: %v, Exist: %v, Value: %v}", outstandingDecisionCount,
+				scheduleEventID, startedEventID, ok, e))
+			return nil
+		}
+		b.previousDecisionTaskStartedEvent = startedEventID
+		delete(b.outstandingDecisionTask, scheduleEventID)
+	case workflow.EventType_DecisionTaskTimedOut:
+		outstandingDecisionCount := len(b.outstandingDecisionTask)
+		scheduleEventID := event.GetDecisionTaskTimedOutEventAttributes().GetScheduledEventId()
+		startedEventID := event.GetDecisionTaskTimedOutEventAttributes().GetStartedEventId()
+		e, ok := b.outstandingDecisionTask[scheduleEventID]
+		if !ok || e != startedEventID {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionDecisionTaskTimedOut, eventID, fmt.Sprintf(
+				"{DecisionCount: %v, ScheduleID: %v, StartedID: %v, Exist: %v, e: %v}", outstandingDecisionCount,
 				scheduleEventID, startedEventID, ok, e))
 			return nil
 		}
@@ -414,6 +435,17 @@ func newDecisionTaskCompletedEvent(eventID, scheduleEventID, startedEventID int6
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.Identity = common.StringPtr(request.GetIdentity())
 	historyEvent.DecisionTaskCompletedEventAttributes = attributes
+
+	return historyEvent
+}
+
+func newDecisionTaskTimedOutEvent(eventID, scheduleEventID int64, startedEventID int64) *workflow.HistoryEvent {
+	historyEvent := newHistoryEvent(eventID, workflow.EventType_DecisionTaskTimedOut)
+	attributes := workflow.NewDecisionTaskTimedOutEventAttributes()
+	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
+	attributes.StartedEventId = common.Int64Ptr(startedEventID)
+	attributes.TimeoutType = workflow.TimeoutTypePtr(workflow.TimeoutType_START_TO_CLOSE)
+	historyEvent.DecisionTaskTimedOutEventAttributes = attributes
 
 	return historyEvent
 }

@@ -32,5 +32,6 @@ type (
 
 	timerQueueProcessor interface {
 		common.Daemon
+		NotifyNewTimer()
 	}
 )
