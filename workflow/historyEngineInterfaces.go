@@ -28,6 +28,7 @@ type (
 
 	transferQueueProcessor interface {
 		common.Daemon
+		UpdateMaxAllowedReadLevel(maxAllowedReadLevel int64)
 	}
 
 	timerQueueProcessor interface {

@@ -39,13 +39,14 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	ackManager struct {
-		shard            ShardContext
-		executionMgr     persistence.ExecutionManager
-		logger           bark.Logger
-		lk               sync.RWMutex
-		outstandingTasks map[int64]bool
-		readLevel        int64
-		ackLevel         int64
+		shard               ShardContext
+		executionMgr        persistence.ExecutionManager
+		logger              bark.Logger
+		lk                  sync.RWMutex
+		outstandingTasks    map[int64]bool
+		readLevel           int64
+		ackLevel            int64
+		maxAllowedReadLevel int64
 	}
 
 	taskInfoWithLevel struct {
@@ -68,12 +69,13 @@ func newTransferQueueProcessor(shard ShardContext, executionManager persistence.
 func newAckManager(shard ShardContext, executionMgr persistence.ExecutionManager, logger bark.Logger) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
-		shard:            shard,
-		executionMgr:     executionMgr,
-		outstandingTasks: make(map[int64]bool),
-		readLevel:        ackLevel,
-		ackLevel:         ackLevel,
-		logger:           logger,
+		shard:               shard,
+		executionMgr:        executionMgr,
+		outstandingTasks:    make(map[int64]bool),
+		readLevel:           ackLevel,
+		ackLevel:            ackLevel,
+		maxAllowedReadLevel: shard.GetTransferSequenceNumber() - 1,
+		logger:              logger,
 	}
 }
 
@@ -102,6 +104,10 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 
 	t.logger.Info("Transfer queue processor stopped.")
+}
+
+func (t *transferQueueProcessorImpl) UpdateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
+	t.ackMgr.updateMaxAllowedReadLevel(maxAllowedReadLevel)
 }
 
 func (t *transferQueueProcessorImpl) processorPump() {
@@ -215,9 +221,10 @@ ProcessRetryLoop:
 
 func (a *ackManager) readTransferTasks() ([]*persistence.TaskInfo, error) {
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel: atomic.LoadInt64(&a.readLevel),
-		BatchSize: transferTaskBatchSize,
-		RangeID:   a.shard.GetRangeID(),
+		ReadLevel:    atomic.LoadInt64(&a.readLevel),
+		MaxReadLevel: atomic.LoadInt64(&a.maxAllowedReadLevel),
+		BatchSize:    transferTaskBatchSize,
+		RangeID:      a.shard.GetRangeID(),
 	})
 
 	if err != nil {
@@ -285,6 +292,15 @@ MoveAckLevelLoop:
 	if updatedAckLevel != -1 {
 		a.shard.UpdateAckLevel(updatedAckLevel)
 	}
+}
+
+func (a *ackManager) updateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
+	a.lk.Lock()
+	a.logger.Debugf("Updating max allowed read level for transfer tasks: %v", maxAllowedReadLevel)
+	if maxAllowedReadLevel > atomic.LoadInt64(&a.maxAllowedReadLevel) {
+		atomic.StoreInt64(&a.maxAllowedReadLevel, maxAllowedReadLevel)
+	}
+	a.lk.Unlock()
 }
 
 func minDuration(x, y time.Duration) time.Duration {

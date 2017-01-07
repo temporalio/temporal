@@ -193,9 +193,10 @@ type (
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
-		ReadLevel int64
-		BatchSize int
-		RangeID   int64
+		ReadLevel    int64
+		MaxReadLevel int64
+		BatchSize    int
+		RangeID      int64
 	}
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest

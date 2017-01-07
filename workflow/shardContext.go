@@ -14,6 +14,7 @@ type (
 		GetTransferAckLevel() int64
 		GetTimerSequenceNumber() int64
 		UpdateAckLevel(ackLevel int64) error
+		GetTransferSequenceNumber() int64
 	}
 
 	shardContextImpl struct {
@@ -47,6 +48,10 @@ func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: updatedShardInfo.RangeID,
 	})
+}
+
+func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
+	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
 func acquireShard(shardID int, executionManager persistence.ExecutionManager) (ShardContext, error) {

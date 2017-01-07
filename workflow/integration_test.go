@@ -148,7 +148,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	we, err0 := s.engine.StartWorkflowExecution(request)
 	s.Nil(err0)
 
-	s.logger.Infof("StartWorkflowExecution: response: %v \n", we)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
 
 	workflowComplete := false
 	activityCount := int32(10)

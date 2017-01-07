@@ -77,6 +77,10 @@ func (s *testShardContext) UpdateAckLevel(ackLevel int64) error {
 	return nil
 }
 
+func (s *testShardContext) GetTransferSequenceNumber() int64 {
+	return atomic.LoadInt64(&s.transferSequenceNumber)
+}
+
 func (s *testShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.RangeID, 100)
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
@@ -217,9 +221,10 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 // GetTransferTasks is a utility method to get tasks from transfer task queue
 func (s *TestBase) GetTransferTasks(batchSize int) ([]*TaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		ReadLevel: s.GetReadLevel(),
-		BatchSize: batchSize,
-		RangeID:   s.ShardContext.GetRangeID(),
+		ReadLevel:    s.GetReadLevel(),
+		MaxReadLevel: s.GetMaxAllowedReadLevel(),
+		BatchSize:    batchSize,
+		RangeID:      s.ShardContext.GetRangeID(),
 	})
 
 	if err != nil {
@@ -371,6 +376,11 @@ func (s *TestBase) GetNextSequenceNumber() int64 {
 // GetReadLevel returns the current read level for shard
 func (s *TestBase) GetReadLevel() int64 {
 	return atomic.LoadInt64(&s.readLevel)
+}
+
+// GetMaxAllowedReadLevel returns the maximum allowed read level for the shard
+func (s *TestBase) GetMaxAllowedReadLevel() int64 {
+	return s.ShardContext.GetTransferSequenceNumber()
 }
 
 func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool, schemaDir string) {

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ func (s *transferQueueProcessorSuite) TearDownSuite() {
 func (s *transferQueueProcessorSuite) SetupTest() {
 	// First cleanup transfer tasks from other tests and reset shard context
 	s.ClearTransferQueue()
+	s.processor.UpdateMaxAllowedReadLevel(math.MaxInt64)
 }
 
 func (s *transferQueueProcessorSuite) TestNoTransferTask() {

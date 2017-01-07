@@ -61,10 +61,13 @@ func (s *engineSuite) SetupTest() {
 		transferSequenceNumber: 1,
 	}
 
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockTaskMgr, s.logger)
+	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	s.mockHistoryEngine = &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
-		txProcessor:      newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockTaskMgr, s.logger),
+		txProcessor:      txProcessor,
+		tracker:          tracker,
 		logger:           s.logger,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 	}

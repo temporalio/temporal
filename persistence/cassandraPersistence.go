@@ -152,7 +152,8 @@ const (
 		`and type = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
-		`and task_id > ? LIMIT ?`
+		`and task_id > ? ` +
+		`and task_id <= ? LIMIT ?`
 
 	templateUpdateTransferTaskQuery = `UPDATE executions ` +
 		`SET transfer = ` + templateTaskType + ` ` +
@@ -545,6 +546,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		request.ReadLevel,
+		request.MaxReadLevel,
 		request.BatchSize).Consistency(d.lowConslevel)
 
 	iter := query.Iter()

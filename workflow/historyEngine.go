@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"sync"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -19,6 +20,7 @@ type (
 		txProcessor      transferQueueProcessor
 		timerProcessor   timerQueueProcessor
 		tokenSerializer  taskTokenSerializer
+		tracker          *pendingTaskTracker
 		logger           bark.Logger
 	}
 
@@ -32,18 +34,42 @@ type (
 		tBuilder          *timerBuilder
 		deleteTimerTask   persistence.Task
 	}
+
+	pendingTaskTracker struct {
+		shard        ShardContext
+		txProcessor  transferQueueProcessor
+		logger       bark.Logger
+		lk           sync.RWMutex
+		pendingTasks map[int64]bool
+		minID        int64
+		maxID        int64
+	}
 )
 
-// NewHistoryEngineWithShardContext creates an instance of history engine
-func NewHistoryEngineWithShardContext(shard ShardContext,
-	executionManager persistence.ExecutionManager, taskManager persistence.TaskManager,
-	logger bark.Logger) HistoryEngine {
+func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcessor,
+	logger bark.Logger) *pendingTaskTracker {
+	return &pendingTaskTracker{
+		shard:        shard,
+		txProcessor:  txProcessor,
+		pendingTasks: make(map[int64]bool),
+		minID:        shard.GetTransferSequenceNumber(),
+		maxID:        shard.GetTransferSequenceNumber(),
+		logger:       logger,
+	}
+}
 
+// NewHistoryEngineWithShardContext creates an instance of history engine
+func NewHistoryEngineWithShardContext(shard ShardContext, executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
+
+	txProcessor := newTransferQueueProcessor(shard, executionManager, taskManager, logger)
+	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		executionManager: executionManager,
-		txProcessor:      newTransferQueueProcessor(shard, executionManager, taskManager, logger),
+		txProcessor:      txProcessor,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
+		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
@@ -60,11 +86,15 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 		logger.WithField("error", err).Error("failed to acquire shard")
 		return nil
 	}
+
+	txProcessor := newTransferQueueProcessor(shard, executionManager, taskManager, logger)
+	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		executionManager: executionManager,
-		txProcessor:      newTransferQueueProcessor(shard, executionManager, taskManager, logger),
+		txProcessor:      txProcessor,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
+		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
@@ -109,6 +139,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		return nil, serializedError
 	}
 
+	id := e.tracker.getNextTaskID()
+	defer e.tracker.completeTask(id)
 	_, err := e.executionManager.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 		Execution:          workflowExecution,
 		TaskList:           request.GetTaskList().GetName(),
@@ -117,7 +149,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		NextEventID:        builder.nextEventID,
 		LastProcessedEvent: 0,
 		TransferTasks: []persistence.Task{&persistence.DecisionTask{
-			TaskID:   e.shard.GetTransferTaskID(),
+			TaskID:   id,
 			TaskList: taskList, ScheduleID: dt.GetEventId(),
 		}},
 		RangeID: e.shard.GetRangeID(),
@@ -290,8 +322,10 @@ Update_History_Loop:
 			case workflow.DecisionType_ScheduleActivityTask:
 				attributes := d.GetScheduleActivityTaskDecisionAttributes()
 				scheduleEvent := builder.AddActivityTaskScheduledEvent(completedID, attributes)
+				id := e.tracker.getNextTaskID()
+				defer e.tracker.completeTask(id)
 				transferTasks = append(transferTasks, &persistence.ActivityTask{
-					TaskID:     e.shard.GetTransferTaskID(),
+					TaskID:     id,
 					TaskList:   attributes.GetTaskList().GetName(),
 					ScheduleID: scheduleEvent.GetEventId(),
 				})
@@ -325,8 +359,10 @@ Update_History_Loop:
 			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
+			id := e.tracker.getNextTaskID()
+			defer e.tracker.completeTask(id)
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
-				TaskID:     e.shard.GetTransferTaskID(),
+				TaskID:     id,
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			})
@@ -391,8 +427,10 @@ Update_History_Loop:
 			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
+			id := e.tracker.getNextTaskID()
+			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskID:     e.shard.GetTransferTaskID(),
+				TaskID:     id,
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
@@ -451,8 +489,10 @@ Update_History_Loop:
 			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
+			id := e.tracker.getNextTaskID()
+			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskID:     e.shard.GetTransferTaskID(),
+				TaskID:     id,
 				TaskList:   startAttributes.GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
@@ -622,4 +662,45 @@ func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 	}
 
 	return err
+}
+
+func (t *pendingTaskTracker) getNextTaskID() int64 {
+	t.lk.Lock()
+	nextID := t.shard.GetTransferTaskID()
+	if nextID != t.maxID+1 {
+		t.logger.Fatalf("No holes allowed for nextID.  nextID: %v, MaxID: %v", nextID, t.maxID)
+	}
+	t.pendingTasks[nextID] = false
+	t.maxID = nextID
+	t.lk.Unlock()
+
+	t.logger.Debugf("Generated new transfer task ID: %v", nextID)
+	return nextID
+}
+
+func (t *pendingTaskTracker) completeTask(taskID int64) {
+	t.lk.Lock()
+	updatedMin := int64(-1)
+	if _, ok := t.pendingTasks[taskID]; ok {
+		t.logger.Debugf("Completing transfer task ID: %v", taskID)
+		t.pendingTasks[taskID] = true
+
+	UpdateMinLoop:
+		for newMin := t.minID + 1; newMin <= t.maxID; newMin++ {
+			if done, ok := t.pendingTasks[newMin]; ok && done {
+				t.logger.Debugf("Updating minID for pending transfer tasks: %v", newMin)
+				t.minID = newMin
+				updatedMin = newMin
+				delete(t.pendingTasks, newMin)
+			} else {
+				break UpdateMinLoop
+			}
+		}
+	}
+
+	t.lk.Unlock()
+
+	if updatedMin != -1 {
+		t.txProcessor.UpdateMaxAllowedReadLevel(updatedMin)
+	}
 }
