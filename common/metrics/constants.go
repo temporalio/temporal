@@ -83,6 +83,7 @@ const (
 	RespondActivityTaskCompletedScope
 	RespondActivityTaskFailedScope
 	GetWorkflowExecutionHistoryScope
+	GetTimerIndexTasksScope
 )
 
 // ScopeToTags record the scope name for all services
@@ -108,6 +109,7 @@ var ScopeToTags = [NumServices][]map[string]string{
 		{OperationTagName: RespondActivityTaskCompletedOperationTagValue},
 		{OperationTagName: RespondActivityTaskFailedOperationTagValue},
 		{OperationTagName: GetWorkflowExecutionHistoryOperationTagValue},
+		{OperationTagName: GetTimerIndexTasksOperationTagValue},
 	},
 }
 
@@ -165,6 +167,7 @@ const (
 	RespondActivityTaskCompletedOperationTagValue = "RespondActivityTaskCompleted"
 	RespondActivityTaskFailedOperationTagValue    = "RespondActivityTaskFailed"
 	GetWorkflowExecutionHistoryOperationTagValue  = "GetWorkflowExecutionHistory"
+	GetTimerIndexTasksOperationTagValue           = "GetTimerIndexTasks"
 )
 
 // ErrorClass is an enum to help with classifying SLA vs. non-SLA errors (SLA = "service level agreement")

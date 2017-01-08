@@ -178,8 +178,17 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *persi
 }
 
 func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
-	// TODO:
-	return nil, nil
+	p.m3Client.IncCounter(metrics.GetTimerIndexTasksScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.GetTimerIndexTasksScope, metrics.WorkflowLatencyTimer)
+	resonse, err := p.persistence.GetTimerIndexTasks(request)
+	sw.Stop()
+
+	if err != nil {
+		p.m3Client.IncCounter(metrics.GetTimerIndexTasksScope, metrics.WorkflowFailures)
+	}
+
+	return resonse, err
 }
 
 func (p *taskPersistenceClient) CreateTask(request *persistence.CreateTaskRequest) (*persistence.CreateTaskResponse, error) {
