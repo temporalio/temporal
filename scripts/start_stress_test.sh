@@ -16,7 +16,7 @@ port=9042
 workflow_keyspace="workflow"
 
 DROP_UBER_MINIONS="$HOME/uber-minions"
-DROP_CMD=$DROP/cmd/stress/
+DROP_CMD=$DROP_UBER_MINIONS/cmd/stress/
 STRESS_LOG=stress_output.log
 
 # cmd/stress/stress -emitMetric=m3 -host="10.185.19.27,10.184.45.6,10.185.27.8,10.185.17.12,10.185.15.30"
