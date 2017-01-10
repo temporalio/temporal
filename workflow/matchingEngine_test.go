@@ -108,7 +108,19 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 
 	// Lets do something
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{
+		"tId",
+		&persistence.TaskInfo{
+			WorkflowID:     "wId",
+			RunID:          "rId",
+			TaskID:         int64(1),
+			TaskList:       tl,
+			TaskType:       1,
+			ScheduleID:     1 + firstEventID,
+			VisibilityTime: time.Time{},
+			LockToken:      "lock",
+			DeliveryCount:  0,
+		}}}}
 	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 	actType := workflow.NewActivityType()
@@ -180,7 +192,19 @@ func (s *matchingEngineSuite) TestPollForActivityTasksIfTaskAlreadyStarted() {
 
 	taskRequest := &persistence.GetTasksRequest{TaskList: "makeBreakfast", TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 2 + firstEventID, time.Time{}, "lock", 0}}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{
+		"tId",
+		&persistence.TaskInfo{
+			WorkflowID:     "wId",
+			RunID:          "rId",
+			TaskID:         int64(1),
+			TaskList:       tl,
+			TaskType:       1,
+			ScheduleID:     2 + firstEventID,
+			VisibilityTime: time.Time{},
+			LockToken:      "lock",
+			DeliveryCount:  0,
+		}}}}
 	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 
 	request := &workflow.StartWorkflowExecutionRequest{
@@ -243,7 +267,19 @@ func (s *matchingEngineSuite) TestPollForActivityTasksOnConditionalUpdateFail() 
 
 	taskRequest := &persistence.GetTasksRequest{TaskList: tl, TaskType: 1, LockTimeout: taskLockDuration, BatchSize: 1}
 
-	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, 1, 1 + firstEventID, time.Time{}, "lock", 0}}}}
+	resp := &persistence.GetTasksResponse{Tasks: []*persistence.TaskInfoWithID{{
+		"tId",
+		&persistence.TaskInfo{
+			WorkflowID:     "wId",
+			RunID:          "rId",
+			TaskID:         int64(1),
+			TaskList:       tl,
+			TaskType:       1,
+			ScheduleID:     1 + firstEventID,
+			VisibilityTime: time.Time{},
+			LockToken:      "lock",
+			DeliveryCount:  0,
+		}}}}
 	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 
@@ -385,7 +421,17 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfNoExecution() {
 	}
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, 2, time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{
+			WorkflowID:     "wId",
+			RunID:          "rId",
+			TaskID:         int64(1),
+			TaskList:       tl,
+			TaskType:       persistence.TaskTypeDecision,
+			ScheduleID:     2,
+			VisibilityTime: time.Time{},
+			LockToken:      "lock",
+			DeliveryCount:  0,
+		}}},
 	}
 
 	s.mockTaskMgr.On("GetTasks", taskRequest).Return(taskResponse, nil)
@@ -421,7 +467,17 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyStarted() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{
+			WorkflowID:     "wId",
+			RunID:          "rId",
+			TaskID:         int64(1),
+			TaskList:       tl,
+			TaskType:       persistence.TaskTypeDecision,
+			ScheduleID:     scheduleEvent.GetEventId(),
+			VisibilityTime: time.Time{},
+			LockToken:      "lock",
+			DeliveryCount:  0,
+		}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -472,7 +528,18 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyCompleted() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId",
+			&persistence.TaskInfo{
+				WorkflowID:     "wId",
+				RunID:          "rId",
+				TaskID:         int64(1),
+				TaskList:       tl,
+				TaskType:       persistence.TaskTypeDecision,
+				ScheduleID:     scheduleEvent.GetEventId(),
+				VisibilityTime: time.Time{},
+				LockToken:      "lock",
+				DeliveryCount:  0,
+			}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -520,7 +587,18 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksConflict() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId",
+			&persistence.TaskInfo{
+				WorkflowID:     "wId",
+				RunID:          "rId",
+				TaskID:         int64(1),
+				TaskList:       tl,
+				TaskType:       persistence.TaskTypeDecision,
+				ScheduleID:     scheduleEvent.GetEventId(),
+				VisibilityTime: time.Time{},
+				LockToken:      "lock",
+				DeliveryCount:  0,
+			}}},
 	}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
@@ -591,7 +669,18 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksMaxAttemptsExceeded() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"rId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"rId",
+			&persistence.TaskInfo{
+				WorkflowID:     "wId",
+				RunID:          "rId",
+				TaskID:         int64(1),
+				TaskList:       tl,
+				TaskType:       persistence.TaskTypeDecision,
+				ScheduleID:     scheduleEvent.GetEventId(),
+				VisibilityTime: time.Time{},
+				LockToken:      "lock",
+				DeliveryCount:  0,
+			}}},
 	}
 
 	s.mockTaskMgr.On("GetTasks", taskRequest).Return(taskResponse, nil)
@@ -642,7 +731,18 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksSuccess() {
 	history, _ := builder.Serialize()
 
 	taskResponse := &persistence.GetTasksResponse{
-		Tasks: []*persistence.TaskInfoWithID{{"tId", &persistence.TaskInfo{"wId", "rId", int64(1), tl, persistence.TaskTypeDecision, scheduleEvent.GetEventId(), time.Time{}, "lock", 0}}},
+		Tasks: []*persistence.TaskInfoWithID{{"tId",
+			&persistence.TaskInfo{
+				WorkflowID:     "wId",
+				RunID:          "rId",
+				TaskID:         int64(1),
+				TaskList:       tl,
+				TaskType:       persistence.TaskTypeDecision,
+				ScheduleID:     scheduleEvent.GetEventId(),
+				VisibilityTime: time.Time{},
+				LockToken:      "lock",
+				DeliveryCount:  0,
+			}}},
 	}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
