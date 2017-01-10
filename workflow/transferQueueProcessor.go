@@ -140,6 +140,7 @@ func (t *transferQueueProcessorImpl) processorPump() {
 			pollTimer = time.NewTimer(pollInterval)
 		case <-updateAckTimer.C:
 			t.ackMgr.updateAckLevel()
+			updateAckTimer = time.NewTimer(transferProcessorUpdateAckInterval)
 		}
 	}
 }
