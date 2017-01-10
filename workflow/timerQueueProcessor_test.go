@@ -45,11 +45,14 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 
 	shard := &shardContextImpl{shardInfo: resp.ShardInfo}
+	txProcessor := newTransferQueueProcessor(shard, s.WorkflowMgr, s.TaskMgr, s.logger)
+	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		executionManager: s.WorkflowMgr,
-		txProcessor:      newTransferQueueProcessor(shard, s.WorkflowMgr, s.TaskMgr, s.logger),
+		txProcessor:      txProcessor,
 		logger:           s.logger,
+		tracker:          tracker,
 		tokenSerializer:  newJSONTaskTokenSerializer(),
 	}
 }

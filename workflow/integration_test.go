@@ -222,8 +222,6 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	s.False(workflowComplete)
 	s.Nil(poller.pollAndProcessDecisionTask(true))
 	s.True(workflowComplete)
-
-	s.logger.Infof("End of test\n")
 }
 
 func (p *taskPoller) pollAndProcessDecisionTask(dumpHistory bool) error {
@@ -233,6 +231,10 @@ retry:
 			TaskList: p.taskList,
 			Identity: common.StringPtr(p.identity),
 		})
+
+		if err1 == errDuplicate {
+			continue retry
+		}
 
 		if err1 != nil {
 			return err1
@@ -267,6 +269,10 @@ retry:
 			TaskList: p.taskList,
 			Identity: common.StringPtr(p.identity),
 		})
+
+		if err1 == errDuplicate {
+			continue retry
+		}
 
 		if err1 != nil {
 			return err1

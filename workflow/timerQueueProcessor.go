@@ -290,6 +290,8 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		return fmt.Errorf("The key didn't match - SequenceID: %d, found task: %v", key, timerTask)
 	}
 
+	t.logger.Debugf("Processing found timer: %s, timer: %+v", SequenceID(timerTask.TaskID), timerTask)
+
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(timerTask.WorkflowID),
 		RunId:      common.StringPtr(timerTask.RunID),
@@ -345,11 +347,14 @@ Update_History_Loop:
 				builder.AddDecisionTaskTimedOutEvent(scheduleID, startedID)
 
 				// Schedule a new decision.
+				id := t.historyService.tracker.getNextTaskID()
+				defer t.historyService.tracker.completeTask(id)
 				startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
 				startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
 				newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 					startAttributes.GetTaskStartToCloseTimeoutSeconds())
 				transferTasks = []persistence.Task{&persistence.DecisionTask{
+					TaskID:     id,
 					TaskList:   startAttributes.GetTaskList().GetName(),
 					ScheduleID: newDecisionEvent.GetEventId(),
 				}}

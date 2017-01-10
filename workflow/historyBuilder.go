@@ -305,7 +305,6 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 				scheduleEventID, startedEventID, ok, e))
 			return nil
 		}
-		b.previousDecisionTaskStartedEvent = startedEventID
 		delete(b.outstandingDecisionTask, scheduleEventID)
 	case workflow.EventType_ActivityTaskScheduled:
 		if e, ok := b.outstandingActivities[eventID]; ok {
