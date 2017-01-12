@@ -210,12 +210,12 @@ Update_History_Loop:
 		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID,
 				isRunning)
-			return nil, errDuplicate
+			return nil, ErrDuplicate
 		}
 
 		event := builder.AddDecisionTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, errCreateEvent
+			return nil, ErrCreateEvent
 		}
 
 		// Start a timer for the decision task.
@@ -228,7 +228,7 @@ Update_History_Loop:
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
 		if err2 := context.updateWorkflowExecution(nil, timerTasks); err2 != nil {
-			if err2 == errConflict {
+			if err2 == ErrConflict {
 				continue Update_History_Loop
 			}
 
@@ -238,7 +238,7 @@ Update_History_Loop:
 		return e.createRecordDecisionTaskStartedResponse(context, event), nil
 	}
 
-	return nil, errMaxAttemptsExceeded
+	return nil, ErrMaxAttemptsExceeded
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
@@ -258,18 +258,18 @@ Update_History_Loop:
 		if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, startedID,
 				isRunning)
-			return nil, errDuplicate
+			return nil, ErrDuplicate
 		}
 
 		event := builder.AddActivityTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, errCreateEvent
+			return nil, ErrCreateEvent
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operationi again.
 		if err2 := context.updateWorkflowExecution(nil, nil); err2 != nil {
-			if err2 == errConflict {
+			if err2 == ErrConflict {
 				continue Update_History_Loop
 			}
 
@@ -282,7 +282,7 @@ Update_History_Loop:
 		return response, nil
 	}
 
-	return nil, errMaxAttemptsExceeded
+	return nil, ErrMaxAttemptsExceeded
 }
 
 // RespondDecisionTaskCompleted completes a decision task
@@ -371,7 +371,7 @@ Update_History_Loop:
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
 		if err := context.updateWorkflowExecutionWithContext(request.GetExecutionContext(), transferTasks); err != nil {
-			if err == errConflict {
+			if err == ErrConflict {
 				continue Update_History_Loop
 			}
 
@@ -387,7 +387,7 @@ Update_History_Loop:
 		return nil
 	}
 
-	return errMaxAttemptsExceeded
+	return ErrMaxAttemptsExceeded
 }
 
 // RespondActivityTaskCompleted completes an activity task.
@@ -439,7 +439,7 @@ Update_History_Loop:
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
 		if err := context.updateWorkflowExecution(transferTasks, nil); err != nil {
-			if err == errConflict {
+			if err == ErrConflict {
 				continue Update_History_Loop
 			}
 
@@ -449,7 +449,7 @@ Update_History_Loop:
 		return nil
 	}
 
-	return errMaxAttemptsExceeded
+	return ErrMaxAttemptsExceeded
 }
 
 // RespondActivityTaskFailed completes an activity task failure.
@@ -501,7 +501,7 @@ Update_History_Loop:
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
 		if err := context.updateWorkflowExecution(transferTasks, nil); err != nil {
-			if err == errConflict {
+			if err == ErrConflict {
 				continue Update_History_Loop
 			}
 
@@ -511,7 +511,7 @@ Update_History_Loop:
 		return nil
 	}
 
-	return errMaxAttemptsExceeded
+	return ErrMaxAttemptsExceeded
 }
 
 func (e *historyEngineImpl) getWorkflowExecutionWithRetry(
@@ -637,7 +637,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
-			return errConflict
+			return ErrConflict
 		}
 
 		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateWorkflowExecution, err,

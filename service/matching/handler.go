@@ -38,6 +38,11 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	return nil
 }
 
+// Stop stops the handler
+func (h *Handler) Stop() {
+	h.Service.Stop()
+}
+
 // IsHealthy - Health endpoint.
 func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 	h.Service.GetLogger().Info("Workflow Health endpoint reached.")
@@ -59,11 +64,13 @@ func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionT
 // PollForActivityTask - long poll for an activity task.
 func (h *Handler) PollForActivityTask(ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
+	h.Service.GetLogger().Debug("Engine Received PollForActivityTask")
 	return h.engine.PollForActivityTask(pollRequest)
 }
 
 // PollForDecisionTask - long poll for a decision task.
 func (h *Handler) PollForDecisionTask(ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
+	h.Service.GetLogger().Debug("Engine Received PollForDecisionTask")
 	return h.engine.PollForDecisionTask(pollRequest)
 }

@@ -35,6 +35,12 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) {
 	h.Service.Start(thriftService)
 }
 
+// Stop stops the handler
+func (h *Handler) Stop() {
+	h.Service.Stop()
+	h.engine.Stop()
+}
+
 // IsHealthy - Health endpoint.
 func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 	log.Println("Workflow Health endpoint reached.")

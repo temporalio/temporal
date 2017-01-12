@@ -94,7 +94,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 	_, err := s.mockMatchingEngine.pollForActivityTaskOperation(&workflow.PollForActivityTaskRequest{
 		TaskList: taskList,
 		Identity: &identity})
-	s.Equal(errNoTasks, err)
+	s.Equal(ErrNoTasks, err)
 	s.mockTaskMgr.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 
@@ -253,7 +253,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasksIfTaskAlreadyStarted() {
 	activityTasks, err = s.mockMatchingEngine.pollForActivityTaskOperation(&workflow.PollForActivityTaskRequest{
 		TaskList: taskList,
 		Identity: &identity})
-	s.Equal(err, errDuplicate)
+	s.Equal(err, ErrDuplicate)
 
 	s.Equal((*workflow.PollForActivityTaskResponse)(nil), activityTasks)
 }
@@ -379,7 +379,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksNoTasks() {
 		Identity: &identity,
 	})
 	s.NotNil(err)
-	s.Equal(errNoTasks, err)
+	s.Equal(ErrNoTasks, err)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksIfGetTaskFailed() {
@@ -502,7 +502,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyStarted() {
 		Identity: &identity,
 	})
 	s.NotNil(err)
-	s.Equal(errDuplicate, err)
+	s.Equal(ErrDuplicate, err)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyCompleted() {
@@ -564,7 +564,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksIfTaskAlreadyCompleted() {
 		Identity: &identity,
 	})
 	s.NotNil(err)
-	s.Equal(errDuplicate, err)
+	s.Equal(ErrDuplicate, err)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksConflict() {
@@ -708,7 +708,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksMaxAttemptsExceeded() {
 		Identity: &identity,
 	})
 	s.NotNil(err)
-	s.Equal(errMaxAttemptsExceeded, err)
+	s.Equal(ErrMaxAttemptsExceeded, err)
 }
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksSuccess() {

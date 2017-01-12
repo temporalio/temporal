@@ -427,7 +427,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 		Identity:         &identity,
 	})
 	s.NotNil(err)
-	s.Equal(errMaxAttemptsExceeded, err)
+	s.Equal(ErrMaxAttemptsExceeded, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
@@ -1062,7 +1062,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 		Result_:   activityResult,
 		Identity:  &identity,
 	})
-	s.Equal(errMaxAttemptsExceeded, err)
+	s.Equal(ErrMaxAttemptsExceeded, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
@@ -1407,7 +1407,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 		TaskToken: taskToken,
 		Identity:  &identity,
 	})
-	s.Equal(errMaxAttemptsExceeded, err)
+	s.Equal(ErrMaxAttemptsExceeded, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {

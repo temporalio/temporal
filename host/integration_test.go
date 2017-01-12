@@ -18,30 +18,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package host
 
 import (
+	"flag"
 	"os"
 	"testing"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
+	tchannel "github.com/uber/tchannel-go"
 
 	"bytes"
 	"encoding/binary"
 	"strconv"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/frontend"
 	"code.uber.internal/devexp/minions/common"
+	wf "code.uber.internal/devexp/minions/workflow"
+)
+
+var (
+	integration = flag.Bool("integration", false, "run integration tests")
 )
 
 type (
 	integrationSuite struct {
-		engine Engine
+		host   Cadence
+		ch     *tchannel.Channel
+		engine frontend.Client
 		logger bark.Logger
 		suite.Suite
-		TestBase
+		wf.TestBase
 	}
 
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -50,7 +60,7 @@ type (
 		activityID string, startedEventID int64, input []byte) ([]byte, error)
 
 	taskPoller struct {
-		engine          Engine
+		engine          frontend.Client
 		taskList        *workflow.TaskList
 		identity        string
 		decisionHandler decisionTaskHandler
@@ -60,8 +70,13 @@ type (
 )
 
 func TestIntegrationSuite(t *testing.T) {
-	s := new(integrationSuite)
-	suite.Run(t, s)
+	flag.Parse()
+	if *integration {
+		s := new(integrationSuite)
+		suite.Run(t, s)
+	} else {
+		t.Skip()
+	}
 }
 
 func (s *integrationSuite) SetupSuite() {
@@ -73,6 +88,8 @@ func (s *integrationSuite) SetupSuite() {
 	logger := log.New()
 	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
+
+	s.ch, _ = tchannel.NewChannel("cadence-integration-test", nil)
 }
 
 func (s *integrationSuite) TearDownSuite() {
@@ -81,13 +98,14 @@ func (s *integrationSuite) TearDownSuite() {
 
 func (s *integrationSuite) SetupTest() {
 	s.ClearTransferQueue()
-	s.engine = NewWorkflowEngineWithShard(s.ShardContext, s.WorkflowMgr, s.TaskMgr, s.logger)
-	s.engine.Start()
+	s.host = NewCadence(s.WorkflowMgr, s.TaskMgr, s.logger)
+	s.host.Start()
+	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
 }
 
 func (s *integrationSuite) TearDownTest() {
-	s.engine.Stop()
-	s.engine = nil
+	s.host.Stop()
+	s.host = nil
 }
 
 func (s *integrationSuite) TestStartWorkflowExecution() {
@@ -232,7 +250,7 @@ retry:
 			Identity: common.StringPtr(p.identity),
 		})
 
-		if err1 == errDuplicate {
+		if err1 == wf.ErrDuplicate {
 			continue retry
 		}
 
@@ -240,12 +258,12 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == emptyPollForDecisionTaskResponse {
+		if response == nil || response == wf.EmptyPollForDecisionTaskResponse {
 			continue retry
 		}
 
 		if dumpHistory {
-			printHistory(response.GetHistory(), p.logger)
+			wf.PrintHistory(response.GetHistory(), p.logger)
 		}
 
 		context, decisions := p.decisionHandler(response.GetWorkflowExecution(), response.GetWorkflowType(),
@@ -259,7 +277,7 @@ retry:
 		})
 	}
 
-	return errNoTasks
+	return wf.ErrNoTasks
 }
 
 func (p *taskPoller) pollAndProcessActivityTask() error {
@@ -270,7 +288,7 @@ retry:
 			Identity: common.StringPtr(p.identity),
 		})
 
-		if err1 == errDuplicate {
+		if err1 == wf.ErrDuplicate {
 			continue retry
 		}
 
@@ -278,7 +296,7 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == emptyPollForActivityTaskResponse {
+		if response == nil || response == wf.EmptyPollForActivityTaskResponse {
 			continue retry
 		}
 
@@ -299,17 +317,5 @@ retry:
 		})
 	}
 
-	return errNoTasks
-}
-
-func printHistory(history *workflow.History, logger bark.Logger) {
-	serializer := newJSONHistorySerializer()
-	data, err := serializer.Serialize(history.GetEvents())
-	if err != nil {
-		logger.Errorf("Error serializing history: %v\n", err)
-	}
-
-	logger.Info("******************************************")
-	logger.Infof("History: %v", string(data))
-	logger.Info("******************************************")
+	return wf.ErrNoTasks
 }

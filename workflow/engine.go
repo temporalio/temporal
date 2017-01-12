@@ -35,16 +35,23 @@ type (
 )
 
 var (
-	emptyPollForDecisionTaskResponse = workflow.NewPollForDecisionTaskResponse()
-	emptyPollForActivityTaskResponse = workflow.NewPollForActivityTaskResponse()
+	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
+	EmptyPollForDecisionTaskResponse = workflow.NewPollForDecisionTaskResponse()
+	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
+	EmptyPollForActivityTaskResponse = workflow.NewPollForActivityTaskResponse()
 	persistenceOperationRetryPolicy  = createPersistanceRetryPolicy()
 	longPollRetryPolicy              = createLongPollRetryPolicy()
 
-	errDuplicate           = errors.New("Duplicate task, completing it")
-	errCreateEvent         = errors.New("Can't create activity task started event")
-	errNoTasks             = errors.New("No tasks")
-	errConflict            = errors.New("Conditional update failed")
-	errMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
+	// ErrDuplicate is exported temporarily for integration test
+	ErrDuplicate = errors.New("Duplicate task, completing it")
+	// ErrCreateEvent is exported temporarily for integration test
+	ErrCreateEvent = errors.New("Can't create activity task started event")
+	// ErrNoTasks is exported temporarily for integration test
+	ErrNoTasks = errors.New("No tasks")
+	// ErrConflict is exported temporarily for integration test
+	ErrConflict = errors.New("Conditional update failed")
+	// ErrMaxAttemptsExceeded is exported temporarily for integration test
+	ErrMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
 )
 
 // NewWorkflowEngineWithShard creates an instannce of engine.
@@ -143,7 +150,7 @@ func isPersistenceTransientError(err error) bool {
 }
 
 func isLongPollRetryableError(err error) bool {
-	if err == errNoTasks {
+	if err == ErrNoTasks || err == ErrDuplicate {
 		return true
 	}
 
@@ -152,4 +159,17 @@ func isLongPollRetryableError(err error) bool {
 
 func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {
 	return &execution
+}
+
+// PrintHistory prints history
+func PrintHistory(history *workflow.History, logger bark.Logger) {
+	serializer := newJSONHistorySerializer()
+	data, err := serializer.Serialize(history.GetEvents())
+	if err != nil {
+		logger.Errorf("Error serializing history: %v\n", err)
+	}
+
+	logger.Info("******************************************")
+	logger.Infof("History: %v", string(data))
+	logger.Info("******************************************")
 }

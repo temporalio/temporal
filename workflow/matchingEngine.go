@@ -51,8 +51,8 @@ func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisi
 			return er
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
-	if err != nil && err == errNoTasks {
-		return emptyPollForDecisionTaskResponse, nil
+	if err != nil && err == ErrNoTasks {
+		return EmptyPollForDecisionTaskResponse, nil
 	}
 
 	return response, err
@@ -69,8 +69,8 @@ func (e *matchingEngineImpl) PollForActivityTask(request *workflow.PollForActivi
 			return er
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
-	if err != nil && err == errNoTasks {
-		return emptyPollForActivityTaskResponse, nil
+	if err != nil && err == ErrNoTasks {
+		return EmptyPollForActivityTaskResponse, nil
 	}
 
 	return response, err
@@ -140,7 +140,7 @@ func (e *matchingEngineImpl) buildTaskContext(taskList string, taskType int) (*t
 	}
 
 	if len(getTaskResponse.Tasks) == 0 {
-		return nil, errNoTasks
+		return nil, ErrNoTasks
 	}
 
 	tWrapped := getTaskResponse.Tasks[0]

@@ -43,6 +43,11 @@ func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) error {
 	return nil
 }
 
+// Stop stops the handler
+func (wh *WorkflowHandler) Stop() {
+	wh.Service.Stop()
+}
+
 // IsHealthy - Health endpoint.
 func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 	log.Println("Workflow Health endpoint reached.")
@@ -53,6 +58,7 @@ func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 func (wh *WorkflowHandler) PollForActivityTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
+	wh.Service.GetLogger().Debug("Received PollForActivityTask")
 	return wh.matching.PollForActivityTask(pollRequest)
 }
 
@@ -60,6 +66,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
+	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
 	return wh.matching.PollForDecisionTask(pollRequest)
 }
 
@@ -96,6 +103,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
+	wh.Service.GetLogger().Debug(" Received StartWorkflowExecution")
 	return wh.history.StartWorkflowExecution(startRequest)
 }
 
