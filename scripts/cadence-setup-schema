@@ -22,5 +22,5 @@ wait_for_cassandra $port
 res=$?
 if [ $res -eq 0 ]; then
     $CADENCE_CQLSH_DIR/cqlsh -f $CADENCE_SCHEMA_DIR/keyspace_test.cql $address
-    $CADENCE_CQLSH_DIR/cqlsh -k $workflow_keyspace -f $CADENCE_SCHEMA_DIR/workflow_test.cql $address
+    $CADENCE_CQLSH_DIR/cqlsh -k $keyspace -f $CADENCE_SCHEMA_DIR/workflow_test.cql $address
 fi

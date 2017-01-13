@@ -1,5 +1,8 @@
 PROJECT_ROOT = code.uber.internal/devexp/minions
 
+jenkins::
+	source .jenkins/test.sh
+
 # define the list of thrift files the service depends on
 # (if you have some)
 THRIFT_SRCS = idl/code.uber.internal/devexp/minions/minions.thrift \
@@ -18,3 +21,6 @@ minions: main.go \
 
 go-build/rules.mk:
 	git submodule update --init
+
+jenkins::
+	.jenkins/cleanup.sh

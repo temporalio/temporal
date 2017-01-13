@@ -108,7 +108,7 @@ func (s *integrationSuite) TearDownTest() {
 	s.host = nil
 }
 
-func (s *integrationSuite) TestStartWorkflowExecution() {
+func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 	id := "integration-start-workflow-test"
 	wt := "integration-start-workflow-test-type"
 	tl := "integration-start-workflow-test-tasklist"
@@ -136,7 +136,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	we1, err1 := s.engine.StartWorkflowExecution(request)
 	s.NotNil(err1)
 	s.IsType(workflow.NewWorkflowExecutionAlreadyStartedError(), err1)
-	log.Infof("Start workflow execution failed with error: %v", err1.Error())
+	log.Infof("Unable to start workflow execution: %v", err1.Error())
 	s.Nil(we1)
 }
 

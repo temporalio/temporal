@@ -41,7 +41,7 @@ func (s *cassandraPersistenceSuite) SetupTest() {
 	s.ClearTransferQueue()
 }
 
-func (s *cassandraPersistenceSuite) TestStartWorkflow() {
+func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("start-workflow-test"),
 		RunId: common.StringPtr("7f9fe8a0-9237-11e6-ae22-56b6b6499611")}
 	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
@@ -51,7 +51,7 @@ func (s *cassandraPersistenceSuite) TestStartWorkflow() {
 	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.NotNil(err1, "Expected workflow creation to fail.")
 	s.Empty(task1, "Expected empty task identifier.")
-	log.Infof("Workflow execution failed with error: %v", err1)
+	log.Infof("Unable to start workflow execution: %v", err1)
 }
 
 func (s *cassandraPersistenceSuite) TestGetWorkflow() {

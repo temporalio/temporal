@@ -7,7 +7,7 @@
 
 wait_for_cassandra() {
     local port=$1
-    local retrycount=30
+    local retrycount=60
     local listen_address=${LISTEN_ADDRESS:-127.0.0.1}
 
     local i=0

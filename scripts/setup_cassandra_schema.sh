@@ -16,11 +16,11 @@ port=9042
 
 # the default keyspace is workflow
 # TODO: probably allow getting this from command line
-workflow_keyspace="workflow"
+keyspace="workflow"
 
 wait_for_cassandra $port
 res=$?
 if [ $res -eq 0 ]; then
 	./cassandra/bin/cqlsh -f ./schema/keyspace_test.cql
-	./cassandra/bin/cqlsh -k $workflow_keyspace -f ./schema/workflow_test.cql
+	./cassandra/bin/cqlsh -k $keyspace -f ./schema/workflow_test.cql
 fi

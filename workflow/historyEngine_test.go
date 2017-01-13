@@ -78,7 +78,7 @@ func (s *engineSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 }
 
-func (s *engineSuite) TestStartWorkflowExecution() {
+func (s *engineSuite) TestHistoryStartWorkflowExecution() {
 	id := "engine-start-workflow-test"
 	wt := "engine-start-workflow-test-type"
 	tl := "engine-start-workflow-test-tasklist"
@@ -106,7 +106,7 @@ func (s *engineSuite) TestStartWorkflowExecution() {
 	we1, err1 := s.engine.StartWorkflowExecution(request)
 	s.NotNil(err1)
 	s.IsType(workflow.NewWorkflowExecutionAlreadyStartedError(), err1)
-	log.Infof("Start workflow execution failed with error: %v", err1.Error())
+	log.Infof("Unable to start workflow execution: %v", err1.Error())
 	s.Nil(we1)
 }
 

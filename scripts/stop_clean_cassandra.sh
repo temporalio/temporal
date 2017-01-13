@@ -6,8 +6,7 @@
 cass_pid_file="/tmp/cassandra.pid"
 if [ -f $cass_pid_file ]
 then
-	kill -9 `cat $cass_pid_file`
-	rm $cass_pid_file /tmp/cassandra.log
+	kill -9 `cat $cass_pid_file` && rm $cass_pid_file /tmp/cassandra.log
 fi
 # cleanup data
 rm -Rf ./cassandra/data ./cassandra/logs /tmp/cassandra
