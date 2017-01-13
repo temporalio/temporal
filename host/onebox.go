@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
 	"code.uber.internal/devexp/minions/service/frontend"
 	"code.uber.internal/devexp/minions/service/history"
 	"code.uber.internal/devexp/minions/service/matching"

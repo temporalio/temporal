@@ -1,4 +1,7 @@
-package workflow
+package matching
+
+// This is disabled because of the dependency on history builder which is internal to history service
+// TODO: rewrite tests to remove dependency
 
 import (
 	"errors"
@@ -15,12 +18,13 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/persistence"
 	"code.uber.internal/devexp/minions/persistence/mocks"
+	"code.uber.internal/devexp/minions/service/history"
 )
 
 type (
 	matchingEngineSuite struct {
 		suite.Suite
-		TestBase
+		persistence.TestBase
 		builder            *historyBuilder
 		mockMatchingEngine *matchingEngineImpl
 		mockTaskMgr        *mocks.TaskManager
@@ -42,7 +46,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 	s.SetupWorkflowStore()
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.builder = newHistoryBuilder(nil, s.logger)
+	s.builder = history.newHistoryBuilder(nil, s.logger)
 }
 
 func (s *matchingEngineSuite) TearDownSuite() {
@@ -121,7 +125,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 			LockToken:      "lock",
 			DeliveryCount:  0,
 		}}}}
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := history.newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(tl, 2)
 	actType := workflow.NewActivityType()
 	actType.Name = common.StringPtr("Dynamic type")

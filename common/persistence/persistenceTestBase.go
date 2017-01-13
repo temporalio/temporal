@@ -8,12 +8,14 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/logging"
 	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 )
 
 const (
 	testWorkflowClusterHosts = "127.0.0.1"
+	testSchemaDir            = "../.."
 )
 
 type (
@@ -360,7 +362,7 @@ func (s *TestBase) ClearTransferQueue() {
 
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
-	s.SetupWorkflowStoreWithOptions(TestBaseOptions{ClusterHost: testWorkflowClusterHosts, DropKeySpace: true})
+	s.SetupWorkflowStoreWithOptions(TestBaseOptions{SchemaDir: testSchemaDir, ClusterHost: testWorkflowClusterHosts, DropKeySpace: true})
 }
 
 // TearDownWorkflowStore to cleanup
@@ -405,7 +407,7 @@ func (s *CassandraTestCluster) createCluster(clusterHosts string, cons gocql.Con
 	var err error
 	s.session, err = s.cluster.CreateSession()
 	if err != nil {
-		log.WithField(common.TagErr, err).Fatal(`createSession`)
+		log.WithField(logging.TagErr, err).Fatal(`createSession`)
 	}
 	s.keyspace = keyspace
 }
@@ -427,19 +429,19 @@ func (s *CassandraTestCluster) dropKeyspace() {
 }
 
 func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
-
 	cqlshDir := "./cassandra/bin/cqlsh"
 	workflowSchemaDir := "./schema/"
 
 	if schemaDir != "" {
 		cqlshDir = schemaDir + "/cassandra/bin/cqlsh"
+		log.Error(cqlshDir)
 		workflowSchemaDir = schemaDir + "/schema/"
 	}
 
 	err := common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
 
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		err = common.LoadCassandraSchema("../cassandra/bin/cqlsh", "../schema/"+fileName, s.keyspace)
+		err = common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
 	}
 
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {

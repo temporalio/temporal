@@ -37,7 +37,9 @@ import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/client/frontend"
 	"code.uber.internal/devexp/minions/common"
-	wf "code.uber.internal/devexp/minions/workflow"
+	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/service/history"
+	"code.uber.internal/devexp/minions/service/matching"
 )
 
 var (
@@ -51,7 +53,7 @@ type (
 		engine frontend.Client
 		logger bark.Logger
 		suite.Suite
-		wf.TestBase
+		persistence.TestBase
 	}
 
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -84,7 +86,12 @@ func (s *integrationSuite) SetupSuite() {
 		log.SetOutput(os.Stdout)
 	}
 
-	s.SetupWorkflowStore()
+	options := persistence.TestBaseOptions{}
+	options.ClusterHost = "127.0.0.1"
+	options.DropKeySpace = true
+	options.SchemaDir = ".."
+	s.SetupWorkflowStoreWithOptions(options)
+
 	logger := log.New()
 	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
@@ -250,7 +257,7 @@ retry:
 			Identity: common.StringPtr(p.identity),
 		})
 
-		if err1 == wf.ErrDuplicate {
+		if err1 == history.ErrDuplicate {
 			continue retry
 		}
 
@@ -258,12 +265,12 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == wf.EmptyPollForDecisionTaskResponse {
+		if response == nil || response == matching.EmptyPollForDecisionTaskResponse {
 			continue retry
 		}
 
 		if dumpHistory {
-			wf.PrintHistory(response.GetHistory(), p.logger)
+			history.PrintHistory(response.GetHistory(), p.logger)
 		}
 
 		context, decisions := p.decisionHandler(response.GetWorkflowExecution(), response.GetWorkflowType(),
@@ -277,7 +284,7 @@ retry:
 		})
 	}
 
-	return wf.ErrNoTasks
+	return matching.ErrNoTasks
 }
 
 func (p *taskPoller) pollAndProcessActivityTask() error {
@@ -288,7 +295,7 @@ retry:
 			Identity: common.StringPtr(p.identity),
 		})
 
-		if err1 == wf.ErrDuplicate {
+		if err1 == history.ErrDuplicate {
 			continue retry
 		}
 
@@ -296,7 +303,7 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == wf.EmptyPollForActivityTaskResponse {
+		if response == nil || response == matching.EmptyPollForActivityTaskResponse {
 			continue retry
 		}
 
@@ -317,5 +324,5 @@ retry:
 		})
 	}
 
-	return wf.ErrNoTasks
+	return matching.ErrNoTasks
 }

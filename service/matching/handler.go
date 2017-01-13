@@ -4,8 +4,7 @@ import (
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/persistence"
-	"code.uber.internal/devexp/minions/workflow"
+	"code.uber.internal/devexp/minions/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -14,7 +13,7 @@ var _ m.TChanMatchingService = (*Handler)(nil)
 // Handler - Thrift handler inteface for history service
 type Handler struct {
 	taskPersistence persistence.TaskManager
-	engine          workflow.MatchingEngine
+	engine          Engine
 	common.Service
 }
 
@@ -34,7 +33,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	if err != nil {
 		return err
 	}
-	h.engine = workflow.NewMatchingEngine(h.taskPersistence, history, h.Service.GetLogger())
+	h.engine = NewEngine(h.taskPersistence, history, h.Service.GetLogger())
 	return nil
 }
 

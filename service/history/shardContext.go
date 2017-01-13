@@ -1,9 +1,9 @@
-package workflow
+package history
 
 import (
 	"sync/atomic"
 
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
 )
 
 type (

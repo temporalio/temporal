@@ -1,21 +1,24 @@
-package workflow
+package matching
 
 import (
+	"errors"
 	"fmt"
+	"time"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/client/history"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/common/util"
 	"github.com/uber-common/bark"
 )
 
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
-	tokenSerializer taskTokenSerializer
+	tokenSerializer common.TaskTokenSerializer
 	logger          bark.Logger
 }
 
@@ -28,12 +31,32 @@ type taskContext struct {
 	logger            bark.Logger
 }
 
-// NewMatchingEngine creates an instance of matching engine
-func NewMatchingEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) MatchingEngine {
+const (
+	taskLockDuration = 10 * time.Second
+
+	retryLongPollInitialInterval    = 10 * time.Millisecond
+	retryLongPollMaxInterval        = 10 * time.Millisecond
+	retryLongPollExpirationInterval = 2 * time.Minute
+)
+
+var (
+	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
+	EmptyPollForDecisionTaskResponse = workflow.NewPollForDecisionTaskResponse()
+	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
+	EmptyPollForActivityTaskResponse = workflow.NewPollForActivityTaskResponse()
+	persistenceOperationRetryPolicy  = util.CreatePersistanceRetryPolicy()
+	longPollRetryPolicy              = createLongPollRetryPolicy()
+
+	// ErrNoTasks is exported temporarily for integration test
+	ErrNoTasks = errors.New("No tasks")
+)
+
+// NewEngine creates an instance of matching engine
+func NewEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) Engine {
 	return &matchingEngineImpl{
 		taskManager:     taskManager,
 		historyService:  historyService,
-		tokenSerializer: newJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
@@ -164,7 +187,7 @@ func (e *matchingEngineImpl) getTasksWithRetry(request *persistence.GetTasksRequ
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +200,7 @@ func (e *matchingEngineImpl) completeTaskWithRetry(request *persistence.Complete
 		return e.taskManager.CompleteTask(request)
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
 }
 
 func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskContext,
@@ -186,14 +209,14 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 
 	response := workflow.NewPollForDecisionTaskResponse()
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
-	token := &taskToken{
+	token := &common.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,
 	}
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
 	response.WorkflowType = historyResponse.GetWorkflowType()
-	if historyResponse.GetPreviousStartedEventId() != emptyEventID {
+	if historyResponse.GetPreviousStartedEventId() != common.EmptyEventID {
 		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
 	response.StartedEventId = historyResponse.StartedEventId
@@ -218,7 +241,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 
-	token := &taskToken{
+	token := &common.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,
@@ -255,4 +278,24 @@ func newTaskContext(matchingEngine *matchingEngineImpl, taskUUID string, info *p
 		workflowExecution: execution,
 		logger:            logger,
 	}
+}
+
+func createLongPollRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryLongPollInitialInterval)
+	policy.SetMaximumInterval(retryLongPollMaxInterval)
+	policy.SetExpirationInterval(retryLongPollExpirationInterval)
+
+	return policy
+}
+
+func isLongPollRetryableError(err error) bool {
+	if err == ErrNoTasks {
+		return true
+	}
+
+	return false
+}
+
+func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {
+	return &execution
 }

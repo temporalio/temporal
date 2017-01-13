@@ -1,4 +1,4 @@
-package workflow
+package history
 
 import (
 	h "code.uber.internal/devexp/minions/.gen/go/history"
@@ -7,8 +7,8 @@ import (
 )
 
 type (
-	// HistoryEngine represents an interface for managing workflow execution history.
-	HistoryEngine interface {
+	// Engine represents an interface for managing workflow execution history.
+	Engine interface {
 		common.Daemon
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"code.uber.internal/devexp/minions/common/logging"
+
 	"bytes"
 	"os/exec"
 
@@ -34,7 +36,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 	err = s.Query(fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {
 		'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, replicas)).Exec()
 	if err != nil {
-		log.WithField(TagErr, err).Error(`create keyspace error`)
+		log.WithField(logging.TagErr, err).Error(`create keyspace error`)
 		return
 	}
 	log.WithField(`keyspace`, keyspace).Debug(`created namespace`)
@@ -46,7 +48,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
 	err = s.Query(fmt.Sprintf("DROP KEYSPACE IF EXISTS %s", keyspace)).Exec()
 	if err != nil {
-		log.WithField(TagErr, err).Error(`drop keyspace error`)
+		log.WithField(logging.TagErr, err).Error(`drop keyspace error`)
 		return
 	}
 	log.WithField(`keyspace`, keyspace).Info(`dropped namespace`)

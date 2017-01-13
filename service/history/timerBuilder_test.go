@@ -1,11 +1,11 @@
-package workflow
+package history
 
 import (
 	"os"
 	"testing"
 	"time"
 
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"

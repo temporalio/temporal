@@ -1,4 +1,4 @@
-package workflow
+package history
 
 import (
 	"fmt"
@@ -13,13 +13,13 @@ import (
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
 )
 
 type (
 	transferQueueProcessorSuite struct {
 		suite.Suite
-		TestBase
+		persistence.TestBase
 		processor *transferQueueProcessorImpl
 	}
 )

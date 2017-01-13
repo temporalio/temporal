@@ -1,4 +1,4 @@
-package workflow
+package history
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"code.uber.internal/devexp/minions/common/persistence"
 	"code.uber.internal/devexp/minions/common/util"
-	"code.uber.internal/devexp/minions/persistence"
 	"github.com/uber-common/bark"
 )
 

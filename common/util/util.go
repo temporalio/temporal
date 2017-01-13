@@ -3,6 +3,16 @@ package util
 import (
 	"sync"
 	"time"
+
+	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common/backoff"
+)
+
+const (
+	retryPersistenceOperationInitialInterval = 50 * time.Millisecond
+	// TODO: Just minimizing for demo from 10 * time.second to time.second
+	retryPersistenceOperationMaxInterval        = time.Second
+	retryPersistenceOperationExpirationInterval = 10 * time.Second
 )
 
 // MergeDictoRight copies the contents of src to dest
@@ -44,4 +54,23 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 func AddSecondsToBaseTime(baseTimeInNanoSec int64, durationInSeconds int64) int64 {
 	timeOut := time.Duration(durationInSeconds) * time.Second
 	return time.Unix(0, baseTimeInNanoSec).Add(timeOut).UnixNano()
+}
+
+// CreatePersistanceRetryPolicy creates a retry policy for persistence layer operations
+func CreatePersistanceRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
+	policy.SetMaximumInterval(retryPersistenceOperationMaxInterval)
+	policy.SetExpirationInterval(retryPersistenceOperationExpirationInterval)
+
+	return policy
+}
+
+// IsPersistenceTransientError checks if the error is a transient persistence error
+func IsPersistenceTransientError(err error) bool {
+	switch err.(type) {
+	case *workflow.InternalServiceError:
+		return true
+	}
+
+	return false
 }

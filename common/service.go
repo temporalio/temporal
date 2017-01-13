@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"code.uber.internal/devexp/minions/common/logging"
 	"code.uber.internal/devexp/minions/common/membership"
 
 	log "github.com/Sirupsen/logrus"
@@ -85,27 +86,27 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	h.hostPort = h.ch.PeerInfo().HostPort
 	h.rp, err = h.createRingpop(h.sName, h.ch)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{TagErr: err}).Fatal("Ringpop creation failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop creation failed")
 	}
 
 	err = h.bootstrapRingpop(h.rp, h.rpSeedHosts)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{TagErr: err}).Fatal("Ringpop bootstrap failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop bootstrap failed")
 	}
 
 	labels, err := h.rp.Labels()
 	if err != nil {
-		h.logger.WithFields(bark.Fields{TagErr: err}).Fatal("Ringpop get node labels failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop get node labels failed")
 	}
 	err = labels.Set(membership.RoleKey, h.sName)
 	if err != nil {
-		h.logger.WithFields(bark.Fields{TagErr: err}).Fatal("Ringpop setting role label failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop setting role label failed")
 	}
 
 	h.membershipMonitor = membership.NewRingpopMonitor(cadenceServices, h.rp, h.logger)
 	err = h.membershipMonitor.Start()
 	if err != nil {
-		h.logger.WithFields(bark.Fields{TagErr: err}).Fatal("starting membership monitor failed")
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("starting membership monitor failed")
 	}
 
 	h.clientFactory = newTChannelClientFactory(h.ch, h.membershipMonitor)

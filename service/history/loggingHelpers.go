@@ -1,8 +1,11 @@
-package workflow
+package history
 
 import (
 	"github.com/uber-common/bark"
 )
+
+// This is duplicated
+// TODO: refactor into common and history specific parts
 
 const (
 	// HistoryBuilder events

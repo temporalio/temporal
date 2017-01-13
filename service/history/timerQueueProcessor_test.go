@@ -1,4 +1,4 @@
-package workflow
+package history
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	log "github.com/Sirupsen/logrus"
@@ -18,7 +18,7 @@ import (
 type (
 	timerQueueProcessorSuite struct {
 		suite.Suite
-		TestBase
+		persistence.TestBase
 		engineImpl *historyEngineImpl
 		logger     bark.Logger
 	}
@@ -33,6 +33,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
+
 	s.SetupWorkflowStore()
 
 	log2 := log.New()
@@ -53,7 +54,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		txProcessor:      txProcessor,
 		logger:           s.logger,
 		tracker:          tracker,
-		tokenSerializer:  newJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 	}
 }
 

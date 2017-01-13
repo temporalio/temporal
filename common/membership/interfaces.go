@@ -3,7 +3,7 @@ package membership
 import "errors"
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance
-var ErrUnknownService = errors.New("Service not tracked by Oracle")
+var ErrUnknownService = errors.New("Service not tracked by Monitor")
 
 // ErrInsufficientHosts is thrown when there are not enough hosts to serve the request
 var ErrInsufficientHosts = errors.New("Not enough hosts to serve the request")

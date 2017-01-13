@@ -1,6 +1,7 @@
-package workflow
+package history
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -8,7 +9,8 @@ import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
-	"code.uber.internal/devexp/minions/persistence"
+	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/common/util"
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 )
@@ -19,7 +21,7 @@ type (
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
 		timerProcessor   timerQueueProcessor
-		tokenSerializer  taskTokenSerializer
+		tokenSerializer  common.TaskTokenSerializer
 		tracker          *pendingTaskTracker
 		logger           bark.Logger
 	}
@@ -46,6 +48,23 @@ type (
 	}
 )
 
+const (
+	conditionalRetryCount = 5
+)
+
+var (
+	persistenceOperationRetryPolicy = util.CreatePersistanceRetryPolicy()
+
+	// ErrDuplicate is exported temporarily for integration test
+	ErrDuplicate = errors.New("Duplicate task, completing it")
+	// ErrCreateEvent is exported temporarily for integration test
+	ErrCreateEvent = errors.New("Can't create activity task started event")
+	// ErrConflict is exported temporarily for integration test
+	ErrConflict = errors.New("Conditional update failed")
+	// ErrMaxAttemptsExceeded is exported temporarily for integration test
+	ErrMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
+)
+
 func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcessor,
 	logger bark.Logger) *pendingTaskTracker {
 	return &pendingTaskTracker{
@@ -58,9 +77,9 @@ func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcesso
 	}
 }
 
-// NewHistoryEngineWithShardContext creates an instance of history engine
-func NewHistoryEngineWithShardContext(shard ShardContext, executionManager persistence.ExecutionManager,
-	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
+// NewEngineWithShardContext creates an instance of history engine
+func NewEngineWithShardContext(shard ShardContext, executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager, logger bark.Logger) Engine {
 
 	txProcessor := newTransferQueueProcessor(shard, executionManager, taskManager, logger)
 	tracker := newPendingTaskTracker(shard, txProcessor, logger)
@@ -68,7 +87,7 @@ func NewHistoryEngineWithShardContext(shard ShardContext, executionManager persi
 		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      txProcessor,
-		tokenSerializer:  newJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
@@ -78,9 +97,9 @@ func NewHistoryEngineWithShardContext(shard ShardContext, executionManager persi
 	return historyEngImpl
 }
 
-// NewHistoryEngine creates an instance of history engine
-func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager,
-	taskManager persistence.TaskManager, logger bark.Logger) HistoryEngine {
+// NewEngine creates an instance of history engine
+func NewEngine(shardID int, executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager, logger bark.Logger) Engine {
 	shard, err := acquireShard(shardID, executionManager)
 	if err != nil {
 		logger.WithField("error", err).Error("failed to acquire shard")
@@ -93,7 +112,7 @@ func NewHistoryEngine(shardID int, executionManager persistence.ExecutionManager
 		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      txProcessor,
-		tokenSerializer:  newJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
@@ -524,7 +543,7 @@ func (e *historyEngineImpl) getWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +557,7 @@ func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(
 		return e.executionManager.DeleteWorkflowExecution(request)
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
 }
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
@@ -548,7 +567,7 @@ func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
 
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, isPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(context *workflowExecutionContext,
@@ -703,4 +722,17 @@ func (t *pendingTaskTracker) completeTask(taskID int64) {
 	if updatedMin != -1 {
 		t.txProcessor.UpdateMaxAllowedReadLevel(updatedMin)
 	}
+}
+
+// PrintHistory prints history
+func PrintHistory(history *workflow.History, logger bark.Logger) {
+	serializer := newJSONHistorySerializer()
+	data, err := serializer.Serialize(history.GetEvents())
+	if err != nil {
+		logger.Errorf("Error serializing history: %v\n", err)
+	}
+
+	logger.Info("******************************************")
+	logger.Infof("History: %v", string(data))
+	logger.Info("******************************************")
 }

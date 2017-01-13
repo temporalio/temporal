@@ -1,4 +1,4 @@
-package workflow
+package history
 
 import (
 	"encoding/json"
