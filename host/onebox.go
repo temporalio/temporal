@@ -31,6 +31,7 @@ type cadenceImpl struct {
 	taskMgr         persistence.TaskManager
 	executionMgr    persistence.ExecutionManager
 	shutdownCh      chan struct{}
+	shutdownWG      sync.WaitGroup
 }
 
 // NewCadence returns an instance that hosts full cadence in one process
@@ -59,15 +60,17 @@ func (c *cadenceImpl) Start() error {
 	startWG.Wait()
 	// Allow some time for the ring to stabilize
 	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 2)
 	return nil
 }
 
 func (c *cadenceImpl) Stop() {
+	c.shutdownWG.Add(3)
 	c.frontendHandler.Stop()
 	c.historyHandler.Stop()
 	c.matchingHandler.Stop()
 	close(c.shutdownCh)
+	c.shutdownWG.Wait()
 }
 
 func (c *cadenceImpl) FrontendAddress() string {
@@ -95,6 +98,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	}
 	startWG.Done()
 	<-c.shutdownCh
+	c.shutdownWG.Done()
 }
 
 func (c *cadenceImpl) startHistory(logger bark.Logger, executionMgr persistence.ExecutionManager,
@@ -108,6 +112,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, executionMgr persistence.
 	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh
+	c.shutdownWG.Done()
 }
 
 func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.TaskManager,
@@ -121,6 +126,7 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 	c.matchingHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh
+	c.shutdownWG.Done()
 }
 
 func (c *cadenceImpl) createTChannel(sName string, hostPort string,
