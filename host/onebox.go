@@ -51,16 +51,17 @@ func (c *cadenceImpl) Start() error {
 	rpHosts = append(rpHosts, c.HistoryServiceAddress())
 
 	var startWG sync.WaitGroup
-	startWG.Add(3)
-
-	go c.startFrontend(c.logger, rpHosts, &startWG)
+	startWG.Add(2)
 	go c.startHistory(c.logger, c.executionMgr, c.taskMgr, rpHosts, &startWG)
 	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
+	startWG.Wait()
 
+	startWG.Add(1)
+	go c.startFrontend(c.logger, rpHosts, &startWG)
 	startWG.Wait()
 	// Allow some time for the ring to stabilize
 	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 	return nil
 }
 
