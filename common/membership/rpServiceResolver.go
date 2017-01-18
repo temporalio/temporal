@@ -31,7 +31,7 @@ func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.
 	return &ringpopServiceResolver{
 		service:   service,
 		rp:        rp,
-		logger:    logger.WithFields(bark.Fields{RoleKey: service}),
+		logger:    logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
 		ring:      hashring.New(farm.Fingerprint32, 1),
 		listeners: make(map[string]chan<- *ChangedEvent),
 	}
@@ -118,7 +118,6 @@ func (r *ringpopServiceResolver) refresh() {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
 
-	// TODO: consider logging what changed?
 	r.ring = hashring.New(farm.Fingerprint32, 1)
 
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
@@ -132,6 +131,7 @@ func (r *ringpopServiceResolver) refresh() {
 		r.ring.AddMembers(host)
 	}
 
+	r.logger.Infof("Current reachable members: %v", addrs)
 }
 
 func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {

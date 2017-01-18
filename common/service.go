@@ -48,7 +48,7 @@ type serviceImpl struct {
 func NewService(serviceName string, logger bark.Logger, tchanFactory TChannelFactory, rpHosts []string) Service {
 	sVice := &serviceImpl{
 		sName:           serviceName,
-		logger:          logger,
+		logger:          logger.WithField("Service", serviceName),
 		tchannelFactory: tchanFactory,
 		rpSeedHosts:     rpHosts,
 	}

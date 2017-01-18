@@ -60,7 +60,7 @@ func (c *cadenceImpl) Start() error {
 	startWG.Wait()
 	// Allow some time for the ring to stabilize
 	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 5)
 	return nil
 }
 
