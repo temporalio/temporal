@@ -7,6 +7,7 @@ import (
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/matching"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/common/persistence"
@@ -79,9 +80,9 @@ func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcesso
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, executionManager persistence.ExecutionManager,
-	taskManager persistence.TaskManager, logger bark.Logger) Engine {
+	matching matching.Client, logger bark.Logger) Engine {
 
-	txProcessor := newTransferQueueProcessor(shard, executionManager, taskManager, logger)
+	txProcessor := newTransferQueueProcessor(shard, executionManager, matching, logger)
 	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
@@ -99,14 +100,14 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 
 // NewEngine creates an instance of history engine
 func NewEngine(shardID int, executionManager persistence.ExecutionManager,
-	taskManager persistence.TaskManager, logger bark.Logger) Engine {
+	matching matching.Client, logger bark.Logger) Engine {
 	shard, err := acquireShard(shardID, executionManager)
 	if err != nil {
 		logger.WithField("error", err).Error("failed to acquire shard")
 		return nil
 	}
 
-	txProcessor := newTransferQueueProcessor(shard, executionManager, taskManager, logger)
+	txProcessor := newTransferQueueProcessor(shard, executionManager, matching, logger)
 	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,

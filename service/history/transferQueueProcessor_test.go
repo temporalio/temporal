@@ -1,7 +1,6 @@
 package history
 
 import (
-	"fmt"
 	"math"
 	"os"
 	"testing"
@@ -11,7 +10,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/matching/mocks"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
 )
@@ -20,7 +21,8 @@ type (
 	transferQueueProcessorSuite struct {
 		suite.Suite
 		persistence.TestBase
-		processor *transferQueueProcessorImpl
+		processor    *transferQueueProcessorImpl
+		mockMatching *mocks.Client
 	}
 )
 
@@ -35,7 +37,8 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	}
 
 	s.SetupWorkflowStore()
-	s.processor = newTransferQueueProcessor(s.ShardContext, s.WorkflowMgr, s.TaskMgr,
+	s.mockMatching = &mocks.Client{}
+	s.processor = newTransferQueueProcessor(s.ShardContext, s.WorkflowMgr, s.mockMatching,
 		bark.NewLoggerFromLogrus(log.New())).(*transferQueueProcessorImpl)
 }
 
@@ -70,20 +73,14 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
+			s.mockMatching.On("AddDecisionTask", createAddRequestFromTask(task)).Once().Return(nil)
 			s.processor.processTransferTask(task)
 		default:
 			break workerPump
 		}
 	}
 
-	tasks1Response, err1 := s.GetTasks(taskList, persistence.TaskTypeDecision, 1)
-	tasks1 := tasks1Response.Tasks
-	s.Nil(err1)
-	s.NotEmpty(tasks1)
-	s.Equal(1, len(tasks1))
-
-	dTask := tasks1[0]
-	s.Equal(int64(2), dTask.ScheduleID)
+	s.mockMatching.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
@@ -103,24 +100,37 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
+			s.mockMatching.On("AddActivityTask", createAddRequestFromTask(task)).Once().Return(nil)
 			s.processor.processTransferTask(task)
 		default:
 			break workerPump
 		}
 	}
 
-	tasks1Result, err1 := s.GetTasks(taskList, persistence.TaskTypeActivity, 10)
-	tasks1 := tasks1Result.Tasks
-	s.Nil(err1)
-	s.NotEmpty(tasks1)
-	s.Equal(len(activityTaskScheduleIds), len(tasks1))
+	s.mockMatching.AssertExpectations(s.T())
+}
 
-	for _, t := range tasks1 {
-		s.True(containsID(activityTaskScheduleIds, t.ScheduleID),
-			fmt.Sprintf("ScheduleID: %v, TaskList: %v", string(t.ScheduleID), taskList))
-		s.Equal(workflowExecution.GetWorkflowId(), t.WorkflowID)
-		s.Equal(workflowExecution.GetRunId(), t.RunID)
+func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
+	var res interface{}
+	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId: common.StringPtr(task.RunID)}
+	taskList := &workflow.TaskList{
+		Name: &task.TaskList,
 	}
+	if task.TaskType == persistence.TaskTypeActivity {
+		res = &m.AddActivityTaskRequest{
+			Execution:  &execution,
+			TaskList:   taskList,
+			ScheduleId: &task.ScheduleID,
+		}
+	} else {
+		res = &m.AddDecisionTaskRequest{
+			Execution:  &execution,
+			TaskList:   taskList,
+			ScheduleId: &task.ScheduleID,
+		}
+	}
+	return res
 }
 
 func containsID(list []int64, scheduleID int64) bool {

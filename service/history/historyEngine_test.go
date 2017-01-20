@@ -13,20 +13,21 @@ import (
 	"github.com/uber-common/bark"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	mmocks "code.uber.internal/devexp/minions/client/matching/mocks"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/persistence/mocks"
+	pmocks "code.uber.internal/devexp/minions/common/persistence/mocks"
 )
 
 type (
 	engineSuite struct {
 		suite.Suite
 		persistence.TestBase
-		builder           *historyBuilder
-		mockHistoryEngine *historyEngineImpl
-		mockTaskMgr       *mocks.TaskManager
-		mockExecutionMgr  *mocks.ExecutionManager
-		logger            bark.Logger
+		builder            *historyBuilder
+		mockHistoryEngine  *historyEngineImpl
+		mockMatchingClient *mmocks.Client
+		mockExecutionMgr   *pmocks.ExecutionManager
+		logger             bark.Logger
 	}
 )
 
@@ -49,15 +50,15 @@ func (s *engineSuite) TearDownSuite() {
 }
 
 func (s *engineSuite) SetupTest() {
-	s.mockTaskMgr = &mocks.TaskManager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
+	s.mockMatchingClient = &mmocks.Client{}
+	s.mockExecutionMgr = &pmocks.ExecutionManager{}
 
 	mockShard := &shardContextImpl{
 		shardInfo:              &persistence.ShardInfo{ShardID: 1, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber: 1,
 	}
 
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockTaskMgr, s.logger)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockMatchingClient, s.logger)
 	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	s.mockHistoryEngine = &historyEngineImpl{
 		shard:            mockShard,
@@ -70,7 +71,7 @@ func (s *engineSuite) SetupTest() {
 }
 
 func (s *engineSuite) TearDownTest() {
-	s.mockTaskMgr.AssertExpectations(s.T())
+	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 }
 

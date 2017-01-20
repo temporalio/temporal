@@ -14,24 +14,30 @@ var _ h.TChanHistoryService = (*Handler)(nil)
 
 // Handler - Thrift handler inteface for history service
 type Handler struct {
-	engine Engine
+	engine           Engine
+	executionManager persistence.ExecutionManager
 	common.Service
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice common.Service, executionPersistence persistence.ExecutionManager, taskPersistence persistence.TaskManager) (*Handler, []thrift.TChanServer) {
-	engine := NewEngine(1, executionPersistence, taskPersistence, sVice.GetLogger())
+func NewHandler(sVice common.Service, executionPersistence persistence.ExecutionManager) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
-		Service: sVice,
-		engine:  engine,
+		Service:          sVice,
+		executionManager: executionPersistence,
 	}
 	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
 }
 
 // Start starts the handler
-func (h *Handler) Start(thriftService []thrift.TChanServer) {
-	h.engine.Start()
+func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	h.Service.Start(thriftService)
+	matchingServiceClient, err := h.Service.GetClientFactory().NewMatchingClient()
+	if err != nil {
+		return err
+	}
+	h.engine = NewEngine(1, h.executionManager, matchingServiceClient, h.Service.GetLogger())
+	h.engine.Start()
+	return nil
 }
 
 // Stop stops the handler

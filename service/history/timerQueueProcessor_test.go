@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"code.uber.internal/devexp/minions/client/matching/mocks"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
 
@@ -46,7 +47,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 
 	shard := &shardContextImpl{shardInfo: resp.ShardInfo}
-	txProcessor := newTransferQueueProcessor(shard, s.WorkflowMgr, s.TaskMgr, s.logger)
+	txProcessor := newTransferQueueProcessor(shard, s.WorkflowMgr, &mocks.Client{}, s.logger)
 	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,

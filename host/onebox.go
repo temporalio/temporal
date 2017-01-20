@@ -61,7 +61,7 @@ func (c *cadenceImpl) Start() error {
 	startWG.Wait()
 	// Allow some time for the ring to stabilize
 	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, executionMgr persistence.
 	}
 	service := common.NewService("cadence-history", logger, tchanFactory, rpHosts)
 	var thriftServices []thrift.TChanServer
-	c.historyHandler, thriftServices = history.NewHandler(service, executionMgr, taskMgr)
+	c.historyHandler, thriftServices = history.NewHandler(service, executionMgr)
 	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh

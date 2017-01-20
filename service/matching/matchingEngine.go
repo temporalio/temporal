@@ -3,9 +3,13 @@ package matching
 import (
 	"errors"
 	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
+	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/client/history"
 	"code.uber.internal/devexp/minions/common"
@@ -20,6 +24,7 @@ type matchingEngineImpl struct {
 	historyService  history.Client
 	tokenSerializer common.TaskTokenSerializer
 	taskLists       map[taskListID]*taskListContext
+	taskListLock    sync.Mutex
 	logger          bark.Logger
 }
 
@@ -38,10 +43,11 @@ type taskContext struct {
 }
 
 type taskListContext struct {
-	taskList     taskListID
-	readLevel    int64
-	maxReadLevel int64
-	rangeID      int64
+	taskList           taskListID
+	readLevel          int64
+	maxReadLevel       int64
+	rangeID            int64
+	taskSequenceNumber int64
 }
 
 const (
@@ -73,19 +79,91 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
+		taskLists: make(map[taskListID]*taskListContext),
 	}
 }
 
 func (e *matchingEngineImpl) getTaskListContext(taskList string, taskListType int) (*taskListContext, error) {
-	if result, ok := e.taskLists[taskListID{taskListName: taskList, taskType: taskListType}]; ok {
+	e.taskListLock.Lock()
+	defer e.taskListLock.Unlock()
+	id := taskListID{taskListName: taskList, taskType: taskListType}
+	if result, ok := e.taskLists[id]; ok {
 		return result, nil
 	}
-	panic("not implemented")
+
+	// TODO: have a lock per task list for acquiring lease so that different
+	// task lists can be leased in parallel.
+	// TODO: retry on intermittent failures?
+	resp, err := e.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{
+		TaskList: taskList,
+		TaskType: taskListType,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: set proper read levels once that is implemented
+	ctx := &taskListContext{
+		taskList:           id,
+		readLevel:          0,
+		maxReadLevel:       math.MaxInt64,
+		rangeID:            resp.RangeID,
+		taskSequenceNumber: resp.RangeID << 24,
+	}
+
+	e.taskLists[id] = ctx
+	return ctx, nil
+}
+
+func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
+	t, err := e.getTaskListContext(addRequest.TaskList.GetName(), persistence.TaskTypeDecision)
+	if err != nil {
+		return err
+	}
+
+	task := &persistence.DecisionTask{
+		TaskList:   addRequest.TaskList.GetName(),
+		ScheduleID: addRequest.GetScheduleId(),
+		TaskID:     t.getTaskID(),
+	}
+
+	_, err = e.taskManager.CreateTask(&persistence.CreateTaskRequest{
+		Execution: *addRequest.Execution,
+		Data:      task,
+		TaskID:    task.TaskID,
+		RangeID:   t.rangeID,
+	})
+
+	return err
+}
+
+func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
+	t, err := e.getTaskListContext(addRequest.TaskList.GetName(), persistence.TaskTypeActivity)
+	if err != nil {
+		return err
+	}
+
+	task := &persistence.ActivityTask{
+		TaskList:   addRequest.TaskList.GetName(),
+		ScheduleID: addRequest.GetScheduleId(),
+		TaskID:     t.getTaskID(),
+	}
+
+	_, err = e.taskManager.CreateTask(&persistence.CreateTaskRequest{
+		Execution: *addRequest.Execution,
+		Data:      task,
+		TaskID:    task.TaskID,
+		RangeID:   t.rangeID,
+	})
+
+	return err
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
 func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (
 	*workflow.PollForDecisionTaskResponse, error) {
+	e.logger.Info("Received PollForDecisionTask")
 	var response *workflow.PollForDecisionTaskResponse
 	err := backoff.Retry(
 		func() error {
@@ -95,6 +173,7 @@ func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisi
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
 	if err != nil && err == ErrNoTasks {
+		e.logger.Info("No tasks to hand out for PollForDecisionTask")
 		return EmptyPollForDecisionTaskResponse, nil
 	}
 
@@ -105,6 +184,7 @@ func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisi
 func (e *matchingEngineImpl) PollForActivityTask(request *workflow.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
 	var response *workflow.PollForActivityTaskResponse
+	e.logger.Info("Received PollForActivityTask")
 	err := backoff.Retry(
 		func() error {
 			var er error
@@ -113,6 +193,7 @@ func (e *matchingEngineImpl) PollForActivityTask(request *workflow.PollForActivi
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
 	if err != nil && err == ErrNoTasks {
+		e.logger.Info("No tasks to hand out for PollForActivityTask")
 		return EmptyPollForActivityTaskResponse, nil
 	}
 
@@ -303,6 +384,10 @@ func newTaskContext(matchingEngine *matchingEngineImpl, info *persistence.TaskIn
 		logger:            logger,
 		taskListID:        taskListID,
 	}
+}
+
+func (c *taskListContext) getTaskID() int64 {
+	return atomic.AddInt64(&c.taskSequenceNumber, 1)
 }
 
 func createLongPollRetryPolicy() backoff.RetryPolicy {

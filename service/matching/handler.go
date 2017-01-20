@@ -50,14 +50,12 @@ func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 
 // AddActivityTask - adds an activity task.
 func (h *Handler) AddActivityTask(ctx thrift.Context, addRequest *m.AddActivityTaskRequest) error {
-	// Note: this API is needed so the transfer queue can add tasks without writing them directly to the DB.
-	panic("not implemented")
+	return h.engine.AddActivityTask(addRequest)
 }
 
 // AddDecisionTask - adds a decision task.
 func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionTaskRequest) error {
-	// Note: this API is needed so the transfer queue can add tasks without writing them directly to the DB.
-	panic("not implemented")
+	return h.engine.AddDecisionTask(addRequest)
 }
 
 // PollForActivityTask - long poll for an activity task.

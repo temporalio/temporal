@@ -8,7 +8,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
+	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/client/matching"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
 	"code.uber.internal/devexp/minions/common/util"
@@ -26,7 +28,7 @@ type (
 	transferQueueProcessorImpl struct {
 		ackMgr           *ackManager
 		executionManager persistence.ExecutionManager
-		taskManager      persistence.TaskManager
+		matchingClient   matching.Client
 		isStarted        int32
 		isStopped        int32
 		shutdownWG       sync.WaitGroup
@@ -56,11 +58,11 @@ type (
 )
 
 func newTransferQueueProcessor(shard ShardContext, executionManager persistence.ExecutionManager,
-	taskManager persistence.TaskManager, logger bark.Logger) transferQueueProcessor {
+	matching matching.Client, logger bark.Logger) transferQueueProcessor {
 	return &transferQueueProcessorImpl{
 		ackMgr:           newAckManager(shard, executionManager, logger),
 		executionManager: executionManager,
-		taskManager:      taskManager,
+		matchingClient:   matching,
 		shutdownCh:       make(chan struct{}),
 		logger:           logger,
 	}
@@ -187,34 +189,36 @@ ProcessRetryLoop:
 		case <-t.shutdownCh:
 			return
 		default:
-			var transferTask persistence.Task
-			switch task.TaskType {
-			case persistence.TaskTypeActivity:
-				transferTask = &persistence.ActivityTask{TaskList: task.TaskList, ScheduleID: task.ScheduleID,
-					TaskID: task.TaskID}
-			case persistence.TaskTypeDecision:
-				transferTask = &persistence.DecisionTask{TaskList: task.TaskList, ScheduleID: task.ScheduleID,
-					TaskID: task.TaskID}
-			}
+			var err error
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
 				RunId: common.StringPtr(task.RunID)}
-
-			// TODO: Hack until all task management is done through the matching engine
-			leaseResponse, err1 := t.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{TaskList: task.TaskList, TaskType: task.TaskType})
-			if err1 != nil {
-				t.logger.Warnf("Processor failed to get lease for the task list: %v, type=%v", task.TaskList, task.TaskType)
-				time.Sleep(100 * time.Millisecond)
-				continue ProcessRetryLoop
+			switch task.TaskType {
+			case persistence.TaskTypeActivity:
+				{
+					taskList := &workflow.TaskList{
+						Name: &task.TaskList,
+					}
+					err = t.matchingClient.AddActivityTask(&m.AddActivityTaskRequest{
+						Execution:  &execution,
+						TaskList:   taskList,
+						ScheduleId: &task.ScheduleID,
+					})
+				}
+			case persistence.TaskTypeDecision:
+				{
+					taskList := &workflow.TaskList{
+						Name: &task.TaskList,
+					}
+					err = t.matchingClient.AddDecisionTask(&m.AddDecisionTaskRequest{
+						Execution:  &execution,
+						TaskList:   taskList,
+						ScheduleId: &task.ScheduleID,
+					})
+				}
 			}
-			_, err2 := t.taskManager.CreateTask(&persistence.CreateTaskRequest{
-				Execution: execution,
-				Data:      transferTask,
-				TaskID:    task.TaskID, // TODO: Generate taskID as using transer task id is not going to work with multiple shards
-				RangeID:   leaseResponse.RangeID,
-			})
 
-			if err2 != nil {
-				t.logger.Warnf("Processor failed to create task: %v", err2)
+			if err != nil {
+				t.logger.WithField("error", err).Warn("Processor failed to create task")
 				time.Sleep(100 * time.Millisecond)
 				continue ProcessRetryLoop
 			}
