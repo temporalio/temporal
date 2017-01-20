@@ -1,16 +1,18 @@
 package persistence
 
 import (
+	"math"
 	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/gocql/gocql"
+
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/logging"
-	log "github.com/Sirupsen/logrus"
-	"github.com/gocql/gocql"
 )
 
 const (
@@ -221,7 +223,7 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(batchSize int) ([]*TaskInfo, error) {
+func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
 		ReadLevel:    s.GetReadLevel(),
 		MaxReadLevel: s.GetMaxAllowedReadLevel(),
@@ -263,78 +265,97 @@ func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerInfo,
 
 // CreateDecisionTask is a utility method to create a task
 func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecution, taskList string,
-	decisionScheduleID int64) (string, error) {
-	response, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
+	decisionScheduleID int64) (int64, error) {
+	leaseResponse, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskTypeDecision})
+	if err != nil {
+		return 0, err
+	}
+
+	taskID := s.GetNextSequenceNumber()
+	_, err = s.TaskMgr.CreateTask(&CreateTaskRequest{
+		TaskID:    taskID,
 		Execution: workflowExecution,
-		TaskList:  taskList,
 		Data: &DecisionTask{
-			TaskID:     s.GetNextSequenceNumber(),
+			TaskID:     taskID,
 			TaskList:   taskList,
 			ScheduleID: decisionScheduleID,
 		},
+		RangeID: leaseResponse.RangeID,
 	})
 
 	if err != nil {
-		return "", err
+		return 0, err
 	}
 
-	return response.TaskID, nil
+	return taskID, err
 }
 
 // CreateActivityTasks is a utility method to create tasks
 func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecution, activities map[int64]string) (
-	[]string, error) {
-	var taskIDs []string
-	sequenceNum := 1
+	[]int64, error) {
+
+	var taskIDs []int64
+	var leaseResponse *LeaseTaskListResponse
+	var err error
 	for activityScheduleID, taskList := range activities {
-		response, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
+
+		leaseResponse, err = s.TaskMgr.LeaseTaskList(
+			&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskTypeActivity})
+		if err != nil {
+			return []int64{}, err
+		}
+		taskID := s.GetNextSequenceNumber()
+
+		_, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
+			TaskID:    taskID,
 			Execution: workflowExecution,
-			TaskList:  taskList,
 			Data: &ActivityTask{
 				TaskID:     s.GetNextSequenceNumber(),
 				TaskList:   taskList,
 				ScheduleID: activityScheduleID,
 			},
+			RangeID: leaseResponse.RangeID,
 		})
 
 		if err != nil {
 			return nil, err
 		}
 
-		taskIDs = append(taskIDs, response.TaskID)
-		sequenceNum++
+		taskIDs = append(taskIDs, taskID)
 	}
 
 	return taskIDs, nil
 }
 
 // GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(taskList string, taskType int, timeout time.Duration, batchSize int) ([]*TaskInfoWithID,
-	error) {
+func (s *TestBase) GetTasks(taskList string, taskType int, batchSize int) (*GetTasksResponse, error) {
+	leaseResponse, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: taskType})
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := s.TaskMgr.GetTasks(&GetTasksRequest{
-		TaskList:    taskList,
-		TaskType:    taskType,
-		LockTimeout: timeout,
-		BatchSize:   batchSize,
+		TaskList:     taskList,
+		TaskType:     taskType,
+		BatchSize:    batchSize,
+		RangeID:      leaseResponse.RangeID,
+		MaxReadLevel: math.MaxInt64,
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return response.Tasks, nil
+	return &GetTasksResponse{Tasks: response.Tasks}, nil
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(workflowExecution workflow.WorkflowExecution, taskList string,
-	taskType int, taskID string, lockToken string) error {
+func (s *TestBase) CompleteTask(taskList string, taskType int, taskID int64) error {
 
 	return s.TaskMgr.CompleteTask(&CompleteTaskRequest{
-		Execution: workflowExecution,
-		TaskList:  taskList,
-		TaskType:  taskType,
-		TaskID:    taskID,
-		LockToken: lockToken,
+		TaskList: taskList,
+		TaskType: taskType,
+		TaskID:   taskID,
 	})
 }
 

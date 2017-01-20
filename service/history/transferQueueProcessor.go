@@ -112,7 +112,7 @@ func (t *transferQueueProcessorImpl) UpdateMaxAllowedReadLevel(maxAllowedReadLev
 
 func (t *transferQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
-	tasksCh := make(chan *persistence.TaskInfo, transferTaskBatchSize)
+	tasksCh := make(chan *persistence.TransferTaskInfo, transferTaskBatchSize)
 
 	var workerWG sync.WaitGroup
 	for i := 0; i < taskWorkerCount; i++ {
@@ -145,7 +145,7 @@ func (t *transferQueueProcessorImpl) processorPump() {
 	}
 }
 
-func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TaskInfo,
+func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo,
 	prevPollInterval time.Duration) time.Duration {
 	tasks, err := t.ackMgr.readTransferTasks()
 
@@ -165,7 +165,7 @@ func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persis
 	return transferProcessorMinPollInterval
 }
 
-func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.TaskInfo, workerWG *sync.WaitGroup) {
+func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.TransferTaskInfo, workerWG *sync.WaitGroup) {
 	defer workerWG.Done()
 	for {
 		select {
@@ -179,7 +179,7 @@ func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.Task
 	}
 }
 
-func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TaskInfo) {
+func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TransferTaskInfo) {
 	t.logger.Debugf("Processing transfer task: %v", task.TaskID)
 ProcessRetryLoop:
 	for retryCount := 0; retryCount < 10; retryCount++ {
@@ -199,14 +199,22 @@ ProcessRetryLoop:
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
 				RunId: common.StringPtr(task.RunID)}
 
-			_, err1 := t.taskManager.CreateTask(&persistence.CreateTaskRequest{
+			// TODO: Hack until all task management is done through the matching engine
+			leaseResponse, err1 := t.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{TaskList: task.TaskList, TaskType: task.TaskType})
+			if err1 != nil {
+				t.logger.Warnf("Processor failed to get lease for the task list: %v, type=%v", task.TaskList, task.TaskType)
+				time.Sleep(100 * time.Millisecond)
+				continue ProcessRetryLoop
+			}
+			_, err2 := t.taskManager.CreateTask(&persistence.CreateTaskRequest{
 				Execution: execution,
-				TaskList:  task.TaskList,
 				Data:      transferTask,
+				TaskID:    task.TaskID, // TODO: Generate taskID as using transer task id is not going to work with multiple shards
+				RangeID:   leaseResponse.RangeID,
 			})
 
-			if err1 != nil {
-				t.logger.Warnf("Processor failed to create task: %v", err1)
+			if err2 != nil {
+				t.logger.Warnf("Processor failed to create task: %v", err2)
 				time.Sleep(100 * time.Millisecond)
 				continue ProcessRetryLoop
 			}
@@ -220,7 +228,7 @@ ProcessRetryLoop:
 	t.logger.Fatalf("Retry count exceeded for transfer taskID: %v", task.TaskID)
 }
 
-func (a *ackManager) readTransferTasks() ([]*persistence.TaskInfo, error) {
+func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error) {
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ReadLevel:    atomic.LoadInt64(&a.readLevel),
 		MaxReadLevel: atomic.LoadInt64(&a.maxAllowedReadLevel),

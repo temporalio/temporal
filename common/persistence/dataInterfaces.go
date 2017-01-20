@@ -58,8 +58,8 @@ type (
 		DecisionPending      bool
 	}
 
-	// TaskInfo describes a task
-	TaskInfo struct {
+	// TransferTaskInfo describes a transfer task
+	TransferTaskInfo struct {
 		WorkflowID     string
 		RunID          string
 		TaskID         int64
@@ -81,10 +81,12 @@ type (
 		EventID     int64
 	}
 
-	// TaskInfoWithID describes a task from tasks table
-	TaskInfoWithID struct {
-		TaskUUID string
-		Info     *TaskInfo
+	// TaskInfo describes either activity or decision task
+	TaskInfo struct {
+		WorkflowID string
+		RunID      string
+		TaskID     int64
+		ScheduleID int64
 	}
 
 	// Task is the generic interface for workflow tasks
@@ -201,7 +203,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks []*TaskInfo
+		Tasks []*TransferTaskInfo
 	}
 
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
@@ -210,38 +212,49 @@ type (
 		TaskID    int64
 	}
 
+	// LeaseTaskListRequest is used to request lease of a task list
+	LeaseTaskListRequest struct {
+		TaskList string
+		TaskType int
+	}
+
+	// LeaseTaskListResponse is response to LeaseTaskListRequest
+	LeaseTaskListResponse struct {
+		RangeID int64
+	}
+
 	// CreateTaskRequest is used to create a new task for a workflow exectution
 	CreateTaskRequest struct {
 		Execution workflow.WorkflowExecution
-		TaskList  string
 		Data      Task
+		TaskID    int64
+		RangeID   int64
 	}
 
 	// CreateTaskResponse is the response to CreateTaskRequest
 	CreateTaskResponse struct {
-		TaskID string
 	}
 
 	// GetTasksRequest is used to retrieve tasks of a task list
 	GetTasksRequest struct {
-		TaskList    string
-		TaskType    int
-		LockTimeout time.Duration
-		BatchSize   int
+		TaskList     string
+		TaskType     int
+		ReadLevel    int64
+		MaxReadLevel int64
+		BatchSize    int
+		RangeID      int64
 	}
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*TaskInfoWithID
+		Tasks []*TaskInfo
 	}
 
 	// CompleteTaskRequest is used to complete a task
 	CompleteTaskRequest struct {
-		Execution workflow.WorkflowExecution
-		TaskList  string
-		TaskType  int
-		TaskID    string
-		LockToken string
+		TaskList string
+		TaskType int
+		TaskID   int64
 	}
 
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
@@ -275,6 +288,7 @@ type (
 
 	// TaskManager is used to manage tasks
 	TaskManager interface {
+		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
 		CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error

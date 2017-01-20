@@ -19,16 +19,29 @@ type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
 	tokenSerializer common.TaskTokenSerializer
+	taskLists       map[taskListID]*taskListContext
 	logger          bark.Logger
+}
+
+type taskListID struct {
+	taskListName string
+	taskType     int
 }
 
 // Contains information needed for current task transition from Activity queue to Workflow execution history.
 type taskContext struct {
-	taskUUID          string
+	taskListID        *taskListID
 	info              *persistence.TaskInfo
 	workflowExecution workflow.WorkflowExecution
 	matchingEngine    *matchingEngineImpl
 	logger            bark.Logger
+}
+
+type taskListContext struct {
+	taskList     taskListID
+	readLevel    int64
+	maxReadLevel int64
+	rangeID      int64
 }
 
 const (
@@ -61,6 +74,13 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
 	}
+}
+
+func (e *matchingEngineImpl) getTaskListContext(taskList string, taskListType int) (*taskListContext, error) {
+	if result, ok := e.taskLists[taskListID{taskListName: taskList, taskType: taskListType}]; ok {
+		return result, nil
+	}
+	panic("not implemented")
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
@@ -148,17 +168,24 @@ func (e *matchingEngineImpl) pollForActivityTaskOperation(request *workflow.Poll
 }
 
 // Creates a task context for a given task list and type.
-func (e *matchingEngineImpl) buildTaskContext(taskList string, taskType int) (*taskContext, error) {
+func (e *matchingEngineImpl) buildTaskContext(taskList string, taskListType int) (*taskContext, error) {
+	t, err := e.getTaskListContext(taskList, taskListType)
+	if err != nil {
+		return nil, err
+	}
+
 	getTaskResponse, err := e.getTasksWithRetry(&persistence.GetTasksRequest{
-		TaskList:    taskList,
-		TaskType:    taskType,
-		LockTimeout: taskLockDuration,
-		BatchSize:   1,
+		TaskList:     t.taskList.taskListName,
+		TaskType:     t.taskList.taskType,
+		ReadLevel:    t.readLevel,
+		MaxReadLevel: t.maxReadLevel,
+		BatchSize:    1,
+		RangeID:      t.rangeID,
 	})
 
 	if err != nil {
 		logPersistantStoreErrorEvent(e.logger, tagValueStoreOperationGetTasks, err,
-			fmt.Sprintf("{taskType: %v, taskList: %v}", taskType, taskList))
+			fmt.Sprintf("{taskType: %v, taskList: %v}", t.taskList.taskType, t.taskList.taskListName))
 		return nil, err
 	}
 
@@ -166,16 +193,15 @@ func (e *matchingEngineImpl) buildTaskContext(taskList string, taskType int) (*t
 		return nil, ErrNoTasks
 	}
 
-	tWrapped := getTaskResponse.Tasks[0]
-	t := tWrapped.Info
+	task := getTaskResponse.Tasks[0]
 	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(t.WorkflowID),
-		RunId:      common.StringPtr(t.RunID),
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
 	}
 
-	context := newTaskContext(e, tWrapped.TaskUUID, t, workflowExecution, e.logger)
+	result := newTaskContext(e, task, &t.taskList, workflowExecution, e.logger)
 
-	return context, nil
+	return result, nil
 }
 
 func (e *matchingEngineImpl) getTasksWithRetry(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
@@ -253,30 +279,29 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 
 func (c *taskContext) completeTask() error {
 	completeReq := &persistence.CompleteTaskRequest{
-		Execution: c.workflowExecution,
-		TaskList:  c.info.TaskList,
-		TaskType:  c.info.TaskType,
-		TaskID:    c.taskUUID,
-		LockToken: c.info.LockToken,
+		TaskList: c.taskListID.taskListName,
+		TaskType: c.taskListID.taskType,
+		TaskID:   c.info.TaskID,
 	}
 
 	err := c.matchingEngine.completeTaskWithRetry(completeReq)
 	if err != nil {
 		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationCompleteTask, err,
-			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}", c.info.TaskID, c.info.TaskType, c.info.TaskList))
+			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
+				c.info.TaskID, c.taskListID.taskType, c.taskListID.taskListName))
 	}
 
 	return err
 }
 
-func newTaskContext(matchingEngine *matchingEngineImpl, taskUUID string, info *persistence.TaskInfo,
+func newTaskContext(matchingEngine *matchingEngineImpl, info *persistence.TaskInfo, taskListID *taskListID,
 	execution workflow.WorkflowExecution, logger bark.Logger) *taskContext {
 	return &taskContext{
-		taskUUID:          taskUUID,
 		info:              info,
 		matchingEngine:    matchingEngine,
 		workflowExecution: execution,
 		logger:            logger,
+		taskListID:        taskListID,
 	}
 }
 

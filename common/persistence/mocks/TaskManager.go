@@ -8,6 +8,29 @@ type TaskManager struct {
 	mock.Mock
 }
 
+// LeaseTaskList provides a mock function with given fields: request
+func (_m *TaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.LeaseTaskListResponse
+	if rf, ok := ret.Get(0).(func(*persistence.LeaseTaskListRequest) *persistence.LeaseTaskListResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.LeaseTaskListResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.LeaseTaskListRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // CompleteTask provides a mock function with given fields: request
 func (_m *TaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
 	ret := _m.Called(request)

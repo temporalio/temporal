@@ -22,7 +22,8 @@ CREATE TYPE workflow_execution (
   decision_pending      boolean,
 );
 
-CREATE TYPE task (
+-- TODO: Remove fields that are left over from activitiy and workflow tasks.
+CREATE TYPE transfer_task (
   workflow_id      text,
   run_id           uuid,
   task_id          bigint,
@@ -43,6 +44,13 @@ CREATE TYPE timer_task (
   event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
 );
 
+-- Activity or workflow task in a task list
+CREATE TYPE task (
+  workflow_id      text,
+  run_id           uuid,
+  schedule_id      bigint,
+);
+
 CREATE TABLE executions (
   shard_id           int,
   type               int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
@@ -52,7 +60,7 @@ CREATE TABLE executions (
   task_id            bigint, -- unique identifier for transfer and timer tasks for an execution
   shard              frozen<shard>,
   execution          frozen<workflow_execution>,
-  transfer           frozen<task>,
+  transfer           frozen<transfer_task>,
   timer              frozen<timer_task>,
   next_event_id      bigint,  -- This is needed to make conditional updates on session history
   range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
@@ -60,13 +68,12 @@ CREATE TABLE executions (
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 
+-- Stores activity or workflow tasks
 CREATE TABLE tasks (
   task_list        text,
   type             int, -- enum TaskType {ActivityTask, DecisionTask}
-  workflow_id      text,
-  run_id           uuid,
-  task_id          uuid,
+  task_id          bigint,  -- unique identifier for tasks, monotonically increasing
+  range_id         bigint static, -- Used to ensure that only one process can write to the table
   task             frozen<task>,
-  lock_token       uuid, -- Token for engine to dispatch tasks
-  PRIMARY KEY (task_list, type, workflow_id, run_id, task_id)
+  PRIMARY KEY ((task_list, type), task_id)
 );

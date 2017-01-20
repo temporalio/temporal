@@ -50,7 +50,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 }
 
 func (s *transferQueueProcessorSuite) TestNoTransferTask() {
-	tasksCh := make(chan *persistence.TaskInfo)
+	tasksCh := make(chan *persistence.TransferTaskInfo)
 	newPollInterval := s.processor.processTransferTasks(tasksCh, transferProcessorMinPollInterval)
 	s.Equal(2*transferProcessorMinPollInterval, newPollInterval)
 }
@@ -63,7 +63,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasksCh := make(chan *persistence.TaskInfo, 10)
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
 	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
 	s.Equal(transferProcessorMinPollInterval, newPollInterval)
 workerPump:
@@ -76,13 +76,14 @@ workerPump:
 		}
 	}
 
-	tasks1, err1 := s.GetTasks(taskList, persistence.TaskTypeDecision, time.Second, 1)
+	tasks1Response, err1 := s.GetTasks(taskList, persistence.TaskTypeDecision, 1)
+	tasks1 := tasks1Response.Tasks
 	s.Nil(err1)
 	s.NotEmpty(tasks1)
 	s.Equal(1, len(tasks1))
 
 	dTask := tasks1[0]
-	s.Equal(int64(2), dTask.Info.ScheduleID)
+	s.Equal(int64(2), dTask.ScheduleID)
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
@@ -95,7 +96,7 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasksCh := make(chan *persistence.TaskInfo, 10)
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
 	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
 	s.Equal(transferProcessorMinPollInterval, newPollInterval)
 workerPump:
@@ -108,19 +109,17 @@ workerPump:
 		}
 	}
 
-	tasks1, err1 := s.GetTasks(taskList, persistence.TaskTypeActivity, time.Second, 10)
+	tasks1Result, err1 := s.GetTasks(taskList, persistence.TaskTypeActivity, 10)
+	tasks1 := tasks1Result.Tasks
 	s.Nil(err1)
 	s.NotEmpty(tasks1)
 	s.Equal(len(activityTaskScheduleIds), len(tasks1))
 
 	for _, t := range tasks1 {
-		s.True(containsID(activityTaskScheduleIds, t.Info.ScheduleID),
-			fmt.Sprintf("ScheduleID: %v, TaskList: %v", string(t.Info.ScheduleID), t.Info.TaskList))
-		s.Equal(workflowExecution.GetWorkflowId(), t.Info.WorkflowID)
-		s.Equal(workflowExecution.GetRunId(), t.Info.RunID)
-		s.Equal(taskList, t.Info.TaskList)
-		s.Equal(1, t.Info.DeliveryCount)
-		s.Equal(persistence.TaskTypeActivity, t.Info.TaskType)
+		s.True(containsID(activityTaskScheduleIds, t.ScheduleID),
+			fmt.Sprintf("ScheduleID: %v, TaskList: %v", string(t.ScheduleID), taskList))
+		s.Equal(workflowExecution.GetWorkflowId(), t.WorkflowID)
+		s.Equal(workflowExecution.GetRunId(), t.RunID)
 	}
 }
 

@@ -248,7 +248,6 @@ func (s *cassandraPersistenceSuite) TestCreateTask() {
 		60: "a5b38106793e",
 	})
 	s.Nil(err2, "No error expected.")
-	s.NotNil(tasks2, "Expected valid task identifiers.")
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
 	for _, t := range tasks2 {
 		s.NotEmpty(t, "Expected non empty task identifier.")
@@ -263,17 +262,16 @@ func (s *cassandraPersistenceSuite) TestGetDecisionTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasks1, err1 := s.GetTasks(taskList, TaskTypeDecision, time.Minute, 1)
+	tasks1Response, err1 := s.GetTasks(taskList, TaskTypeDecision, 1)
 	s.Nil(err1, "No error expected.")
-	s.NotNil(tasks1, "expected valid list of tasks.")
-	s.Equal(1, len(tasks1), "Expected 1 decision task.")
+	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
 }
 
 func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("complete-decision-task-test"),
 		RunId: common.StringPtr("2aa0a74e-16ee-4f27-983d-48b07ec1915d")}
 	taskList := "48b07ec1915d"
-	startTime := time.Now()
 	tasks0, err0 := s.CreateActivityTasks(workflowExecution, map[int64]string{
 		10: taskList,
 		20: taskList,
@@ -288,62 +286,28 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasksWithID1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 5)
+	tasksWithID1Response, err1 := s.GetTasks(taskList, TaskTypeActivity, 5)
+
 	s.Nil(err1, "No error expected.")
+	tasksWithID1 := tasksWithID1Response.Tasks
 	s.NotNil(tasksWithID1, "expected valid list of tasks.")
 
 	s.Equal(5, len(tasksWithID1), "Expected 5 activity tasks.")
-	for _, tWrapped := range tasksWithID1 {
-		t := tWrapped.Info
+	for _, t := range tasksWithID1 {
 		s.Equal(workflowExecution.GetWorkflowId(), t.WorkflowID)
 		s.Equal(workflowExecution.GetRunId(), t.RunID)
-		s.NotEmpty(tWrapped.TaskUUID)
-		s.Equal(taskList, t.TaskList)
-		s.Equal(TaskTypeActivity, t.TaskType)
-		s.True(t.VisibilityTime.Before(startTime.Add(10 * time.Minute)))
-		s.True(time.Now().Before(t.VisibilityTime))
-		s.NotEmpty(t.LockToken)
-		s.Equal(1, t.DeliveryCount)
+		s.True(t.TaskID > 0)
 
-		err2 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, t.LockToken)
+		err2 := s.CompleteTask(taskList, TaskTypeActivity, t.TaskID)
 		s.Nil(err2)
 	}
 
-	for _, tWrapped := range tasksWithID1 {
-		t := tWrapped.Info
-		err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, t.LockToken)
+	for _, t := range tasksWithID1 {
+		err3 := s.CompleteTask(taskList, TaskTypeActivity, t.TaskID)
 		s.NotNil(err3)
-		log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", t.TaskID, t.LockToken, err3)
+		log.Infof("Failed to complete task '%v'.  Error: %v", t.TaskID, err3)
 		s.IsType(&gen.EntityNotExistsError{}, err3)
 	}
-}
-
-func (s *cassandraPersistenceSuite) TestCompleteDecisionTaskConflict() {
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("conflict-decision-task-test"),
-		RunId: common.StringPtr("c4f353fe-302e-483d-9b57-9d2278cfcadb")}
-	taskList := "9d2278cfcadb"
-	badToken := "99fd2d2e-e9eb-47d0-9b1d-e08dab6ffb65"
-	tasks0, err0 := s.CreateActivityTasks(workflowExecution, map[int64]string{
-		10: taskList,
-	})
-	s.Nil(err0, "No error expected.")
-	s.NotNil(tasks0, "Expected non empty task identifier.")
-	s.Equal(1, len(tasks0), "expected 1 valid task identifier.")
-	for _, t := range tasks0 {
-		s.NotEmpty(t, "Expected non empty task identifier.")
-	}
-
-	tasksWrapped1, err1 := s.GetTasks(taskList, TaskTypeActivity, time.Minute, 1)
-	s.Nil(err1, "No error expected.")
-	s.NotNil(tasksWrapped1, "expected valid list of tasks.")
-	s.Equal(1, len(tasksWrapped1), "Expected 1 activity task.")
-
-	tWrapped := tasksWrapped1[0]
-	t := tWrapped.Info
-	err3 := s.CompleteTask(workflowExecution, t.TaskList, t.TaskType, tWrapped.TaskUUID, badToken)
-	s.NotNil(err3)
-	log.Infof("Failed to complete task '%v' using lock token '%v'.  Error: %v", t.TaskID, badToken, err3)
-	s.IsType(&ConditionFailedError{}, err3)
 }
 
 func (s *cassandraPersistenceSuite) TestTimerTasks() {

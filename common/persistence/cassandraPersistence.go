@@ -55,7 +55,7 @@ const (
 		`decision_pending: ?` +
 		`}`
 
-	templateTaskType = `{` +
+	templateTransferTaskType = `{` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
 		`task_id: ?, ` +
@@ -74,6 +74,12 @@ const (
 		`type: ?, ` +
 		`timeoutType: ?, ` +
 		`event_id: ?` +
+		`}`
+
+	templateTaskType = `{` +
+		`workflow_id: ?, ` +
+		`run_id: ?, ` +
+		`schedule_id: ?` +
 		`}`
 
 	templateCreateShardQuery = `INSERT INTO executions (` +
@@ -107,7 +113,7 @@ const (
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, workflow_id, run_id, transfer, task_id, lock_token) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTaskType + `, ?, ?)`
+		`VALUES(?, ?, ?, ?, ` + templateTransferTaskType + `, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, workflow_id, run_id, timer, task_id, lock_token) ` +
@@ -156,7 +162,7 @@ const (
 		`and task_id <= ? LIMIT ?`
 
 	templateUpdateTransferTaskQuery = `UPDATE executions ` +
-		`SET transfer = ` + templateTaskType + ` ` +
+		`SET transfer = ` + templateTransferTaskType + ` ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
@@ -189,30 +195,31 @@ const (
 		`and task_id = ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`task_list, type, workflow_id, run_id, task_id, task, lock_token) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `, ?)`
+		`task_list, type, task_id, task) ` +
+		`VALUES(?, ?, ?, ` + templateTaskType + `)`
 
 	templateGetTasksQuery = `SELECT task_id, task ` +
 		`FROM tasks ` +
 		`WHERE task_list = ? ` +
-		`and type = ? `
-
-	templateLockTaskQuery = `UPDATE tasks ` +
-		`SET task = ` + templateTaskType + `, lock_token = ? ` +
-		`WHERE task_list = ? ` +
 		`and type = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and task_id = ? ` +
-		`IF lock_token = ?`
+		`and task_id > ? ` +
+		`and task_id <= ? LIMIT ?`
 
 	templateCompleteTaskQuery = `DELETE FROM tasks ` +
 		`WHERE task_list = ? ` +
 		`and type = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
 		`and task_id = ?` +
-		`IF lock_token = ?`
+		`IF EXISTS`
+
+	templateUpdateLeaseTaskListQuery = `UPDATE tasks ` +
+		`SET range_id = ? ` +
+		`WHERE task_list = ? ` +
+		`and type = ? ` +
+		`IF range_id = ?`
+
+	tempaleGetTaskListRangeID = `SELECT range_id FROM tasks WHERE task_list = ? AND type = ?`
+
+	templateInsertLeaseTaskListQuery = `INSERT INTO tasks (task_list, type, range_id) VALUES (?, ?, 1) IF NOT EXISTS`
 )
 
 type (
@@ -560,7 +567,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
-		t := createTaskInfo(task["transfer"].(map[string]interface{}))
+		t := createTransferTaskInfo(task["transfer"].(map[string]interface{}))
 		// Reset task map to get it ready for next scan
 		task = make(map[string]interface{})
 
@@ -647,15 +654,60 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 	return nil
 }
 
-func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
-	taskUUID := uuid.New()
-	lockToken := uuid.New()
+// From TaskManager interface
+func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
+	if len(request.TaskList) == 0 {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("LeaseTaskList requires non empty task list"),
+		}
+	}
+	query := d.session.Query(tempaleGetTaskListRangeID,
+		request.TaskList,
+		request.TaskType,
+	)
+	var rangeID int64
+	err := query.Scan(&rangeID)
+	if err != nil {
+		if err == gocql.ErrNotFound { // First time task list is used
+			query = d.session.Query(templateInsertLeaseTaskListQuery,
+				request.TaskList,
+				request.TaskType)
+		} else {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error : %v",
+					request.TaskList, request.TaskType, err),
+			}
+		}
+	} else {
+		query = d.session.Query(templateUpdateLeaseTaskListQuery,
+			rangeID+1,
+			request.TaskList,
+			request.TaskType,
+			rangeID)
+	}
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("LeaseTaskList operation failed. Error : %v", err),
+		}
+	}
+	if !applied {
+		previousRangeID := previous["range_id"]
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
+		}
+	}
 
+	return &LeaseTaskListResponse{RangeID: rangeID + 1}, nil
+}
+
+// From TaskManager interface
+func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
 	var taskList string
 	var scheduleID int64
-
-	switch request.Data.GetType() {
+	taskType := request.Data.GetType()
+	switch taskType {
 	case TaskTypeActivity:
 		taskList = request.Data.(*ActivityTask).TaskList
 		scheduleID = request.Data.(*ActivityTask).ScheduleID
@@ -665,38 +717,49 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 		scheduleID = request.Data.(*DecisionTask).ScheduleID
 	}
 
-	query := d.session.Query(templateCreateTaskQuery,
-		request.TaskList,
-		request.Data.GetType(),
-		request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(),
-		taskUUID,
-		request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(),
-		request.Data.GetTaskID(),
+	// Batch is used to include conditional update on range_id
+	batch := d.session.NewBatch(gocql.LoggedBatch)
+
+	batch.Query(templateCreateTaskQuery,
 		taskList,
 		request.Data.GetType(),
-		scheduleID,
-		cqlNowTimestamp,
-		lockToken,
-		0,
-		lockToken).Consistency(d.lowConslevel)
+		request.TaskID,
+		request.Execution.GetWorkflowId(),
+		request.Execution.GetRunId(),
+		scheduleID)
 
-	if err := query.Exec(); err != nil {
+	// The following query is used to ensure that range_id didn't change
+	batch.Query(templateUpdateLeaseTaskListQuery,
+		request.RangeID,
+		taskList,
+		taskType,
+		request.RangeID,
+	)
+	previous := make(map[string]interface{})
+	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
 		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateTask operation failed. Error: %v", err),
+			Message: fmt.Sprintf("CreateTask operation failed. Error : %v", err),
 		}
 	}
-
-	return &CreateTaskResponse{TaskID: taskUUID}, nil
+	if !applied {
+		rangeID := previous["range_id"]
+		return nil, &ConditionFailedError{
+			msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
+				taskList, taskType, request.RangeID, rangeID),
+		}
+	}
+	return &CreateTaskResponse{}, nil
 }
 
+// From TaskManager interface
 func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	currentTimestamp := time.Now()
-
 	query := d.session.Query(templateGetTasksQuery,
 		request.TaskList,
-		request.TaskType).Consistency(d.lowConslevel)
+		request.TaskType,
+		request.ReadLevel,
+		request.MaxReadLevel,
+		request.BatchSize).Consistency(d.lowConslevel)
 
 	iter := query.Iter()
 	if iter == nil {
@@ -709,53 +772,17 @@ func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResp
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
-
-		taskUUID := task["task_id"].(gocql.UUID).String()
+		taskID, ok := task["task_id"]
+		if !ok { // no tasks, but static column record returned
+			continue
+		}
 		t := createTaskInfo(task["task"].(map[string]interface{}))
-		// Reset task map to get it ready for next scan
-		task = make(map[string]interface{})
-		// Skip if the task should not be delivered right now
-		if t.VisibilityTime.After(currentTimestamp) {
-			continue
-		}
-
-		newVisibilityTime := currentTimestamp.Add(request.LockTimeout)
-		newCQLVisibilityTime := common.UnixNanoToCQLTimestamp(newVisibilityTime.UnixNano())
-		newLockToken := uuid.New()
-		newDeliveryCount := t.DeliveryCount + 1
-
-		lockQuery := d.session.Query(templateLockTaskQuery,
-			t.WorkflowID,
-			t.RunID,
-			t.TaskID,
-			t.TaskList,
-			t.TaskType,
-			t.ScheduleID,
-			newCQLVisibilityTime,
-			newLockToken,
-			newDeliveryCount,
-			newLockToken,
-			t.TaskList,
-			t.TaskType,
-			t.WorkflowID,
-			t.RunID,
-			taskUUID,
-			t.LockToken)
-
-		previous := make(map[string]interface{})
-		applied, err1 := lockQuery.MapScanCAS(previous)
-		if err1 != nil || !applied {
-			// TODO: log on failure to acquire lock
-			continue
-		}
-
-		t.VisibilityTime = newVisibilityTime
-		t.LockToken = newLockToken
-		t.DeliveryCount = newDeliveryCount
-		response.Tasks = append(response.Tasks, &TaskInfoWithID{TaskUUID: taskUUID, Info: t})
+		t.TaskID = taskID.(int64)
+		response.Tasks = append(response.Tasks, t)
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
 		}
+		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
 	}
 
 	if err := iter.Close(); err != nil {
@@ -767,15 +794,12 @@ PopulateTasks:
 	return response, nil
 }
 
+// From TaskManager interface
 func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error {
-	execution := request.Execution
 	query := d.session.Query(templateCompleteTaskQuery,
 		request.TaskList,
 		request.TaskType,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
-		request.TaskID,
-		request.LockToken)
+		request.TaskID)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -786,20 +810,11 @@ func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error 
 	}
 
 	if !applied {
-		if v, ok := previous["lock_token"]; ok {
-			actualLockToken := v.(gocql.UUID).String()
-			return &ConditionFailedError{
-				msg: fmt.Sprintf("Failed to complete task.  Provided lock_token: %v, actual lock_token: %v", request.LockToken,
-					actualLockToken),
-			}
-		}
-
 		return &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("Task not found.  WorkflowId: %v, RunId: %v, TaskId: %v", execution.GetWorkflowId(),
-				execution.GetRunId(), request.TaskID),
+			Message: fmt.Sprintf("Task not found.  TaskList: %v, TaskType: %v, TaskId: %v",
+				request.TaskList, request.TaskType, request.TaskID),
 		}
 	}
-
 	return nil
 }
 
@@ -977,8 +992,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 	return info
 }
 
-func createTaskInfo(result map[string]interface{}) *TaskInfo {
-	info := &TaskInfo{}
+func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
+	info := &TransferTaskInfo{}
 	for k, v := range result {
 		switch k {
 		case "workflow_id":
@@ -999,6 +1014,24 @@ func createTaskInfo(result map[string]interface{}) *TaskInfo {
 			info.LockToken = v.(gocql.UUID).String()
 		case "delivery_count":
 			info.DeliveryCount = v.(int)
+		}
+	}
+
+	return info
+}
+
+func createTaskInfo(result map[string]interface{}) *TaskInfo {
+	info := &TaskInfo{}
+	for k, v := range result {
+		switch k {
+		case "workflow_id":
+			info.WorkflowID = v.(string)
+		case "run_id":
+			info.RunID = v.(gocql.UUID).String()
+		case "task_id":
+			info.TaskID = v.(int64)
+		case "schedule_id":
+			info.ScheduleID = v.(int64)
 		}
 	}
 

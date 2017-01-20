@@ -76,6 +76,7 @@ const (
 	CreateTaskScope
 	GetTasksScope
 	CompleteTaskScope
+	LeaseTaskListScope
 	StartWorkflowExecutionScope
 	PollForDecisionTaskScope
 	PollForActivityTaskScope

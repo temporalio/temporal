@@ -231,3 +231,17 @@ func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error
 
 	return err
 }
+
+func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
+	p.m3Client.IncCounter(metrics.LeaseTaskListScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.LeaseTaskListScope, metrics.WorkflowLatencyTimer)
+	response, err := p.LeaseTaskList(request)
+	sw.Stop()
+
+	if err != nil {
+		p.m3Client.IncCounter(metrics.CompleteTaskScope, metrics.WorkflowFailures)
+	}
+
+	return response, err
+}
