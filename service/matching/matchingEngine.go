@@ -55,7 +55,7 @@ const (
 
 	retryLongPollInitialInterval    = 10 * time.Millisecond
 	retryLongPollMaxInterval        = 10 * time.Millisecond
-	retryLongPollExpirationInterval = 2 * time.Minute
+	retryLongPollExpirationInterval = 1 * time.Minute
 )
 
 var (
