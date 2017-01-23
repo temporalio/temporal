@@ -100,9 +100,9 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 }
 
 // NewEngine creates an instance of history engine
-func NewEngine(shardID int, executionManager persistence.ExecutionManager,
+func NewEngine(shardID int, shardManager persistence.ShardManager, executionManager persistence.ExecutionManager,
 	matching matching.Client, logger bark.Logger) Engine {
-	shard, err := acquireShard(shardID, executionManager)
+	shard, err := acquireShard(shardID, shardManager)
 	if err != nil {
 		logger.WithField("error", err).Error("failed to acquire shard")
 		return nil

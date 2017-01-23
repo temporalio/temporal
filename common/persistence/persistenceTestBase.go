@@ -31,6 +31,7 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
 	TestBase struct {
+		ShardMgr     ShardManager
 		WorkflowMgr  ExecutionManager
 		TaskMgr      TaskManager
 		ShardInfo    *ShardInfo
@@ -95,6 +96,10 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	var err error
+	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
 		s.CassandraTestCluster.keyspace, 1)
 	if err != nil {
@@ -112,12 +117,46 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		TransferAckLevel: 0,
 	}
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0)
-	err1 := s.WorkflowMgr.CreateShard(&CreateShardRequest{
+	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
 		ShardInfo: s.ShardInfo,
 	})
 	if err1 != nil {
 		log.Fatal(err1)
 	}
+}
+
+// CreateShard is a utility method to create the shard using persistence layer
+func (s *TestBase) CreateShard(shardID int, owner string, rangeID int64) error {
+	info := &ShardInfo{
+		ShardID: shardID,
+		Owner:   owner,
+		RangeID: rangeID,
+	}
+
+	return s.ShardMgr.CreateShard(&CreateShardRequest{
+		ShardInfo: info,
+	})
+}
+
+// GetShard is a utility method to get the shard using persistence layer
+func (s *TestBase) GetShard(shardID int) (*ShardInfo, error) {
+	response, err := s.ShardMgr.GetShard(&GetShardRequest{
+		ShardID: shardID,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response.ShardInfo, nil
+}
+
+// UpdateShard is a utility method to update the shard using persistence layer
+func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) error {
+	return s.ShardMgr.UpdateShard(&UpdateShardRequest{
+		ShardInfo:       updatedInfo,
+		PreviousRangeID: previousRangeID,
+	})
 }
 
 // CreateWorkflowExecution is a utility method to create workflow executions

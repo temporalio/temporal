@@ -18,7 +18,7 @@ type (
 	}
 
 	shardContextImpl struct {
-		executionManager       persistence.ExecutionManager
+		shardManager           persistence.ShardManager
 		shardInfo              *persistence.ShardInfo
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
@@ -44,7 +44,8 @@ func (s *shardContextImpl) GetTransferAckLevel() int64 {
 func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, ackLevel)
 	updatedShardInfo := copyShardInfo(s.shardInfo)
-	return s.executionManager.UpdateShard(&persistence.UpdateShardRequest{
+	updatedShardInfo.StolenSinceRenew = 0
+	return s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: updatedShardInfo.RangeID,
 	})
@@ -54,8 +55,8 @@ func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
-func acquireShard(shardID int, executionManager persistence.ExecutionManager) (ShardContext, error) {
-	response, err0 := executionManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
+func acquireShard(shardID int, shardManager persistence.ShardManager) (ShardContext, error) {
+	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
 	}
@@ -63,8 +64,9 @@ func acquireShard(shardID int, executionManager persistence.ExecutionManager) (S
 	shardInfo := response.ShardInfo
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.RangeID++
+	updatedShardInfo.StolenSinceRenew++
 
-	err1 := executionManager.UpdateShard(&persistence.UpdateShardRequest{
+	err1 := shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: shardInfo.RangeID})
 	if err1 != nil {
@@ -72,7 +74,7 @@ func acquireShard(shardID int, executionManager persistence.ExecutionManager) (S
 	}
 
 	context := &shardContextImpl{
-		executionManager:       executionManager,
+		shardManager:           shardManager,
 		shardInfo:              updatedShardInfo,
 		transferSequenceNumber: updatedShardInfo.RangeID << 24,
 	}

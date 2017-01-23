@@ -40,7 +40,9 @@ type (
 	// ShardInfo describes a shard
 	ShardInfo struct {
 		ShardID          int
+		Owner            string
 		RangeID          int64
+		StolenSinceRenew int
 		TransferAckLevel int64
 	}
 
@@ -300,11 +302,15 @@ type (
 		State *WorkflowMutableState
 	}
 
-	// ExecutionManager is the used to manage workflow executions
-	ExecutionManager interface {
+	// ShardManager is used to manage all shards
+	ShardManager interface {
 		CreateShard(request *CreateShardRequest) error
 		GetShard(request *GetShardRequest) (*GetShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
+	}
+
+	// ExecutionManager is used to manage workflow executions
+	ExecutionManager interface {
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error

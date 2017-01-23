@@ -6,6 +6,11 @@ import (
 )
 
 type (
+	shardPersistenceClient struct {
+		m3Client    metrics.Client
+		persistence ShardManager
+	}
+
 	workflowExecutionPersistenceClient struct {
 		m3Client    metrics.Client
 		persistence ExecutionManager
@@ -16,6 +21,18 @@ type (
 		persistence TaskManager
 	}
 )
+
+var _ ShardManager = (*shardPersistenceClient)(nil)
+var _ ExecutionManager = (*workflowExecutionPersistenceClient)(nil)
+var _ TaskManager = (*taskPersistenceClient)(nil)
+
+// NewShardPersistenceClient creates a client to manage shards
+func NewShardPersistenceClient(persistence ShardManager, m3Client metrics.Client) ShardManager {
+	return &shardPersistenceClient{
+		persistence: persistence,
+		m3Client:    m3Client,
+	}
+}
 
 // NewWorkflowExecutionPersistenceClient creates a client to manage executions
 func NewWorkflowExecutionPersistenceClient(persistence ExecutionManager, m3Client metrics.Client) ExecutionManager {
@@ -33,7 +50,7 @@ func NewTaskPersistenceClient(persistence TaskManager, m3Client metrics.Client) 
 	}
 }
 
-func (p *workflowExecutionPersistenceClient) CreateShard(request *CreateShardRequest) error {
+func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error {
 	p.m3Client.IncCounter(metrics.CreateShardScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateShardScope, metrics.WorkflowLatencyTimer)
@@ -49,7 +66,7 @@ func (p *workflowExecutionPersistenceClient) CreateShard(request *CreateShardReq
 	return err
 }
 
-func (p *workflowExecutionPersistenceClient) GetShard(
+func (p *shardPersistenceClient) GetShard(
 	request *GetShardRequest) (*GetShardResponse, error) {
 	p.m3Client.IncCounter(metrics.GetShardScope, metrics.WorkflowRequests)
 
@@ -66,7 +83,7 @@ func (p *workflowExecutionPersistenceClient) GetShard(
 	return response, err
 }
 
-func (p *workflowExecutionPersistenceClient) UpdateShard(request *UpdateShardRequest) error {
+func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error {
 	p.m3Client.IncCounter(metrics.UpdateShardScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.UpdateShardScope, metrics.WorkflowLatencyTimer)

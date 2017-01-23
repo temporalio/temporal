@@ -38,7 +38,9 @@ const (
 const (
 	templateShardType = `{` +
 		`shard_id: ?, ` +
+		`owner: ?, ` +
 		`range_id: ?, ` +
+		`stolen_since_renew: ?, ` +
 		`transfer_ack_level: ?` +
 		`}`
 
@@ -266,6 +268,22 @@ type (
 	}
 )
 
+// NewCassandraShardPersistence is used to create an instance of ShardManager implementation
+func NewCassandraShardPersistence(hosts string, keyspace string) (ShardManager, error) {
+	cluster := common.NewCassandraCluster(hosts)
+	cluster.Keyspace = keyspace
+	cluster.ProtoVersion = cassandraProtoVersion
+	cluster.Consistency = gocql.Quorum
+	cluster.Timeout = defaultSessionTimeout
+
+	session, err := cluster.CreateSession()
+	if err != nil {
+		return nil, err
+	}
+
+	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One}, nil
+}
+
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string, shardID int) (ExecutionManager, error) {
 	cluster := common.NewCassandraCluster(hosts)
@@ -306,7 +324,9 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 		rowTypeShardRunID,
 		rowTypeShardTaskID,
 		shardInfo.ShardID,
+		shardInfo.Owner,
 		shardInfo.RangeID,
+		shardInfo.StolenSinceRenew,
 		shardInfo.TransferAckLevel,
 		shardInfo.RangeID)
 
@@ -360,7 +380,9 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 
 	query := d.session.Query(templateUpdateShardQuery,
 		shardInfo.ShardID,
+		shardInfo.Owner,
 		shardInfo.RangeID,
+		shardInfo.StolenSinceRenew,
 		shardInfo.TransferAckLevel,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
@@ -1062,8 +1084,12 @@ func createShardInfo(result map[string]interface{}) *ShardInfo {
 		switch k {
 		case "shard_id":
 			info.ShardID = v.(int)
+		case "owner":
+			info.Owner = v.(string)
 		case "range_id":
 			info.RangeID = v.(int64)
+		case "stolen_since_renew":
+			info.StolenSinceRenew = v.(int)
 		case "transfer_ack_level":
 			info.TransferAckLevel = v.(int64)
 		}

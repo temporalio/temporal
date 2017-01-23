@@ -1,0 +1,127 @@
+package persistence
+
+import (
+	"os"
+	"testing"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/stretchr/testify/suite"
+
+	gen "code.uber.internal/devexp/minions/.gen/go/shared"
+)
+
+type (
+	shardPersistenceSuite struct {
+		suite.Suite
+		TestBase
+	}
+)
+
+func TestShardPersistenceSuite(t *testing.T) {
+	s := new(shardPersistenceSuite)
+	suite.Run(t, s)
+}
+
+func (s *shardPersistenceSuite) SetupSuite() {
+	if testing.Verbose() {
+		log.SetOutput(os.Stdout)
+	}
+
+	s.SetupWorkflowStore()
+}
+
+func (s *shardPersistenceSuite) TearDownSuite() {
+	s.TearDownWorkflowStore()
+}
+
+func (s *shardPersistenceSuite) TestCreateShard() {
+	err0 := s.CreateShard(19, "test_create_shard1", 123)
+	s.Nil(err0, "No error expected.")
+
+	err1 := s.CreateShard(19, "test_create_shard2", 124)
+	s.NotNil(err1, "expected non nil error.")
+	s.IsType(&ShardAlreadyExistError{}, err1)
+	log.Infof("CreateShard failed with error: %v", err1)
+}
+
+func (s *shardPersistenceSuite) TestGetShard() {
+	shardID := 20
+	owner := "test_get_shard"
+	rangeID := int64(131)
+	err0 := s.CreateShard(shardID, owner, rangeID)
+	s.Nil(err0, "No error expected.")
+
+	shardInfo, err1 := s.GetShard(shardID)
+	s.Nil(err1)
+	s.NotNil(shardInfo)
+	s.Equal(shardID, shardInfo.ShardID)
+	s.Equal(owner, shardInfo.Owner)
+	s.Equal(rangeID, shardInfo.RangeID)
+	s.Equal(0, shardInfo.StolenSinceRenew)
+
+	_, err2 := s.GetShard(4766)
+	s.NotNil(err2)
+	s.IsType(&gen.EntityNotExistsError{}, err2)
+	log.Infof("GetShard failed with error: %v", err2)
+}
+
+func (s *shardPersistenceSuite) TestUpdateShard() {
+	shardID := 30
+	owner := "test_update_shard"
+	rangeID := int64(141)
+	err0 := s.CreateShard(shardID, owner, rangeID)
+	s.Nil(err0, "No error expected.")
+
+	shardInfo, err1 := s.GetShard(shardID)
+	s.Nil(err1)
+	s.NotNil(shardInfo)
+	s.Equal(shardID, shardInfo.ShardID)
+	s.Equal(owner, shardInfo.Owner)
+	s.Equal(rangeID, shardInfo.RangeID)
+	s.Equal(0, shardInfo.StolenSinceRenew)
+
+	updatedOwner := "updatedOwner"
+	updatedRangeID := int64(142)
+	updatedTransferAckLevel := int64(1000)
+	updatedStolenSinceRenew := 10
+	updatedInfo := copyShardInfo(shardInfo)
+	updatedInfo.Owner = updatedOwner
+	updatedInfo.RangeID = updatedRangeID
+	updatedInfo.TransferAckLevel = updatedTransferAckLevel
+	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
+	err2 := s.UpdateShard(updatedInfo, shardInfo.RangeID)
+	s.Nil(err2)
+
+	info1, err3 := s.GetShard(shardID)
+	s.Nil(err3)
+	s.NotNil(info1)
+	s.Equal(updatedOwner, info1.Owner)
+	s.Equal(updatedRangeID, info1.RangeID)
+	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
+	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
+
+	failedUpdateInfo := copyShardInfo(shardInfo)
+	failedUpdateInfo.Owner = "failed_owner"
+	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.RangeID)
+	s.NotNil(err4)
+	s.IsType(&ConditionFailedError{}, err4)
+	log.Infof("Update shard failed with error: %v", err4)
+
+	info2, err5 := s.GetShard(shardID)
+	s.Nil(err5)
+	s.NotNil(info2)
+	s.Equal(updatedOwner, info2.Owner)
+	s.Equal(updatedRangeID, info2.RangeID)
+	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
+	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
+}
+
+func copyShardInfo(sourceInfo *ShardInfo) *ShardInfo {
+	return &ShardInfo{
+		ShardID:          sourceInfo.ShardID,
+		Owner:            sourceInfo.Owner,
+		RangeID:          sourceInfo.RangeID,
+		TransferAckLevel: sourceInfo.TransferAckLevel,
+		StolenSinceRenew: sourceInfo.StolenSinceRenew,
+	}
+}

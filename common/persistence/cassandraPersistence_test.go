@@ -127,7 +127,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo.NextEventID = int64(6)
 	failedUpdatedInfo.LastProcessedEvent = int64(3)
 	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil)
-	s.NotNil(err4, "No error expected.")
+	s.NotNil(err4, "expected non nil error.")
 	s.IsType(&ConditionFailedError{}, err4)
 	log.Infof("Conditional update failed with error: %v", err4)
 

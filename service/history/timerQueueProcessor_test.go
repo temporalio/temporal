@@ -41,7 +41,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	//log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
-	resp, err := s.WorkflowMgr.GetShard(&persistence.GetShardRequest{ShardID: 1})
+	resp, err := s.ShardMgr.GetShard(&persistence.GetShardRequest{ShardID: 1})
 	if err != nil {
 		log.Fatal(err)
 	}

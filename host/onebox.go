@@ -28,6 +28,7 @@ type cadenceImpl struct {
 	matchingHandler *matching.Handler
 	historyHandler  *history.Handler
 	logger          bark.Logger
+	shardMgr        persistence.ShardManager
 	taskMgr         persistence.TaskManager
 	executionMgr    persistence.ExecutionManager
 	shutdownCh      chan struct{}
@@ -35,9 +36,11 @@ type cadenceImpl struct {
 }
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(executionMgr persistence.ExecutionManager, taskMgr persistence.TaskManager, logger bark.Logger) Cadence {
+func NewCadence(shardMgr persistence.ShardManager, executionMgr persistence.ExecutionManager,
+	taskMgr persistence.TaskManager, logger bark.Logger) Cadence {
 	return &cadenceImpl{
 		logger:       logger,
+		shardMgr:     shardMgr,
 		taskMgr:      taskMgr,
 		executionMgr: executionMgr,
 		shutdownCh:   make(chan struct{}),
@@ -52,7 +55,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(c.logger, c.executionMgr, c.taskMgr, rpHosts, &startWG)
+	go c.startHistory(c.logger, c.shardMgr, c.executionMgr, rpHosts, &startWG)
 	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
 	startWG.Wait()
 
@@ -102,14 +105,14 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(logger bark.Logger, executionMgr persistence.ExecutionManager,
-	taskMgr persistence.TaskManager, rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
+	executionMgr persistence.ExecutionManager, rpHosts []string, startWG *sync.WaitGroup) {
 	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 		return c.createTChannel(sName, c.HistoryServiceAddress(), thriftServices)
 	}
 	service := common.NewService("cadence-history", logger, tchanFactory, rpHosts)
 	var thriftServices []thrift.TChanServer
-	c.historyHandler, thriftServices = history.NewHandler(service, executionMgr)
+	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr)
 	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh

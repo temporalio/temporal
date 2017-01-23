@@ -5,7 +5,12 @@ CREATE TABLE shards (
 
 CREATE TYPE shard (
   shard_id            int,
+  owner               text, -- Host identifier processing the shard
+  -- Range identifier used for generating ack ids for tasks within shard.
+  -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
   range_id            bigint,
+  -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
+  stolen_since_renew  int,
   transfer_ack_level  bigint,
 );
 

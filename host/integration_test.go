@@ -106,7 +106,7 @@ func (s *integrationSuite) TearDownSuite() {
 
 func (s *integrationSuite) SetupTest() {
 	s.ClearTransferQueue()
-	s.host = NewCadence(s.WorkflowMgr, s.TaskMgr, s.logger)
+	s.host = NewCadence(s.ShardMgr, s.WorkflowMgr, s.TaskMgr, s.logger)
 	s.host.Start()
 	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
 }
