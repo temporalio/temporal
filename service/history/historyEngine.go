@@ -305,6 +305,8 @@ Update_History_Loop:
 		}
 		if start2HeartBeatTimeoutTask != nil {
 			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
+			ai.StartedID = event.GetEventId()
+			msBuilder.UpdatePendingActivity(scheduleID, ai)
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
