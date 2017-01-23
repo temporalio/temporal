@@ -44,7 +44,7 @@ import (
 )
 
 var (
-	integration = flag.Bool("integration", false, "run integration tests")
+	integration = flag.Bool("integration", true, "run integration tests")
 )
 
 type (
