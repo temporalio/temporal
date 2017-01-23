@@ -275,7 +275,12 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		isRunning, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
-		if !isRunning || ai.StartedID != emptyEventID {
+		if !isRunning {
+			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
+				isRunning)
+			return nil, ErrDuplicate
+		}
+		if ai.StartedID != emptyEventID {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, ai.StartedID,
 				isRunning)
 			return nil, ErrDuplicate
