@@ -188,6 +188,7 @@ struct ActivityTaskFailedEventAttributes {
 }
 
 struct ActivityTaskTimedOutEventAttributes {
+  05: optional binary details
   10: optional i64 (js.type = "Long") scheduledEventId
   20: optional i64 (js.type = "Long") startedEventId
   30: optional TimeoutType timeoutType

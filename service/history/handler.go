@@ -55,7 +55,7 @@ func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (h *Handler) RecordActivityTaskHeartbeat(ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
-	panic("Not Implemented")
+	return h.engine.RecordActivityTaskHeartbeat(heartbeatRequest)
 }
 
 // RecordActivityTaskStarted - Record Activity Task started.

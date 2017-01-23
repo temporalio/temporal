@@ -74,7 +74,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
-	panic("Not Implemented")
+	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
+	return wh.history.RecordActivityTaskHeartbeat(heartbeatRequest)
 }
 
 // RespondActivityTaskCompleted - Record Activity Task Heart beat

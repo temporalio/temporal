@@ -5133,11 +5133,14 @@ func (p *ActivityTaskFailedEventAttributes) String() string {
 }
 
 // Attributes:
+//  - Details
 //  - ScheduledEventId
 //  - StartedEventId
 //  - TimeoutType
 type ActivityTaskTimedOutEventAttributes struct {
-	// unused fields # 1 to 9
+	// unused fields # 1 to 4
+	Details []byte `thrift:"details,5" db:"details" json:"details,omitempty"`
+	// unused fields # 6 to 9
 	ScheduledEventId *int64 `thrift:"scheduledEventId,10" db:"scheduledEventId" json:"scheduledEventId,omitempty"`
 	// unused fields # 11 to 19
 	StartedEventId *int64 `thrift:"startedEventId,20" db:"startedEventId" json:"startedEventId,omitempty"`
@@ -5147,6 +5150,12 @@ type ActivityTaskTimedOutEventAttributes struct {
 
 func NewActivityTaskTimedOutEventAttributes() *ActivityTaskTimedOutEventAttributes {
 	return &ActivityTaskTimedOutEventAttributes{}
+}
+
+var ActivityTaskTimedOutEventAttributes_Details_DEFAULT []byte
+
+func (p *ActivityTaskTimedOutEventAttributes) GetDetails() []byte {
+	return p.Details
 }
 
 var ActivityTaskTimedOutEventAttributes_ScheduledEventId_DEFAULT int64
@@ -5175,6 +5184,10 @@ func (p *ActivityTaskTimedOutEventAttributes) GetTimeoutType() TimeoutType {
 	}
 	return *p.TimeoutType
 }
+func (p *ActivityTaskTimedOutEventAttributes) IsSetDetails() bool {
+	return p.Details != nil
+}
+
 func (p *ActivityTaskTimedOutEventAttributes) IsSetScheduledEventId() bool {
 	return p.ScheduledEventId != nil
 }
@@ -5201,6 +5214,10 @@ func (p *ActivityTaskTimedOutEventAttributes) Read(iprot thrift.TProtocol) error
 			break
 		}
 		switch fieldId {
+		case 5:
+			if err := p.ReadField5(iprot); err != nil {
+				return err
+			}
 		case 10:
 			if err := p.ReadField10(iprot); err != nil {
 				return err
@@ -5224,6 +5241,15 @@ func (p *ActivityTaskTimedOutEventAttributes) Read(iprot thrift.TProtocol) error
 	}
 	if err := iprot.ReadStructEnd(); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *ActivityTaskTimedOutEventAttributes) ReadField5(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadBinary(); err != nil {
+		return thrift.PrependError("error reading field 5: ", err)
+	} else {
+		p.Details = v
 	}
 	return nil
 }
@@ -5260,6 +5286,9 @@ func (p *ActivityTaskTimedOutEventAttributes) Write(oprot thrift.TProtocol) erro
 	if err := oprot.WriteStructBegin("ActivityTaskTimedOutEventAttributes"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
 	}
+	if err := p.writeField5(oprot); err != nil {
+		return err
+	}
 	if err := p.writeField10(oprot); err != nil {
 		return err
 	}
@@ -5276,6 +5305,21 @@ func (p *ActivityTaskTimedOutEventAttributes) Write(oprot thrift.TProtocol) erro
 		return thrift.PrependError("write struct stop error: ", err)
 	}
 	return nil
+}
+
+func (p *ActivityTaskTimedOutEventAttributes) writeField5(oprot thrift.TProtocol) (err error) {
+	if p.IsSetDetails() {
+		if err := oprot.WriteFieldBegin("details", thrift.STRING, 5); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 5:details: ", p), err)
+		}
+		if err := oprot.WriteBinary(p.Details); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.details (5) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 5:details: ", p), err)
+		}
+	}
+	return err
 }
 
 func (p *ActivityTaskTimedOutEventAttributes) writeField10(oprot thrift.TProtocol) (err error) {

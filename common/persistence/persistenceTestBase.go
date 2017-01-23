@@ -191,9 +191,24 @@ func (s *TestBase) GetWorkflowExecutionInfo(workflowExecution workflow.WorkflowE
 	return response.ExecutionInfo, nil
 }
 
+// GetWorkflowMutableState is a utility method to retrieve execution info
+func (s *TestBase) GetWorkflowMutableState(workflowExecution workflow.WorkflowExecution) (*WorkflowMutableState,
+	error) {
+	response, err := s.WorkflowMgr.GetWorkflowMutableState(&GetWorkflowMutableStateRequest{
+		WorkflowID: workflowExecution.GetWorkflowId(),
+		RunID:      workflowExecution.GetRunId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response.State, nil
+}
+
 // UpdateWorkflowExecution is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
-	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task) error {
+	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task,
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{TaskList: updatedInfo.TaskList,
@@ -206,12 +221,14 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	}
 
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo:   updatedInfo,
-		TransferTasks:   transferTasks,
-		TimerTasks:      timerTasks,
-		Condition:       condition,
-		DeleteTimerTask: deleteTimerTask,
-		RangeID:         s.ShardContext.GetRangeID(),
+		ExecutionInfo:       updatedInfo,
+		TransferTasks:       transferTasks,
+		TimerTasks:          timerTasks,
+		Condition:           condition,
+		DeleteTimerTask:     deleteTimerTask,
+		RangeID:             s.ShardContext.GetRangeID(),
+		UpsertActivityInfos: upsertActivityInfos,
+		DeleteActivityInfo:  deleteActivityInfo,
 	})
 }
 

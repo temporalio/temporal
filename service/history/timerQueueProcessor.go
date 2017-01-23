@@ -306,9 +306,15 @@ Update_History_Loop:
 			return err1
 		}
 
+		msBuilder, err1 := context.loadWorkflowMutableState()
+		if err1 != nil {
+			return err1
+		}
+
 		var transferTasks []persistence.Task
 		var timerTasks []persistence.Task
 		var clearTimerTask persistence.Task
+		scheduleNewDecision := false
 
 		switch timerTask.TaskType {
 
@@ -337,6 +343,44 @@ Update_History_Loop:
 		case persistence.TaskTypeActivityTimeout:
 			clearTimerTask = &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
 
+			scheduleID := timerTask.EventID
+
+			if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); isRunning {
+				timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
+				t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
+					timeoutType, scheduleID, startedID)
+
+				switch timeoutType {
+				case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
+					builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+					scheduleNewDecision = !builder.hasPendingDecisionTask()
+
+				case workflow.TimeoutType_START_TO_CLOSE:
+					if startedID != emptyEventID {
+						builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+						scheduleNewDecision = !builder.hasPendingDecisionTask()
+					}
+
+				case workflow.TimeoutType_HEARTBEAT:
+					if startedID != emptyEventID {
+						isTimerRunning, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+						if isTimerRunning {
+							t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
+							// The current heart beat expired.
+							builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, ai.Details)
+							msBuilder.DeletePendingActivity(scheduleID)
+							scheduleNewDecision = !builder.hasPendingDecisionTask()
+						}
+					}
+
+				case workflow.TimeoutType_SCHEDULE_TO_START:
+					if startedID == emptyEventID {
+						builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+						scheduleNewDecision = !builder.hasPendingDecisionTask()
+					}
+				}
+			}
+
 		case persistence.TaskTypeDecisionTimeout:
 			clearTimerTask = &persistence.DecisionTimeoutTask{TaskID: timerTask.TaskID}
 
@@ -345,20 +389,20 @@ Update_History_Loop:
 			if isRunning && startedID != emptyEventID {
 				// Add a decision task timeout event.
 				builder.AddDecisionTaskTimedOutEvent(scheduleID, startedID)
-
-				// Schedule a new decision.
-				id := t.historyService.tracker.getNextTaskID()
-				defer t.historyService.tracker.completeTask(id)
-				startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
-				startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
-				newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
-					startAttributes.GetTaskStartToCloseTimeoutSeconds())
-				transferTasks = []persistence.Task{&persistence.DecisionTask{
-					TaskID:     id,
-					TaskList:   startAttributes.GetTaskList().GetName(),
-					ScheduleID: newDecisionEvent.GetEventId(),
-				}}
+				scheduleNewDecision = true
 			}
+		}
+
+		if scheduleNewDecision {
+			// Schedule a new decision.
+			id := t.historyService.tracker.getNextTaskID()
+			defer t.historyService.tracker.completeTask(id)
+			newDecisionEvent := builder.ScheduleDecisionTask()
+			transferTasks = []persistence.Task{&persistence.DecisionTask{
+				TaskID:     id,
+				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
+				ScheduleID: newDecisionEvent.GetEventId(),
+			}}
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	w "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common/persistence"
 	"code.uber.internal/devexp/minions/common/util"
 	"github.com/uber-common/bark"
@@ -20,6 +21,13 @@ const (
 	SeqNumMax                  = math.MaxInt64 & TimerQueueSeqNumBitmask // The max allowed seqnum (subject to mode-specific bitmask)
 	MinTimerKey                = -1
 	MaxTimerKey                = math.MaxInt64
+
+	DefaultScheduleToStartActivityTimeoutInSecs = 1
+	DefaultScheduleToCloseActivityTimeoutInSecs = 1
+	DefaultStartToCloseActivityTimeoutInSecs    = 1
+	DefaultHeartbeatActivityTimeoutInSecs       = 1
+
+	emptyTimerID = -1
 )
 
 type (
@@ -105,8 +113,88 @@ func newTimerBuilder(seqNumGen SequenceNumberGenerator, logger bark.Logger) *tim
 		localSeqNumGen: &localSeqNumGenerator{counter: 1}}
 }
 
-// CreateDecisionTimeoutTask - Creates a decision timeout task.
-func (tb *timerBuilder) CreateDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
+// AddDecisionTimoutTask - Add a decision timeout task.
+func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
+	builder *historyBuilder) *persistence.DecisionTimeoutTask {
+	startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
+	startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
+	timeOutTask := tb.createDecisionTimeoutTask(startAttributes.GetTaskStartToCloseTimeoutSeconds(), scheduleID)
+	return timeOutTask
+}
+
+func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, scheduleEvent *w.HistoryEvent,
+	msBuilder *mutableStateBuilder) *persistence.ActivityTimeoutTask {
+	scheduleToStartTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetScheduleToStartTimeoutSeconds()
+	if scheduleToStartTimeout <= 0 {
+		scheduleToStartTimeout = DefaultScheduleToStartActivityTimeoutInSecs
+	}
+	scheduleToCloseTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetScheduleToCloseTimeoutSeconds()
+	if scheduleToCloseTimeout <= 0 {
+		scheduleToCloseTimeout = DefaultScheduleToCloseActivityTimeoutInSecs
+	}
+	startToCloseTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds()
+	if startToCloseTimeout <= 0 {
+		startToCloseTimeout = DefaultStartToCloseActivityTimeoutInSecs
+	}
+	heartbeatTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetHeartbeatTimeoutSeconds()
+	if heartbeatTimeout <= 0 {
+		heartbeatTimeout = DefaultHeartbeatActivityTimeoutInSecs
+	}
+
+	t := tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_START, scheduleToStartTimeout)
+
+	msBuilder.UpdatePendingActivity(scheduleID, &persistence.ActivityInfo{
+		ScheduleID:             scheduleID,
+		StartedID:              emptyEventID,
+		ScheduleToStartTimeout: scheduleToStartTimeout,
+		ScheduleToCloseTimeout: scheduleToCloseTimeout,
+		StartToCloseTimeout:    startToCloseTimeout,
+		HeartbeatTimeout:       heartbeatTimeout,
+	})
+
+	return t
+}
+
+func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
+	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
+	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	if !ok {
+		return nil, fmt.Errorf("ScheduleToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
+	}
+	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout), nil
+}
+
+func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
+	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
+	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	if !ok {
+		return nil, fmt.Errorf("StartToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
+	}
+	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout), nil
+}
+
+func (tb *timerBuilder) AddHeartBeatActivityTimeout(scheduleID int64,
+	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
+	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	if !ok {
+		return nil, fmt.Errorf("HeartBeat: Unable to find activity Info in mutable state for event id: %d", scheduleID)
+	}
+	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout), nil
+}
+
+// AddActivityTimeoutTask - Adds an activity timeout task.
+func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64, timeoutType w.TimeoutType, fireTimeout int32) *persistence.ActivityTimeoutTask {
+	if fireTimeout <= 0 {
+		return nil
+	}
+
+	timeOutTask := tb.createActivityTimeoutTask(fireTimeout, timeoutType, scheduleID)
+	tb.logger.Debugf("Adding Activity Timeout: %+v", timeOutTask)
+	return timeOutTask
+}
+
+// createDecisionTimeoutTask - Creates a decision timeout task.
+func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
 	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.DecisionTimeoutTask{
@@ -115,13 +203,14 @@ func (tb *timerBuilder) CreateDecisionTimeoutTask(fireTimeOut int32, eventID int
 	}
 }
 
-// CreateActivityTimeoutTask - Creates a activity timeout task.
-func (tb *timerBuilder) CreateActivityTimeoutTask(fireTimeOut int32, eventID int64) *persistence.ActivityTimeoutTask {
+// createActivityTimeoutTask - Creates a activity timeout task.
+func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType w.TimeoutType, eventID int64) *persistence.ActivityTimeoutTask {
 	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.ActivityTimeoutTask{
-		TaskID:  int64(seqID),
-		EventID: eventID,
+		TaskID:      int64(seqID),
+		TimeoutType: int(timeoutType),
+		EventID:     eventID,
 	}
 }
 

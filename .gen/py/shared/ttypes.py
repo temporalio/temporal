@@ -3023,6 +3023,7 @@ class ActivityTaskFailedEventAttributes:
 class ActivityTaskTimedOutEventAttributes:
   """
   Attributes:
+   - details
    - scheduledEventId
    - startedEventId
    - timeoutType
@@ -3034,7 +3035,7 @@ class ActivityTaskTimedOutEventAttributes:
     None, # 2
     None, # 3
     None, # 4
-    None, # 5
+    (5, TType.STRING, 'details', str, None, ), # 5
     None, # 6
     None, # 7
     None, # 8
@@ -3062,7 +3063,8 @@ class ActivityTaskTimedOutEventAttributes:
     (30, TType.I32, 'timeoutType', None, None, ), # 30
   )
 
-  def __init__(self, scheduledEventId=None, startedEventId=None, timeoutType=None,):
+  def __init__(self, details=None, scheduledEventId=None, startedEventId=None, timeoutType=None,):
+    self.details = details
     self.scheduledEventId = scheduledEventId
     self.startedEventId = startedEventId
     self.timeoutType = timeoutType
@@ -3076,7 +3078,12 @@ class ActivityTaskTimedOutEventAttributes:
       (fname, ftype, fid) = iprot.readFieldBegin()
       if ftype == TType.STOP:
         break
-      if fid == 10:
+      if fid == 5:
+        if ftype == TType.STRING:
+          self.details = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 10:
         if ftype == TType.I64:
           self.scheduledEventId = iprot.readI64();
         else:
@@ -3101,6 +3108,10 @@ class ActivityTaskTimedOutEventAttributes:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('ActivityTaskTimedOutEventAttributes')
+    if self.details is not None:
+      oprot.writeFieldBegin('details', TType.STRING, 5)
+      oprot.writeString(self.details)
+      oprot.writeFieldEnd()
     if self.scheduledEventId is not None:
       oprot.writeFieldBegin('scheduledEventId', TType.I64, 10)
       oprot.writeI64(self.scheduledEventId)
@@ -3122,6 +3133,7 @@ class ActivityTaskTimedOutEventAttributes:
 
   def __hash__(self):
     value = 17
+    value = (value * 31) ^ hash(self.details)
     value = (value * 31) ^ hash(self.scheduledEventId)
     value = (value * 31) ^ hash(self.startedEventId)
     value = (value * 31) ^ hash(self.timeoutType)

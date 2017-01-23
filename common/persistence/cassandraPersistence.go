@@ -72,8 +72,18 @@ const (
 		`run_id: ?, ` +
 		`task_id: ?, ` +
 		`type: ?, ` +
-		`timeoutType: ?, ` +
+		`timeout_type: ?, ` +
 		`event_id: ?` +
+		`}`
+
+	templateActivityInfoType = `{` +
+		`schedule_id: ?, ` +
+		`started_id: ?, ` +
+		`details: ?, ` +
+		`schedule_to_start_timeout: ?, ` +
+		`schedule_to_close_timeout: ?, ` +
+		`start_to_close_timeout: ?, ` +
+		`heart_beat_timeout: ?` +
 		`}`
 
 	templateTaskType = `{` +
@@ -132,8 +142,34 @@ const (
 		`and run_id = ? ` +
 		`and task_id = ?`
 
+	templateGetWorkflowMutabeStateQuery = `SELECT activity_map ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ?`
+
 	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
 		`SET execution = ` + templateWorkflowExecutionType + `, next_event_id = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ? and range_id = ?`
+
+	templateUpdateActivityInfoQuery = `UPDATE executions ` +
+		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ? and range_id = ?`
+
+	templateDeleteActivityInfoQuery = `DELETE activity_map[ ? ] ` +
+		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
@@ -479,7 +515,11 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 
 	d.createTransferTasks(batch, request.TransferTasks, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
-	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
+	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask,
+		executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
+
+	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfo,
+		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
@@ -864,6 +904,41 @@ PopulateTasks:
 	return response, nil
 }
 
+func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (
+	*GetWorkflowMutableStateResponse, error) {
+	query := d.session.Query(templateGetWorkflowMutabeStateQuery,
+		d.shardID,
+		rowTypeExecution,
+		request.WorkflowID,
+		request.RunID,
+		rowTypeExecutionTaskID).Consistency(d.lowConslevel)
+
+	result := make(map[string]interface{})
+	if err := query.MapScan(result); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, &workflow.EntityNotExistsError{
+				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
+					request.WorkflowID, request.RunID),
+			}
+		}
+
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err),
+		}
+	}
+
+	state := &WorkflowMutableState{}
+	activityInfos := make(map[int64]*ActivityInfo)
+	aMap := result["activity_map"].(map[int64]map[string]interface{})
+	for key, value := range aMap {
+		info := createActivityInfo(value)
+		activityInfos[key] = info
+	}
+	state.ActivitInfos = activityInfos
+
+	return &GetWorkflowMutableStateResponse{State: state}, nil
+}
+
 func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, workflowID string,
 	runID string, cqlNowTimestamp int64) {
 	for _, task := range transferTasks {
@@ -946,6 +1021,41 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 	}
 }
 
+func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, deleteInfo *int64,
+	workflowID string, runID string, condition int64, rangeID int64) {
+
+	for _, a := range activityInfos {
+		batch.Query(templateUpdateActivityInfoQuery,
+			a.ScheduleID,
+			a.ScheduleID,
+			a.StartedID,
+			a.Details,
+			a.ScheduleToStartTimeout,
+			a.ScheduleToCloseTimeout,
+			a.StartToCloseTimeout,
+			a.HeartbeatTimeout,
+			d.shardID,
+			rowTypeExecution,
+			workflowID,
+			runID,
+			rowTypeExecutionTaskID,
+			condition,
+			rangeID)
+	}
+
+	if deleteInfo != nil {
+		batch.Query(templateDeleteActivityInfoQuery,
+			*deleteInfo,
+			d.shardID,
+			rowTypeExecution,
+			workflowID,
+			runID,
+			rowTypeExecutionTaskID,
+			condition,
+			rangeID)
+	}
+}
+
 func createShardInfo(result map[string]interface{}) *ShardInfo {
 	info := &ShardInfo{}
 	for k, v := range result {
@@ -1020,6 +1130,30 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 	return info
 }
 
+func createActivityInfo(result map[string]interface{}) *ActivityInfo {
+	info := &ActivityInfo{}
+	for k, v := range result {
+		switch k {
+		case "schedule_id":
+			info.ScheduleID = v.(int64)
+		case "started_id":
+			info.StartedID = v.(int64)
+		case "details":
+			info.Details = v.([]byte)
+		case "schedule_to_start_timeout":
+			info.ScheduleToStartTimeout = int32(v.(int))
+		case "schedule_to_close_timeout":
+			info.ScheduleToCloseTimeout = int32(v.(int))
+		case "start_to_close_timeout":
+			info.StartToCloseTimeout = int32(v.(int))
+		case "heart_beat_timeout":
+			info.HeartbeatTimeout = int32(v.(int))
+		}
+	}
+
+	return info
+}
+
 func createTaskInfo(result map[string]interface{}) *TaskInfo {
 	info := &TaskInfo{}
 	for k, v := range result {
@@ -1050,7 +1184,7 @@ func createTimerInfo(result map[string]interface{}) *TimerInfo {
 			info.TaskID = v.(int64)
 		case "type":
 			info.TaskType = v.(int)
-		case "timeoutType":
+		case "timeout_type":
 			info.TimeoutType = v.(int)
 		case "event_id":
 			info.EventID = v.(int64)

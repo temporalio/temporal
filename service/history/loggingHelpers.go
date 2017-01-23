@@ -42,6 +42,7 @@ const (
 	tagValueActionActivityTaskStarted   = "add-activitytask-started-event"
 	tagValueActionActivityTaskCompleted = "add-activitytask-completed-event"
 	tagValueActionActivityTaskFailed    = "add-activitytask-failed-event"
+	tagValueActionActivityTaskTimedOut  = "add-activitytask-timed-event"
 	tagValueActionCompleteWorkflow      = "add-complete-workflow-event"
 	tagValueActionFailWorkflow          = "add-fail-workflow-event"
 	tagValueActionUnknownEvent          = "add-unknown-event"
@@ -53,6 +54,7 @@ const (
 	tagValueStoreOperationCompleteTask            = "complete-task"
 	tagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
+	tagValueStoreOperationGetWorkflowMutableState = "get-wf-mutable-state"
 	tagValueStoreOperationUpdateWorkflowExecution = "get-wf-execution"
 	tagValueStoreOperationDeleteWorkflowExecution = "delete-wf-execution"
 )

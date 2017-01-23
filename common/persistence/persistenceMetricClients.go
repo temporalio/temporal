@@ -190,6 +190,18 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 	return resonse, err
 }
 
+func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error) {
+	sw := p.m3Client.StartTimer(metrics.GetWorkflowMutableStateScope, metrics.WorkflowLatencyTimer)
+	resonse, err := p.GetWorkflowMutableState(request)
+	sw.Stop()
+
+	if err != nil {
+		p.m3Client.IncCounter(metrics.GetWorkflowMutableStateScope, metrics.WorkflowFailures)
+	}
+
+	return resonse, err
+}
+
 func (p *taskPersistenceClient) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateTaskScope, metrics.WorkflowRequests)
 

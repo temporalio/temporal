@@ -41,6 +41,7 @@ const (
 	tagValueActionActivityTaskScheduled = "add-activitytask-scheduled-event"
 	tagValueActionActivityTaskStarted   = "add-activitytask-started-event"
 	tagValueActionActivityTaskCompleted = "add-activitytask-completed-event"
+	tagValueActionActivityTaskTimedOut  = "add-activitytask-timedout-event"
 	tagValueActionActivityTaskFailed    = "add-activitytask-failed-event"
 	tagValueActionCompleteWorkflow      = "add-complete-workflow-event"
 	tagValueActionFailWorkflow          = "add-fail-workflow-event"
@@ -53,6 +54,7 @@ const (
 	tagValueStoreOperationCompleteTask            = "complete-task"
 	tagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
+	tagValueStoreOperationGetWorkflowMutableState = "get-wf-mutable-state"
 	tagValueStoreOperationUpdateWorkflowExecution = "get-wf-execution"
 	tagValueStoreOperationDeleteWorkflowExecution = "delete-wf-execution"
 )
@@ -60,7 +62,7 @@ const (
 func logInvalidHistoryActionEvent(logger bark.Logger, action string, eventID int64, state string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID:      invalidHistoryActionEventID,
-		tagHistoryBuilderAction: tagValueActionWorkflowStarted,
+		tagHistoryBuilderAction: action,
 	}).Errorf("Invalid history builder state for action: EventID: %v, State: %v", eventID, state)
 }
 

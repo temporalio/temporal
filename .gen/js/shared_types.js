@@ -2137,10 +2137,14 @@ ActivityTaskFailedEventAttributes.prototype.write = function(output) {
 };
 
 var ActivityTaskTimedOutEventAttributes = module.exports.ActivityTaskTimedOutEventAttributes = function(args) {
+  this.details = null;
   this.scheduledEventId = null;
   this.startedEventId = null;
   this.timeoutType = null;
   if (args) {
+    if (args.details !== undefined && args.details !== null) {
+      this.details = args.details;
+    }
     if (args.scheduledEventId !== undefined && args.scheduledEventId !== null) {
       this.scheduledEventId = args.scheduledEventId;
     }
@@ -2166,6 +2170,13 @@ ActivityTaskTimedOutEventAttributes.prototype.read = function(input) {
     }
     switch (fid)
     {
+      case 5:
+      if (ftype == Thrift.Type.STRING) {
+        this.details = input.readBinary();
+      } else {
+        input.skip(ftype);
+      }
+      break;
       case 10:
       if (ftype == Thrift.Type.I64) {
         this.scheduledEventId = input.readI64();
@@ -2198,6 +2209,11 @@ ActivityTaskTimedOutEventAttributes.prototype.read = function(input) {
 
 ActivityTaskTimedOutEventAttributes.prototype.write = function(output) {
   output.writeStructBegin('ActivityTaskTimedOutEventAttributes');
+  if (this.details !== null && this.details !== undefined) {
+    output.writeFieldBegin('details', Thrift.Type.STRING, 5);
+    output.writeBinary(this.details);
+    output.writeFieldEnd();
+  }
   if (this.scheduledEventId !== null && this.scheduledEventId !== undefined) {
     output.writeFieldBegin('scheduledEventId', Thrift.Type.I64, 10);
     output.writeI64(this.scheduledEventId);

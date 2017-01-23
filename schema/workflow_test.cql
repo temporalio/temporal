@@ -40,8 +40,18 @@ CREATE TYPE timer_task (
   run_id           uuid,
   task_id          bigint,
   type             int,  -- enum TaskType {DecisionTaskTimeout, ActivityTaskTimeout, UserTimer}
-  timeoutType      int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
+  timeout_type     int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
   event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
+);
+
+CREATE TYPE activity_info (
+  schedule_id               bigint,
+  started_id                bigint,
+  details                   blob,
+  schedule_to_start_timeout int,
+  schedule_to_close_timeout int,
+  start_to_close_timeout    int,
+  heart_beat_timeout        int,
 );
 
 -- Activity or workflow task in a task list
@@ -65,6 +75,7 @@ CREATE TABLE executions (
   next_event_id      bigint,  -- This is needed to make conditional updates on session history
   range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   lock_token         uuid,
+  activity_map       map<bigint, frozen<activity_info>>,
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 

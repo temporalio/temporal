@@ -82,6 +82,13 @@ func (b *historyBuilder) loadExecutionInfo(executionInfo *persistence.WorkflowEx
 	return nil
 }
 
+func (b *historyBuilder) ScheduleDecisionTask() *workflow.HistoryEvent {
+	startWorkflowExecutionEvent := b.GetEvent(firstEventID)
+	startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
+	return b.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
+		startAttributes.GetTaskStartToCloseTimeoutSeconds())
+}
+
 func (b *historyBuilder) GetEvent(eventID int64) *workflow.HistoryEvent {
 	return b.history[eventID-firstEventID]
 }
@@ -201,6 +208,13 @@ func (b *historyBuilder) AddActivityTaskCompletedEvent(scheduleEventID, startedE
 func (b *historyBuilder) AddActivityTaskFailedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondActivityTaskFailedRequest) *workflow.HistoryEvent {
 	event := newActivityTaskFailedEvent(b.nextEventID, scheduleEventID, startedEventID, request)
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID int64,
+	timeoutType workflow.TimeoutType, lastHeartBeatDetails []byte) *workflow.HistoryEvent {
+	event := newActivityTaskTimedOutEvent(b.nextEventID, scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails)
 
 	return b.addEventToHistory(event)
 }
@@ -339,6 +353,20 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 		if !ok || e != startedEventID {
 			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskFailed, eventID, fmt.Sprintf(
 				"{ScheduleID: %v, StartedID: %v, Exist: %v, Value: %v}", scheduleEventID, startedEventID, ok, e))
+			return nil
+		}
+		delete(b.outstandingActivities, scheduleEventID)
+	case workflow.EventType_ActivityTaskTimedOut:
+		scheduleEventID := event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId()
+		startedEventID := event.GetActivityTaskTimedOutEventAttributes().GetStartedEventId()
+		timeOutType := event.GetActivityTaskTimedOutEventAttributes().GetTimeoutType()
+		e, ok := b.outstandingActivities[scheduleEventID]
+		if !ok ||
+			startedEventID != e ||
+			((timeOutType == workflow.TimeoutType_START_TO_CLOSE || timeOutType == workflow.TimeoutType_HEARTBEAT) && e == emptyEventID) {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskTimedOut, eventID, fmt.Sprintf(
+				"{ScheduleID: %v, StartedID: %v, TimeOutType: %v, Exist: %v, Value: %v}",
+				scheduleEventID, startedEventID, timeOutType, ok, e))
 			return nil
 		}
 		delete(b.outstandingActivities, scheduleEventID)
@@ -487,6 +515,19 @@ func newActivityTaskCompletedEvent(eventID, scheduleEventID, startedEventID int6
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.Identity = common.StringPtr(request.GetIdentity())
 	historyEvent.ActivityTaskCompletedEventAttributes = attributes
+
+	return historyEvent
+}
+
+func newActivityTaskTimedOutEvent(eventID, scheduleEventID, startedEventID int64,
+	timeoutType workflow.TimeoutType, lastHeartBeatDetails []byte) *workflow.HistoryEvent {
+	historyEvent := newHistoryEvent(eventID, workflow.EventType_ActivityTaskTimedOut)
+	attributes := workflow.NewActivityTaskTimedOutEventAttributes()
+	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
+	attributes.StartedEventId = common.Int64Ptr(startedEventID)
+	attributes.TimeoutType = workflow.TimeoutTypePtr(timeoutType)
+	attributes.Details = lastHeartBeatDetails
+	historyEvent.ActivityTaskTimedOutEventAttributes = attributes
 
 	return historyEvent
 }

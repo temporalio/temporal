@@ -129,6 +129,22 @@ type (
 		EventID  int64
 	}
 
+	// WorkflowMutableState indicates worklow realted state
+	WorkflowMutableState struct {
+		ActivitInfos map[int64]*ActivityInfo
+	}
+
+	// ActivityInfo details.
+	ActivityInfo struct {
+		ScheduleID             int64
+		StartedID              int64
+		Details                []byte
+		ScheduleToStartTimeout int32
+		ScheduleToCloseTimeout int32
+		StartToCloseTimeout    int32
+		HeartbeatTimeout       int32
+	}
+
 	// CreateShardRequest is used to create a shard in executions table
 	CreateShardRequest struct {
 		ShardInfo *ShardInfo
@@ -180,12 +196,14 @@ type (
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
-		ExecutionInfo   *WorkflowExecutionInfo
-		TransferTasks   []Task
-		TimerTasks      []Task
-		DeleteTimerTask Task
-		Condition       int64
-		RangeID         int64
+		ExecutionInfo       *WorkflowExecutionInfo
+		TransferTasks       []Task
+		TimerTasks          []Task
+		DeleteTimerTask     Task
+		Condition           int64
+		RangeID             int64
+		UpsertActivityInfos []*ActivityInfo
+		DeleteActivityInfo  *int64
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -270,6 +288,18 @@ type (
 		Timers []*TimerInfo
 	}
 
+	// GetWorkflowMutableStateRequest is used to retrieve the info of a workflow execution
+	GetWorkflowMutableStateRequest struct {
+		WorkflowID     string
+		RunID          string
+		IncludeDetails bool
+	}
+
+	// GetWorkflowMutableStateResponse is the response to GetWorkflowMutableStateRequest
+	GetWorkflowMutableStateResponse struct {
+		State *WorkflowMutableState
+	}
+
 	// ExecutionManager is the used to manage workflow executions
 	ExecutionManager interface {
 		CreateShard(request *CreateShardRequest) error
@@ -284,6 +314,9 @@ type (
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+
+		// Workflow mutable state operations.
+		GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error)
 	}
 
 	// TaskManager is used to manage tasks

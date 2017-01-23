@@ -123,3 +123,13 @@ func (c *clientImpl) RespondActivityTaskFailed(request *workflow.RespondActivity
 	defer cancel()
 	return client.RespondActivityTaskFailed(ctx, request)
 }
+
+func (c *clientImpl) RecordActivityTaskHeartbeat(request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
+	client, err := c.getHostForRequest(shardID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext()
+	defer cancel()
+	return client.RecordActivityTaskHeartbeat(ctx, request)
+}
