@@ -1,88 +1,105 @@
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"code.uber.internal/devexp/minions/common/util"
+
+	"github.com/uber-go/tally"
+)
 
 // ClientImpl is for m3 emits within inputhost
 type ClientImpl struct {
-	//parentReporter is the parent for the metrics Reporters
-	parentReporter Reporter
-	// childReporters is the children for the metrics Reporters
-	childReporters []Reporter
+	//parentReporter is the parent scope for the metrics
+	parentScope tally.Scope
 
-	// timerName is the map of all TimerName for  metrics
-	timerName map[int]string
+	childScopes map[int]tally.Scope
 
-	// counterName is the map of all CounterName for  metrics
-	counterName map[int]string
-
-	// gaugeName is the map of all GaugeName for  metrics
-	gaugeName map[int]string
+	metricDefs map[int]metricDefinition
 }
 
 // NewClient creates and returns a new instance of
 // Client implementation
 // reporter holds the common tags for the servcie
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(reporter Reporter, serviceIdx int) Client {
-	counterName := CounterNames[serviceIdx]
-	timerName := TimerNames[serviceIdx]
-	gaugeName := GaugeNames[serviceIdx]
-	scopeTagsMap := ScopeToTags[serviceIdx]
-	size := len(counterName) + len(timerName) + len(gaugeName)
-	metricsMap := make(map[MetricName]MetricType, size)
-	for _, val := range counterName {
-		metricsMap[MetricName(val)] = Counter
-	}
-	for _, val := range timerName {
-		metricsMap[MetricName(val)] = Timer
-	}
-	for _, val := range gaugeName {
-		metricsMap[MetricName(val)] = Gauge
-	}
+func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
+	commonScopes := ScopeDefs[Common]
+	serviceScopes := ScopeDefs[serviceIdx]
+	totalScopes := len(commonScopes) + len(serviceScopes)
 	metricsClient := &ClientImpl{
-		parentReporter: reporter,
-		counterName:    counterName,
-		timerName:      timerName,
-		gaugeName:      gaugeName,
+		parentScope: scope,
+		childScopes: make(map[int]tally.Scope, totalScopes),
+		metricDefs:  getMetricDefs(serviceIdx),
 	}
-	metricsClient.childReporters = make([]Reporter, len(scopeTagsMap))
-	for i := 0; i < len(scopeTagsMap); i++ {
-		metricsClient.childReporters[i] = reporter.GetChildReporter(scopeTagsMap[i])
-		metricsClient.childReporters[i].InitMetrics(metricsMap)
+
+	metricsMap := make(map[MetricName]MetricType)
+	for _, def := range metricsClient.metricDefs {
+		metricsMap[def.metricName] = def.metricType
 	}
+
+	for idx, def := range ScopeDefs[Common] {
+		scopeTags := map[string]string{
+			OperationTagName: def.operation,
+		}
+		util.MergeDictoRight(def.tags, scopeTags)
+		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
+	}
+
+	for idx, def := range ScopeDefs[serviceIdx] {
+		scopeTags := map[string]string{
+			OperationTagName: def.operation,
+		}
+		util.MergeDictoRight(def.tags, scopeTags)
+		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
+		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
+	}
+
 	return metricsClient
 }
 
 // IncCounter increments one for a counter and emits
 // to m3 backend
 func (m *ClientImpl) IncCounter(scopeIdx int, counterIdx int) {
-	m.childReporters[scopeIdx].IncCounter(m.counterName[counterIdx], nil, 1)
+	name := string(m.metricDefs[counterIdx].metricName)
+	m.childScopes[scopeIdx].Counter(name).Inc(1)
 }
 
 // AddCounter adds delta to the counter and
 // emits to the m3 backend
 func (m *ClientImpl) AddCounter(scopeIdx int, counterIdx int, delta int64) {
-	m.childReporters[scopeIdx].IncCounter(m.counterName[counterIdx], nil, delta)
+	name := string(m.metricDefs[counterIdx].metricName)
+	m.childScopes[scopeIdx].Counter(name).Inc(delta)
 }
 
 // StartTimer starts a timer for the given
 // metric name
-func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
-	return m.childReporters[scopeIdx].StartTimer(m.timerName[timerIdx], nil)
+func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) tally.Stopwatch {
+	name := string(m.metricDefs[timerIdx].metricName)
+	return m.childScopes[scopeIdx].Timer(name).Start()
 }
 
 // RecordTimer record and emit a timer for the given
 // metric name
 func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
-	m.childReporters[scopeIdx].RecordTimer(m.timerName[timerIdx], nil, d)
+	name := string(m.metricDefs[timerIdx].metricName)
+	m.childScopes[scopeIdx].Timer(name).Record(d)
 }
 
 // UpdateGauge reports Gauge type metric to M3
-func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta int64) {
-	m.childReporters[scopeIdx].UpdateGauge(m.gaugeName[gaugeIdx], nil, delta)
+func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta float64) {
+	name := string(m.metricDefs[gaugeIdx].metricName)
+	m.childScopes[scopeIdx].Gauge(name).Update(delta)
 }
 
-// GetParentReporter return the parentReporter
-func (m *ClientImpl) GetParentReporter() Reporter {
-	return m.parentReporter
+func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
+	defs := make(map[int]metricDefinition)
+	for idx, def := range MetricDefs[Common] {
+		defs[idx] = def
+	}
+
+	for idx, def := range MetricDefs[serviceIdx] {
+		defs[idx] = def
+	}
+
+	return defs
 }

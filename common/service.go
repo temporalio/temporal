@@ -8,9 +8,11 @@ import (
 
 	"code.uber.internal/devexp/minions/common/logging"
 	"code.uber.internal/devexp/minions/common/membership"
+	"code.uber.internal/devexp/minions/common/metrics"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	ringpop "github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
@@ -28,30 +30,34 @@ type TChannelFactory func(sName string, thriftServices []thrift.TChanServer) (*t
 
 // Service contains the objects specific to this service
 type serviceImpl struct {
-	sName             string
-	hostName          string
-	hostPort          string
-	server            *thrift.Server
-	ch                *tchannel.Channel
-	rp                *ringpop.Ringpop
-	rpSeedHosts       []string
-	membershipMonitor membership.Monitor
-	tchannelFactory   TChannelFactory
-	clientFactory     ClientFactory
-	logger            bark.Logger
+	sName                  string
+	hostName               string
+	hostPort               string
+	server                 *thrift.Server
+	ch                     *tchannel.Channel
+	rp                     *ringpop.Ringpop
+	rpSeedHosts            []string
+	membershipMonitor      membership.Monitor
+	tchannelFactory        TChannelFactory
+	clientFactory          ClientFactory
+	logger                 bark.Logger
+	metricsScope           tally.Scope
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 }
 
 // NewService instantiates a ServiceInstance
 // TODO: have a better name for Service.
 // this is the object which holds all the common stuff
 // shared by all the services.
-func NewService(serviceName string, logger bark.Logger, tchanFactory TChannelFactory, rpHosts []string) Service {
+func NewService(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string) Service {
 	sVice := &serviceImpl{
 		sName:           serviceName,
 		logger:          logger.WithField("Service", serviceName),
 		tchannelFactory: tchanFactory,
 		rpSeedHosts:     rpHosts,
+		metricsScope:    scope,
 	}
+	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(scope, time.Minute, sVice.logger)
 
 	// Get the host name and set it on the service.  This is used for emitting metric with a tag for hostname
 	if hostName, e := os.Hostname(); e != nil {
@@ -80,6 +86,10 @@ func (h *serviceImpl) GetHostName() string {
 // Start starts a TChannel-Thrift service
 func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	var err error
+
+	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	h.runtimeMetricsReporter.Start()
+
 	h.ch, h.server = h.tchannelFactory(h.sName, thriftServices)
 
 	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
@@ -131,11 +141,17 @@ func (h *serviceImpl) Stop() {
 	if h.ch != nil {
 		h.ch.Close()
 	}
+
+	h.runtimeMetricsReporter.Stop()
 }
 
 // GetLogger returns the service logger
 func (h *serviceImpl) GetLogger() bark.Logger {
 	return h.logger
+}
+
+func (h *serviceImpl) GetMetricsScope() tally.Scope {
+	return h.metricsScope
 }
 
 func (h *serviceImpl) GetClientFactory() ClientFactory {

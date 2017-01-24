@@ -2,6 +2,7 @@ package common
 
 import (
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -18,6 +19,8 @@ type (
 		Stop()
 
 		GetLogger() bark.Logger
+
+		GetMetricsScope() tally.Scope
 
 		GetClientFactory() ClientFactory
 	}

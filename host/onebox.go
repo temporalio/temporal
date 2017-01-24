@@ -10,6 +10,7 @@ import (
 	"code.uber.internal/devexp/minions/service/history"
 	"code.uber.internal/devexp/minions/service/matching"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -93,7 +94,8 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 		return c.createTChannel(sName, c.FrontendAddress(), thriftServices)
 	}
-	service := common.NewService("cadence-frontend", logger, tchanFactory, rpHosts)
+	scope := tally.NewTestScope("cadence-frontend", make(map[string]string))
+	service := common.NewService("cadence-frontend", logger, scope, tchanFactory, rpHosts)
 	var thriftServices []thrift.TChanServer
 	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service)
 	err := c.frontendHandler.Start(thriftServices)
@@ -110,7 +112,8 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 		return c.createTChannel(sName, c.HistoryServiceAddress(), thriftServices)
 	}
-	service := common.NewService("cadence-history", logger, tchanFactory, rpHosts)
+	scope := tally.NewTestScope("cadence-history", make(map[string]string))
+	service := common.NewService("cadence-history", logger, scope, tchanFactory, rpHosts)
 	var thriftServices []thrift.TChanServer
 	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr)
 	c.historyHandler.Start(thriftServices)
@@ -124,7 +127,8 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 		return c.createTChannel(sName, c.MatchingServiceAddress(), thriftServices)
 	}
-	service := common.NewService("cadence-matching", logger, tchanFactory, rpHosts)
+	scope := tally.NewTestScope("cadence-matching", make(map[string]string))
+	service := common.NewService("cadence-matching", logger, scope, tchanFactory, rpHosts)
 	var thriftServices []thrift.TChanServer
 	c.matchingHandler, thriftServices = matching.NewHandler(taskMgr, service)
 	c.matchingHandler.Start(thriftServices)
