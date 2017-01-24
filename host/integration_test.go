@@ -87,12 +87,6 @@ func (s *integrationSuite) SetupSuite() {
 		log.SetOutput(os.Stdout)
 	}
 
-	options := persistence.TestBaseOptions{}
-	options.ClusterHost = "127.0.0.1"
-	options.DropKeySpace = true
-	options.SchemaDir = ".."
-	s.SetupWorkflowStoreWithOptions(options)
-
 	logger := log.New()
 	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
@@ -101,11 +95,15 @@ func (s *integrationSuite) SetupSuite() {
 }
 
 func (s *integrationSuite) TearDownSuite() {
-	s.TearDownWorkflowStore()
 }
 
 func (s *integrationSuite) SetupTest() {
-	s.ClearTransferQueue()
+	options := persistence.TestBaseOptions{}
+	options.ClusterHost = "127.0.0.1"
+	options.DropKeySpace = true
+	options.SchemaDir = ".."
+	s.SetupWorkflowStoreWithOptions(options)
+
 	s.host = NewCadence(s.ShardMgr, s.WorkflowMgr, s.TaskMgr, s.logger)
 	s.host.Start()
 	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
@@ -114,6 +112,7 @@ func (s *integrationSuite) SetupTest() {
 func (s *integrationSuite) TearDownTest() {
 	s.host.Stop()
 	s.host = nil
+	s.TearDownWorkflowStore()
 }
 
 func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {

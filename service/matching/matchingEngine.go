@@ -403,6 +403,14 @@ func isLongPollRetryableError(err error) bool {
 		return true
 	}
 
+	// Any errors from history service that can be retriable as well.
+	switch err.(type) {
+	case *workflow.EntityNotExistsError:
+		return true
+	case *workflow.InternalServiceError:
+		return true
+	}
+
 	return false
 }
 

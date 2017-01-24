@@ -49,6 +49,11 @@ func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, erro
 
 func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
+	return thrift.NewContext(time.Second * 10)
+}
+
+func (c *clientImpl) createLongPollContext() (thrift.Context, context.CancelFunc) {
+	// TODO: make timeout configurable
 	return thrift.NewContext(time.Minute * 3)
 }
 
@@ -77,7 +82,7 @@ func (c *clientImpl) PollForActivityTask(pollRequest *workflow.PollForActivityTa
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createLongPollContext()
 	defer cancel()
 	return client.PollForActivityTask(ctx, pollRequest)
 }
@@ -87,7 +92,7 @@ func (c *clientImpl) PollForDecisionTask(pollRequest *workflow.PollForDecisionTa
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createLongPollContext()
 	defer cancel()
 	return client.PollForDecisionTask(ctx, pollRequest)
 }

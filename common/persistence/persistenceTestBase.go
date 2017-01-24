@@ -87,7 +87,7 @@ func (s *testShardContext) GetTransferSequenceNumber() int64 {
 }
 
 func (s *testShardContext) Reset() {
-	atomic.StoreInt64(&s.shardInfo.RangeID, 100)
+	atomic.StoreInt64(&s.shardInfo.RangeID, 0)
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
 }
 
@@ -113,7 +113,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.readLevel = 0
 	s.ShardInfo = &ShardInfo{
 		ShardID:          1,
-		RangeID:          100,
+		RangeID:          0,
 		TransferAckLevel: 0,
 	}
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0)

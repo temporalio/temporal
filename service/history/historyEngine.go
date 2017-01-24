@@ -231,12 +231,12 @@ Update_History_Loop:
 		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID,
 				isRunning)
-			return nil, ErrDuplicate
+			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
 		event := builder.AddDecisionTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, ErrCreateEvent
+			return nil, &workflow.InternalServiceError{Message: "Unable to add decision started event to history"}
 		}
 
 		// Start a timer for the decision task.
@@ -278,12 +278,12 @@ Update_History_Loop:
 		if !isRunning {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
 				isRunning)
-			return nil, ErrDuplicate
+			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 		if ai.StartedID != emptyEventID {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, ai.StartedID,
 				isRunning)
-			return nil, ErrDuplicate
+			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
 		builder, err1 := context.loadWorkflowExecution()
@@ -293,7 +293,7 @@ Update_History_Loop:
 
 		event := builder.AddActivityTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, ErrCreateEvent
+			return nil, &workflow.InternalServiceError{Message: "Unable to add started event to history"}
 		}
 
 		// Start a timer for the activity task.
