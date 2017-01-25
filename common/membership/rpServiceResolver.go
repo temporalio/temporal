@@ -16,13 +16,13 @@ import (
 const RoleKey = "serviceName"
 
 type ringpopServiceResolver struct {
-	service       string
-	rp            *ringpop.Ringpop
-	ring          *hashring.HashRing
-	ringLock      sync.RWMutex
-	listeners     map[string]chan<- *ChangedEvent
-	listenerMutex sync.RWMutex
-	logger        bark.Logger
+	service      string
+	rp           *ringpop.Ringpop
+	ring         *hashring.HashRing
+	ringLock     sync.RWMutex
+	listeners    map[string]chan<- *ChangedEvent
+	listenerLock sync.RWMutex
+	logger       bark.Logger
 }
 
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
@@ -59,6 +59,8 @@ func (r *ringpopServiceResolver) Start() error {
 // Stop stops the oracle
 func (r *ringpopServiceResolver) Stop() error {
 	r.ringLock.Lock()
+	r.listenerLock.Lock()
+	defer r.listenerLock.Unlock()
 	defer r.ringLock.Unlock()
 
 	r.rp.RemoveListener(r)
@@ -79,8 +81,8 @@ func (r *ringpopServiceResolver) Lookup(key string) (*HostInfo, error) {
 }
 
 func (r *ringpopServiceResolver) AddListener(name string, notifyChannel chan<- *ChangedEvent) error {
-	r.listenerMutex.Lock()
-	defer r.listenerMutex.Unlock()
+	r.listenerLock.Lock()
+	defer r.listenerLock.Unlock()
 	_, ok := r.listeners[name]
 	if ok {
 		return ErrListenerAlreadyExist
@@ -90,8 +92,8 @@ func (r *ringpopServiceResolver) AddListener(name string, notifyChannel chan<- *
 }
 
 func (r *ringpopServiceResolver) RemoveListener(name string) error {
-	r.listenerMutex.Lock()
-	defer r.listenerMutex.Unlock()
+	r.listenerLock.Lock()
+	defer r.listenerLock.Unlock()
 	_, ok := r.listeners[name]
 	if !ok {
 		return nil
@@ -148,8 +150,8 @@ func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
 	}
 
 	// Notify listeners
-	r.listenerMutex.RLock()
-	defer r.listenerMutex.RUnlock()
+	r.listenerLock.RLock()
+	defer r.listenerLock.RUnlock()
 
 	for name, ch := range r.listeners {
 		select {
