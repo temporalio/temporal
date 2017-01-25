@@ -13,10 +13,9 @@ import (
 	"github.com/uber-common/bark"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	mmocks "code.uber.internal/devexp/minions/client/matching/mocks"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
-	pmocks "code.uber.internal/devexp/minions/common/persistence/mocks"
 )
 
 type (
@@ -25,8 +24,8 @@ type (
 		persistence.TestBase
 		builder            *historyBuilder
 		mockHistoryEngine  *historyEngineImpl
-		mockMatchingClient *mmocks.Client
-		mockExecutionMgr   *pmocks.ExecutionManager
+		mockMatchingClient *mocks.MatchingClient
+		mockExecutionMgr   *mocks.ExecutionManager
 		logger             bark.Logger
 	}
 )
@@ -50,8 +49,8 @@ func (s *engineSuite) TearDownSuite() {
 }
 
 func (s *engineSuite) SetupTest() {
-	s.mockMatchingClient = &mmocks.Client{}
-	s.mockExecutionMgr = &pmocks.ExecutionManager{}
+	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.mockExecutionMgr = &mocks.ExecutionManager{}
 
 	mockShard := &shardContextImpl{
 		shardInfo:              &persistence.ShardInfo{ShardID: 1, RangeID: 1, TransferAckLevel: 0},

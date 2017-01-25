@@ -6,6 +6,7 @@
       "exclude": [
         "(^Godeps/)",
         "(^client/)",
+        "(^common/mocks)",
         "(/thrift/)",
         "(\\.gen/)"
       ]

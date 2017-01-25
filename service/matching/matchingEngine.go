@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"github.com/uber-common/bark"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
@@ -16,16 +17,18 @@ import (
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/common/persistence"
 	"code.uber.internal/devexp/minions/common/util"
-	"github.com/uber-common/bark"
 )
+
+const defaultRangeSize = 100000
 
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
 	tokenSerializer common.TaskTokenSerializer
 	taskLists       map[taskListID]*taskListContext
-	taskListLock    sync.Mutex
+	rangeSize       int64
 	logger          bark.Logger
+	taskListsLock   sync.RWMutex // locks mutation of taskLists
 }
 
 type taskListID struct {
@@ -43,11 +46,14 @@ type taskContext struct {
 }
 
 type taskListContext struct {
-	taskList           taskListID
-	readLevel          int64
-	maxReadLevel       int64
-	rangeID            int64
-	taskSequenceNumber int64
+	taskList     taskListID
+	readLevel    int64
+	maxReadLevel int64
+
+	sync.Mutex
+	rangeID                 int64 // current range of the task list
+	taskSequenceNumber      int64 // sequence number of the next task
+	nextRangeSequenceNumber int64 // current range boundary
 }
 
 const (
@@ -76,43 +82,40 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 		taskManager:     taskManager,
 		historyService:  historyService,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		taskLists:       make(map[taskListID]*taskListContext),
+		rangeSize:       defaultRangeSize,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
 		}),
-		taskLists: make(map[taskListID]*taskListContext),
 	}
 }
 
 func (e *matchingEngineImpl) getTaskListContext(taskList string, taskListType int) (*taskListContext, error) {
-	e.taskListLock.Lock()
-	defer e.taskListLock.Unlock()
+	e.taskListsLock.RLock()
 	id := taskListID{taskListName: taskList, taskType: taskListType}
 	if result, ok := e.taskLists[id]; ok {
+		e.taskListsLock.RUnlock()
 		return result, nil
 	}
+	e.taskListsLock.RUnlock()
+	// TODO: set proper read levels once that is implemented
+	ctx := &taskListContext{
+		taskList:     id,
+		readLevel:    0,
+		maxReadLevel: math.MaxInt64,
+	}
+	e.taskListsLock.Lock()
+	if result, ok := e.taskLists[id]; ok {
+		e.taskListsLock.Unlock()
+		return result, nil
+	}
+	e.taskLists[id] = ctx
+	e.taskListsLock.Unlock()
 
-	// TODO: have a lock per task list for acquiring lease so that different
-	// task lists can be leased in parallel.
-	// TODO: retry on intermittent failures?
-	resp, err := e.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{
-		TaskList: taskList,
-		TaskType: taskListType,
-	})
-
+	err := ctx.updateRange(e)
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: set proper read levels once that is implemented
-	ctx := &taskListContext{
-		taskList:           id,
-		readLevel:          0,
-		maxReadLevel:       math.MaxInt64,
-		rangeID:            resp.RangeID,
-		taskSequenceNumber: resp.RangeID << 24,
-	}
-
-	e.taskLists[id] = ctx
 	return ctx, nil
 }
 
@@ -121,11 +124,14 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 	if err != nil {
 		return err
 	}
-
+	taskID, err := t.getTaskID(e)
+	if err != nil {
+		return err
+	}
 	task := &persistence.DecisionTask{
 		TaskList:   addRequest.TaskList.GetName(),
 		ScheduleID: addRequest.GetScheduleId(),
-		TaskID:     t.getTaskID(),
+		TaskID:     taskID,
 	}
 
 	_, err = e.taskManager.CreateTask(&persistence.CreateTaskRequest{
@@ -144,10 +150,15 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 		return err
 	}
 
+	taskID, err := t.getTaskID(e)
+	if err != nil {
+		return err
+	}
+
 	task := &persistence.ActivityTask{
 		TaskList:   addRequest.TaskList.GetName(),
 		ScheduleID: addRequest.GetScheduleId(),
-		TaskID:     t.getTaskID(),
+		TaskID:     taskID,
 	}
 
 	_, err = e.taskManager.CreateTask(&persistence.CreateTaskRequest{
@@ -386,8 +397,42 @@ func newTaskContext(matchingEngine *matchingEngineImpl, info *persistence.TaskIn
 	}
 }
 
-func (c *taskListContext) getTaskID() int64 {
-	return atomic.AddInt64(&c.taskSequenceNumber, 1)
+func (c *taskListContext) getTaskID(e *matchingEngineImpl) (int64, error) {
+	c.Lock()
+	defer c.Unlock()
+	err := c.updateRangeLocked(e)
+	if err != nil {
+		return -1, err
+	}
+	result := c.taskSequenceNumber
+	c.taskSequenceNumber++
+	return result, nil
+}
+
+func (c *taskListContext) updateRange(e *matchingEngineImpl) error {
+	c.Lock()
+	defer c.Unlock()
+	return c.updateRangeLocked(e)
+}
+
+func (c *taskListContext) updateRangeLocked(e *matchingEngineImpl) error {
+	if c.taskSequenceNumber < c.nextRangeSequenceNumber { // also works for initial values of 0
+		return nil
+	}
+	// TODO: retry on intermittent failures?
+	resp, err := e.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{
+		TaskList: c.taskList.taskListName,
+		TaskType: c.taskList.taskType,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	c.rangeID = resp.RangeID
+	c.taskSequenceNumber = resp.RangeID * e.rangeSize
+	c.nextRangeSequenceNumber = (resp.RangeID + 1) * e.rangeSize
+	return nil
 }
 
 func createLongPollRetryPolicy() backoff.RetryPolicy {

@@ -12,8 +12,8 @@ import (
 
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/matching/mocks"
 	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
 )
 
@@ -22,7 +22,7 @@ type (
 		suite.Suite
 		persistence.TestBase
 		processor    *transferQueueProcessorImpl
-		mockMatching *mocks.Client
+		mockMatching *mocks.MatchingClient
 	}
 )
 
@@ -37,7 +37,7 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	}
 
 	s.SetupWorkflowStore()
-	s.mockMatching = &mocks.Client{}
+	s.mockMatching = &mocks.MatchingClient{}
 	s.processor = newTransferQueueProcessor(s.ShardContext, s.WorkflowMgr, s.mockMatching,
 		bark.NewLoggerFromLogrus(log.New())).(*transferQueueProcessorImpl)
 }
