@@ -395,6 +395,9 @@ func (p *HistoryServiceClient) recvRecordDecisionTaskStarted() (value *RecordDec
 	} else if result.EventAlreadyStartedError != nil {
 		err = result.EventAlreadyStartedError
 		return
+	} else if result.EntityNotExistError != nil {
+		err = result.EntityNotExistError
+		return
 	}
 	value = result.GetSuccess()
 	return
@@ -487,6 +490,9 @@ func (p *HistoryServiceClient) recvRecordActivityTaskStarted() (value *RecordAct
 	} else if result.EventAlreadyStartedError != nil {
 		err = result.EventAlreadyStartedError
 		return
+	} else if result.EntityNotExistError != nil {
+		err = result.EntityNotExistError
+		return
 	}
 	value = result.GetSuccess()
 	return
@@ -577,6 +583,9 @@ func (p *HistoryServiceClient) recvRespondDecisionTaskCompleted() (err error) {
 		return
 	} else if result.InternalServiceError != nil {
 		err = result.InternalServiceError
+		return
+	} else if result.EntityNotExistError != nil {
+		err = result.EntityNotExistError
 		return
 	}
 	return
@@ -1055,6 +1064,8 @@ func (p *historyServiceProcessorRecordDecisionTaskStarted) Process(seqId int32, 
 			result.InternalServiceError = v
 		case *EventAlreadyStartedError:
 			result.EventAlreadyStartedError = v
+		case *shared.EntityNotExistsError:
+			result.EntityNotExistError = v
 		default:
 			x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RecordDecisionTaskStarted: "+err2.Error())
 			oprot.WriteMessageBegin("RecordDecisionTaskStarted", thrift.EXCEPTION, seqId)
@@ -1112,6 +1123,8 @@ func (p *historyServiceProcessorRecordActivityTaskStarted) Process(seqId int32, 
 			result.InternalServiceError = v
 		case *EventAlreadyStartedError:
 			result.EventAlreadyStartedError = v
+		case *shared.EntityNotExistsError:
+			result.EntityNotExistError = v
 		default:
 			x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RecordActivityTaskStarted: "+err2.Error())
 			oprot.WriteMessageBegin("RecordActivityTaskStarted", thrift.EXCEPTION, seqId)
@@ -1166,6 +1179,8 @@ func (p *historyServiceProcessorRespondDecisionTaskCompleted) Process(seqId int3
 			result.BadRequestError = v
 		case *shared.InternalServiceError:
 			result.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			result.EntityNotExistError = v
 		default:
 			x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondDecisionTaskCompleted: "+err2.Error())
 			oprot.WriteMessageBegin("RespondDecisionTaskCompleted", thrift.EXCEPTION, seqId)
@@ -2134,11 +2149,13 @@ func (p *HistoryServiceRecordDecisionTaskStartedArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EventAlreadyStartedError
+//  - EntityNotExistError
 type HistoryServiceRecordDecisionTaskStartedResult struct {
 	Success                  *RecordDecisionTaskStartedResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
 	BadRequestError          *shared.BadRequestError            `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
 	InternalServiceError     *shared.InternalServiceError       `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
 	EventAlreadyStartedError *EventAlreadyStartedError          `thrift:"eventAlreadyStartedError,3" db:"eventAlreadyStartedError" json:"eventAlreadyStartedError,omitempty"`
+	EntityNotExistError      *shared.EntityNotExistsError       `thrift:"entityNotExistError,4" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
 }
 
 func NewHistoryServiceRecordDecisionTaskStartedResult() *HistoryServiceRecordDecisionTaskStartedResult {
@@ -2180,6 +2197,15 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) GetEventAlreadyStartedEr
 	}
 	return p.EventAlreadyStartedError
 }
+
+var HistoryServiceRecordDecisionTaskStartedResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+
+func (p *HistoryServiceRecordDecisionTaskStartedResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+	if !p.IsSetEntityNotExistError() {
+		return HistoryServiceRecordDecisionTaskStartedResult_EntityNotExistError_DEFAULT
+	}
+	return p.EntityNotExistError
+}
 func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2194,6 +2220,10 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetInternalServiceErro
 
 func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetEventAlreadyStartedError() bool {
 	return p.EventAlreadyStartedError != nil
+}
+
+func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetEntityNotExistError() bool {
+	return p.EntityNotExistError != nil
 }
 
 func (p *HistoryServiceRecordDecisionTaskStartedResult) Read(iprot thrift.TProtocol) error {
@@ -2224,6 +2254,10 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) Read(iprot thrift.TProto
 			}
 		case 3:
 			if err := p.ReadField3(iprot); err != nil {
+				return err
+			}
+		case 4:
+			if err := p.ReadField4(iprot); err != nil {
 				return err
 			}
 		default:
@@ -2273,6 +2307,14 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) ReadField3(iprot thrift.
 	return nil
 }
 
+func (p *HistoryServiceRecordDecisionTaskStartedResult) ReadField4(iprot thrift.TProtocol) error {
+	p.EntityNotExistError = &shared.EntityNotExistsError{}
+	if err := p.EntityNotExistError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+	}
+	return nil
+}
+
 func (p *HistoryServiceRecordDecisionTaskStartedResult) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("RecordDecisionTaskStarted_result"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -2287,6 +2329,9 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) Write(oprot thrift.TProt
 		return err
 	}
 	if err := p.writeField3(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField4(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -2353,6 +2398,21 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) writeField3(oprot thrift
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 3:eventAlreadyStartedError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRecordDecisionTaskStartedResult) writeField4(oprot thrift.TProtocol) (err error) {
+	if p.IsSetEntityNotExistError() {
+		if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 4); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:entityNotExistError: ", p), err)
+		}
+		if err := p.EntityNotExistError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 4:entityNotExistError: ", p), err)
 		}
 	}
 	return err
@@ -2469,11 +2529,13 @@ func (p *HistoryServiceRecordActivityTaskStartedArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EventAlreadyStartedError
+//  - EntityNotExistError
 type HistoryServiceRecordActivityTaskStartedResult struct {
 	Success                  *RecordActivityTaskStartedResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
 	BadRequestError          *shared.BadRequestError            `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
 	InternalServiceError     *shared.InternalServiceError       `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
 	EventAlreadyStartedError *EventAlreadyStartedError          `thrift:"eventAlreadyStartedError,3" db:"eventAlreadyStartedError" json:"eventAlreadyStartedError,omitempty"`
+	EntityNotExistError      *shared.EntityNotExistsError       `thrift:"entityNotExistError,4" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
 }
 
 func NewHistoryServiceRecordActivityTaskStartedResult() *HistoryServiceRecordActivityTaskStartedResult {
@@ -2515,6 +2577,15 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) GetEventAlreadyStartedEr
 	}
 	return p.EventAlreadyStartedError
 }
+
+var HistoryServiceRecordActivityTaskStartedResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+
+func (p *HistoryServiceRecordActivityTaskStartedResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+	if !p.IsSetEntityNotExistError() {
+		return HistoryServiceRecordActivityTaskStartedResult_EntityNotExistError_DEFAULT
+	}
+	return p.EntityNotExistError
+}
 func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2529,6 +2600,10 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetInternalServiceErro
 
 func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetEventAlreadyStartedError() bool {
 	return p.EventAlreadyStartedError != nil
+}
+
+func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetEntityNotExistError() bool {
+	return p.EntityNotExistError != nil
 }
 
 func (p *HistoryServiceRecordActivityTaskStartedResult) Read(iprot thrift.TProtocol) error {
@@ -2559,6 +2634,10 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) Read(iprot thrift.TProto
 			}
 		case 3:
 			if err := p.ReadField3(iprot); err != nil {
+				return err
+			}
+		case 4:
+			if err := p.ReadField4(iprot); err != nil {
 				return err
 			}
 		default:
@@ -2608,6 +2687,14 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) ReadField3(iprot thrift.
 	return nil
 }
 
+func (p *HistoryServiceRecordActivityTaskStartedResult) ReadField4(iprot thrift.TProtocol) error {
+	p.EntityNotExistError = &shared.EntityNotExistsError{}
+	if err := p.EntityNotExistError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+	}
+	return nil
+}
+
 func (p *HistoryServiceRecordActivityTaskStartedResult) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("RecordActivityTaskStarted_result"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -2622,6 +2709,9 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) Write(oprot thrift.TProt
 		return err
 	}
 	if err := p.writeField3(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField4(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -2688,6 +2778,21 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) writeField3(oprot thrift
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 3:eventAlreadyStartedError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRecordActivityTaskStartedResult) writeField4(oprot thrift.TProtocol) (err error) {
+	if p.IsSetEntityNotExistError() {
+		if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 4); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:entityNotExistError: ", p), err)
+		}
+		if err := p.EntityNotExistError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 4:entityNotExistError: ", p), err)
 		}
 	}
 	return err
@@ -2802,9 +2907,11 @@ func (p *HistoryServiceRespondDecisionTaskCompletedArgs) String() string {
 // Attributes:
 //  - BadRequestError
 //  - InternalServiceError
+//  - EntityNotExistError
 type HistoryServiceRespondDecisionTaskCompletedResult struct {
 	BadRequestError      *shared.BadRequestError      `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+	EntityNotExistError  *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
 }
 
 func NewHistoryServiceRespondDecisionTaskCompletedResult() *HistoryServiceRespondDecisionTaskCompletedResult {
@@ -2828,12 +2935,25 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) GetInternalServiceErr
 	}
 	return p.InternalServiceError
 }
+
+var HistoryServiceRespondDecisionTaskCompletedResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+	if !p.IsSetEntityNotExistError() {
+		return HistoryServiceRespondDecisionTaskCompletedResult_EntityNotExistError_DEFAULT
+	}
+	return p.EntityNotExistError
+}
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetBadRequestError() bool {
 	return p.BadRequestError != nil
 }
 
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetInternalServiceError() bool {
 	return p.InternalServiceError != nil
+}
+
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetEntityNotExistError() bool {
+	return p.EntityNotExistError != nil
 }
 
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TProtocol) error {
@@ -2856,6 +2976,10 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TPr
 			}
 		case 2:
 			if err := p.ReadField2(iprot); err != nil {
+				return err
+			}
+		case 3:
+			if err := p.ReadField3(iprot); err != nil {
 				return err
 			}
 		default:
@@ -2889,6 +3013,14 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) ReadField2(iprot thri
 	return nil
 }
 
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) ReadField3(iprot thrift.TProtocol) error {
+	p.EntityNotExistError = &shared.EntityNotExistsError{}
+	if err := p.EntityNotExistError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+	}
+	return nil
+}
+
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("RespondDecisionTaskCompleted_result"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -2897,6 +3029,9 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) Write(oprot thrift.TP
 		return err
 	}
 	if err := p.writeField2(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField3(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -2933,6 +3068,21 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) writeField2(oprot thr
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) writeField3(oprot thrift.TProtocol) (err error) {
+	if p.IsSetEntityNotExistError() {
+		if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err)
+		}
+		if err := p.EntityNotExistError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err)
 		}
 	}
 	return err

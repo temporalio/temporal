@@ -408,6 +408,7 @@ var HistoryService_RecordDecisionTaskStarted_result = function(args) {
   this.badRequestError = null;
   this.internalServiceError = null;
   this.eventAlreadyStartedError = null;
+  this.entityNotExistError = null;
   if (args instanceof shared_ttypes.BadRequestError) {
     this.badRequestError = args;
     return;
@@ -418,6 +419,10 @@ var HistoryService_RecordDecisionTaskStarted_result = function(args) {
   }
   if (args instanceof ttypes.EventAlreadyStartedError) {
     this.eventAlreadyStartedError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.EntityNotExistsError) {
+    this.entityNotExistError = args;
     return;
   }
   if (args) {
@@ -432,6 +437,9 @@ var HistoryService_RecordDecisionTaskStarted_result = function(args) {
     }
     if (args.eventAlreadyStartedError !== undefined && args.eventAlreadyStartedError !== null) {
       this.eventAlreadyStartedError = args.eventAlreadyStartedError;
+    }
+    if (args.entityNotExistError !== undefined && args.entityNotExistError !== null) {
+      this.entityNotExistError = args.entityNotExistError;
     }
   }
 };
@@ -481,6 +489,14 @@ HistoryService_RecordDecisionTaskStarted_result.prototype.read = function(input)
         input.skip(ftype);
       }
       break;
+      case 4:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.entityNotExistError = new shared_ttypes.EntityNotExistsError();
+        this.entityNotExistError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -510,6 +526,11 @@ HistoryService_RecordDecisionTaskStarted_result.prototype.write = function(outpu
   if (this.eventAlreadyStartedError !== null && this.eventAlreadyStartedError !== undefined) {
     output.writeFieldBegin('eventAlreadyStartedError', Thrift.Type.STRUCT, 3);
     this.eventAlreadyStartedError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.entityNotExistError !== null && this.entityNotExistError !== undefined) {
+    output.writeFieldBegin('entityNotExistError', Thrift.Type.STRUCT, 4);
+    this.entityNotExistError.write(output);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -576,6 +597,7 @@ var HistoryService_RecordActivityTaskStarted_result = function(args) {
   this.badRequestError = null;
   this.internalServiceError = null;
   this.eventAlreadyStartedError = null;
+  this.entityNotExistError = null;
   if (args instanceof shared_ttypes.BadRequestError) {
     this.badRequestError = args;
     return;
@@ -586,6 +608,10 @@ var HistoryService_RecordActivityTaskStarted_result = function(args) {
   }
   if (args instanceof ttypes.EventAlreadyStartedError) {
     this.eventAlreadyStartedError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.EntityNotExistsError) {
+    this.entityNotExistError = args;
     return;
   }
   if (args) {
@@ -600,6 +626,9 @@ var HistoryService_RecordActivityTaskStarted_result = function(args) {
     }
     if (args.eventAlreadyStartedError !== undefined && args.eventAlreadyStartedError !== null) {
       this.eventAlreadyStartedError = args.eventAlreadyStartedError;
+    }
+    if (args.entityNotExistError !== undefined && args.entityNotExistError !== null) {
+      this.entityNotExistError = args.entityNotExistError;
     }
   }
 };
@@ -649,6 +678,14 @@ HistoryService_RecordActivityTaskStarted_result.prototype.read = function(input)
         input.skip(ftype);
       }
       break;
+      case 4:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.entityNotExistError = new shared_ttypes.EntityNotExistsError();
+        this.entityNotExistError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -678,6 +715,11 @@ HistoryService_RecordActivityTaskStarted_result.prototype.write = function(outpu
   if (this.eventAlreadyStartedError !== null && this.eventAlreadyStartedError !== undefined) {
     output.writeFieldBegin('eventAlreadyStartedError', Thrift.Type.STRUCT, 3);
     this.eventAlreadyStartedError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.entityNotExistError !== null && this.entityNotExistError !== undefined) {
+    output.writeFieldBegin('entityNotExistError', Thrift.Type.STRUCT, 4);
+    this.entityNotExistError.write(output);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -742,6 +784,7 @@ HistoryService_RespondDecisionTaskCompleted_args.prototype.write = function(outp
 var HistoryService_RespondDecisionTaskCompleted_result = function(args) {
   this.badRequestError = null;
   this.internalServiceError = null;
+  this.entityNotExistError = null;
   if (args instanceof shared_ttypes.BadRequestError) {
     this.badRequestError = args;
     return;
@@ -750,12 +793,19 @@ var HistoryService_RespondDecisionTaskCompleted_result = function(args) {
     this.internalServiceError = args;
     return;
   }
+  if (args instanceof shared_ttypes.EntityNotExistsError) {
+    this.entityNotExistError = args;
+    return;
+  }
   if (args) {
     if (args.badRequestError !== undefined && args.badRequestError !== null) {
       this.badRequestError = args.badRequestError;
     }
     if (args.internalServiceError !== undefined && args.internalServiceError !== null) {
       this.internalServiceError = args.internalServiceError;
+    }
+    if (args.entityNotExistError !== undefined && args.entityNotExistError !== null) {
+      this.entityNotExistError = args.entityNotExistError;
     }
   }
 };
@@ -789,6 +839,14 @@ HistoryService_RespondDecisionTaskCompleted_result.prototype.read = function(inp
         input.skip(ftype);
       }
       break;
+      case 3:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.entityNotExistError = new shared_ttypes.EntityNotExistsError();
+        this.entityNotExistError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -808,6 +866,11 @@ HistoryService_RespondDecisionTaskCompleted_result.prototype.write = function(ou
   if (this.internalServiceError !== null && this.internalServiceError !== undefined) {
     output.writeFieldBegin('internalServiceError', Thrift.Type.STRUCT, 2);
     this.internalServiceError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.entityNotExistError !== null && this.entityNotExistError !== undefined) {
+    output.writeFieldBegin('entityNotExistError', Thrift.Type.STRUCT, 3);
+    this.entityNotExistError.write(output);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -1457,6 +1520,9 @@ HistoryServiceClient.prototype.recv_RecordDecisionTaskStarted = function(input,m
   if (null !== result.eventAlreadyStartedError) {
     return callback(result.eventAlreadyStartedError);
   }
+  if (null !== result.entityNotExistError) {
+    return callback(result.entityNotExistError);
+  }
   if (null !== result.success) {
     return callback(null, result.success);
   }
@@ -1513,6 +1579,9 @@ HistoryServiceClient.prototype.recv_RecordActivityTaskStarted = function(input,m
   if (null !== result.eventAlreadyStartedError) {
     return callback(result.eventAlreadyStartedError);
   }
+  if (null !== result.entityNotExistError) {
+    return callback(result.entityNotExistError);
+  }
   if (null !== result.success) {
     return callback(null, result.success);
   }
@@ -1565,6 +1634,9 @@ HistoryServiceClient.prototype.recv_RespondDecisionTaskCompleted = function(inpu
   }
   if (null !== result.internalServiceError) {
     return callback(result.internalServiceError);
+  }
+  if (null !== result.entityNotExistError) {
+    return callback(result.entityNotExistError);
   }
   callback(null)
 };
@@ -1841,7 +1913,7 @@ HistoryServiceProcessor.prototype.process_RecordDecisionTaskStarted = function(s
         output.writeMessageEnd();
         output.flush();
       }, function (err) {
-        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError) {
+        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError || err instanceof shared_ttypes.EntityNotExistsError) {
           var result = new HistoryService_RecordDecisionTaskStarted_result(err);
           output.writeMessageBegin("RecordDecisionTaskStarted", Thrift.MessageType.REPLY, seqid);
         } else {
@@ -1854,7 +1926,7 @@ HistoryServiceProcessor.prototype.process_RecordDecisionTaskStarted = function(s
       });
   } else {
     this._handler.RecordDecisionTaskStarted(args.addRequest, function (err, result) {
-      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError) {
+      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError || err instanceof shared_ttypes.EntityNotExistsError) {
         var result = new HistoryService_RecordDecisionTaskStarted_result((err != null ? err : {success: result}));
         output.writeMessageBegin("RecordDecisionTaskStarted", Thrift.MessageType.REPLY, seqid);
       } else {
@@ -1881,7 +1953,7 @@ HistoryServiceProcessor.prototype.process_RecordActivityTaskStarted = function(s
         output.writeMessageEnd();
         output.flush();
       }, function (err) {
-        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError) {
+        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError || err instanceof shared_ttypes.EntityNotExistsError) {
           var result = new HistoryService_RecordActivityTaskStarted_result(err);
           output.writeMessageBegin("RecordActivityTaskStarted", Thrift.MessageType.REPLY, seqid);
         } else {
@@ -1894,7 +1966,7 @@ HistoryServiceProcessor.prototype.process_RecordActivityTaskStarted = function(s
       });
   } else {
     this._handler.RecordActivityTaskStarted(args.addRequest, function (err, result) {
-      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError) {
+      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof ttypes.EventAlreadyStartedError || err instanceof shared_ttypes.EntityNotExistsError) {
         var result = new HistoryService_RecordActivityTaskStarted_result((err != null ? err : {success: result}));
         output.writeMessageBegin("RecordActivityTaskStarted", Thrift.MessageType.REPLY, seqid);
       } else {
@@ -1921,7 +1993,7 @@ HistoryServiceProcessor.prototype.process_RespondDecisionTaskCompleted = functio
         output.writeMessageEnd();
         output.flush();
       }, function (err) {
-        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError) {
+        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
           var result = new HistoryService_RespondDecisionTaskCompleted_result(err);
           output.writeMessageBegin("RespondDecisionTaskCompleted", Thrift.MessageType.REPLY, seqid);
         } else {
@@ -1934,7 +2006,7 @@ HistoryServiceProcessor.prototype.process_RespondDecisionTaskCompleted = functio
       });
   } else {
     this._handler.RespondDecisionTaskCompleted(args.completeRequest, function (err, result) {
-      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError) {
+      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
         var result = new HistoryService_RespondDecisionTaskCompleted_result((err != null ? err : {success: result}));
         output.writeMessageBegin("RespondDecisionTaskCompleted", Thrift.MessageType.REPLY, seqid);
       } else {

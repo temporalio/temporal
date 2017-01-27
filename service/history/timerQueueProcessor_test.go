@@ -1,6 +1,7 @@
 package history
 
 import (
+	"encoding/hex"
 	"os"
 	"testing"
 	"time"
@@ -499,4 +500,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Equal(uint64(1), p.timerFiredCount)
 	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+}
+
+func (s *timerQueueProcessorSuite) Test_DecodeHistory() {
+	historyString := ""
+	data, err := hex.DecodeString(historyString)
+	if err != nil {
+		s.logger.Errorf("DecodeString failed with error: %+v", err)
+		panic("Failed deserialization of history")
+	}
+	s.logger.Infof("History: %s \n", string(data))
 }

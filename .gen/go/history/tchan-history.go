@@ -105,6 +105,9 @@ func (c *tchanHistoryServiceClient) RecordActivityTaskStarted(ctx thrift.Context
 		if e := resp.EventAlreadyStartedError; e != nil {
 			err = e
 		}
+		if e := resp.EntityNotExistError; e != nil {
+			err = e
+		}
 	}
 
 	return resp.GetSuccess(), err
@@ -124,6 +127,9 @@ func (c *tchanHistoryServiceClient) RecordDecisionTaskStarted(ctx thrift.Context
 			err = e
 		}
 		if e := resp.EventAlreadyStartedError; e != nil {
+			err = e
+		}
+		if e := resp.EntityNotExistError; e != nil {
 			err = e
 		}
 	}
@@ -184,6 +190,9 @@ func (c *tchanHistoryServiceClient) RespondDecisionTaskCompleted(ctx thrift.Cont
 			err = e
 		}
 		if e := resp.InternalServiceError; e != nil {
+			err = e
+		}
+		if e := resp.EntityNotExistError; e != nil {
 			err = e
 		}
 	}
@@ -369,6 +378,11 @@ func (s *tchanHistoryServiceServer) handleRecordActivityTaskStarted(ctx thrift.C
 				return false, nil, fmt.Errorf("Handler for eventAlreadyStartedError returned non-nil error type *EventAlreadyStartedError but nil value")
 			}
 			res.EventAlreadyStartedError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
 		default:
 			return false, nil, err
 		}
@@ -407,6 +421,11 @@ func (s *tchanHistoryServiceServer) handleRecordDecisionTaskStarted(ctx thrift.C
 				return false, nil, fmt.Errorf("Handler for eventAlreadyStartedError returned non-nil error type *EventAlreadyStartedError but nil value")
 			}
 			res.EventAlreadyStartedError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
 		default:
 			return false, nil, err
 		}
@@ -514,6 +533,11 @@ func (s *tchanHistoryServiceServer) handleRespondDecisionTaskCompleted(ctx thrif
 				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
 			}
 			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
 		default:
 			return false, nil, err
 		}

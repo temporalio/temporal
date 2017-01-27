@@ -183,7 +183,7 @@ func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisi
 			return er
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
-	if err != nil && err == ErrNoTasks {
+	if err != nil && isLongPollRetryableError(err) {
 		e.logger.Info("No tasks to hand out for PollForDecisionTask")
 		return EmptyPollForDecisionTaskResponse, nil
 	}
@@ -203,7 +203,7 @@ func (e *matchingEngineImpl) PollForActivityTask(request *workflow.PollForActivi
 			return er
 		}, longPollRetryPolicy, isLongPollRetryableError)
 
-	if err != nil && err == ErrNoTasks {
+	if err != nil && isLongPollRetryableError(err) {
 		e.logger.Info("No tasks to hand out for PollForActivityTask")
 		return EmptyPollForActivityTaskResponse, nil
 	}
@@ -451,8 +451,6 @@ func isLongPollRetryableError(err error) bool {
 	// Any errors from history service that can be retriable as well.
 	switch err.(type) {
 	case *workflow.EntityNotExistsError:
-		return true
-	case *workflow.InternalServiceError:
 		return true
 	}
 

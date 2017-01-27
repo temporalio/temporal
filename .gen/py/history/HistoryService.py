@@ -264,6 +264,8 @@ class Client(Iface):
       raise result.internalServiceError
     if result.eventAlreadyStartedError is not None:
       raise result.eventAlreadyStartedError
+    if result.entityNotExistError is not None:
+      raise result.entityNotExistError
     raise TApplicationException(TApplicationException.MISSING_RESULT, "RecordDecisionTaskStarted failed: unknown result");
 
   def RecordActivityTaskStarted(self, addRequest):
@@ -306,6 +308,8 @@ class Client(Iface):
       raise result.internalServiceError
     if result.eventAlreadyStartedError is not None:
       raise result.eventAlreadyStartedError
+    if result.entityNotExistError is not None:
+      raise result.entityNotExistError
     raise TApplicationException(TApplicationException.MISSING_RESULT, "RecordActivityTaskStarted failed: unknown result");
 
   def RespondDecisionTaskCompleted(self, completeRequest):
@@ -346,6 +350,8 @@ class Client(Iface):
       raise result.badRequestError
     if result.internalServiceError is not None:
       raise result.internalServiceError
+    if result.entityNotExistError is not None:
+      raise result.entityNotExistError
     return
 
   def RecordActivityTaskHeartbeat(self, heartbeatRequest):
@@ -554,6 +560,8 @@ class Processor(Iface, TProcessor):
       result.internalServiceError = internalServiceError
     except EventAlreadyStartedError, eventAlreadyStartedError:
       result.eventAlreadyStartedError = eventAlreadyStartedError
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
+      result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RecordDecisionTaskStarted", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -572,6 +580,8 @@ class Processor(Iface, TProcessor):
       result.internalServiceError = internalServiceError
     except EventAlreadyStartedError, eventAlreadyStartedError:
       result.eventAlreadyStartedError = eventAlreadyStartedError
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
+      result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RecordActivityTaskStarted", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -588,6 +598,8 @@ class Processor(Iface, TProcessor):
       result.badRequestError = badRequestError
     except shared.ttypes.InternalServiceError, internalServiceError:
       result.internalServiceError = internalServiceError
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
+      result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RespondDecisionTaskCompleted", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
@@ -1069,6 +1081,7 @@ class RecordDecisionTaskStarted_result:
    - badRequestError
    - internalServiceError
    - eventAlreadyStartedError
+   - entityNotExistError
   """
 
   thrift_spec = (
@@ -1076,13 +1089,15 @@ class RecordDecisionTaskStarted_result:
     (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
     (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
     (3, TType.STRUCT, 'eventAlreadyStartedError', (EventAlreadyStartedError, EventAlreadyStartedError.thrift_spec), None, ), # 3
+    (4, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 4
   )
 
-  def __init__(self, success=None, badRequestError=None, internalServiceError=None, eventAlreadyStartedError=None,):
+  def __init__(self, success=None, badRequestError=None, internalServiceError=None, eventAlreadyStartedError=None, entityNotExistError=None,):
     self.success = success
     self.badRequestError = badRequestError
     self.internalServiceError = internalServiceError
     self.eventAlreadyStartedError = eventAlreadyStartedError
+    self.entityNotExistError = entityNotExistError
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -1117,6 +1132,12 @@ class RecordDecisionTaskStarted_result:
           self.eventAlreadyStartedError.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 4:
+        if ftype == TType.STRUCT:
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
+          self.entityNotExistError.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -1143,6 +1164,10 @@ class RecordDecisionTaskStarted_result:
       oprot.writeFieldBegin('eventAlreadyStartedError', TType.STRUCT, 3)
       self.eventAlreadyStartedError.write(oprot)
       oprot.writeFieldEnd()
+    if self.entityNotExistError is not None:
+      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 4)
+      self.entityNotExistError.write(oprot)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -1156,6 +1181,7 @@ class RecordDecisionTaskStarted_result:
     value = (value * 31) ^ hash(self.badRequestError)
     value = (value * 31) ^ hash(self.internalServiceError)
     value = (value * 31) ^ hash(self.eventAlreadyStartedError)
+    value = (value * 31) ^ hash(self.entityNotExistError)
     return value
 
   def __repr__(self):
@@ -1242,6 +1268,7 @@ class RecordActivityTaskStarted_result:
    - badRequestError
    - internalServiceError
    - eventAlreadyStartedError
+   - entityNotExistError
   """
 
   thrift_spec = (
@@ -1249,13 +1276,15 @@ class RecordActivityTaskStarted_result:
     (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
     (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
     (3, TType.STRUCT, 'eventAlreadyStartedError', (EventAlreadyStartedError, EventAlreadyStartedError.thrift_spec), None, ), # 3
+    (4, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 4
   )
 
-  def __init__(self, success=None, badRequestError=None, internalServiceError=None, eventAlreadyStartedError=None,):
+  def __init__(self, success=None, badRequestError=None, internalServiceError=None, eventAlreadyStartedError=None, entityNotExistError=None,):
     self.success = success
     self.badRequestError = badRequestError
     self.internalServiceError = internalServiceError
     self.eventAlreadyStartedError = eventAlreadyStartedError
+    self.entityNotExistError = entityNotExistError
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -1290,6 +1319,12 @@ class RecordActivityTaskStarted_result:
           self.eventAlreadyStartedError.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 4:
+        if ftype == TType.STRUCT:
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
+          self.entityNotExistError.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -1316,6 +1351,10 @@ class RecordActivityTaskStarted_result:
       oprot.writeFieldBegin('eventAlreadyStartedError', TType.STRUCT, 3)
       self.eventAlreadyStartedError.write(oprot)
       oprot.writeFieldEnd()
+    if self.entityNotExistError is not None:
+      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 4)
+      self.entityNotExistError.write(oprot)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -1329,6 +1368,7 @@ class RecordActivityTaskStarted_result:
     value = (value * 31) ^ hash(self.badRequestError)
     value = (value * 31) ^ hash(self.internalServiceError)
     value = (value * 31) ^ hash(self.eventAlreadyStartedError)
+    value = (value * 31) ^ hash(self.entityNotExistError)
     return value
 
   def __repr__(self):
@@ -1413,17 +1453,20 @@ class RespondDecisionTaskCompleted_result:
   Attributes:
    - badRequestError
    - internalServiceError
+   - entityNotExistError
   """
 
   thrift_spec = (
     None, # 0
     (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
     (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
   )
 
-  def __init__(self, badRequestError=None, internalServiceError=None,):
+  def __init__(self, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
     self.badRequestError = badRequestError
     self.internalServiceError = internalServiceError
+    self.entityNotExistError = entityNotExistError
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -1446,6 +1489,12 @@ class RespondDecisionTaskCompleted_result:
           self.internalServiceError.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 3:
+        if ftype == TType.STRUCT:
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
+          self.entityNotExistError.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -1464,6 +1513,10 @@ class RespondDecisionTaskCompleted_result:
       oprot.writeFieldBegin('internalServiceError', TType.STRUCT, 2)
       self.internalServiceError.write(oprot)
       oprot.writeFieldEnd()
+    if self.entityNotExistError is not None:
+      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 3)
+      self.entityNotExistError.write(oprot)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -1475,6 +1528,7 @@ class RespondDecisionTaskCompleted_result:
     value = 17
     value = (value * 31) ^ hash(self.badRequestError)
     value = (value * 31) ^ hash(self.internalServiceError)
+    value = (value * 31) ^ hash(self.entityNotExistError)
     return value
 
   def __repr__(self):
