@@ -88,6 +88,13 @@ const (
 		`heart_beat_timeout: ?` +
 		`}`
 
+	templateTimerInfoType = `{` +
+		`timer_id: ?, ` +
+		`started_id: ?, ` +
+		`expiry_time: ?, ` +
+		`task_id: ?` +
+		`}`
+
 	templateTaskType = `{` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
@@ -144,7 +151,7 @@ const (
 		`and run_id = ? ` +
 		`and task_id = ?`
 
-	templateGetWorkflowMutabeStateQuery = `SELECT activity_map ` +
+	templateGetWorkflowMutabeStateQuery = `SELECT activity_map, timer_map ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -170,7 +177,25 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ? and range_id = ?`
 
+	templateUpdateTimerInfoQuery = `UPDATE executions ` +
+		`SET timer_map[ ? ] =` + templateTimerInfoType + ` ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ? and range_id = ?`
+
 	templateDeleteActivityInfoQuery = `DELETE activity_map[ ? ] ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ? and range_id = ?`
+
+	templateDeleteTimerInfoQuery = `DELETE timer_map[ ? ] ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -543,6 +568,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfo,
 		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
+	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos,
+		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
+
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
@@ -900,7 +928,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
-		t := createTimerInfo(task["timer"].(map[string]interface{}))
+		t := createTimerTaskInfo(task["timer"].(map[string]interface{}))
 		// Reset task map to get it ready for next scan
 		task = make(map[string]interface{})
 		// Skip the task if it is not in the bounds.
@@ -950,6 +978,7 @@ func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutab
 	}
 
 	state := &WorkflowMutableState{}
+
 	activityInfos := make(map[int64]*ActivityInfo)
 	aMap := result["activity_map"].(map[int64]map[string]interface{})
 	for key, value := range aMap {
@@ -957,6 +986,14 @@ func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutab
 		activityInfos[key] = info
 	}
 	state.ActivitInfos = activityInfos
+
+	timerInfos := make(map[string]*TimerInfo)
+	tMap := result["timer_map"].(map[string]map[string]interface{})
+	for key, value := range tMap {
+		info := createTimerInfo(value)
+		timerInfos[key] = info
+	}
+	state.TimerInfos = timerInfos
 
 	return &GetWorkflowMutableStateResponse{State: state}, nil
 }
@@ -1078,6 +1115,38 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 	}
 }
 
+func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos []*TimerInfo, deleteInfos []string,
+	workflowID string, runID string, condition int64, rangeID int64) {
+
+	for _, a := range timerInfos {
+		batch.Query(templateUpdateTimerInfoQuery,
+			a.TimerID,
+			a.TimerID,
+			a.StartedID,
+			a.ExpiryTime,
+			a.TaskID,
+			d.shardID,
+			rowTypeExecution,
+			workflowID,
+			runID,
+			rowTypeExecutionTaskID,
+			condition,
+			rangeID)
+	}
+
+	for _, t := range deleteInfos {
+		batch.Query(templateDeleteTimerInfoQuery,
+			t,
+			d.shardID,
+			rowTypeExecution,
+			workflowID,
+			runID,
+			rowTypeExecutionTaskID,
+			condition,
+			rangeID)
+	}
+}
+
 func createShardInfo(result map[string]interface{}) *ShardInfo {
 	info := &ShardInfo{}
 	for k, v := range result {
@@ -1180,6 +1249,23 @@ func createActivityInfo(result map[string]interface{}) *ActivityInfo {
 	return info
 }
 
+func createTimerInfo(result map[string]interface{}) *TimerInfo {
+	info := &TimerInfo{}
+	for k, v := range result {
+		switch k {
+		case "timer_id":
+			info.TimerID = v.(string)
+		case "started_id":
+			info.StartedID = v.(int64)
+		case "expiry_time":
+			info.ExpiryTime = v.(time.Time)
+		case "task_id":
+			info.TaskID = v.(int64)
+		}
+	}
+	return info
+}
+
 func createTaskInfo(result map[string]interface{}) *TaskInfo {
 	info := &TaskInfo{}
 	for k, v := range result {
@@ -1198,8 +1284,8 @@ func createTaskInfo(result map[string]interface{}) *TaskInfo {
 	return info
 }
 
-func createTimerInfo(result map[string]interface{}) *TimerInfo {
-	info := &TimerInfo{}
+func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
+	info := &TimerTaskInfo{}
 	for k, v := range result {
 		switch k {
 		case "workflow_id":

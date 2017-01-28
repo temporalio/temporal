@@ -27,7 +27,7 @@ func TestHistoryBuilderSuite(t *testing.T) {
 
 func (s *historyBuilderSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.builder = newHistoryBuilder(nil, s.logger)
+	s.builder = newHistoryBuilder(s.logger)
 }
 
 func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {

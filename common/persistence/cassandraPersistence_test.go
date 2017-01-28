@@ -104,7 +104,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	updatedInfo.History = []byte(`event2`)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	info1, err3 := s.GetWorkflowExecutionInfo(workflowExecution)
@@ -126,7 +126,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo.History = []byte(`event3`)
 	failedUpdatedInfo.NextEventID = int64(6)
 	failedUpdatedInfo.LastProcessedEvent = int64(3)
-	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil)
+	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.NotNil(err4, "expected non nil error.")
 	s.IsType(&ConditionFailedError{}, err4)
 	log.Infof("Conditional update failed with error: %v", err4)
@@ -327,14 +327,14 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	tasks := []Task{&DecisionTimeoutTask{1, 2}}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	timerTasks, err1 := s.GetTimerIndexTasks(-1, math.MaxInt64)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, &DecisionTimeoutTask{TaskID: timerTasks[0].TaskID}, nil, nil)
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, &DecisionTimeoutTask{TaskID: timerTasks[0].TaskID}, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(-1, math.MaxInt64)
@@ -342,7 +342,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	s.Empty(timerTasks2, "expected empty task list.")
 }
 
-func (s *cassandraPersistenceSuite) TestWorkflowMutableState() {
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("test-workflow-mutable-test"),
 		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
 
@@ -360,7 +360,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	activityInfos := []*ActivityInfo{{
 		ScheduleID: 1, ScheduleToCloseTimeout: 1, ScheduleToStartTimeout: 2, StartToCloseTimeout: 3, HeartbeatTimeout: 4}}
-	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	state, err1 := s.GetWorkflowMutableState(workflowExecution)
@@ -368,13 +368,53 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState() {
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.ActivitInfos))
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, common.Int64Ptr(1))
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, common.Int64Ptr(1), nil, nil)
 	s.Nil(err2, "No error expected.")
 
 	state, err1 = s.GetWorkflowMutableState(workflowExecution)
 	s.Nil(err2, "No error expected.")
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ActivitInfos))
+}
+
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Timers() {
+	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("test-workflow-mutable-timers-test"),
+		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
+
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", "history", nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	info0, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.History = []byte(`event2`)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	currentTime := time.Now().UTC()
+	timerID := "id_1"
+	timerInfos := []*TimerInfo{{TimerID: timerID, ExpiryTime: currentTime, TaskID: 2, StartedID: 5}}
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, timerInfos, nil)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 := s.GetWorkflowMutableState(workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(1, len(state.TimerInfos))
+	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
+	s.Equal(currentTime.Unix(), state.TimerInfos[timerID].ExpiryTime.Unix())
+	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
+	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
+
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, nil, nil, []string{timerID})
+	s.Nil(err2, "No error expected.")
+
+	state, err1 = s.GetWorkflowMutableState(workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(0, len(state.TimerInfos))
 }
 
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {

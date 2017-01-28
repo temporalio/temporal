@@ -260,7 +260,7 @@ func (t *timerQueueProcessorImpl) getNextKey(minKey SequenceID, maxKey SequenceI
 	return MaxTimerKey, nil
 }
 
-func (t *timerQueueProcessorImpl) getTimerTasks(minKey SequenceID, maxKey SequenceID, batchSize int) ([]*persistence.TimerInfo, error) {
+func (t *timerQueueProcessorImpl) getTimerTasks(minKey SequenceID, maxKey SequenceID, batchSize int) ([]*persistence.TimerTaskInfo, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinKey:    int64(minKey),
 		MaxKey:    int64(maxKey),
@@ -319,25 +319,43 @@ Update_History_Loop:
 		switch timerTask.TaskType {
 
 		case persistence.TaskTypeUserTimer:
-			// Add TimerFired event to history.
-			isRunning, timerID := builder.isTimerTaskRunning(timerTask.EventID)
-			if !isRunning {
-				return fmt.Errorf("The timer task is not running - TimerID: %s, SequenceID: %s, StartedID: %d",
-					timerID, SequenceID(timerTask.TaskID), timerTask.EventID)
-			}
-			_, err = builder.AddTimerFiredEvent(timerTask.EventID, timerID, timerTask.TaskID)
-			if err != nil {
-				return err
+			referenceExpiryTime, _ := DeconstructTimerKey(SequenceID(timerTask.TaskID))
+			context.tBuilder.LoadUserTimers(msBuilder)
+
+		ExpireUserTimers:
+			for _, td := range context.tBuilder.AllTimers() {
+				hasTimer, ti := context.tBuilder.UserTimer(td.SequenceID)
+				if !hasTimer {
+					t.logger.Debugf("Failed to find in memory user timer for: %s", td.SequenceID)
+					return fmt.Errorf("failed to find user timer")
+				}
+
+				if isExpired := context.tBuilder.IsTimerExpired(td, referenceExpiryTime); isExpired {
+					// Add TimerFired event to history.
+					_, err = builder.AddTimerFiredEvent(ti.StartedID, ti.TimerID)
+					if err != nil {
+						return err
+					}
+
+					// Remove timer from mutable state.
+					msBuilder.DeletePendingTimer(ti.TimerID)
+					scheduleNewDecision = !builder.hasPendingDecisionTask()
+				} else {
+					// See if we have next timer in list to be created.
+					if !td.TaskCreated {
+						nextTask := context.tBuilder.createNewTask(td)
+						timerTasks = []persistence.Task{nextTask}
+
+						// Update the task ID tracking the corresponding timer task.
+						ti.TaskID = nextTask.GetTaskID()
+						msBuilder.UpdatePendingTimers(ti.TimerID, ti)
+					}
+
+					// Done!
+					break ExpireUserTimers
+				}
 			}
 
-			// See if we have next timer in list to be created.
-			nextTask, err := context.tBuilder.RemoveTimer(&persistence.UserTimerTask{TaskID: timerTask.TaskID})
-			if err != nil {
-				return err
-			}
-			if nextTask != nil {
-				timerTasks = []persistence.Task{nextTask}
-			}
 			clearTimerTask = &persistence.UserTimerTask{TaskID: timerTask.TaskID}
 
 		case persistence.TaskTypeActivityTimeout:

@@ -41,7 +41,7 @@ func (s *engineSuite) SetupSuite() {
 	}
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.builder = newHistoryBuilder(nil, s.logger)
+	s.builder = newHistoryBuilder(s.logger)
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -135,7 +135,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -176,7 +176,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -217,7 +217,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	})
 	identity := "testIdentity"
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 100)
 
@@ -255,7 +255,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	activity3Type := "activity_type3"
 	activity3Input := []byte("input3")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -322,7 +322,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(16), info2.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info2.LastProcessedEvent)
@@ -361,7 +361,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	context := []byte("context")
 	input := []byte("input")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -415,7 +415,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2Input := []byte("input2")
 	workflowResult := []byte("workflow result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -463,7 +463,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(14), info.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info.LastProcessedEvent)
@@ -495,7 +495,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	reason := "workflow fail reason"
 	details := []byte("workflow fail details")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -544,7 +544,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 		Identity:         &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(14), info.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), info.LastProcessedEvent)
@@ -573,7 +573,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	context := []byte("context")
 	input := []byte("input")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -610,7 +610,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -645,7 +645,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	context := []byte("context")
 	workflowResult := []byte("success")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -676,7 +676,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -705,7 +705,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	details := []byte("fail workflow details")
 	reason := "fail workflow reason"
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent := addDecisionTaskScheduledEvent(builder, tl, 100)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
@@ -737,7 +737,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		Identity:         &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(6), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -817,7 +817,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -859,7 +859,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -904,7 +904,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -948,7 +948,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -991,7 +991,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		Identity:  &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(12), info2.NextEventID)
 	s.Equal(int64(3), info2.LastProcessedEvent)
@@ -1018,7 +1018,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1061,7 +1061,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1088,7 +1088,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		Identity:  &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(9), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -1168,7 +1168,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1211,7 +1211,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	failReason := "fail reason"
 	details := []byte("fail details")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1256,7 +1256,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1300,7 +1300,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -1344,7 +1344,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		Identity:  &identity,
 	})
 	s.Nil(err, string(history))
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
 	s.Equal(int64(12), info2.NextEventID)
 	s.Equal(int64(3), info2.LastProcessedEvent)
@@ -1371,7 +1371,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1414,7 +1414,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	failReason := "failed"
 	failDetails := []byte("fail details.")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1442,7 +1442,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		Identity:  &identity,
 	})
 	s.Nil(err)
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(9), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)
@@ -1475,7 +1475,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1510,7 +1510,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	builder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
@@ -1548,7 +1548,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.Nil(err)
 	s.NotNil(response)
 
-	updatedBuilder := newHistoryBuilder(nil, bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info)
 	s.Equal(int64(7), info.NextEventID)
 	s.Equal(int64(3), info.LastProcessedEvent)

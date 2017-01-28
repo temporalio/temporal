@@ -452,8 +452,6 @@ func isLongPollRetryableError(err error) bool {
 	switch err.(type) {
 	case *workflow.EntityNotExistsError:
 		return true
-	case *workflow.InternalServiceError:
-		return true
 	}
 
 	return false

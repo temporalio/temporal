@@ -148,7 +148,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 
 	// Generate first decision task event.
 	taskList := request.GetTaskList().GetName()
-	builder := newHistoryBuilder(nil, e.logger)
+	builder := newHistoryBuilder(e.logger)
 	builder.AddWorkflowExecutionStartedEvent(request)
 	dt := builder.AddDecisionTaskScheduledEvent(taskList, request.GetTaskStartToCloseTimeoutSeconds())
 
@@ -202,8 +202,7 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 		return nil, err
 	}
 
-	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: e.shard}, e.logger)
-	builder := newHistoryBuilder(tBuilder, e.logger)
+	builder := newHistoryBuilder(e.logger)
 	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
 		return nil, err
 	}
@@ -354,7 +353,7 @@ Update_History_Loop:
 			return err1
 		}
 
-		aiBuilder, err1 := context.loadWorkflowMutableState()
+		msBuilder, err1 := context.loadWorkflowMutableState()
 		if err1 != nil {
 			return err1
 		}
@@ -388,11 +387,11 @@ Update_History_Loop:
 				// Create activity timeouts.
 				defer e.timerProcessor.NotifyNewTimer()
 				Schedule2StartTimeoutTask := context.tBuilder.AddScheduleToStartActivityTimeout(
-					scheduleEvent.GetEventId(), scheduleEvent, aiBuilder)
+					scheduleEvent.GetEventId(), scheduleEvent, msBuilder)
 				timerTasks = append(timerTasks, Schedule2StartTimeoutTask)
 
 				Schedule2CloseTimeoutTask, err := context.tBuilder.AddScheduleToCloseActivityTimeout(
-					scheduleEvent.GetEventId(), aiBuilder)
+					scheduleEvent.GetEventId(), msBuilder)
 				if err != nil {
 					return err
 				}
@@ -416,6 +415,18 @@ Update_History_Loop:
 				attributes := d.GetFailWorkflowExecutionDecisionAttributes()
 				builder.AddFailWorkflowEvent(completedID, attributes)
 				isComplete = true
+			case workflow.DecisionType_StartTimer:
+				attributes := d.GetStartTimerDecisionAttributes()
+				startTimerEvent := builder.AddTimerStartedEvent(completedID, attributes)
+				nextTimerTask, err := context.tBuilder.AddUserTimer(attributes.GetTimerId(), attributes.GetStartToFireTimeoutSeconds(),
+					startTimerEvent.GetEventId(), msBuilder)
+				if err != nil {
+					return err
+				}
+				if nextTimerTask != nil {
+					timerTasks = append(timerTasks, nextTimerTask)
+				}
+
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
 			}
@@ -730,14 +741,18 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(context *wor
 
 func newWorkflowExecutionContext(historyService *historyEngineImpl,
 	execution workflow.WorkflowExecution) *workflowExecutionContext {
+	logger := historyService.logger.WithFields(bark.Fields{
+		tagWorkflowExecutionID: execution.GetWorkflowId(),
+		tagWorkflowRunID:       execution.GetRunId(),
+	})
+	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: historyService.shard}, logger)
+
 	return &workflowExecutionContext{
 		workflowExecution: execution,
 		historyService:    historyService,
 		msBuilder:         &mutableStateBuilder{},
-		logger: historyService.logger.WithFields(bark.Fields{
-			tagWorkflowExecutionID: execution.GetWorkflowId(),
-			tagWorkflowRunID:       execution.GetRunId(),
-		}),
+		tBuilder:          tBuilder,
+		logger:            logger,
 	}
 }
 
@@ -751,11 +766,9 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*historyBuilder, err
 		return nil, err
 	}
 
-	c.tBuilder = newTimerBuilder(&shardSeqNumGenerator{context: c.historyService.shard}, c.logger)
-
 	c.executionInfo = response.ExecutionInfo
 	c.updateCondition = response.ExecutionInfo.NextEventID
-	builder := newHistoryBuilder(c.tBuilder, c.logger)
+	builder := newHistoryBuilder(c.logger)
 	if err := builder.loadExecutionInfo(response.ExecutionInfo); err != nil {
 		return nil, err
 	}
@@ -776,7 +789,7 @@ func (c *workflowExecutionContext) loadWorkflowMutableState() (*mutableStateBuil
 
 	msBuilder := newMutableStateBuilder(c.logger)
 	if response != nil && response.State != nil {
-		msBuilder.Load(response.State.ActivitInfos)
+		msBuilder.Load(response.State.ActivitInfos, response.State.TimerInfos)
 	}
 
 	c.msBuilder = msBuilder
@@ -819,6 +832,8 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		RangeID:             c.historyService.shard.GetRangeID(),
 		UpsertActivityInfos: c.msBuilder.updateActivityInfos,
 		DeleteActivityInfo:  c.msBuilder.deleteActivityInfo,
+		UpserTimerInfos:     c.msBuilder.updateTimerInfos,
+		DeleteTimerInfos:    c.msBuilder.deleteTimerInfos,
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:

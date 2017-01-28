@@ -73,8 +73,8 @@ type (
 		DeliveryCount  int
 	}
 
-	// TimerInfo describes a timer.
-	TimerInfo struct {
+	// TimerTaskInfo describes a timer task.
+	TimerTaskInfo struct {
 		WorkflowID  string
 		RunID       string
 		TaskID      int64
@@ -126,14 +126,14 @@ type (
 
 	// UserTimerTask identifies a timeout task.
 	UserTimerTask struct {
-		TaskID   int64
-		TaskList string
-		EventID  int64
+		TaskID  int64
+		EventID int64
 	}
 
 	// WorkflowMutableState indicates worklow realted state
 	WorkflowMutableState struct {
 		ActivitInfos map[int64]*ActivityInfo
+		TimerInfos   map[string]*TimerInfo
 	}
 
 	// ActivityInfo details.
@@ -145,6 +145,14 @@ type (
 		ScheduleToCloseTimeout int32
 		StartToCloseTimeout    int32
 		HeartbeatTimeout       int32
+	}
+
+	// TimerInfo details - metadata about user timer info.
+	TimerInfo struct {
+		TimerID    string
+		StartedID  int64
+		ExpiryTime time.Time
+		TaskID     int64
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -206,6 +214,8 @@ type (
 		RangeID             int64
 		UpsertActivityInfos []*ActivityInfo
 		DeleteActivityInfo  *int64
+		UpserTimerInfos     []*TimerInfo
+		DeleteTimerInfos    []string
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -287,7 +297,7 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers []*TimerInfo
+		Timers []*TimerTaskInfo
 	}
 
 	// GetWorkflowMutableStateRequest is used to retrieve the info of a workflow execution

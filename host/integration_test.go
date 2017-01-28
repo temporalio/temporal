@@ -22,6 +22,7 @@ package host
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -638,6 +639,81 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	err = poller.pollAndProcessActivityTask(false)
 
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", we.GetRunId())
+
+	s.False(workflowComplete)
+	s.Nil(poller.pollAndProcessDecisionTask(true, false))
+	s.True(workflowComplete)
+}
+
+func (s *integrationSuite) TestSequential_UserTimers() {
+	id := "interation-sequential-user-timers-test"
+	wt := "interation-sequential-user-timers-test-type"
+	tl := "interation-sequential-user-timers-test-tasklist"
+	identity := "worker1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	timerCount := int32(10)
+	timerCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if timerCounter < timerCount {
+			timerCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
+
+			return []byte(strconv.Itoa(int(timerCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_StartTimer),
+				StartTimerDecisionAttributes: &workflow.StartTimerDecisionAttributes{
+					TimerId:                   common.StringPtr(fmt.Sprintf("timer-id-%d", timerCounter)),
+					StartToFireTimeoutSeconds: common.Int64Ptr(1),
+				},
+			}}
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(timerCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result_: []byte("Done."),
+			},
+		}}
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: nil,
+		logger:          s.logger,
+	}
+
+	for i := 0; i < 10; i++ {
+		err := poller.pollAndProcessDecisionTask(false, false)
+		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		s.Nil(err)
+	}
 
 	s.False(workflowComplete)
 	s.Nil(poller.pollAndProcessDecisionTask(true, false))

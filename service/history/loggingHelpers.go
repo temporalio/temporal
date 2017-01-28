@@ -62,7 +62,7 @@ const (
 func logInvalidHistoryActionEvent(logger bark.Logger, action string, eventID int64, state string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID:      invalidHistoryActionEventID,
-		tagHistoryBuilderAction: tagValueActionWorkflowStarted,
+		tagHistoryBuilderAction: action,
 	}).Errorf("Invalid history builder state for action: EventID: %v, State: %v", eventID, state)
 }
 

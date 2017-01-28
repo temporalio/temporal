@@ -247,7 +247,8 @@ func (s *TestBase) GetWorkflowMutableState(workflowExecution workflow.WorkflowEx
 // UpdateWorkflowExecution is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task,
-	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64) error {
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64,
+	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{TaskList: updatedInfo.TaskList,
@@ -268,6 +269,8 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		RangeID:             s.ShardContext.GetRangeID(),
 		UpsertActivityInfos: upsertActivityInfos,
 		DeleteActivityInfo:  deleteActivityInfo,
+		UpserTimerInfos:     upsertTimerInfos,
+		DeleteTimerInfos:    deleteTimerInfos,
 	})
 }
 
@@ -308,7 +311,7 @@ func (s *TestBase) CompleteTransferTask(workflowExecution workflow.WorkflowExecu
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerInfo, error) {
+func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
 		MinKey: minKey, MaxKey: maxKey, BatchSize: 10})
 

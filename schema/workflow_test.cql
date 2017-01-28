@@ -49,6 +49,7 @@ CREATE TYPE timer_task (
   event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
 );
 
+-- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
   schedule_id               bigint,
   started_id                bigint,
@@ -57,6 +58,14 @@ CREATE TYPE activity_info (
   schedule_to_close_timeout int,
   start_to_close_timeout    int,
   heart_beat_timeout        int,
+);
+
+-- User timer details
+CREATE TYPE timer_info (
+  timer_id      text,      -- User defined timer ID
+  started_id    bigint,    -- The event ID corresponding to timer started.
+  expiry_time   timestamp, -- Timestamp at which this timer expires or fires
+  task_id       bigint,    -- The task ID if we have one created for this timer
 );
 
 -- Activity or workflow task in a task list
@@ -81,6 +90,7 @@ CREATE TABLE executions (
   range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   lock_token         uuid,
   activity_map       map<bigint, frozen<activity_info>>,
+  timer_map          map<text, frozen<timer_info>>,
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 
