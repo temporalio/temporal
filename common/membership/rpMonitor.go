@@ -67,6 +67,18 @@ func (rpo *ringpopMonitor) Stop() {
 	rpo.stopped = true
 }
 
+func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
+	address, err := rpo.rp.WhoAmI()
+	if err != nil {
+		return nil, err
+	}
+	labels, err := rpo.rp.Labels()
+	if err != nil {
+		return nil, err
+	}
+	return NewHostInfo(address, labels.AsMap()), nil
+}
+
 func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {

@@ -25,6 +25,7 @@ type (
 	Monitor interface {
 		Start() error
 		Stop()
+		WhoAmI() (*HostInfo, error)
 		Lookup(service string, key string) (*HostInfo, error)
 		GetResolver(service string) (ServiceResolver, error)
 		// AddListener adds a listener for this service.
