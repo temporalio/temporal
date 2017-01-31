@@ -49,11 +49,12 @@ func (s *engineSuite) TearDownSuite() {
 }
 
 func (s *engineSuite) SetupTest() {
+	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 
 	mockShard := &shardContextImpl{
-		shardInfo:              &persistence.ShardInfo{ShardID: 1, RangeID: 1, TransferAckLevel: 0},
+		shardInfo:              &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber: 1,
 	}
 

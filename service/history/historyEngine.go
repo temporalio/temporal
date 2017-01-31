@@ -99,32 +99,9 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 	return historyEngImpl
 }
 
-// NewEngine creates an instance of history engine
-func NewEngine(shardID int, shardManager persistence.ShardManager, executionManager persistence.ExecutionManager,
-	matching matching.Client, logger bark.Logger) Engine {
-	shard, err := acquireShard(shardID, shardManager)
-	if err != nil {
-		logger.WithField("error", err).Error("failed to acquire shard")
-		return nil
-	}
-
-	txProcessor := newTransferQueueProcessor(shard, executionManager, matching, logger)
-	tracker := newPendingTaskTracker(shard, txProcessor, logger)
-	historyEngImpl := &historyEngineImpl{
-		shard:            shard,
-		executionManager: executionManager,
-		txProcessor:      txProcessor,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		tracker:          tracker,
-		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueWorkflowEngineComponent,
-		}),
-	}
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)
-	return historyEngImpl
-}
-
-// Start the service.
+// Start will spin up all the components needed to start serving this shard.
+// Make sure all the components are loaded lazily so start can return immediately.  This is important because
+// ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
 	e.txProcessor.Start()
 	e.timerProcessor.Start()

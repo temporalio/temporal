@@ -95,13 +95,14 @@ func (s *testShardContext) Reset() {
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
+	shardID := 0
 	var err error
 	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
 	if err != nil {
 		log.Fatal(err)
 	}
 	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
-		s.CassandraTestCluster.keyspace, 1)
+		s.CassandraTestCluster.keyspace, shardID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Create a shard for test
 	s.readLevel = 0
 	s.ShardInfo = &ShardInfo{
-		ShardID:          1,
+		ShardID:          shardID,
 		RangeID:          0,
 		TransferAckLevel: 0,
 	}

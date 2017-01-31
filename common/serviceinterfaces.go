@@ -4,6 +4,8 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
+
+	"code.uber.internal/devexp/minions/common/membership"
 )
 
 type (
@@ -23,5 +25,9 @@ type (
 		GetMetricsScope() tally.Scope
 
 		GetClientFactory() ClientFactory
+
+		GetMembershipMonitor() membership.Monitor
+
+		GetHostInfo() *membership.HostInfo
 	}
 )

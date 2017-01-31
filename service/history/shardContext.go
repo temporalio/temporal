@@ -85,7 +85,9 @@ func acquireShard(shardID int, shardManager persistence.ShardManager) (ShardCont
 func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 	copy := &persistence.ShardInfo{
 		ShardID:          shardInfo.ShardID,
+		Owner:            shardInfo.Owner,
 		RangeID:          shardInfo.RangeID,
+		StolenSinceRenew: shardInfo.StolenSinceRenew,
 		TransferAckLevel: atomic.LoadInt64(&shardInfo.TransferAckLevel),
 	}
 

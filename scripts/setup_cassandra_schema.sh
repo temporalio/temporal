@@ -16,7 +16,7 @@ port=9042
 
 # the default keyspace is workflow
 # TODO: probably allow getting this from command line
-keyspace="workflow"
+keyspace="cadence"
 
 wait_for_cassandra $port
 res=$?

@@ -23,6 +23,11 @@ type (
 			request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
 	}
 
+	// EngineFactory is used to create an instance of sharded history engine
+	EngineFactory interface {
+		CreateEngine(context ShardContext) Engine
+	}
+
 	historySerializer interface {
 		Serialize(history []*workflow.HistoryEvent) ([]byte, error)
 		Deserialize(data []byte) ([]*workflow.HistoryEvent, error)

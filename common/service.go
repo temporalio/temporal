@@ -33,6 +33,7 @@ type serviceImpl struct {
 	sName                  string
 	hostName               string
 	hostPort               string
+	hostInfo               *membership.HostInfo
 	server                 *thrift.Server
 	ch                     *tchannel.Channel
 	rp                     *ringpop.Ringpop
@@ -119,6 +120,12 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("starting membership monitor failed")
 	}
 
+	hostInfo, err := h.membershipMonitor.WhoAmI()
+	if err != nil {
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("failed to get host info from membership monitor")
+	}
+	h.hostInfo = hostInfo
+
 	h.clientFactory = newTChannelClientFactory(h.ch, h.membershipMonitor)
 
 	// The service is now started up
@@ -156,6 +163,14 @@ func (h *serviceImpl) GetMetricsScope() tally.Scope {
 
 func (h *serviceImpl) GetClientFactory() ClientFactory {
 	return h.clientFactory
+}
+
+func (h *serviceImpl) GetMembershipMonitor() membership.Monitor {
+	return h.membershipMonitor
+}
+
+func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
+	return h.hostInfo
 }
 
 // createRingpop instantiates the ringpop for the provided channel and host,
