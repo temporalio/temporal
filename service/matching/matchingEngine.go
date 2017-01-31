@@ -24,7 +24,7 @@ const defaultRangeSize = 100000
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
-	tokenSerializer common.TaskTokenSerializer
+	tokenSerializer util.TaskTokenSerializer
 	taskLists       map[taskListID]*taskListContext
 	rangeSize       int64
 	logger          bark.Logger
@@ -81,7 +81,7 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 	return &matchingEngineImpl{
 		taskManager:     taskManager,
 		historyService:  historyService,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		tokenSerializer: util.NewJSONTaskTokenSerializer(),
 		taskLists:       make(map[taskListID]*taskListContext),
 		rangeSize:       defaultRangeSize,
 		logger: logger.WithFields(bark.Fields{
@@ -327,7 +327,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 
 	response := workflow.NewPollForDecisionTaskResponse()
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
-	token := &common.TaskToken{
+	token := &util.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,
@@ -359,7 +359,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 
-	token := &common.TaskToken{
+	token := &util.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,

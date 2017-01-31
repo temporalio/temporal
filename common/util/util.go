@@ -4,6 +4,8 @@ import (
 	"sync"
 	"time"
 
+	farm "github.com/dgryski/go-farm"
+
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common/backoff"
 )
@@ -73,4 +75,10 @@ func IsPersistenceTransientError(err error) bool {
 	}
 
 	return false
+}
+
+// WorkflowIDToHistoryShard is used to map workflowID to a shardID
+func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
+	hash := farm.Fingerprint32([]byte(workflowID))
+	return int(hash % uint32(numberOfShards))
 }

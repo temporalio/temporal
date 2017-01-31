@@ -5,6 +5,7 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
 
+	"code.uber.internal/devexp/minions/client"
 	"code.uber.internal/devexp/minions/common/membership"
 )
 
@@ -24,7 +25,7 @@ type (
 
 		GetMetricsScope() tally.Scope
 
-		GetClientFactory() ClientFactory
+		GetClientFactory() client.Factory
 
 		GetMembershipMonitor() membership.Monitor
 

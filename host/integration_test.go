@@ -48,6 +48,10 @@ var (
 	integration = flag.Bool("integration", true, "run integration tests")
 )
 
+const (
+	testNumberOfHistoryShards = 4
+)
+
 type (
 	integrationSuite struct {
 		host   Cadence
@@ -105,7 +109,9 @@ func (s *integrationSuite) SetupTest() {
 	options.SchemaDir = ".."
 	s.SetupWorkflowStoreWithOptions(options)
 
-	s.host = NewCadence(s.ShardMgr, s.WorkflowMgr, s.TaskMgr, s.logger)
+	s.setupShards()
+
+	s.host = NewCadence(s.ShardMgr, s.WorkflowMgr, s.TaskMgr, testNumberOfHistoryShards, s.logger)
 	s.host.Start()
 	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
 }
@@ -718,4 +724,14 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	s.False(workflowComplete)
 	s.Nil(poller.pollAndProcessDecisionTask(true, false))
 	s.True(workflowComplete)
+}
+
+func (s *integrationSuite) setupShards() {
+	// shard 0 is always created, we create additional shards if needed
+	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
+		err := s.CreateShard(shardID, "", 0)
+		if err != nil {
+			s.logger.WithField("error", err).Fatal("Failed to create shard")
+		}
+	}
 }

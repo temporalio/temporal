@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
 	"code.uber.internal/devexp/minions/common/membership"
@@ -111,7 +110,7 @@ func (c *shardController) Stop() {
 }
 
 func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := WorkflowIDToShard(workflowID)
+	shardID := util.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	return c.getEngineForShard(shardID)
 }
 
@@ -267,10 +266,4 @@ func (i *historyShardsItem) stopEngine() {
 		i.logger.Infof("Stopping engine for shardID: %v", i.shardID)
 		i.engine.Stop()
 	}
-}
-
-// WorkflowIDToShard is used to hash workflowID to a shardID
-func WorkflowIDToShard(workflowID string) int {
-	hash := farm.Fingerprint32([]byte(workflowID))
-	return int(hash % numberOfShards)
 }

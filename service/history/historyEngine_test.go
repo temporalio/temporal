@@ -16,6 +16,7 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/common/util"
 )
 
 type (
@@ -66,7 +67,7 @@ func (s *engineSuite) SetupTest() {
 		txProcessor:      txProcessor,
 		tracker:          tracker,
 		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:  util.NewJSONTaskTokenSerializer(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
@@ -93,7 +94,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -111,7 +112,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -129,7 +130,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -170,7 +171,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -211,7 +212,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -273,7 +274,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	decisionScheduledEvent2 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent2.GetEventId(), tl, identity)
 
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: decisionScheduledEvent2.GetEventId(),
@@ -353,7 +354,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -433,7 +434,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	decisionScheduledEvent2 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent2.GetEventId(), tl, identity)
 
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: decisionScheduledEvent2.GetEventId(),
@@ -513,7 +514,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	decisionScheduledEvent2 := addDecisionTaskScheduledEvent(builder, tl, 30)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(builder, decisionScheduledEvent2.GetEventId(), tl, identity)
 
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: decisionScheduledEvent2.GetEventId(),
@@ -565,7 +566,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -637,7 +638,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -696,7 +697,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -771,7 +772,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -789,7 +790,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -807,7 +808,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -849,7 +850,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -894,7 +895,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -934,7 +935,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1008,7 +1009,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1051,7 +1052,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 
 func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1123,7 +1124,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -1141,7 +1142,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 2,
@@ -1159,7 +1160,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1200,7 +1201,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1247,7 +1248,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1285,7 +1286,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1362,7 +1363,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1403,7 +1404,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 
 func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1466,7 +1467,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,
@@ -1501,7 +1502,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	tl := "testTaskList"
-	taskToken, _ := json.Marshal(&common.TaskToken{
+	taskToken, _ := json.Marshal(&util.TaskToken{
 		WorkflowID: "wId",
 		RunID:      "rId",
 		ScheduleID: 5,

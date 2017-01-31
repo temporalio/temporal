@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"code.uber.internal/devexp/minions/client"
 	"code.uber.internal/devexp/minions/common/logging"
 	"code.uber.internal/devexp/minions/common/membership"
 	"code.uber.internal/devexp/minions/common/metrics"
@@ -40,7 +41,8 @@ type serviceImpl struct {
 	rpSeedHosts            []string
 	membershipMonitor      membership.Monitor
 	tchannelFactory        TChannelFactory
-	clientFactory          ClientFactory
+	clientFactory          client.Factory
+	numberOfHistoryShards  int
 	logger                 bark.Logger
 	metricsScope           tally.Scope
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
@@ -48,15 +50,18 @@ type serviceImpl struct {
 
 // NewService instantiates a ServiceInstance
 // TODO: have a better name for Service.
+// TODO: consider passing a config object if the parameter list gets too big
 // this is the object which holds all the common stuff
 // shared by all the services.
-func NewService(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string) Service {
+func NewService(serviceName string, logger bark.Logger,
+	scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string, numberOfHistoryShards int) Service {
 	sVice := &serviceImpl{
-		sName:           serviceName,
-		logger:          logger.WithField("Service", serviceName),
-		tchannelFactory: tchanFactory,
-		rpSeedHosts:     rpHosts,
-		metricsScope:    scope,
+		sName:                 serviceName,
+		logger:                logger.WithField("Service", serviceName),
+		tchannelFactory:       tchanFactory,
+		rpSeedHosts:           rpHosts,
+		metricsScope:          scope,
+		numberOfHistoryShards: numberOfHistoryShards,
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(scope, time.Minute, sVice.logger)
 
@@ -126,7 +131,8 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	}
 	h.hostInfo = hostInfo
 
-	h.clientFactory = newTChannelClientFactory(h.ch, h.membershipMonitor)
+	metricsClient := metrics.NewClient(h.metricsScope, h.getMetricsServiceIdx(h.sName))
+	h.clientFactory = client.NewTChannelClientFactory(h.ch, h.membershipMonitor, metricsClient, h.numberOfHistoryShards)
 
 	// The service is now started up
 	log.Info("service started")
@@ -161,7 +167,7 @@ func (h *serviceImpl) GetMetricsScope() tally.Scope {
 	return h.metricsScope
 }
 
-func (h *serviceImpl) GetClientFactory() ClientFactory {
+func (h *serviceImpl) GetClientFactory() client.Factory {
 	return h.clientFactory
 }
 
@@ -191,4 +197,10 @@ func (h *serviceImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []string) er
 
 	_, err := rp.Bootstrap(bOptions)
 	return err
+}
+
+func (h *serviceImpl) getMetricsServiceIdx(serviceName string) metrics.ServiceIdx {
+	// for now we always use frontend for all metrics
+	// TODO: return proper index based on service name once per-service metrics are defined
+	return metrics.Frontend
 }

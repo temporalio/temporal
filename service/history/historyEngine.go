@@ -22,7 +22,7 @@ type (
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
 		timerProcessor   timerQueueProcessor
-		tokenSerializer  common.TaskTokenSerializer
+		tokenSerializer  util.TaskTokenSerializer
 		tracker          *pendingTaskTracker
 		logger           bark.Logger
 	}
@@ -89,7 +89,7 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      txProcessor,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		tokenSerializer:  util.NewJSONTaskTokenSerializer(),
 		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
