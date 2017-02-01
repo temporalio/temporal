@@ -7,11 +7,10 @@ import (
 
 	m "code.uber.internal/devexp/minions/.gen/go/minions"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )
-
-const frontendServiceName = "cadence-frontend"
 
 var _ Client = (*clientImpl)(nil)
 
@@ -28,7 +27,7 @@ func NewClient(ch *tchannel.Channel, hostPort string) (Client, error) {
 			HostPort: hostPort,
 		}
 	}
-	tClient := thrift.NewClient(ch, frontendServiceName, opts)
+	tClient := thrift.NewClient(ch, common.FrontendServiceName, opts)
 
 	client := &clientImpl{
 		connection: ch,

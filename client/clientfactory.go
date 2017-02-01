@@ -33,9 +33,23 @@ func NewTChannelClientFactory(ch *tchannel.Channel,
 }
 
 func (cf *tchannelClientFactory) NewHistoryClient() (history.Client, error) {
-	return history.NewClient(cf.ch, cf.monitor, cf.numberOfHistoryShards)
+	client, err := history.NewClient(cf.ch, cf.monitor, cf.numberOfHistoryShards)
+	if err != nil {
+		return nil, err
+	}
+	if cf.metricsClient != nil {
+		client = history.NewMetricClient(client, cf.metricsClient)
+	}
+	return client, nil
 }
 
 func (cf *tchannelClientFactory) NewMatchingClient() (matching.Client, error) {
-	return matching.NewClient(cf.ch, cf.monitor)
+	client, err := matching.NewClient(cf.ch, cf.monitor)
+	if err != nil {
+		return nil, err
+	}
+	if cf.metricsClient != nil {
+		client = matching.NewMetricClient(client, cf.metricsClient)
+	}
+	return client, nil
 }

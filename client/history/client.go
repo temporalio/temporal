@@ -14,8 +14,6 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 )
 
-const historyServiceName = "cadence-history"
-
 var _ Client = (*clientImpl)(nil)
 
 type clientImpl struct {
@@ -30,7 +28,7 @@ type clientImpl struct {
 
 // NewClient creates a new history service TChannel client
 func NewClient(ch *tchannel.Channel, monitor membership.Monitor, numberOfShards int) (Client, error) {
-	sResolver, err := monitor.GetResolver(historyServiceName)
+	sResolver, err := monitor.GetResolver(common.HistoryServiceName)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +170,7 @@ func (c *clientImpl) getThriftClient(hostPort string) h.TChanHistoryService {
 	// before we acquired the lock
 	client, ok = c.thriftCache[hostPort]
 	if !ok {
-		tClient := thrift.NewClient(c.connection, historyServiceName, &thrift.ClientOptions{
+		tClient := thrift.NewClient(c.connection, common.HistoryServiceName, &thrift.ClientOptions{
 			HostPort: hostPort,
 		})
 

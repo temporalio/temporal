@@ -7,12 +7,11 @@ import (
 
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/membership"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )
-
-const matchingServiceName = "cadence-matching"
 
 var _ Client = (*clientImpl)(nil)
 
@@ -23,7 +22,7 @@ type clientImpl struct {
 
 // NewClient creates a new history service TChannel client
 func NewClient(ch *tchannel.Channel, monitor membership.Monitor) (Client, error) {
-	sResolver, err := monitor.GetResolver(matchingServiceName)
+	sResolver, err := monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +40,7 @@ func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, erro
 		return nil, err
 	}
 	// TODO: build client cache
-	tClient := thrift.NewClient(c.connection, matchingServiceName, &thrift.ClientOptions{
+	tClient := thrift.NewClient(c.connection, common.MatchingServiceName, &thrift.ClientOptions{
 		HostPort: host.GetAddress(),
 	})
 	return m.NewTChanMatchingServiceClient(tClient), nil

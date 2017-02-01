@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"code.uber.internal/devexp/minions/client"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/logging"
 	"code.uber.internal/devexp/minions/common/membership"
 	"code.uber.internal/devexp/minions/common/metrics"
@@ -21,7 +22,7 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 )
 
-var cadenceServices = []string{"cadence-frontend", "cadence-history", "cadence-matching"}
+var cadenceServices = []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName}
 
 const rpAppNamePrefix string = "cadence"
 const maxRpJoinTimeout = 30 * time.Second
@@ -200,7 +201,15 @@ func (h *serviceImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []string) er
 }
 
 func (h *serviceImpl) getMetricsServiceIdx(serviceName string) metrics.ServiceIdx {
-	// for now we always use frontend for all metrics
-	// TODO: return proper index based on service name once per-service metrics are defined
-	return metrics.Frontend
+	switch serviceName {
+	case common.FrontendServiceName:
+		return metrics.Frontend
+	case common.HistoryServiceName:
+		return metrics.History
+	case common.MatchingServiceName:
+		return metrics.Matching
+	default:
+		h.logger.WithField("name", serviceName).Fatal("Unknown service name for metrics")
+	}
+	panic("Fatal!") // this should never happen!
 }
