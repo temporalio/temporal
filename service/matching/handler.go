@@ -3,8 +3,8 @@ package matching
 import (
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -14,11 +14,11 @@ var _ m.TChanMatchingService = (*Handler)(nil)
 type Handler struct {
 	taskPersistence persistence.TaskManager
 	engine          Engine
-	common.Service
+	service.Service
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(taskPersistence persistence.TaskManager, sVice common.Service) (*Handler, []thrift.TChanServer) {
+func NewHandler(taskPersistence persistence.TaskManager, sVice service.Service) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:         sVice,
 		taskPersistence: taskPersistence,

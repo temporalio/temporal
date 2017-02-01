@@ -8,9 +8,9 @@ import (
 
 	"github.com/uber-common/bark"
 
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/membership"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 )
 
 const (
@@ -102,7 +102,7 @@ func (c *shardController) Stop() {
 		close(c.shutdownCh)
 	}
 
-	if success := util.AwaitWaitGroup(&c.shutdownWG, time.Minute); !success {
+	if success := common.AwaitWaitGroup(&c.shutdownWG, time.Minute); !success {
 		c.logger.Warn("ShardController timed out on shutdown.")
 	}
 
@@ -110,7 +110,7 @@ func (c *shardController) Stop() {
 }
 
 func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := util.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+	shardID := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	return c.getEngineForShard(shardID)
 }
 

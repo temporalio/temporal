@@ -7,7 +7,7 @@ import (
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/client/history"
 	"code.uber.internal/devexp/minions/client/matching"
-	"code.uber.internal/devexp/minions/common"
+	"code.uber.internal/devexp/minions/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -17,11 +17,11 @@ var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
 type WorkflowHandler struct {
 	history  history.Client
 	matching matching.Client
-	common.Service
+	service.Service
 }
 
 // NewWorkflowHandler creates a thrift handler for the minions service
-func NewWorkflowHandler(sVice common.Service) (*WorkflowHandler, []thrift.TChanServer) {
+func NewWorkflowHandler(sVice service.Service) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service: sVice,
 	}

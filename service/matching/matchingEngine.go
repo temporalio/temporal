@@ -16,7 +16,6 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 )
 
 const defaultRangeSize = 100000
@@ -24,7 +23,7 @@ const defaultRangeSize = 100000
 type matchingEngineImpl struct {
 	taskManager     persistence.TaskManager
 	historyService  history.Client
-	tokenSerializer util.TaskTokenSerializer
+	tokenSerializer common.TaskTokenSerializer
 	taskLists       map[taskListID]*taskListContext
 	rangeSize       int64
 	logger          bark.Logger
@@ -69,7 +68,7 @@ var (
 	EmptyPollForDecisionTaskResponse = workflow.NewPollForDecisionTaskResponse()
 	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
 	EmptyPollForActivityTaskResponse = workflow.NewPollForActivityTaskResponse()
-	persistenceOperationRetryPolicy  = util.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy  = common.CreatePersistanceRetryPolicy()
 	longPollRetryPolicy              = createLongPollRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
@@ -81,7 +80,7 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 	return &matchingEngineImpl{
 		taskManager:     taskManager,
 		historyService:  historyService,
-		tokenSerializer: util.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		taskLists:       make(map[taskListID]*taskListContext),
 		rangeSize:       defaultRangeSize,
 		logger: logger.WithFields(bark.Fields{
@@ -305,7 +304,7 @@ func (e *matchingEngineImpl) getTasksWithRetry(request *persistence.GetTasksRequ
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +317,7 @@ func (e *matchingEngineImpl) completeTaskWithRetry(request *persistence.Complete
 		return e.taskManager.CompleteTask(request)
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskContext,
@@ -327,7 +326,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 
 	response := workflow.NewPollForDecisionTaskResponse()
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
-	token := &util.TaskToken{
+	token := &common.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,
@@ -359,7 +358,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 
-	token := &util.TaskToken{
+	token := &common.TaskToken{
 		WorkflowID: task.WorkflowID,
 		RunID:      task.RunID,
 		ScheduleID: task.ScheduleID,

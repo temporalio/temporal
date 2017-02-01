@@ -8,8 +8,8 @@ import (
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/membership"
-	"code.uber.internal/devexp/minions/common/util"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -21,7 +21,7 @@ var _ Client = (*clientImpl)(nil)
 type clientImpl struct {
 	connection      *tchannel.Channel
 	resolver        membership.ServiceResolver
-	tokenSerializer util.TaskTokenSerializer
+	tokenSerializer common.TaskTokenSerializer
 	numberOfShards  int
 	// TODO: consider refactor thriftCache into a separate struct
 	thriftCacheLock sync.RWMutex
@@ -38,7 +38,7 @@ func NewClient(ch *tchannel.Channel, monitor membership.Monitor, numberOfShards 
 	client := &clientImpl{
 		connection:      ch,
 		resolver:        sResolver,
-		tokenSerializer: util.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		numberOfShards:  numberOfShards,
 		thriftCache:     make(map[string]h.TChanHistoryService),
 	}
@@ -143,7 +143,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(request *workflow.RecordActivit
 }
 
 func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService, error) {
-	key := util.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	host, err := c.resolver.Lookup(string(key))
 	if err != nil {
 		return nil, err

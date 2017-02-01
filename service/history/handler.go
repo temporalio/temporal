@@ -8,7 +8,7 @@ import (
 	"code.uber.internal/devexp/minions/client/matching"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
+	"code.uber.internal/devexp/minions/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -19,22 +19,22 @@ type Handler struct {
 	executionManager      persistence.ExecutionManager
 	matchingServiceClient matching.Client
 	controller            *shardController
-	tokenSerializer       util.TaskTokenSerializer
-	common.Service
+	tokenSerializer       common.TaskTokenSerializer
+	service.Service
 }
 
 var _ h.TChanHistoryService = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice common.Service, shardManager persistence.ShardManager,
+func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
 	executionPersistence persistence.ExecutionManager, numberOfShards int) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:          sVice,
 		shardManager:     shardManager,
 		executionManager: executionPersistence,
 		numberOfShards:   numberOfShards,
-		tokenSerializer:  util.NewJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 	}
 	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
 }

@@ -9,7 +9,6 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	log "github.com/Sirupsen/logrus"
@@ -58,7 +57,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		txProcessor:      txProcessor,
 		logger:           s.logger,
 		tracker:          tracker,
-		tokenSerializer:  util.NewJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 	}
 }
 

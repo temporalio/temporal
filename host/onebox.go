@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
+	"code.uber.internal/devexp/minions/common/service"
 	"code.uber.internal/devexp/minions/service/frontend"
 	"code.uber.internal/devexp/minions/service/history"
 	"code.uber.internal/devexp/minions/service/matching"
@@ -97,7 +97,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 		return c.createTChannel(sName, c.FrontendAddress(), thriftServices)
 	}
 	scope := tally.NewTestScope("cadence-frontend", make(map[string]string))
-	service := common.NewService("cadence-frontend", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
+	service := service.New("cadence-frontend", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
 	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service)
 	err := c.frontendHandler.Start(thriftServices)
@@ -115,7 +115,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		return c.createTChannel(sName, c.HistoryServiceAddress(), thriftServices)
 	}
 	scope := tally.NewTestScope("cadence-history", make(map[string]string))
-	service := common.NewService("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
+	service := service.New("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
 	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr, c.numberOfHistoryShards)
 	c.historyHandler.Start(thriftServices)
@@ -130,7 +130,7 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 		return c.createTChannel(sName, c.MatchingServiceAddress(), thriftServices)
 	}
 	scope := tally.NewTestScope("cadence-matching", make(map[string]string))
-	service := common.NewService("cadence-matching", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
+	service := service.New("cadence-matching", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
 	c.matchingHandler, thriftServices = matching.NewHandler(taskMgr, service)
 	c.matchingHandler.Start(thriftServices)

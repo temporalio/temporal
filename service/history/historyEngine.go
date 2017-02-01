@@ -11,7 +11,6 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/backoff"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 )
@@ -22,7 +21,7 @@ type (
 		executionManager persistence.ExecutionManager
 		txProcessor      transferQueueProcessor
 		timerProcessor   timerQueueProcessor
-		tokenSerializer  util.TaskTokenSerializer
+		tokenSerializer  common.TaskTokenSerializer
 		tracker          *pendingTaskTracker
 		logger           bark.Logger
 	}
@@ -55,7 +54,7 @@ const (
 )
 
 var (
-	persistenceOperationRetryPolicy = util.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("Duplicate task, completing it")
@@ -89,7 +88,7 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 		shard:            shard,
 		executionManager: executionManager,
 		txProcessor:      txProcessor,
-		tokenSerializer:  util.NewJSONTaskTokenSerializer(),
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueWorkflowEngineComponent,
@@ -656,7 +655,7 @@ func (e *historyEngineImpl) getWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +669,7 @@ func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(
 		return e.executionManager.DeleteWorkflowExecution(request)
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
@@ -680,7 +679,7 @@ func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
 
 	}
 
-	return backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (e *historyEngineImpl) getWorkflowMutableStateWithRetry(
@@ -693,7 +692,7 @@ func (e *historyEngineImpl) getWorkflowMutableStateWithRetry(
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, util.IsPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}

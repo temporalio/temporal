@@ -13,7 +13,6 @@ import (
 	"code.uber.internal/devexp/minions/client/matching"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 )
 
 const (
@@ -101,7 +100,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		close(t.shutdownCh)
 	}
 
-	if success := util.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
+	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Transfer queue processor timed out on shutdown.")
 	}
 
@@ -133,7 +132,7 @@ func (t *transferQueueProcessorImpl) processorPump() {
 			t.logger.Info("Transfer queue processor pump shutting down.")
 			// This is the only pump which writes to tasksCh, so it is safe to close channel here
 			close(tasksCh)
-			if success := util.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
+			if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
 				t.logger.Warn("Transfer queue processor timed out on worker shutdown.")
 			}
 			return

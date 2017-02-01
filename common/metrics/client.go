@@ -3,7 +3,7 @@ package metrics
 import (
 	"time"
 
-	"code.uber.internal/devexp/minions/common/util"
+	"code.uber.internal/devexp/minions/common"
 
 	"github.com/uber-go/tally"
 )
@@ -41,7 +41,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
 		}
-		util.MergeDictoRight(def.tags, scopeTags)
+		common.MergeDictoRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
 	}
 
@@ -49,7 +49,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
 		}
-		util.MergeDictoRight(def.tags, scopeTags)
+		common.MergeDictoRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
 		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
 	}

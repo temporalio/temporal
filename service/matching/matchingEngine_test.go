@@ -19,7 +19,6 @@ import (
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 )
 
 type (
@@ -57,7 +56,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		historyService:  s.historyClient,
 		taskLists:       make(map[taskListID]*taskListContext),
 		logger:          s.logger,
-		tokenSerializer: util.NewJSONTaskTokenSerializer(),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 	}
 }
 
@@ -168,7 +167,7 @@ func (s *matchingEngineSuite) TestPollForActivityTasks() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		token := &util.TaskToken{
+		token := &common.TaskToken{
 			WorkflowID: workflowID,
 			RunID:      runID,
 			ScheduleID: scheduleID,

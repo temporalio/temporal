@@ -1,4 +1,4 @@
-package common
+package service
 
 import (
 	"fmt"
@@ -48,12 +48,12 @@ type serviceImpl struct {
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 }
 
-// NewService instantiates a ServiceInstance
+// New instantiates a Service Instance
 // TODO: have a better name for Service.
 // TODO: consider passing a config object if the parameter list gets too big
 // this is the object which holds all the common stuff
 // shared by all the services.
-func NewService(serviceName string, logger bark.Logger,
+func New(serviceName string, logger bark.Logger,
 	scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string, numberOfHistoryShards int) Service {
 	sVice := &serviceImpl{
 		sName:                 serviceName,

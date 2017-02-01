@@ -8,8 +8,8 @@ import (
 	"time"
 
 	w "code.uber.internal/devexp/minions/.gen/go/shared"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 	"github.com/uber-common/bark"
 )
 
@@ -262,7 +262,7 @@ func (tb *timerBuilder) IsTimerExpired(td *timerDetails, referenceTime int64) bo
 
 // createDecisionTimeoutTask - Creates a decision timeout task.
 func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
-	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
+	expiryTime := common.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.DecisionTimeoutTask{
 		TaskID:  int64(seqID),
@@ -272,7 +272,7 @@ func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int
 
 // createActivityTimeoutTask - Creates a activity timeout task.
 func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType w.TimeoutType, eventID int64) *persistence.ActivityTimeoutTask {
-	expiryTime := util.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
+	expiryTime := common.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.ActivityTimeoutTask{
 		TaskID:      int64(seqID),

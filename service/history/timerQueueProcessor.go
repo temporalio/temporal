@@ -10,7 +10,6 @@ import (
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/util"
 
 	"github.com/uber-common/bark"
 )
@@ -132,7 +131,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		close(t.shutdownCh)
 	}
 
-	if success := util.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
+	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Timer queue processor timed out on shutdown.")
 	}
 
