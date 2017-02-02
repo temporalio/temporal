@@ -177,8 +177,8 @@ func (c *shardController) removeHistoryShardItem(shardID int) (*historyShardsIte
 func (c *shardController) acquireShardsPump() {
 	defer c.shutdownWG.Done()
 
-	acquireTimer := time.NewTimer(c.acquireInterval)
-	defer acquireTimer.Stop()
+	acquireTicker := time.NewTicker(c.acquireInterval)
+	defer acquireTicker.Stop()
 	for {
 		select {
 		case <-c.shutdownCh:
@@ -192,9 +192,8 @@ func (c *shardController) acquireShardsPump() {
 			}
 			c.historyShards = nil
 			return
-		case <-acquireTimer.C:
+		case <-acquireTicker.C:
 			c.acquireShards()
-			acquireTimer = time.NewTimer(c.acquireInterval)
 		case changedEvent := <-c.membershipUpdateCh:
 			c.logger.Infof("Updating shards due to membership changed event: {Added: %v, Removed: %v, Updated: %v}",
 				len(changedEvent.HostsAdded), len(changedEvent.HostsRemoved), len(changedEvent.HostsUpdated))

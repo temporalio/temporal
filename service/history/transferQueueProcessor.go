@@ -138,7 +138,7 @@ func (t *transferQueueProcessorImpl) processorPump() {
 			return
 		case <-pollTimer.C:
 			pollInterval = t.processTransferTasks(tasksCh, pollInterval)
-			pollTimer = time.NewTimer(pollInterval)
+			pollTimer.Reset(pollInterval)
 		case <-updateAckTimer.C:
 			t.ackMgr.updateAckLevel()
 			updateAckTimer = time.NewTimer(transferProcessorUpdateAckInterval)
