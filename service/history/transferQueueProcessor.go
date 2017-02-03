@@ -288,7 +288,12 @@ MoveAckLevelLoop:
 
 				if err != nil {
 					a.logger.Warnf("Processor unable to complete transfer task '%v': %v", current, err)
-					break MoveAckLevelLoop
+					// It is possible that the task is already completed (e.g. due to a previous attempt that timed out)
+					// in this case move on.
+					_, ok := err.(*workflow.EntityNotExistsError)
+					if !ok {
+						break MoveAckLevelLoop
+					}
 				}
 				a.logger.Debugf("Updating ack level: %v", current)
 				a.ackLevel = current
