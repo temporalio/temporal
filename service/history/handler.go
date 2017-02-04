@@ -2,6 +2,7 @@ package history
 
 import (
 	"log"
+	"time"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -20,6 +21,7 @@ type Handler struct {
 	matchingServiceClient matching.Client
 	controller            *shardController
 	tokenSerializer       common.TaskTokenSerializer
+	waitForRing           bool
 	service.Service
 }
 
@@ -28,13 +30,14 @@ var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
 func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
-	executionPersistence persistence.ExecutionManager, numberOfShards int) (*Handler, []thrift.TChanServer) {
+	executionPersistence persistence.ExecutionManager, numberOfShards int, waitForRing bool) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:          sVice,
 		shardManager:     shardManager,
 		executionManager: executionPersistence,
 		numberOfShards:   numberOfShards,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		waitForRing:      waitForRing,
 	}
 	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
 }
@@ -42,6 +45,9 @@ func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
 // Start starts the handler
 func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	h.Service.Start(thriftService)
+	if h.waitForRing {
+		time.Sleep(time.Minute) // wait for ring to stabilize (workaround Jira: ABS-80)
+	}
 	matchingServiceClient, err0 := h.Service.GetClientFactory().NewMatchingClient()
 	if err0 != nil {
 		return err0

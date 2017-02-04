@@ -117,7 +117,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 	scope := tally.NewTestScope("cadence-history", make(map[string]string))
 	service := service.New("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
-	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr, c.numberOfHistoryShards)
+	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr, c.numberOfHistoryShards, false)
 	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh
