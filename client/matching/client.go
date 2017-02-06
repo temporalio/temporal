@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -16,8 +17,10 @@ import (
 var _ Client = (*clientImpl)(nil)
 
 type clientImpl struct {
-	connection *tchannel.Channel
-	resolver   membership.ServiceResolver
+	connection      *tchannel.Channel
+	resolver        membership.ServiceResolver
+	thriftCacheLock sync.RWMutex
+	thriftCache     map[string]m.TChanMatchingService
 }
 
 // NewClient creates a new history service TChannel client
@@ -28,32 +31,11 @@ func NewClient(ch *tchannel.Channel, monitor membership.Monitor) (Client, error)
 	}
 
 	client := &clientImpl{
-		connection: ch,
-		resolver:   sResolver,
+		connection:  ch,
+		resolver:    sResolver,
+		thriftCache: make(map[string]m.TChanMatchingService),
 	}
 	return client, nil
-}
-
-func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, error) {
-	host, err := c.resolver.Lookup(key)
-	if err != nil {
-		return nil, err
-	}
-	// TODO: build client cache
-	tClient := thrift.NewClient(c.connection, common.MatchingServiceName, &thrift.ClientOptions{
-		HostPort: host.GetAddress(),
-	})
-	return m.NewTChanMatchingServiceClient(tClient), nil
-}
-
-func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	return thrift.NewContext(time.Second * 10)
-}
-
-func (c *clientImpl) createLongPollContext() (thrift.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	return thrift.NewContext(time.Minute * 3)
 }
 
 func (c *clientImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
@@ -94,4 +76,47 @@ func (c *clientImpl) PollForDecisionTask(pollRequest *workflow.PollForDecisionTa
 	ctx, cancel := c.createLongPollContext()
 	defer cancel()
 	return client.PollForDecisionTask(ctx, pollRequest)
+}
+
+func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, error) {
+	host, err := c.resolver.Lookup(key)
+	if err != nil {
+		return nil, err
+	}
+	return c.getThriftClient(host.GetAddress()), nil
+}
+
+func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
+	// TODO: make timeout configurable
+	return thrift.NewContext(time.Second * 10)
+}
+
+func (c *clientImpl) createLongPollContext() (thrift.Context, context.CancelFunc) {
+	// TODO: make timeout configurable
+	return thrift.NewContext(time.Minute * 3)
+}
+
+func (c *clientImpl) getThriftClient(hostPort string) m.TChanMatchingService {
+	c.thriftCacheLock.RLock()
+	client, ok := c.thriftCache[hostPort]
+	c.thriftCacheLock.RUnlock()
+	if ok {
+		return client
+	}
+
+	c.thriftCacheLock.Lock()
+	defer c.thriftCacheLock.Unlock()
+
+	// check again if in the cache cause it might have been added
+	// before we acquired the lock
+	client, ok = c.thriftCache[hostPort]
+	if !ok {
+		tClient := thrift.NewClient(c.connection, common.MatchingServiceName, &thrift.ClientOptions{
+			HostPort: hostPort,
+		})
+
+		client = m.NewTChanMatchingServiceClient(tClient)
+		c.thriftCache[hostPort] = client
+	}
+	return client
 }
