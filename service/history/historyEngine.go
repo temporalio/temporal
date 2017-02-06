@@ -211,7 +211,8 @@ Update_History_Loop:
 
 		event := builder.AddDecisionTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, &workflow.InternalServiceError{Message: "Unable to add decision started event to history"}
+			// Let's retry and see if the decision still exist.
+			continue Update_History_Loop
 		}
 
 		// Start a timer for the decision task.
@@ -249,7 +250,7 @@ Update_History_Loop:
 
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
-		isRunning, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+		isRunning, ai := msBuilder.isActivityRunning(scheduleID)
 		if !isRunning {
 			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
 				isRunning)
@@ -268,7 +269,8 @@ Update_History_Loop:
 
 		event := builder.AddActivityTaskStartedEvent(scheduleID, request.PollRequest)
 		if event == nil {
-			return nil, &workflow.InternalServiceError{Message: "Unable to add started event to history"}
+			// Let's retry and see if the activity still exist.
+			continue Update_History_Loop
 		}
 
 		// Start a timer for the activity task.
@@ -475,7 +477,8 @@ Update_History_Loop:
 		}
 
 		if builder.AddActivityTaskCompletedEvent(scheduleID, startedID, request) == nil {
-			return &workflow.InternalServiceError{Message: "Unable to add completed event to history"}
+			// Let's retry and see if the activity still exist.
+			continue Update_History_Loop
 		}
 
 		msBuilder.DeletePendingActivity(scheduleID)
@@ -541,7 +544,8 @@ Update_History_Loop:
 		}
 
 		if builder.AddActivityTaskFailedEvent(scheduleID, startedID, request) == nil {
-			return &workflow.InternalServiceError{Message: "Unable to add failed event to history"}
+			// Let's retry and see if the activity still exist.
+			continue Update_History_Loop
 		}
 
 		msBuilder.DeletePendingActivity(scheduleID)
@@ -600,7 +604,7 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		isRunning, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+		isRunning, ai := msBuilder.isActivityRunning(scheduleID)
 		if !isRunning || ai.StartedID == emptyEventID {
 			e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v",
 				scheduleID, ai, isRunning)

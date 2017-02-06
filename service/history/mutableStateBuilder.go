@@ -34,7 +34,7 @@ func (e *mutableStateBuilder) Load(activityInfos map[int64]*persistence.Activity
 	e.pendingTimerInfoIDs = timerInfos
 }
 
-func (e *mutableStateBuilder) isActivityHeartBeatRunning(scheduleEventID int64) (bool, *persistence.ActivityInfo) {
+func (e *mutableStateBuilder) isActivityRunning(scheduleEventID int64) (bool, *persistence.ActivityInfo) {
 	a, ok := e.pendingActivityInfoIDs[scheduleEventID]
 	return ok, a
 }

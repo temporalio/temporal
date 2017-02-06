@@ -230,13 +230,21 @@ func (s *timerQueueProcessorSuite) waitForTimerTasksToProcess(p timerQueueProces
 	}
 }
 
-func (s *timerQueueProcessorSuite) checkTimedOutEventFor(workflowExecution workflow.WorkflowExecution, scheduleID int64) (bool, *historyBuilder) {
+func (s *timerQueueProcessorSuite) checkTimedOutEventFor(workflowExecution workflow.WorkflowExecution,
+	scheduleID int64) (bool, bool, *historyBuilder) {
 	info, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
 	s.Nil(err1)
 	builder := newHistoryBuilder(s.logger)
 	builder.loadExecutionInfo(info)
 	isRunning, _ := builder.isActivityTaskRunning(scheduleID)
-	return isRunning, builder
+
+	minfo, err1 := s.GetWorkflowMutableState(workflowExecution)
+	s.Nil(err1)
+	msBuilder := newMutableStateBuilder(s.logger)
+	msBuilder.Load(minfo.ActivitInfos, minfo.TimerInfos)
+	isRunningFromMutableState, _ := msBuilder.isActivityRunning(scheduleID)
+
+	return isRunning, isRunningFromMutableState, builder
 }
 
 func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(workflowExecution workflow.WorkflowExecution,
@@ -301,13 +309,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	processor.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
-	running, b := s.checkTimedOutEventFor(workflowExecution, activityScheduled.GetEventId())
+	running, isRunningFromMS, b := s.checkTimedOutEventFor(workflowExecution, activityScheduled.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_SCHEDULE_TO_START - With Start
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -317,7 +326,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		})
-	b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste := b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
 	history, err = b.Serialize()
 	s.Nil(err)
 
@@ -325,14 +334,16 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	t = tBuilder.AddScheduleToStartActivityTimeout(ase.GetEventId(), ase, msBuilder)
 	s.NotNil(t)
 	timerTasks = []persistence.Task{t}
+	msBuilder.updateActivityInfos[0].StartedID = aste.GetEventId()
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.True(running)
+	s.True(isRunningFromMS)
 
 	// TimeoutType_START_TO_CLOSE - Just start.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -342,10 +353,11 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
-	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{StartToCloseTimeout: 1})
+	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
+		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), StartToCloseTimeout: 1})
 	t, err = tBuilder.AddStartToCloseActivityTimeout(ase.GetEventId(), msBuilder)
 	s.Nil(err)
 	s.NotNil(t)
@@ -354,13 +366,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_START_TO_CLOSE - Start and Completed activity.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -370,7 +383,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste := b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{StartToCloseTimeout: 1})
@@ -387,13 +400,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil /* since activity is completed */, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Just Scheduled.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -405,7 +419,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		})
 
 	msBuilder = newMutableStateBuilder(s.logger)
-	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{ScheduleToCloseTimeout: 1})
+	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
+		ScheduleID: ase.GetEventId(), StartedID: emptyEventID, ScheduleToCloseTimeout: 1})
 	t, err = tBuilder.AddScheduleToCloseActivityTimeout(ase.GetEventId(), msBuilder)
 	s.Nil(err)
 	s.NotNil(t)
@@ -414,13 +429,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Scheduled and started.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -433,7 +449,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
-	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{ScheduleToCloseTimeout: 1})
+	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
+		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), ScheduleToCloseTimeout: 1})
 	t, err = tBuilder.AddScheduleToCloseActivityTimeout(ase.GetEventId(), msBuilder)
 	s.Nil(err)
 	s.NotNil(t)
@@ -442,13 +459,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Scheduled, started, completed.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -475,13 +493,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil /* since it is completed */, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 
 	// TimeoutType_HEARTBEAT - Scheduled, started.
 	p = newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
@@ -494,7 +513,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
-	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{HeartbeatTimeout: 1})
+	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
+		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), HeartbeatTimeout: 1})
 
 	t, err = tBuilder.AddHeartBeatActivityTimeout(ase.GetEventId(), msBuilder)
 	s.Nil(err)
@@ -504,18 +524,14 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	history, err = b.Serialize()
 	s.Nil(err)
 
-	//  -- Update heart beat timer ID.
-	msBuilder = newMutableStateBuilder(s.logger)
-	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
-		ScheduleID: ase.GetEventId(), HeartbeatTimeout: 1})
-
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer()
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running, isRunningFromMS, b = s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
 	s.False(running)
+	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimer_UserTimers() {

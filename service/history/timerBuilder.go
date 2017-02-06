@@ -171,7 +171,7 @@ func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, sche
 
 func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	ok, ai := msBuilder.isActivityRunning(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("ScheduleToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}
@@ -180,7 +180,7 @@ func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
 
 func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	ok, ai := msBuilder.isActivityRunning(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("StartToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}
@@ -189,7 +189,7 @@ func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
 
 func (tb *timerBuilder) AddHeartBeatActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+	ok, ai := msBuilder.isActivityRunning(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("HeartBeat: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}

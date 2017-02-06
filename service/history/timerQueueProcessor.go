@@ -362,37 +362,40 @@ Update_History_Loop:
 
 			scheduleID := timerTask.EventID
 
-			if isRunning, startedID := builder.isActivityTaskRunning(scheduleID); isRunning {
+			if isRunning, ai := msBuilder.isActivityRunning(scheduleID); isRunning {
 				timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
 				t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
-					timeoutType, scheduleID, startedID)
+					timeoutType, scheduleID, ai.StartedID)
 
 				switch timeoutType {
 				case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
-					builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+					builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
+					msBuilder.DeletePendingActivity(scheduleID)
 					scheduleNewDecision = !builder.hasPendingDecisionTask()
 
 				case workflow.TimeoutType_START_TO_CLOSE:
-					if startedID != emptyEventID {
-						builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+					if ai.StartedID != emptyEventID {
+						builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
+						msBuilder.DeletePendingActivity(scheduleID)
 						scheduleNewDecision = !builder.hasPendingDecisionTask()
 					}
 
 				case workflow.TimeoutType_HEARTBEAT:
-					if startedID != emptyEventID {
-						isTimerRunning, ai := msBuilder.isActivityHeartBeatRunning(scheduleID)
+					if ai.StartedID != emptyEventID {
+						isTimerRunning, ai := msBuilder.isActivityRunning(scheduleID)
 						if isTimerRunning {
 							t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
 							// The current heart beat expired.
-							builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, ai.Details)
+							builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, ai.Details)
 							msBuilder.DeletePendingActivity(scheduleID)
 							scheduleNewDecision = !builder.hasPendingDecisionTask()
 						}
 					}
 
 				case workflow.TimeoutType_SCHEDULE_TO_START:
-					if startedID == emptyEventID {
-						builder.AddActivityTaskTimedOutEvent(scheduleID, startedID, timeoutType, nil)
+					if ai.StartedID == emptyEventID {
+						builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
+						msBuilder.DeletePendingActivity(scheduleID)
 						scheduleNewDecision = !builder.hasPendingDecisionTask()
 					}
 				}
