@@ -63,7 +63,7 @@ func logInvalidHistoryActionEvent(logger bark.Logger, action string, eventID int
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID:      invalidHistoryActionEventID,
 		tagHistoryBuilderAction: action,
-	}).Errorf("Invalid history builder state for action: EventID: %v, State: %v", eventID, state)
+	}).Warn("Invalid history builder state for action: EventID: %v, State: %v", eventID, state)
 }
 
 func logHistorySerializationErrorEvent(logger bark.Logger, err error, msg string) {
