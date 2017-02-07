@@ -54,7 +54,7 @@ func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error 
 	p.m3Client.IncCounter(metrics.CreateShardScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateShardScope, metrics.WorkflowLatency)
-	err := p.CreateShard(request)
+	err := p.persistence.CreateShard(request)
 	sw.Stop()
 
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *shardPersistenceClient) GetShard(
 	p.m3Client.IncCounter(metrics.GetShardScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetShardScope, metrics.WorkflowLatency)
-	response, err := p.GetShard(request)
+	response, err := p.persistence.GetShard(request)
 	sw.Stop()
 
 	if err != nil {
@@ -87,7 +87,7 @@ func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error 
 	p.m3Client.IncCounter(metrics.UpdateShardScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.UpdateShardScope, metrics.WorkflowLatency)
-	err := p.UpdateShard(request)
+	err := p.persistence.UpdateShard(request)
 	sw.Stop()
 
 	if err != nil {
@@ -103,7 +103,7 @@ func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *Cr
 	p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateWorkflowExecutionScope, metrics.WorkflowLatency)
-	response, err := p.CreateWorkflowExecution(request)
+	response, err := p.persistence.CreateWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
@@ -119,7 +119,7 @@ func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *GetWo
 	p.m3Client.IncCounter(metrics.GetWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetWorkflowExecutionScope, metrics.WorkflowLatency)
-	response, err := p.GetWorkflowExecution(request)
+	response, err := p.persistence.GetWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
@@ -135,7 +135,7 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *Up
 	p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowLatency)
-	err := p.UpdateWorkflowExecution(request)
+	err := p.persistence.UpdateWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
@@ -151,7 +151,7 @@ func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *De
 	p.m3Client.IncCounter(metrics.DeleteWorkflowExecutionScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.DeleteWorkflowExecutionScope, metrics.WorkflowLatency)
-	err := p.DeleteWorkflowExecution(request)
+	err := p.persistence.DeleteWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
@@ -167,7 +167,7 @@ func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransf
 	p.m3Client.IncCounter(metrics.GetTransferTasksScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetTransferTasksScope, metrics.WorkflowLatency)
-	response, err := p.GetTransferTasks(request)
+	response, err := p.persistence.GetTransferTasks(request)
 	sw.Stop()
 
 	if err != nil {
@@ -181,7 +181,7 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *Compl
 	p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CompleteTransferTaskScope, metrics.WorkflowLatency)
-	err := p.CompleteTransferTask(request)
+	err := p.persistence.CompleteTransferTask(request)
 	sw.Stop()
 
 	if err != nil {
@@ -197,7 +197,7 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 	p.m3Client.IncCounter(metrics.GetTimerIndexTasksScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetTimerIndexTasksScope, metrics.WorkflowLatency)
-	resonse, err := p.GetTimerIndexTasks(request)
+	resonse, err := p.persistence.GetTimerIndexTasks(request)
 	sw.Stop()
 
 	if err != nil {
@@ -209,7 +209,7 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 
 func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error) {
 	sw := p.m3Client.StartTimer(metrics.GetWorkflowMutableStateScope, metrics.WorkflowLatency)
-	resonse, err := p.GetWorkflowMutableState(request)
+	resonse, err := p.persistence.GetWorkflowMutableState(request)
 	sw.Stop()
 
 	if err != nil {
@@ -223,7 +223,7 @@ func (p *taskPersistenceClient) CreateTask(request *CreateTaskRequest) (*CreateT
 	p.m3Client.IncCounter(metrics.CreateTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateTaskScope, metrics.WorkflowLatency)
-	response, err := p.CreateTask(request)
+	response, err := p.persistence.CreateTask(request)
 	sw.Stop()
 
 	if err != nil {
@@ -237,7 +237,7 @@ func (p *taskPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksRes
 	p.m3Client.IncCounter(metrics.GetTasksScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.GetTasksScope, metrics.WorkflowLatency)
-	response, err := p.GetTasks(request)
+	response, err := p.persistence.GetTasks(request)
 	sw.Stop()
 
 	if err != nil {
@@ -251,7 +251,7 @@ func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error
 	p.m3Client.IncCounter(metrics.CompleteTaskScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CompleteTaskScope, metrics.WorkflowLatency)
-	err := p.CompleteTask(request)
+	err := p.persistence.CompleteTask(request)
 	sw.Stop()
 
 	if err != nil {
@@ -265,7 +265,7 @@ func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*L
 	p.m3Client.IncCounter(metrics.LeaseTaskListScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.LeaseTaskListScope, metrics.WorkflowLatency)
-	response, err := p.LeaseTaskList(request)
+	response, err := p.persistence.LeaseTaskList(request)
 	sw.Stop()
 
 	if err != nil {
