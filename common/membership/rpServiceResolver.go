@@ -2,6 +2,9 @@ package membership
 
 import (
 	"sync"
+	"time"
+
+	"code.uber.internal/devexp/minions/common"
 
 	"github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
@@ -11,29 +14,39 @@ import (
 	"github.com/uber/ringpop-go/swim"
 )
 
-// RoleKey label is set by every single service as soon as it bootstraps its
-// ringpop instance. The data for this key is the service name
-const RoleKey = "serviceName"
+const (
+	// RoleKey label is set by every single service as soon as it bootstraps its
+	// ringpop instance. The data for this key is the service name
+	RoleKey                = "serviceName"
+	defaultRefreshInterval = time.Second * 20
+)
 
 type ringpopServiceResolver struct {
-	service      string
-	rp           *ringpop.Ringpop
-	ring         *hashring.HashRing
-	ringLock     sync.RWMutex
-	listeners    map[string]chan<- *ChangedEvent
+	service    string
+	isStarted  bool
+	isStopped  bool
+	rp         *ringpop.Ringpop
+	shutdownCh chan struct{}
+	shutdownWG sync.WaitGroup
+	logger     bark.Logger
+
+	ringLock sync.RWMutex
+	ring     *hashring.HashRing
+
 	listenerLock sync.RWMutex
-	logger       bark.Logger
+	listeners    map[string]chan<- *ChangedEvent
 }
 
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
 
 func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.Logger) *ringpopServiceResolver {
 	return &ringpopServiceResolver{
-		service:   service,
-		rp:        rp,
-		logger:    logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
-		ring:      hashring.New(farm.Fingerprint32, 1),
-		listeners: make(map[string]chan<- *ChangedEvent),
+		service:    service,
+		rp:         rp,
+		logger:     logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
+		ring:       hashring.New(farm.Fingerprint32, 1),
+		listeners:  make(map[string]chan<- *ChangedEvent),
+		shutdownCh: make(chan struct{}),
 	}
 }
 
@@ -41,6 +54,10 @@ func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.
 func (r *ringpopServiceResolver) Start() error {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
+
+	if r.isStarted {
+		return nil
+	}
 
 	r.rp.AddListener(r)
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
@@ -53,19 +70,34 @@ func (r *ringpopServiceResolver) Start() error {
 		r.ring.AddMembers(NewHostInfo(addr, labels))
 	}
 
+	r.shutdownWG.Add(1)
+	go r.refreshRingWorker()
+
+	r.isStarted = true
 	return nil
 }
 
 // Stop stops the oracle
 func (r *ringpopServiceResolver) Stop() error {
 	r.ringLock.Lock()
+	defer r.ringLock.Unlock()
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
-	defer r.ringLock.Unlock()
 
-	r.rp.RemoveListener(r)
-	r.ring = hashring.New(farm.Fingerprint32, 1)
-	r.listeners = make(map[string]chan<- *ChangedEvent)
+	if r.isStopped {
+		return nil
+	}
+
+	if r.isStarted {
+		r.rp.RemoveListener(r)
+		r.ring = hashring.New(farm.Fingerprint32, 1)
+		r.listeners = make(map[string]chan<- *ChangedEvent)
+		close(r.shutdownCh)
+	}
+
+	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
+		r.logger.Warn("service resolver timed out on shutdown.")
+	}
 	return nil
 }
 
@@ -158,6 +190,22 @@ func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
 		case ch <- event:
 		default:
 			r.logger.WithFields(bark.Fields{`listenerName`: name}).Error("Failed to send listener notification, channel full")
+		}
+	}
+}
+
+func (r *ringpopServiceResolver) refreshRingWorker() {
+	defer r.shutdownWG.Done()
+
+	refreshTicker := time.NewTicker(defaultRefreshInterval)
+	defer refreshTicker.Stop()
+
+	for {
+		select {
+		case <-r.shutdownCh:
+			return
+		case <-refreshTicker.C:
+			r.refresh()
 		}
 	}
 }
