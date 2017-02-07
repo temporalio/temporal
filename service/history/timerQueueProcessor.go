@@ -152,9 +152,17 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer() {
 func (t *timerQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
 
-	err := t.internalProcessor()
-	if err != nil {
-		t.logger.Error("processor pump failed with error: ", err)
+	RetryProcessor:
+	for {
+		select {
+		case <-t.shutdownCh:
+			break RetryProcessor
+		default:
+			err := t.internalProcessor()
+			if err != nil {
+				t.logger.Error("processor pump failed with error: ", err)
+			}
+		}
 	}
 	t.logger.Info("Timer processor exiting.")
 }
@@ -220,7 +228,7 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 
 			// We have a timer to fire.
 			err = t.processTimerTask(nextKey)
-			if err != nil {
+			if err != nil && err != ErrMaxAttemptsExceeded {
 				return err
 			}
 
