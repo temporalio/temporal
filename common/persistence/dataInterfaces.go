@@ -335,6 +335,11 @@ type (
 		GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error)
 	}
 
+	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
+	ExecutionManagerFactory interface {
+		CreateExecutionManager(shardID int) (ExecutionManager, error)
+	}
+
 	// TaskManager is used to manage tasks
 	TaskManager interface {
 		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)

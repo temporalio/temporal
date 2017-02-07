@@ -19,12 +19,13 @@ import (
 type (
 	shardControllerSuite struct {
 		suite.Suite
-		hostInfo            *membership.HostInfo
-		controller          *shardController
-		mockShardManager    *mmocks.ShardManager
-		mockServiceResolver *mmocks.ServiceResolver
-		mockEngineFactory   *MockHistoryEngineFactory
-		logger              bark.Logger
+		hostInfo                *membership.HostInfo
+		controller              *shardController
+		mockShardManager        *mmocks.ShardManager
+		mockExecutionMgrFactory *mmocks.ExecutionManagerFactory
+		mockServiceResolver     *mmocks.ServiceResolver
+		mockEngineFactory       *MockHistoryEngineFactory
+		logger                  bark.Logger
 	}
 )
 
@@ -37,13 +38,15 @@ func (s *shardControllerSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
 	s.hostInfo = membership.NewHostInfo("shardController-host-test", nil)
 	s.mockShardManager = &mmocks.ShardManager{}
+	s.mockExecutionMgrFactory = &mmocks.ExecutionManagerFactory{}
 	s.mockServiceResolver = &mmocks.ServiceResolver{}
 	s.mockEngineFactory = &MockHistoryEngineFactory{}
-	s.controller = newShardController(1, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockEngineFactory,
-		s.logger)
+	s.controller = newShardController(1, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockExecutionMgrFactory,
+		s.mockEngineFactory, s.logger)
 }
 
 func (s *shardControllerSuite) TearDownTest() {
+	s.mockExecutionMgrFactory.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockServiceResolver.AssertExpectations(s.T())
 	s.mockEngineFactory.AssertExpectations(s.T())
@@ -57,6 +60,8 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
+			mockExecutionMgr := &mmocks.ExecutionManager{}
+			s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 			mockEngine := &MockHistoryEngine{}
 			mockEngine.On("Start").Return().Once()
 			s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
@@ -112,6 +117,8 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := 2
 	s.controller.numberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
+		mockExecutionMgr := &mmocks.ExecutionManager{}
+		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		mockEngine := &MockHistoryEngine{}
 		mockEngine.On("Start").Return().Once()
 		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
@@ -152,6 +159,8 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := 2
 	s.controller.numberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
+		mockExecutionMgr := &mmocks.ExecutionManager{}
+		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		mockEngine := &MockHistoryEngine{}
 		mockEngine.On("Start").Return().Once()
 		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()

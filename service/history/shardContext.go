@@ -9,6 +9,7 @@ import (
 type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
+		GetExecutionManager() persistence.ExecutionManager
 		GetTransferTaskID() int64
 		GetRangeID() int64
 		GetTransferAckLevel() int64
@@ -20,10 +21,15 @@ type (
 	shardContextImpl struct {
 		shardManager           persistence.ShardManager
 		shardInfo              *persistence.ShardInfo
+		executionManager       persistence.ExecutionManager
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
 	}
 )
+
+func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
+	return s.executionManager
+}
 
 func (s *shardContextImpl) GetTimerSequenceNumber() int64 {
 	return atomic.AddInt64(&s.timerSequeceNumber, 1)
@@ -55,7 +61,8 @@ func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
-func acquireShard(shardID int, shardManager persistence.ShardManager) (ShardContext, error) {
+func acquireShard(shardID int, shardManager persistence.ShardManager,
+	executionMgr persistence.ExecutionManager) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -76,6 +83,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager) (ShardCont
 	context := &shardContextImpl{
 		shardManager:           shardManager,
 		shardInfo:              updatedShardInfo,
+		executionManager:       executionMgr,
 		transferSequenceNumber: updatedShardInfo.RangeID << 24,
 	}
 

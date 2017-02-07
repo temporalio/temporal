@@ -17,7 +17,7 @@ import (
 type Handler struct {
 	numberOfShards        int
 	shardManager          persistence.ShardManager
-	executionManager      persistence.ExecutionManager
+	executionMgrFactory   persistence.ExecutionManagerFactory
 	matchingServiceClient matching.Client
 	controller            *shardController
 	tokenSerializer       common.TaskTokenSerializer
@@ -30,14 +30,14 @@ var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
 func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
-	executionPersistence persistence.ExecutionManager, numberOfShards int, waitForRing bool) (*Handler, []thrift.TChanServer) {
+	executionMgrFactory persistence.ExecutionManagerFactory, numberOfShards int, waitForRing bool) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
-		Service:          sVice,
-		shardManager:     shardManager,
-		executionManager: executionPersistence,
-		numberOfShards:   numberOfShards,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		waitForRing:      waitForRing,
+		Service:             sVice,
+		shardManager:        shardManager,
+		executionMgrFactory: executionMgrFactory,
+		numberOfShards:      numberOfShards,
+		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
+		waitForRing:         waitForRing,
 	}
 	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
 }
@@ -59,7 +59,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
 	}
 	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager,
-		h, h.GetLogger())
+		h.executionMgrFactory, h, h.GetLogger())
 	h.controller.Start()
 	return nil
 }
@@ -72,7 +72,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.executionManager, h.matchingServiceClient, h.Service.GetLogger())
+	return NewEngineWithShardContext(context, context.GetExecutionManager(), h.matchingServiceClient, h.Service.GetLogger())
 }
 
 // IsHealthy - Health endpoint.

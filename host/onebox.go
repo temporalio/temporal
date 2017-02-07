@@ -32,20 +32,20 @@ type cadenceImpl struct {
 	logger                bark.Logger
 	shardMgr              persistence.ShardManager
 	taskMgr               persistence.TaskManager
-	executionMgr          persistence.ExecutionManager
+	executionMgrFactory   persistence.ExecutionManagerFactory
 	shutdownCh            chan struct{}
 	shutdownWG            sync.WaitGroup
 }
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(shardMgr persistence.ShardManager, executionMgr persistence.ExecutionManager,
+func NewCadence(shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
 	taskMgr persistence.TaskManager, numberOfHistoryShards int, logger bark.Logger) Cadence {
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		shardMgr:              shardMgr,
 		taskMgr:               taskMgr,
-		executionMgr:          executionMgr,
+		executionMgrFactory:   executionMgrFactory,
 		shutdownCh:            make(chan struct{}),
 	}
 }
@@ -58,7 +58,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(c.logger, c.shardMgr, c.executionMgr, rpHosts, &startWG)
+	go c.startHistory(c.logger, c.shardMgr, c.executionMgrFactory, rpHosts, &startWG)
 	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
 	startWG.Wait()
 
@@ -110,14 +110,14 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 }
 
 func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
-	executionMgr persistence.ExecutionManager, rpHosts []string, startWG *sync.WaitGroup) {
+	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
 	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 		return c.createTChannel(sName, c.HistoryServiceAddress(), thriftServices)
 	}
 	scope := tally.NewTestScope("cadence-history", make(map[string]string))
 	service := service.New("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
-	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgr, c.numberOfHistoryShards, false)
+	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgrFactory, c.numberOfHistoryShards, false)
 	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh

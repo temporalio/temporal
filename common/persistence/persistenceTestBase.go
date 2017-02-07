@@ -31,12 +31,13 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
 	TestBase struct {
-		ShardMgr     ShardManager
-		WorkflowMgr  ExecutionManager
-		TaskMgr      TaskManager
-		ShardInfo    *ShardInfo
-		ShardContext *testShardContext
-		readLevel    int64
+		ShardMgr            ShardManager
+		ExecutionMgrFactory ExecutionManagerFactory
+		WorkflowMgr         ExecutionManager
+		TaskMgr             TaskManager
+		ShardInfo           *ShardInfo
+		ShardContext        *testShardContext
+		readLevel           int64
 		CassandraTestCluster
 	}
 
@@ -51,14 +52,25 @@ type (
 		shardInfo              *ShardInfo
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
+		executionMgr           ExecutionManager
+	}
+
+	testExecutionMgrFactory struct {
+		options   TestBaseOptions
+		cassandra CassandraTestCluster
 	}
 )
 
-func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64) *testShardContext {
+func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, executionMgr ExecutionManager) *testShardContext {
 	return &testShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
+		executionMgr:           executionMgr,
 	}
+}
+
+func (s *testShardContext) GetExecutionManager() ExecutionManager {
+	return s.executionMgr
 }
 
 func (s *testShardContext) GetTransferTaskID() int64 {
@@ -91,6 +103,17 @@ func (s *testShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
 }
 
+func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster) ExecutionManagerFactory {
+	return &testExecutionMgrFactory{
+		options:   options,
+		cassandra: cassandra,
+	}
+}
+
+func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
+	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.cassandra.keyspace, shardID)
+}
+
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	// Setup Workflow keyspace and deploy schema for tests
@@ -101,8 +124,9 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.WorkflowMgr, err = NewCassandraWorkflowExecutionPersistence(options.ClusterHost,
-		s.CassandraTestCluster.keyspace, shardID)
+	s.ExecutionMgrFactory = newTestExecutionMgrFactory(options, s.CassandraTestCluster)
+	// Create an ExecutionManager for the shard for use in unit tests
+	s.WorkflowMgr, err = s.ExecutionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -117,7 +141,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		RangeID:          0,
 		TransferAckLevel: 0,
 	}
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.WorkflowMgr)
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
 		ShardInfo: s.ShardInfo,
 	})
