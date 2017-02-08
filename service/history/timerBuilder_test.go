@@ -8,7 +8,6 @@ import (
 	"code.uber.internal/devexp/minions/common/persistence"
 
 	"encoding/hex"
-	"fmt"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
@@ -115,11 +114,11 @@ func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
 		s.logger.Errorf("DecodeString failed with error: %+v", err)
 		panic("Failed deserialization of history")
 	}
-	s.logger.Infof("History: %s \n", string(data))
+	s.logger.Infof("History: %s", string(data))
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeKey() {
 	taskID := SequenceID(1486434275547938830)
 	expiryTime, _ := DeconstructTimerKey(taskID)
-	fmt.Printf("Timer Sequence ID: %s, expiry: %v", SequenceID(taskID), time.Unix(0, expiryTime).UTC())
+	s.logger.Infof("Timer Sequence ID: %s, expiry: %v", SequenceID(taskID), time.Unix(0, expiryTime).UTC())
 }
