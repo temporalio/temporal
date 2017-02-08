@@ -533,7 +533,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.False(isRunningFromMS)
 }
 
-func (s *timerQueueProcessorSuite) TestTimer_UserTimers() {
+func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -578,7 +578,7 @@ func (s *timerQueueProcessorSuite) TestTimer_UserTimers() {
 	s.False(running)
 }
 
-func (s *timerQueueProcessorSuite) TestTimer_UserTimers_SameExpiry() {
+func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-same-expiry-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
