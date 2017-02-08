@@ -4,6 +4,8 @@ import (
 	"sync/atomic"
 
 	"code.uber.internal/devexp/minions/common/persistence"
+
+	"github.com/uber-common/bark"
 )
 
 type (
@@ -16,6 +18,7 @@ type (
 		GetTimerSequenceNumber() int64
 		UpdateAckLevel(ackLevel int64) error
 		GetTransferSequenceNumber() int64
+		GetLogger() bark.Logger
 	}
 
 	shardContextImpl struct {
@@ -24,8 +27,11 @@ type (
 		executionManager       persistence.ExecutionManager
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
+		logger                 bark.Logger
 	}
 )
+
+var _ ShardContext = (*shardContextImpl)(nil)
 
 func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
@@ -47,6 +53,10 @@ func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	return atomic.LoadInt64(&s.shardInfo.TransferAckLevel)
 }
 
+func (s *shardContextImpl) GetLogger() bark.Logger {
+	return s.logger
+}
+
 func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, ackLevel)
 	updatedShardInfo := copyShardInfo(s.shardInfo)
@@ -61,8 +71,8 @@ func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
-func acquireShard(shardID int, shardManager persistence.ShardManager,
-	executionMgr persistence.ExecutionManager) (ShardContext, error) {
+func acquireShard(shardID int, shardManager persistence.ShardManager, executionMgr persistence.ExecutionManager,
+	logger bark.Logger) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -86,6 +96,9 @@ func acquireShard(shardID int, shardManager persistence.ShardManager,
 		executionManager:       executionMgr,
 		transferSequenceNumber: updatedShardInfo.RangeID << 24,
 	}
+	context.logger = logger.WithFields(bark.Fields{
+		tagHistoryShardID: shardID,
+	})
 
 	return context, nil
 }

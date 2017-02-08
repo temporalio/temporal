@@ -8,7 +8,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 
 	m "code.uber.internal/devexp/minions/.gen/go/matching"
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -38,8 +37,7 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 
 	s.SetupWorkflowStore()
 	s.mockMatching = &mocks.MatchingClient{}
-	s.processor = newTransferQueueProcessor(s.ShardContext, s.WorkflowMgr, s.mockMatching,
-		bark.NewLoggerFromLogrus(log.New())).(*transferQueueProcessorImpl)
+	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockMatching).(*transferQueueProcessorImpl)
 }
 
 func (s *transferQueueProcessorSuite) TearDownSuite() {

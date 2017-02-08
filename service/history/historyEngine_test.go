@@ -56,9 +56,11 @@ func (s *engineSuite) SetupTest() {
 	mockShard := &shardContextImpl{
 		shardInfo:              &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber: 1,
+		executionManager:       s.mockExecutionMgr,
+		logger:                 s.logger,
 	}
 
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockExecutionMgr, s.mockMatchingClient, s.logger)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient)
 	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	h := &historyEngineImpl{
 		shard:            mockShard,

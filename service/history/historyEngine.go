@@ -15,6 +15,10 @@ import (
 	"github.com/uber-common/bark"
 )
 
+const (
+	conditionalRetryCount = 5
+)
+
 type (
 	historyEngineImpl struct {
 		shard            ShardContext
@@ -49,9 +53,7 @@ type (
 	}
 )
 
-const (
-	conditionalRetryCount = 5
-)
+var _ Engine = (*historyEngineImpl)(nil)
 
 var (
 	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
@@ -79,10 +81,10 @@ func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcesso
 }
 
 // NewEngineWithShardContext creates an instance of history engine
-func NewEngineWithShardContext(shard ShardContext, executionManager persistence.ExecutionManager,
-	matching matching.Client, logger bark.Logger) Engine {
-
-	txProcessor := newTransferQueueProcessor(shard, executionManager, matching, logger)
+func NewEngineWithShardContext(shard ShardContext, matching matching.Client) Engine {
+	logger := shard.GetLogger()
+	executionManager := shard.GetExecutionManager()
+	txProcessor := newTransferQueueProcessor(shard, matching)
 	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
@@ -91,7 +93,7 @@ func NewEngineWithShardContext(shard ShardContext, executionManager persistence.
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		tracker:          tracker,
 		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueWorkflowEngineComponent,
+			tagWorkflowComponent: tagValueHistoryEngineComponent,
 		}),
 	}
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)

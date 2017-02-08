@@ -77,7 +77,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, context.GetExecutionManager(), h.matchingServiceClient, h.Service.GetLogger())
+	return NewEngineWithShardContext(context, h.matchingServiceClient)
 }
 
 // IsHealthy - Health endpoint.

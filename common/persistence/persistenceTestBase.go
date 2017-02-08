@@ -54,6 +54,7 @@ type (
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
 		executionMgr           ExecutionManager
+		logger                 bark.Logger
 	}
 
 	testExecutionMgrFactory struct {
@@ -63,11 +64,13 @@ type (
 	}
 )
 
-func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, executionMgr ExecutionManager) *testShardContext {
+func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, executionMgr ExecutionManager,
+	logger bark.Logger) *testShardContext {
 	return &testShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
 		executionMgr:           executionMgr,
+		logger:                 logger,
 	}
 }
 
@@ -100,12 +103,17 @@ func (s *testShardContext) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
+func (s *testShardContext) GetLogger() bark.Logger {
+	return s.logger
+}
+
 func (s *testShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.RangeID, 0)
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
 }
 
-func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster, logger bark.Logger) ExecutionManagerFactory {
+func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster,
+	logger bark.Logger) ExecutionManagerFactory {
 	return &testExecutionMgrFactory{
 		options:   options,
 		cassandra: cassandra,
@@ -145,7 +153,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		RangeID:          0,
 		TransferAckLevel: 0,
 	}
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.WorkflowMgr)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.WorkflowMgr, log)
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
 		ShardInfo: s.ShardInfo,
 	})
@@ -479,7 +487,11 @@ func (s *TestBase) ClearTransferQueue() {
 
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
-	s.SetupWorkflowStoreWithOptions(TestBaseOptions{SchemaDir: testSchemaDir, ClusterHost: testWorkflowClusterHosts, DropKeySpace: true})
+	s.SetupWorkflowStoreWithOptions(TestBaseOptions{
+		SchemaDir:    testSchemaDir,
+		ClusterHost:  testWorkflowClusterHosts,
+		DropKeySpace: true,
+	})
 }
 
 // TearDownWorkflowStore to cleanup

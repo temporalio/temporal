@@ -56,14 +56,17 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(shard ShardContext, executionManager persistence.ExecutionManager,
-	matching matching.Client, logger bark.Logger) transferQueueProcessor {
+func newTransferQueueProcessor(shard ShardContext, matching matching.Client) transferQueueProcessor {
+	executionManager := shard.GetExecutionManager()
+	logger := shard.GetLogger()
 	return &transferQueueProcessorImpl{
 		ackMgr:           newAckManager(shard, executionManager, logger),
 		executionManager: executionManager,
 		matchingClient:   matching,
 		shutdownCh:       make(chan struct{}),
-		logger:           logger,
+		logger: logger.WithFields(bark.Fields{
+			tagWorkflowComponent: tagValueTransferQueueComponent,
+		}),
 	}
 }
 

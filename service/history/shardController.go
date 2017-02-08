@@ -255,7 +255,7 @@ func (i *historyShardsItem) getOrCreateEngine() (Engine, error) {
 		return nil, err
 	}
 
-	context, err := acquireShard(i.shardID, i.shardMgr, executionMgr)
+	context, err := acquireShard(i.shardID, i.shardMgr, executionMgr, i.logger)
 	if err != nil {
 		return nil, err
 	}

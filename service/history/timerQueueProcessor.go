@@ -107,7 +107,9 @@ func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager 
 		executionManager: executionManager,
 		shutdownCh:       make(chan struct{}),
 		newTimerCh:       make(chan struct{}, 1),
-		logger:           logger.WithFields(bark.Fields{"component": "TimerProcessor"}),
+		logger: logger.WithFields(bark.Fields{
+			tagWorkflowComponent: tagValueTimerQueueComponent,
+		}),
 	}
 }
 

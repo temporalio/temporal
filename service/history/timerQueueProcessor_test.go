@@ -47,8 +47,8 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		log.Fatal(err)
 	}
 
-	shard := &shardContextImpl{shardInfo: resp.ShardInfo}
-	txProcessor := newTransferQueueProcessor(shard, s.WorkflowMgr, &mocks.MatchingClient{}, s.logger)
+	shard := &shardContextImpl{shardInfo: resp.ShardInfo, executionManager: s.WorkflowMgr, logger: s.logger}
+	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{})
 	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
