@@ -7,11 +7,12 @@ import (
 
 	"code.uber.internal/devexp/minions/common/persistence"
 
+	"encoding/hex"
+	"fmt"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-	"encoding/hex"
-	"fmt"
 )
 
 type (
@@ -118,7 +119,7 @@ func (s *timerBuilderProcessorSuite) Test_DecodeHistory() {
 }
 
 func (s *timerBuilderProcessorSuite) Test_DecodeKey() {
-	task_id := SequenceID(1486434275547938830)
-	expiryTime, _ := DeconstructTimerKey(task_id)
-	fmt.Printf("Timer Sequence ID: %s, expiry: %v", SequenceID(task_id), time.Unix(0, expiryTime).UTC())
+	taskID := SequenceID(1486434275547938830)
+	expiryTime, _ := DeconstructTimerKey(taskID)
+	fmt.Printf("Timer Sequence ID: %s, expiry: %v", SequenceID(taskID), time.Unix(0, expiryTime).UTC())
 }

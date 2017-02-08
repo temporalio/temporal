@@ -2,6 +2,7 @@ package history
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	h "code.uber.internal/devexp/minions/.gen/go/history"
@@ -22,6 +23,7 @@ type Handler struct {
 	controller            *shardController
 	tokenSerializer       common.TaskTokenSerializer
 	waitForRing           bool
+	startWG               sync.WaitGroup
 	service.Service
 }
 
@@ -39,6 +41,8 @@ func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 		waitForRing:         waitForRing,
 	}
+	// prevent us from trying to serve requests before shard controller is started and ready
+	handler.startWG.Add(1)
 	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
 }
 
@@ -61,6 +65,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager,
 		h.executionMgrFactory, h, h.GetLogger())
 	h.controller.Start()
+	h.startWG.Done()
 	return nil
 }
 
@@ -84,6 +89,7 @@ func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (h *Handler) RecordActivityTaskHeartbeat(ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
+	h.startWG.Wait()
 	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.GetTaskToken())
 	if err0 != nil {
 		return nil, &gen.BadRequestError{Message: "Error deserializing task token."}
@@ -100,6 +106,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx thrift.Context,
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
 	recordRequest *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
+	h.startWG.Wait()
 	workflowExecution := recordRequest.GetWorkflowExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
@@ -112,6 +119,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
 // RecordDecisionTaskStarted - Record Decision Task started.
 func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
 	recordRequest *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+	h.startWG.Wait()
 	workflowExecution := recordRequest.GetWorkflowExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
@@ -124,6 +132,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx thrift.Context,
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
+	h.startWG.Wait()
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.GetTaskToken())
 	if err0 != nil {
 		return &gen.BadRequestError{Message: "Error deserializing task token."}
@@ -140,6 +149,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx thrift.Context,
 // RespondActivityTaskFailed - records failure of an activity task
 func (h *Handler) RespondActivityTaskFailed(ctx thrift.Context,
 	failRequest *gen.RespondActivityTaskFailedRequest) error {
+	h.startWG.Wait()
 	token, err0 := h.tokenSerializer.Deserialize(failRequest.GetTaskToken())
 	if err0 != nil {
 		return &gen.BadRequestError{Message: "Error deserializing task token."}
@@ -155,6 +165,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx thrift.Context,
 // RespondDecisionTaskCompleted - records completion of a decision task
 func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
+	h.startWG.Wait()
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.GetTaskToken())
 	if err0 != nil {
 		return &gen.BadRequestError{Message: "Error deserializing task token."}
@@ -170,6 +181,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 // StartWorkflowExecution - creates a new workflow execution
 func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
+	h.startWG.Wait()
 	engine, err1 := h.controller.GetEngine(startRequest.GetWorkflowId())
 	if err1 != nil {
 		return nil, err1
@@ -180,6 +192,7 @@ func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 // GetWorkflowExecutionHistory - returns the complete history of a workflow execution
 func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+	h.startWG.Wait()
 	workflowExecution := getRequest.GetExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {

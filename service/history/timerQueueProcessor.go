@@ -152,7 +152,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer() {
 func (t *timerQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
 
-	RetryProcessor:
+RetryProcessor:
 	for {
 		select {
 		case <-t.shutdownCh:
