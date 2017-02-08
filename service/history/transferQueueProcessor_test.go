@@ -117,7 +117,7 @@ func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
-	if task.TaskType == persistence.TaskTypeActivity {
+	if task.TaskType == persistence.TaskListTypeActivity {
 		res = &m.AddActivityTaskRequest{
 			Execution:  &execution,
 			TaskList:   taskList,

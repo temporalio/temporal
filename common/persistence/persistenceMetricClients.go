@@ -269,7 +269,21 @@ func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*L
 	sw.Stop()
 
 	if err != nil {
-		p.m3Client.IncCounter(metrics.CompleteTaskScope, metrics.WorkflowFailures)
+		p.m3Client.IncCounter(metrics.LeaseTaskListScope, metrics.WorkflowFailures)
+	}
+
+	return response, err
+}
+
+func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {
+	p.m3Client.IncCounter(metrics.UpdateTaskListScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.UpdateTaskListScope, metrics.WorkflowLatency)
+	response, err := p.UpdateTaskList(request)
+	sw.Stop()
+
+	if err != nil {
+		p.m3Client.IncCounter(metrics.UpdateTaskListScope, metrics.WorkflowFailures)
 	}
 
 	return response, err

@@ -204,7 +204,7 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeDecision, *request.TaskId, scheduleID, startedID,
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, *request.TaskId, scheduleID, startedID,
 				isRunning)
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
@@ -252,12 +252,12 @@ Update_History_Loop:
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		isRunning, ai := msBuilder.isActivityRunning(scheduleID)
 		if !isRunning {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
 				isRunning)
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 		if ai.StartedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskTypeActivity, request.GetTaskId(), scheduleID, ai.StartedID,
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), scheduleID, ai.StartedID,
 				isRunning)
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}

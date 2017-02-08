@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	"github.com/uber-common/bark"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common"
@@ -58,6 +59,7 @@ type (
 	testExecutionMgrFactory struct {
 		options   TestBaseOptions
 		cassandra CassandraTestCluster
+		logger    bark.Logger
 	}
 )
 
@@ -103,34 +105,36 @@ func (s *testShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
 }
 
-func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster) ExecutionManagerFactory {
+func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster, logger bark.Logger) ExecutionManagerFactory {
 	return &testExecutionMgrFactory{
 		options:   options,
 		cassandra: cassandra,
+		logger:    logger,
 	}
 }
 
 func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
-	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.cassandra.keyspace, shardID)
+	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.cassandra.keyspace, shardID, f.logger)
 }
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
+	log := bark.NewLoggerFromLogrus(log.New())
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	shardID := 0
 	var err error
-	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
+	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.ExecutionMgrFactory = newTestExecutionMgrFactory(options, s.CassandraTestCluster)
+	s.ExecutionMgrFactory = newTestExecutionMgrFactory(options, s.CassandraTestCluster, log)
 	// Create an ExecutionManager for the shard for use in unit tests
 	s.WorkflowMgr, err = s.ExecutionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace)
+	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -350,7 +354,7 @@ func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerTaskI
 // CreateDecisionTask is a utility method to create a task
 func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecution, taskList string,
 	decisionScheduleID int64) (int64, error) {
-	leaseResponse, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskTypeDecision})
+	leaseResponse, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskListTypeDecision})
 	if err != nil {
 		return 0, err
 	}
@@ -364,7 +368,7 @@ func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecuti
 			TaskList:   taskList,
 			ScheduleID: decisionScheduleID,
 		},
-		RangeID: leaseResponse.RangeID,
+		RangeID: leaseResponse.TaskListInfo.RangeID,
 	})
 
 	if err != nil {
@@ -384,7 +388,7 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 	for activityScheduleID, taskList := range activities {
 
 		leaseResponse, err = s.TaskMgr.LeaseTaskList(
-			&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskTypeActivity})
+			&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskListTypeActivity})
 		if err != nil {
 			return []int64{}, err
 		}
@@ -398,7 +402,7 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 				TaskList:   taskList,
 				ScheduleID: activityScheduleID,
 			},
-			RangeID: leaseResponse.RangeID,
+			RangeID: leaseResponse.TaskListInfo.RangeID,
 		})
 
 		if err != nil {
@@ -422,7 +426,7 @@ func (s *TestBase) GetTasks(taskList string, taskType int, batchSize int) (*GetT
 		TaskList:     taskList,
 		TaskType:     taskType,
 		BatchSize:    batchSize,
-		RangeID:      leaseResponse.RangeID,
+		RangeID:      leaseResponse.TaskListInfo.RangeID,
 		MaxReadLevel: math.MaxInt64,
 	})
 
@@ -434,12 +438,20 @@ func (s *TestBase) GetTasks(taskList string, taskType int, batchSize int) (*GetT
 }
 
 // CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(taskList string, taskType int, taskID int64) error {
+func (s *TestBase) CompleteTask(taskList string, taskType int, taskID int64, ackLevel int64) error {
+	leaseResponse, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: taskType})
+	if err != nil {
+		return err
+	}
 
 	return s.TaskMgr.CompleteTask(&CompleteTaskRequest{
-		TaskList: taskList,
-		TaskType: taskType,
-		TaskID:   taskID,
+		TaskList: &TaskListInfo{
+			AckLevel: ackLevel,
+			TaskType: taskType,
+			Name:     taskList,
+			RangeID:  leaseResponse.TaskListInfo.RangeID,
+		},
+		TaskID: taskID,
 	})
 }
 
@@ -544,11 +556,6 @@ func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
 	}
 
 	err := common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
-
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		err = common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
-	}
-
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}

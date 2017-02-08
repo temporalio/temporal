@@ -209,7 +209,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
 	s.Equal(workflowExecution.GetRunId(), task1.RunID)
 	s.Equal("queue1", task1.TaskList)
-	s.Equal(TaskTypeDecision, task1.TaskType)
+	s.Equal(TaskListTypeDecision, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
 	s.NotNil(task1.LockToken)
 	s.True(task1.VisibilityTime.Before(startTime.Add(10 * time.Minute)))
@@ -262,7 +262,7 @@ func (s *cassandraPersistenceSuite) TestGetDecisionTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasks1Response, err1 := s.GetTasks(taskList, TaskTypeDecision, 1)
+	tasks1Response, err1 := s.GetTasks(taskList, TaskListTypeDecision, 1)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
@@ -286,7 +286,7 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 		s.NotEmpty(t, "Expected non empty task identifier.")
 	}
 
-	tasksWithID1Response, err1 := s.GetTasks(taskList, TaskTypeActivity, 5)
+	tasksWithID1Response, err1 := s.GetTasks(taskList, TaskListTypeActivity, 5)
 
 	s.Nil(err1, "No error expected.")
 	tasksWithID1 := tasksWithID1Response.Tasks
@@ -298,16 +298,28 @@ func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
 		s.Equal(workflowExecution.GetRunId(), t.RunID)
 		s.True(t.TaskID > 0)
 
-		err2 := s.CompleteTask(taskList, TaskTypeActivity, t.TaskID)
+		err2 := s.CompleteTask(taskList, TaskListTypeActivity, t.TaskID, 100)
 		s.Nil(err2)
 	}
+}
 
-	for _, t := range tasksWithID1 {
-		err3 := s.CompleteTask(taskList, TaskTypeActivity, t.TaskID)
-		s.NotNil(err3)
-		log.Infof("Failed to complete task '%v'.  Error: %v", t.TaskID, err3)
-		s.IsType(&gen.EntityNotExistsError{}, err3)
-	}
+func (s *cassandraPersistenceSuite) TestLeaseTaskList() {
+
+	taskList := "aaaaaaa"
+	response, err := s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskListTypeActivity})
+	s.NoError(err)
+	tli := response.TaskListInfo
+	s.EqualValues(1, tli.RangeID)
+	s.EqualValues(0, tli.AckLevel)
+	err = s.TaskMgr.CompleteTask(
+		&CompleteTaskRequest{TaskID: 110, TaskList: &TaskListInfo{Name: taskList, TaskType: TaskListTypeActivity, AckLevel: 100, RangeID: tli.RangeID}})
+	s.NoError(err)
+
+	response, err = s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskListTypeActivity})
+	s.NoError(err)
+	tli = response.TaskListInfo
+	s.EqualValues(2, tli.RangeID)
+	s.EqualValues(100, tli.AckLevel)
 }
 
 func (s *cassandraPersistenceSuite) TestTimerTasks() {

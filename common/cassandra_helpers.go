@@ -66,7 +66,7 @@ func LoadCassandraSchema(cqlshpath string, fileName string, keyspace string) (er
 	err = cmd.Run()
 
 	// CQLSH doesn't return non-zero for some errors
-	if err != nil || strings.Contains(stderr.String(), `Errno`) {
+	if err != nil || len(stderr.String()) > 0 {
 		err = fmt.Errorf("LoadSchema %v returned %v. STDERR: %v", cmd.Path, err, stderr.String())
 	}
 	return

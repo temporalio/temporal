@@ -13,16 +13,39 @@ func (_m *TaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) 
 	ret := _m.Called(request)
 
 	var r0 *persistence.LeaseTaskListResponse
-	if rf, ok := ret.Get(0).(func(*persistence.LeaseTaskListRequest) *persistence.LeaseTaskListResponse); ok {
-		r0 = rf(request)
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error)); ok {
+		return rf(request)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.LeaseTaskListResponse)
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(*persistence.LeaseTaskListRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// UpdateTaskList provides a mock function with given fields: request
+func (_m *TaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.UpdateTaskListResponse
+	if rf, ok := ret.Get(0).(func(*persistence.UpdateTaskListRequest) *persistence.UpdateTaskListResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.UpdateTaskListResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.UpdateTaskListRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)
@@ -73,8 +96,8 @@ func (_m *TaskManager) GetTasks(request *persistence.GetTasksRequest) (*persiste
 	ret := _m.Called(request)
 
 	var r0 *persistence.GetTasksResponse
-	if rf, ok := ret.Get(0).(func(*persistence.GetTasksRequest) *persistence.GetTasksResponse); ok {
-		r0 = rf(request)
+	if rf, ok := ret.Get(0).(func(*persistence.GetTasksRequest) (*persistence.GetTasksResponse, error)); ok {
+		return rf(request)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.GetTasksResponse)

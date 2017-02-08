@@ -13,10 +13,10 @@ const (
 	WorkflowStateCompleted
 )
 
-// Types of tasks
+// Types of task lists
 const (
-	TaskTypeDecision = iota
-	TaskTypeActivity
+	TaskListTypeDecision = iota
+	TaskListTypeActivity
 )
 
 // Types of timers
@@ -29,12 +29,12 @@ const (
 type (
 	// ConditionFailedError represents a failed conditional put
 	ConditionFailedError struct {
-		msg string
+		Msg string
 	}
 
 	// ShardAlreadyExistError is returned when conditionally creating a shard fails
 	ShardAlreadyExistError struct {
-		msg string
+		Msg string
 	}
 
 	// ShardInfo describes a shard
@@ -81,6 +81,14 @@ type (
 		TaskType    int
 		TimeoutType int
 		EventID     int64
+	}
+
+	// TaskListInfo describes a state of a task list implementation.
+	TaskListInfo struct {
+		Name     string
+		TaskType int
+		RangeID  int64
+		AckLevel int64
 	}
 
 	// TaskInfo describes either activity or decision task
@@ -250,7 +258,16 @@ type (
 
 	// LeaseTaskListResponse is response to LeaseTaskListRequest
 	LeaseTaskListResponse struct {
-		RangeID int64
+		TaskListInfo *TaskListInfo
+	}
+
+	// UpdateTaskListRequest is used to update task list implementation information
+	UpdateTaskListRequest struct {
+		TaskListInfo *TaskListInfo
+	}
+
+	// UpdateTaskListResponse is the response to UpdateTaskList
+	UpdateTaskListResponse struct {
 	}
 
 	// CreateTaskRequest is used to create a new task for a workflow exectution
@@ -270,7 +287,7 @@ type (
 		TaskList     string
 		TaskType     int
 		ReadLevel    int64
-		MaxReadLevel int64
+		MaxReadLevel int64 // inclusive
 		BatchSize    int
 		RangeID      int64
 	}
@@ -282,8 +299,7 @@ type (
 
 	// CompleteTaskRequest is used to complete a task
 	CompleteTaskRequest struct {
-		TaskList string
-		TaskType int
+		TaskList *TaskListInfo
 		TaskID   int64
 	}
 
@@ -343,6 +359,7 @@ type (
 	// TaskManager is used to manage tasks
 	TaskManager interface {
 		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
+		UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error)
 		CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
@@ -350,16 +367,16 @@ type (
 )
 
 func (e *ConditionFailedError) Error() string {
-	return e.msg
+	return e.Msg
 }
 
 func (e *ShardAlreadyExistError) Error() string {
-	return e.msg
+	return e.Msg
 }
 
 // GetType returns the type of the activity task
 func (a *ActivityTask) GetType() int {
-	return TaskTypeActivity
+	return TaskListTypeActivity
 }
 
 // GetTaskID returns the sequence ID of the activity task
@@ -369,7 +386,7 @@ func (a *ActivityTask) GetTaskID() int64 {
 
 // GetType returns the type of the decision task
 func (d *DecisionTask) GetType() int {
-	return TaskTypeDecision
+	return TaskListTypeDecision
 }
 
 // GetTaskID returns the sequence ID of the decision task.

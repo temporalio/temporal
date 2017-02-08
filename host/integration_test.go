@@ -273,7 +273,7 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == matching.EmptyPollForDecisionTaskResponse {
+		if response == nil || len(response.TaskToken) == 0 {
 			p.logger.Info("Empty Decision task: Polling again.")
 			continue retry
 		}
@@ -318,7 +318,7 @@ retry:
 			return err1
 		}
 
-		if response == nil || response == matching.EmptyPollForActivityTaskResponse {
+		if response == nil || len(response.TaskToken) == 0 {
 			p.logger.Info("Empty Activity task: Polling again.")
 			return nil
 		}
@@ -327,6 +327,7 @@ retry:
 			p.logger.Info("Dropping Activity task: ")
 			return nil
 		}
+		p.logger.Infof("Received Activity task: %v", response)
 
 		result, err2 := p.activityHandler(response.GetWorkflowExecution(), response.GetActivityType(), response.GetActivityId(),
 			response.GetStartedEventId(), response.GetInput(), response.GetTaskToken())

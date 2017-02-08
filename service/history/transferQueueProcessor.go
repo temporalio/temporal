@@ -192,7 +192,7 @@ ProcessRetryLoop:
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
 				RunId: common.StringPtr(task.RunID)}
 			switch task.TaskType {
-			case persistence.TaskTypeActivity:
+			case persistence.TaskListTypeActivity:
 				{
 					taskList := &workflow.TaskList{
 						Name: &task.TaskList,
@@ -203,7 +203,7 @@ ProcessRetryLoop:
 						ScheduleId: &task.ScheduleID,
 					})
 				}
-			case persistence.TaskTypeDecision:
+			case persistence.TaskListTypeDecision:
 				{
 					taskList := &workflow.TaskList{
 						Name: &task.TaskList,

@@ -68,13 +68,6 @@ CREATE TYPE timer_info (
   task_id       bigint,    -- The task ID if we have one created for this timer
 );
 
--- Activity or workflow task in a task list
-CREATE TYPE task (
-  workflow_id      text,
-  run_id           uuid,
-  schedule_id      bigint,
-);
-
 CREATE TABLE executions (
   shard_id           int,
   type               int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
@@ -94,12 +87,27 @@ CREATE TABLE executions (
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 
+-- Activity or workflow task in a task list
+CREATE TYPE task (
+  workflow_id      text,
+  run_id           uuid,
+  schedule_id      bigint,
+);
+
+CREATE TYPE task_list (
+  name             text,
+  type             int, -- enum TaskRowType {ActivityTask, DecisionTask}
+  ack_level        bigint, -- task_id of the last acknowledged message
+);
+
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
-  task_list        text,
-  type             int, -- enum TaskType {ActivityTask, DecisionTask}
+  task_list_name   text,
+  task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
+  type             int, -- enum rowType {Task, TaskList}
   task_id          bigint,  -- unique identifier for tasks, monotonically increasing
   range_id         bigint static, -- Used to ensure that only one process can write to the table
   task             frozen<task>,
-  PRIMARY KEY ((task_list, type), task_id)
+  task_list        frozen<task_list>,
+  PRIMARY KEY ((task_list_name, task_list_type), type, task_id)
 );

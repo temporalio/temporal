@@ -117,6 +117,8 @@ const (
 	CompleteTaskScope
 	// LeaseTaskListScope tracks LeaseTaskList calls made by service to persistence layer
 	LeaseTaskListScope
+	// UpdateTaskListScope tracks UpdateTaskListScope calls made by service to persistence layer
+	UpdateTaskListScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -207,21 +209,23 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		CreateShardScope:                               {operation: "CreateShard"},
-		GetShardScope:                                  {operation: "GetShard"},
-		UpdateShardScope:                               {operation: "UpdateShard"},
-		CreateWorkflowExecutionScope:                   {operation: "CreateWorkflowExecution"},
-		GetWorkflowExecutionScope:                      {operation: "GetWorkflowExecution"},
-		UpdateWorkflowExecutionScope:                   {operation: "UpdateWorkflowExecution"},
-		DeleteWorkflowExecutionScope:                   {operation: "DeleteWorkflowExecution"},
-		GetTransferTasksScope:                          {operation: "GetTransferTasks"},
-		CompleteTransferTaskScope:                      {operation: "CompleteTransferTask"},
-		GetTimerIndexTasksScope:                        {operation: "GetTimerIndexTasks"},
-		GetWorkflowMutableStateScope:                   {operation: "GetWorkflowMutableState"},
-		CreateTaskScope:                                {operation: "CreateTask"},
-		GetTasksScope:                                  {operation: "GetTasks"},
-		CompleteTaskScope:                              {operation: "CompleteTask"},
-		LeaseTaskListScope:                             {operation: "LeaseTaskList"},
+		CreateShardScope:             {operation: "CreateShard"},
+		GetShardScope:                {operation: "GetShard"},
+		UpdateShardScope:             {operation: "UpdateShard"},
+		CreateWorkflowExecutionScope: {operation: "CreateWorkflowExecution"},
+		GetWorkflowExecutionScope:    {operation: "GetWorkflowExecution"},
+		UpdateWorkflowExecutionScope: {operation: "UpdateWorkflowExecution"},
+		DeleteWorkflowExecutionScope: {operation: "DeleteWorkflowExecution"},
+		GetTransferTasksScope:        {operation: "GetTransferTasks"},
+		CompleteTransferTaskScope:    {operation: "CompleteTransferTask"},
+		GetTimerIndexTasksScope:      {operation: "GetTimerIndexTasks"},
+		GetWorkflowMutableStateScope: {operation: "GetWorkflowMutableState"},
+		CreateTaskScope:              {operation: "CreateTask"},
+		GetTasksScope:                {operation: "GetTasks"},
+		CompleteTaskScope:            {operation: "CompleteTask"},
+		LeaseTaskListScope:           {operation: "LeaseTaskList"},
+		UpdateTaskListScope:          {operation: "UpdateTaskList"},
+
 		HistoryClientStartWorkflowExecutionScope:       {operation: "HistoryClientStartWorkflowExecution"},
 		HistoryClientRecordActivityTaskHeartbeatScope:  {operation: "HistoryClientRecordActivityTaskHeartbeat"},
 		HistoryClientRespondDecisionTaskCompletedScope: {operation: "HistoryClientRespondDecisionTaskCompleted"},

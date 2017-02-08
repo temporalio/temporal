@@ -50,11 +50,13 @@ func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 
 // AddActivityTask - adds an activity task.
 func (h *Handler) AddActivityTask(ctx thrift.Context, addRequest *m.AddActivityTaskRequest) error {
+	h.Service.GetLogger().Debug("Engine Received AddActivityTask")
 	return h.engine.AddActivityTask(addRequest)
 }
 
 // AddDecisionTask - adds a decision task.
 func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionTaskRequest) error {
+	h.Service.GetLogger().Debug("Engine Received AddDecisionTask")
 	return h.engine.AddDecisionTask(addRequest)
 }
 
@@ -62,12 +64,17 @@ func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionT
 func (h *Handler) PollForActivityTask(ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
 	h.Service.GetLogger().Debug("Engine Received PollForActivityTask")
-	return h.engine.PollForActivityTask(pollRequest)
+	response, error := h.engine.PollForActivityTask(pollRequest)
+	h.Service.GetLogger().Debug("Engine returned from PollForActivityTask")
+	return response, error
+
 }
 
 // PollForDecisionTask - long poll for a decision task.
 func (h *Handler) PollForDecisionTask(ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
 	h.Service.GetLogger().Debug("Engine Received PollForDecisionTask")
-	return h.engine.PollForDecisionTask(pollRequest)
+	response, error := h.engine.PollForDecisionTask(pollRequest)
+	h.Service.GetLogger().Debug("Engine returned from PollForDecisionTask")
+	return response, error
 }
