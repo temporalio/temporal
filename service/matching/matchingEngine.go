@@ -357,12 +357,15 @@ func (e *matchingEngineImpl) getTask(taskList *taskListID) (*taskContext, error)
 }
 
 func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {
-	var tlCtx *taskListContext
 	e.taskListsLock.Lock()
-	tlCtx = e.taskLists[*id]
-	delete(e.taskLists, *id)
+	tlCtx, ok := e.taskLists[*id]
+	if ok {
+		delete(e.taskLists, *id)
+	}
 	e.taskListsLock.Unlock()
-	tlCtx.Stop()
+	if ok {
+		tlCtx.Stop()
+	}
 }
 
 // Populate the decision task response based on context and scheduled/started events.
