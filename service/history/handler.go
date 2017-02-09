@@ -120,9 +120,18 @@ func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
 func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
 	recordRequest *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	h.startWG.Wait()
+	h.Service.GetLogger().Debugf("RecordDecisionTaskStarted. WorkflowID: %v, RunID: %v, ScheduleID: %v",
+		recordRequest.GetWorkflowExecution().GetWorkflowId(),
+		recordRequest.GetWorkflowExecution().GetRunId(),
+		recordRequest.GetScheduleId())
 	workflowExecution := recordRequest.GetWorkflowExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
+		h.Service.GetLogger().Errorf("RecordDecisionTaskStarted failed. Error: %v. WorkflowID: %v, RunID: %v, ScheduleID: %v",
+			err1,
+			recordRequest.GetWorkflowExecution().GetWorkflowId(),
+			recordRequest.GetWorkflowExecution().GetRunId(),
+			recordRequest.GetScheduleId())
 		return nil, err1
 	}
 
@@ -170,6 +179,11 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 	if err0 != nil {
 		return &gen.BadRequestError{Message: "Error deserializing task token."}
 	}
+
+	h.Service.GetLogger().Debugf("RespondDecisionTaskCompleted. WorkflowID: %v, RunID: %v, ScheduleID: %v",
+		token.WorkflowID,
+		token.RunID,
+		token.ScheduleID)
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
