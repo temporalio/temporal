@@ -215,9 +215,10 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 
 		if isWokeByNewTimer {
 			t.logger.Debugf("Woke up by the timer")
-			// We have a new timer msg, see if it is earlier than what we know.
-			earlyTimeKey := SequenceID(time.Now().UnixNano() - int64(time.Second))
-			tempKey, err := t.getNextKey(earlyTimeKey, nextKey)
+			//// We have a new timer msg, see if it is earlier than what we know.
+			//earlyTimeKey := SequenceID(time.Now().UnixNano() - int64(time.Second))
+			//tempKey, err := t.getNextKey(earlyTimeKey, nextKey)
+			tempKey, err := t.getInitialSeed()
 			if err != nil {
 				return err
 			}
@@ -226,8 +227,7 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 			}
 		}
 
-		if nextKey != MaxTimerKey && t.isProcessNow(nextKey) {
-
+		for nextKey != MaxTimerKey && t.isProcessNow(nextKey) {
 			// We have a timer to fire.
 			err = t.processTimerTask(nextKey)
 			if err != nil && err != ErrMaxAttemptsExceeded {
@@ -239,7 +239,9 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 			if err != nil {
 				return err
 			}
+		}
 
+		if nextKey != MaxTimerKey {
 			t.logger.Debugf("GetNextKey: %s", nextKey)
 
 			if nextKey != MaxTimerKey {

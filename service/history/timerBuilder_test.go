@@ -118,7 +118,7 @@ func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeKey() {
-	taskID := SequenceID(1486434275547938830)
+	taskID := SequenceID(1486597582082801667)
 	expiryTime, _ := DeconstructTimerKey(taskID)
 	s.logger.Infof("Timer Sequence ID: %s, expiry: %v", SequenceID(taskID), time.Unix(0, expiryTime).UTC())
 }

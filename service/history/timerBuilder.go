@@ -76,7 +76,7 @@ func DeconstructTimerKey(key SequenceID) (expiryTime int64, seqNum int64) {
 
 func (s SequenceID) String() string {
 	expiry, seqNum := DeconstructTimerKey(s)
-	return fmt.Sprintf("SequenceID=%x(%x %x)", int64(s), expiry, seqNum)
+	return fmt.Sprintf("SequenceID=%v(%x %x) %s", int64(s), expiry, seqNum, time.Unix(0, int64(expiry)))
 }
 
 // Len implements sort.Interace
