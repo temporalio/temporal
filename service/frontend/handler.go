@@ -7,7 +7,9 @@ import (
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/client/history"
 	"code.uber.internal/devexp/minions/client/matching"
+	"code.uber.internal/devexp/minions/common"
 	"code.uber.internal/devexp/minions/common/service"
+	"github.com/uber-common/bark"
 	"github.com/uber/tchannel-go/thrift"
 )
 
@@ -15,15 +17,17 @@ var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
-	history  history.Client
-	matching matching.Client
+	history         history.Client
+	matching        matching.Client
+	tokenSerializer common.TaskTokenSerializer
 	service.Service
 }
 
 // NewWorkflowHandler creates a thrift handler for the minions service
 func NewWorkflowHandler(sVice service.Service) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
-		Service: sVice,
+		Service:         sVice,
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 	}
 	return handler, []thrift.TChanServer{minions.NewTChanWorkflowServiceServer(handler)}
 }
@@ -59,7 +63,12 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
-	return wh.matching.PollForActivityTask(pollRequest)
+	resp, err := wh.matching.PollForActivityTask(pollRequest)
+	if err != nil {
+		wh.Service.GetLogger().Errorf(
+			"PollForActivityTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
+	}
+	return resp, err
 }
 
 // PollForDecisionTask - Poll for a decision task.
@@ -67,7 +76,12 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
-	return wh.matching.PollForDecisionTask(pollRequest)
+	err, resp := wh.matching.PollForDecisionTask(pollRequest)
+	if err != nil {
+		wh.Service.GetLogger().Errorf(
+			"PollForDecisionTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
+	}
+	return err, resp
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -82,14 +96,24 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
-	return wh.history.RespondActivityTaskCompleted(completeRequest)
+	err := wh.history.RespondActivityTaskCompleted(completeRequest)
+	if err != nil {
+		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
+		logger.Errorf("RespondActivityTaskCompleted. Error: %v", err)
+	}
+	return err
 }
 
 // RespondActivityTaskFailed - Record Activity Task Heart beat
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx thrift.Context,
 	failRequest *gen.RespondActivityTaskFailedRequest) error {
-	return wh.history.RespondActivityTaskFailed(failRequest)
+	err := wh.history.RespondActivityTaskFailed(failRequest)
+	if err != nil {
+		logger := wh.getLoggerForTask(failRequest.GetTaskToken())
+		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
+	}
+	return err
 
 }
 
@@ -97,15 +121,24 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
-	return wh.history.RespondDecisionTaskCompleted(completeRequest)
+	err := wh.history.RespondDecisionTaskCompleted(completeRequest)
+	if err != nil {
+		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
+		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
+	}
+	return err
 }
 
 // StartWorkflowExecution - Record Activity Task Heart beat
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
-	wh.Service.GetLogger().Debug(" Received StartWorkflowExecution")
-	return wh.history.StartWorkflowExecution(startRequest)
+	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
+	resp, err := wh.history.StartWorkflowExecution(startRequest)
+	if err != nil {
+		wh.Service.GetLogger().Errorf("StartWorkflowExecution failed. WorkflowID: %v. Error: %v", startRequest.GetWorkflowId(), err)
+	}
+	return resp, err
 }
 
 // GetWorkflowExecutionHistory - retrieves the hisotry of workflow execution
@@ -113,4 +146,17 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx thrift.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
 	return wh.history.GetWorkflowExecutionHistory(getRequest)
+}
+
+func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {
+	logger := wh.Service.GetLogger()
+	task, err := wh.tokenSerializer.Deserialize(taskToken)
+	if err == nil {
+		logger = logger.WithFields(bark.Fields{
+			"WorkflowID": task.WorkflowID,
+			"RunID":      task.RunID,
+			"ScheduleID": task.ScheduleID,
+		})
+	}
+	return logger
 }
