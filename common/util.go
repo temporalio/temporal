@@ -11,10 +11,13 @@ import (
 )
 
 const (
-	retryPersistenceOperationInitialInterval = 50 * time.Millisecond
-	// TODO: Just minimizing for demo from 10 * time.second to time.second
-	retryPersistenceOperationMaxInterval        = time.Second
-	retryPersistenceOperationExpirationInterval = 10 * time.Second
+	retryPersistenceOperationInitialInterval    = 50 * time.Millisecond
+	retryPersistenceOperationMaxInterval        = 10 * time.Second
+	retryPersistenceOperationExpirationInterval = 30 * time.Second
+
+	historyServiceOperationInitialInterval    = 50 * time.Millisecond
+	historyServiceOperationMaxInterval        = 10 * time.Second
+	historyServiceOperationExpirationInterval = 30 * time.Second
 )
 
 // MergeDictoRight copies the contents of src to dest
@@ -63,6 +66,15 @@ func CreatePersistanceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
 	policy.SetMaximumInterval(retryPersistenceOperationMaxInterval)
 	policy.SetExpirationInterval(retryPersistenceOperationExpirationInterval)
+
+	return policy
+}
+
+// CreateHistoryServiceRetryPolicy creates a retry policy for calls to history service
+func CreateHistoryServiceRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(historyServiceOperationInitialInterval)
+	policy.SetMaximumInterval(historyServiceOperationMaxInterval)
+	policy.SetExpirationInterval(historyServiceOperationExpirationInterval)
 
 	return policy
 }

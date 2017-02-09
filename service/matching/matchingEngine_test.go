@@ -45,6 +45,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 	//l.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(l)
 	// Get pprof HTTP UI at http://localhost:6060/debug/pprof/
+	// Add the following import _ "net/http/pprof"
 	//go func() {
 	//	log.Println(http.ListenAndServe("localhost:6060", nil))
 	//}()
@@ -201,9 +202,9 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 
 			err = s.matchingEngine.AddDecisionTask(&addRequest)
 		}
-		s.Assert().NoError(err)
+		s.NoError(err)
 	}
-	s.Assert().EqualValues(taskCount, ttm.getTaskCount(&taskListID{taskListName: tl, taskType: taskType}))
+	s.EqualValues(taskCount, ttm.getTaskCount(&taskListID{taskListName: tl, taskType: taskType}))
 
 }
 
@@ -237,9 +238,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			TaskList:   taskList}
 
 		err := s.matchingEngine.AddActivityTask(&addRequest)
-		s.Assert().NoError(err)
+		s.NoError(err)
 	}
-	s.Assert().EqualValues(taskCount, ttm.getTaskCount(tlID))
+	s.EqualValues(taskCount, ttm.getTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -296,13 +297,118 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(taskToken, result.TaskToken)
 		i++
 	}
-	s.Assert().EqualValues(0, ttm.getTaskCount(tlID))
+	s.EqualValues(0, ttm.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.Assert().True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+}
+
+func (s *matchingEngineSuite) TestSyncMatchActivities() {
+	s.matchingEngine.longPollExpirationInterval = 1 * time.Minute
+
+	runID := "run1"
+	workflowID := "workflow1"
+	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+
+	const taskCount = 10
+	const initialRangeID = 102
+	// TODO: Understand why publish is low when rangeSize is 3
+	const rangeSize = 30
+
+	tl := "makeToast"
+	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	ttm := newTestTaskManager(s.logger)
+	ttm.getTaskListManager(tlID).rangeID = initialRangeID
+	s.matchingEngine.taskManager = ttm
+	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+	activityTypeName := "activity1"
+	activityID := "activityId1"
+	activityType := &workflow.ActivityType{Name: &activityTypeName}
+	activityInput := []byte("Activity1 Input")
+
+	var startedID int64 = 123456
+	identity := "nobody"
+
+	// History service is using mock
+	s.historyClient.On("RecordActivityTaskStarted",
+		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
+		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
+			return &gohistory.RecordActivityTaskStartedResponse{
+				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
+					&workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:   &activityID,
+						TaskList:     &workflow.TaskList{Name: taskList.Name},
+						ActivityType: activityType,
+						Input:        activityInput,
+					}),
+				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
+					TaskList: &workflow.TaskList{Name: taskList.Name},
+					Identity: &identity,
+				})}
+		}, nil)
+
+	for i := int64(0); i < taskCount; i++ {
+		scheduleID := i * 3
+
+		var wg sync.WaitGroup
+
+		var result *workflow.PollForActivityTaskResponse
+		var pollErr error
+		wg.Add(1)
+		go func() {
+			result, pollErr = s.matchingEngine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+				TaskList: taskList,
+				Identity: &identity})
+			wg.Done()
+		}()
+		time.Sleep(50 * time.Millisecond)
+		addRequest := matching.AddActivityTaskRequest{
+			Execution:  &workflowExecution,
+			ScheduleId: &scheduleID,
+			TaskList:   taskList}
+		err := s.matchingEngine.AddActivityTask(&addRequest)
+		s.NoError(err)
+
+		wg.Wait()
+
+		s.NoError(pollErr)
+		s.NotNil(result)
+		if len(result.TaskToken) == 0 {
+			s.logger.Debugf("empty poll returned")
+			continue
+		}
+		s.EqualValues(activityID, *result.ActivityId)
+		s.EqualValues(activityType, result.ActivityType)
+		s.EqualValues(activityInput, result.Input)
+		s.EqualValues(startedID, *result.StartedEventId)
+		s.EqualValues(workflowExecution, *result.WorkflowExecution)
+		token := &common.TaskToken{
+			WorkflowID: workflowID,
+			RunID:      runID,
+			ScheduleID: scheduleID,
+		}
+
+		taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+		//s.EqualValues(scheduleID, result.TaskToken)
+
+		s.EqualValues(string(taskToken), string(result.TaskToken))
+
+	}
+	s.EqualValues(0, ttm.getCreateTaskCount(tlID)) // Not tasks stored in persistence
+	s.EqualValues(0, ttm.getTaskCount(tlID))
+	expectedRange := int64(initialRangeID + taskCount/rangeSize)
+	if taskCount%rangeSize > 0 {
+		expectedRange++
+	}
+	// Due to conflicts some ids are skipped and more real ranges are used.
+	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
@@ -311,7 +417,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
 	const workerCount = 20
-	const taskCount = 100
+	const taskCount = 1000
 	const initialRangeID = 0
 	const rangeSize = 3
 	var scheduleID int64 = 123
@@ -410,13 +516,16 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		}()
 	}
 	wg.Wait()
-	s.Assert().EqualValues(0, ttm.getTaskCount(tlID))
-	expectedRange := int64(initialRangeID + taskCount*workerCount/rangeSize)
-	if (taskCount*taskCount)%rangeSize > 0 {
+	totalTasks := taskCount * workerCount
+	s.EqualValues(0, ttm.getTaskCount(tlID))
+	persisted := ttm.getCreateTaskCount(tlID)
+	s.True(persisted < totalTasks)
+	expectedRange := int64(initialRangeID + persisted/rangeSize)
+	if persisted%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.Assert().True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
 
 }
 
@@ -426,7 +535,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
 	const workerCount = 20
-	const taskCount = 100
+	const taskCount = 1000
 	const initialRangeID = 0
 	const rangeSize = 5
 	var scheduleID int64 = 123
@@ -532,14 +641,16 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		}()
 	}
 	wg.Wait()
-	s.Assert().EqualValues(0, ttm.getTaskCount(tlID))
-	expectedRange := int64(initialRangeID + taskCount*workerCount/rangeSize)
-	if (taskCount*taskCount)%rangeSize > 0 {
+	s.EqualValues(0, ttm.getTaskCount(tlID))
+	totalTasks := taskCount * workerCount
+	persisted := ttm.getCreateTaskCount(tlID)
+	s.True(persisted < totalTasks)
+	expectedRange := int64(initialRangeID + persisted/rangeSize)
+	if persisted%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.Assert().True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
-
+	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
 }
 
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
@@ -607,9 +718,10 @@ func (m *testTaskManager) getTaskListManager(id *taskListID) *testTaskListManage
 
 type testTaskListManager struct {
 	sync.Mutex
-	rangeID  int64
-	ackLevel int64
-	tasks    *treemap.Map
+	rangeID         int64
+	ackLevel        int64
+	createTaskCount int
+	tasks           *treemap.Map
 }
 
 func Int64Comparator(a, b interface{}) int {
@@ -691,6 +803,7 @@ func (m *testTaskManager) CreateTask(request *persistence.CreateTaskRequest) (*p
 	tlm.Lock()
 	defer tlm.Unlock()
 
+	tlm.createTaskCount++
 	if tlm.rangeID != request.RangeID {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
@@ -739,10 +852,18 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	}, nil
 }
 
-// GetTasks provides a mock function with given fields: request
+// getTaskCount returns number of tasks in a task list
 func (m *testTaskManager) getTaskCount(taskList *taskListID) int {
 	tlm := m.getTaskListManager(taskList)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.tasks.Size()
+}
+
+// getCreateTaskCount returns how many times CreateTask was called
+func (m *testTaskManager) getCreateTaskCount(taskList *taskListID) int {
+	tlm := m.getTaskListManager(taskList)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.createTaskCount
 }
