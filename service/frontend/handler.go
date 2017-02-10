@@ -124,7 +124,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	err := wh.history.RespondDecisionTaskCompleted(completeRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
-		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
+		logger.Errorf("RespondDecisionTaskCompleted. Error: %v", err)
 	}
 	return err
 }
