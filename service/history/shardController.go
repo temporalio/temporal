@@ -43,6 +43,7 @@ type (
 		shardMgr            persistence.ShardManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		engineFactory       EngineFactory
+		host                *membership.HostInfo
 		logger              bark.Logger
 
 		sync.RWMutex
@@ -70,12 +71,13 @@ func newShardController(numberOfShards int, host *membership.HostInfo, resolver 
 }
 
 func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	factory EngineFactory, logger bark.Logger) *historyShardsItem {
+	factory EngineFactory, host *membership.HostInfo, logger bark.Logger) *historyShardsItem {
 	return &historyShardsItem{
 		shardID:             shardID,
 		shardMgr:            shardMgr,
 		executionMgrFactory: executionMgrFactory,
 		engineFactory:       factory,
+		host:                host,
 		logger:              logger,
 	}
 }
@@ -157,7 +159,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 
 	if info.Identity() == c.host.Identity() {
 		c.logger.Infof("Creating new history shard item.  Host: %v, ShardID: %v", info.Identity(), shardID)
-		shardItem := newHistoryShardsItem(shardID, c.shardMgr, c.executionMgrFactory, c.engineFactory, c.logger)
+		shardItem := newHistoryShardsItem(shardID, c.shardMgr, c.executionMgrFactory, c.engineFactory, c.host, c.logger)
 		c.historyShards[shardID] = shardItem
 		return shardItem, nil
 	}
@@ -255,7 +257,7 @@ func (i *historyShardsItem) getOrCreateEngine() (Engine, error) {
 		return nil, err
 	}
 
-	context, err := acquireShard(i.shardID, i.shardMgr, executionMgr, i.logger)
+	context, err := acquireShard(i.shardID, i.shardMgr, executionMgr, i.host.Identity(), i.logger)
 	if err != nil {
 		return nil, err
 	}

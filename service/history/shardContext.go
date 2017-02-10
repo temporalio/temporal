@@ -72,7 +72,7 @@ func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
 }
 
 func acquireShard(shardID int, shardManager persistence.ShardManager, executionMgr persistence.ExecutionManager,
-	logger bark.Logger) (ShardContext, error) {
+	owner string, logger bark.Logger) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -82,6 +82,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, executionM
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.RangeID++
 	updatedShardInfo.StolenSinceRenew++
+	updatedShardInfo.Owner = owner
 
 	err1 := shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
