@@ -76,12 +76,12 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
-	err, resp := wh.matching.PollForDecisionTask(pollRequest)
+	resp, err := wh.matching.PollForDecisionTask(pollRequest)
 	if err != nil {
 		wh.Service.GetLogger().Errorf(
 			"PollForDecisionTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
 	}
-	return err, resp
+	return resp, err
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
