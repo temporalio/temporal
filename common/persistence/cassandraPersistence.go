@@ -682,6 +682,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	currentTimestamp := time.Now()
 
+	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -689,7 +690,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 		rowTypeTransferRunID,
 		request.ReadLevel,
 		request.MaxReadLevel,
-		request.BatchSize).Consistency(d.lowConslevel)
+		request.BatchSize)
 
 	iter := query.Iter()
 	if iter == nil {
@@ -947,13 +948,15 @@ func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResp
 	if request.ReadLevel > request.MaxReadLevel {
 		return &GetTasksResponse{}, nil
 	}
+
+	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
 		request.TaskList,
 		request.TaskType,
 		rowTypeTask,
 		request.ReadLevel,
 		request.MaxReadLevel,
-		request.BatchSize).Consistency(d.lowConslevel)
+		request.BatchSize)
 
 	iter := query.Iter()
 	if iter == nil {
@@ -1032,13 +1035,14 @@ func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error 
 }
 
 func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
+	// Reading timer tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		request.MinKey,
-		request.MaxKey).Consistency(d.lowConslevel)
+		request.MaxKey)
 
 	iter := query.Iter()
 	if iter == nil {
