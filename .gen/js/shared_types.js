@@ -3016,12 +3016,16 @@ StartWorkflowExecutionResponse.prototype.write = function(output) {
 var PollForDecisionTaskRequest = module.exports.PollForDecisionTaskRequest = function(args) {
   this.taskList = null;
   this.identity = null;
+  this.requestId = null;
   if (args) {
     if (args.taskList !== undefined && args.taskList !== null) {
       this.taskList = new ttypes.TaskList(args.taskList);
     }
     if (args.identity !== undefined && args.identity !== null) {
       this.identity = args.identity;
+    }
+    if (args.requestId !== undefined && args.requestId !== null) {
+      this.requestId = args.requestId;
     }
   }
 };
@@ -3054,6 +3058,13 @@ PollForDecisionTaskRequest.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 30:
+      if (ftype == Thrift.Type.STRING) {
+        this.requestId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -3073,6 +3084,11 @@ PollForDecisionTaskRequest.prototype.write = function(output) {
   if (this.identity !== null && this.identity !== undefined) {
     output.writeFieldBegin('identity', Thrift.Type.STRING, 20);
     output.writeString(this.identity);
+    output.writeFieldEnd();
+  }
+  if (this.requestId !== null && this.requestId !== undefined) {
+    output.writeFieldBegin('requestId', Thrift.Type.STRING, 30);
+    output.writeString(this.requestId);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -3337,12 +3353,16 @@ RespondDecisionTaskCompletedRequest.prototype.write = function(output) {
 var PollForActivityTaskRequest = module.exports.PollForActivityTaskRequest = function(args) {
   this.taskList = null;
   this.identity = null;
+  this.requestId = null;
   if (args) {
     if (args.taskList !== undefined && args.taskList !== null) {
       this.taskList = new ttypes.TaskList(args.taskList);
     }
     if (args.identity !== undefined && args.identity !== null) {
       this.identity = args.identity;
+    }
+    if (args.requestId !== undefined && args.requestId !== null) {
+      this.requestId = args.requestId;
     }
   }
 };
@@ -3375,6 +3395,13 @@ PollForActivityTaskRequest.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 30:
+      if (ftype == Thrift.Type.STRING) {
+        this.requestId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -3394,6 +3421,11 @@ PollForActivityTaskRequest.prototype.write = function(output) {
   if (this.identity !== null && this.identity !== undefined) {
     output.writeFieldBegin('identity', Thrift.Type.STRING, 20);
     output.writeString(this.identity);
+    output.writeFieldEnd();
+  }
+  if (this.requestId !== null && this.requestId !== undefined) {
+    output.writeFieldBegin('requestId', Thrift.Type.STRING, 30);
+    output.writeString(this.requestId);
     output.writeFieldEnd();
   }
   output.writeFieldStop();

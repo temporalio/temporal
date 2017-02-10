@@ -248,6 +248,7 @@ struct StartWorkflowExecutionResponse {
 struct PollForDecisionTaskRequest {
   10: optional TaskList taskList
   20: optional string identity
+  30: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.
 }
 
 struct PollForDecisionTaskResponse {
@@ -269,6 +270,7 @@ struct RespondDecisionTaskCompletedRequest {
 struct PollForActivityTaskRequest {
   10: optional TaskList taskList
   20: optional string identity
+  30: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.
 }
 
 struct PollForActivityTaskResponse {
