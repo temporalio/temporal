@@ -170,7 +170,8 @@ func (e *matchingEngineImpl) getTaskListContext(taskList *taskListID) (*taskList
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
 	taskListName := addRequest.GetTaskList().GetName()
-	e.logger.Debugf("Received AddDecisionTask for taskList=%v", addRequest.TaskList.Name)
+	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v",
+		addRequest.TaskList.Name, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(taskListName, persistence.TaskListTypeDecision)
 	t, err := e.getTaskListContext(taskList)
 	if err != nil {
@@ -212,7 +213,8 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
 	taskListName := addRequest.GetTaskList().GetName()
-	e.logger.Debugf("Received AddActivityTask for taskList=%v", taskListName)
+	e.logger.Debugf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
+		taskListName, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(taskListName, persistence.TaskListTypeActivity)
 	t, err := e.getTaskListContext(taskList)
 	if err != nil {
