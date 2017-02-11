@@ -75,10 +75,7 @@ const (
 		`task_id: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
-		`schedule_id: ?, ` +
-		`visibility_time: ?, ` +
-		`lock_token: ?, ` +
-		`delivery_count: ?` +
+		`schedule_id: ?` +
 		`}`
 
 	templateTimerTaskType = `{` +
@@ -149,12 +146,12 @@ const (
 		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, transfer, task_id, lock_token) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTransferTaskType + `, ?, ?)`
+		`shard_id, type, workflow_id, run_id, transfer, task_id) ` +
+		`VALUES(?, ?, ?, ?, ` + templateTransferTaskType + `, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, timer, task_id, lock_token) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTimerTaskType + `, ?, ?)`
+		`shard_id, type, workflow_id, run_id, timer, task_id) ` +
+		`VALUES(?, ?, ?, ?, ` + templateTimerTaskType + `, ?)`
 
 	templateUpdateLeaseQuery = `UPDATE executions ` +
 		`SET range_id = ? ` +
@@ -241,15 +238,6 @@ const (
 		`and run_id = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ? LIMIT ?`
-
-	templateUpdateTransferTaskQuery = `UPDATE executions ` +
-		`SET transfer = ` + templateTransferTaskType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
 
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -680,7 +668,6 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 }
 
 func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
-	currentTimestamp := time.Now()
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTransferTasksQuery,
@@ -701,56 +688,11 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 
 	response := &GetTransferTasksResponse{}
 	task := make(map[string]interface{})
-PopulateTasks:
 	for iter.MapScan(task) {
 		t := createTransferTaskInfo(task["transfer"].(map[string]interface{}))
 		// Reset task map to get it ready for next scan
 		task = make(map[string]interface{})
 
-		newCQLVisibilityTime := common.UnixNanoToCQLTimestamp(currentTimestamp.UnixNano())
-		newLockToken := uuid.New()
-		newDeliveryCount := t.DeliveryCount + 1
-
-		lockQuery := d.session.Query(templateUpdateTransferTaskQuery,
-			t.WorkflowID,
-			t.RunID,
-			t.TaskID,
-			t.TaskList,
-			t.TaskType,
-			t.ScheduleID,
-			newCQLVisibilityTime,
-			newLockToken,
-			newDeliveryCount,
-			d.shardID,
-			rowTypeTransferTask,
-			rowTypeTransferWorkflowID,
-			rowTypeTransferRunID,
-			t.TaskID,
-			request.RangeID)
-
-		previous := make(map[string]interface{})
-		applied, err1 := lockQuery.MapScanCAS(previous)
-		if err1 != nil {
-			// TODO: log on failure to acquire lock
-			continue PopulateTasks
-		}
-
-		if !applied {
-			var columns []string
-			for k, v := range previous {
-				columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-			}
-
-			rangeID := previous["range_id"].(int64)
-			return nil, &ConditionFailedError{
-				Msg: fmt.Sprintf("Update transfer task failed. Request rangeID: %v, Actual rangeID: %v, columns: (%v)",
-					rangeID, request.RangeID, strings.Join(columns, ",")),
-			}
-		}
-
-		t.VisibilityTime = currentTimestamp
-		t.LockToken = newLockToken
-		t.DeliveryCount = newDeliveryCount
 		response.Tasks = append(response.Tasks, t)
 	}
 
@@ -1141,7 +1083,6 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			scheduleID = task.(*DecisionTask).ScheduleID
 		}
 
-		lockToken := uuid.New()
 		batch.Query(templateCreateTransferTaskQuery,
 			d.shardID,
 			rowTypeTransferTask,
@@ -1153,11 +1094,7 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			taskList,
 			task.GetType(),
 			scheduleID,
-			cqlNowTimestamp,
-			lockToken,
-			0,
-			task.GetTaskID(),
-			lockToken)
+			task.GetTaskID())
 	}
 }
 
@@ -1167,7 +1104,6 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 	for _, task := range timerTasks {
 		var eventID int64
 
-		lockToken := uuid.New()
 		timeoutType := 0
 
 		switch task.GetType() {
@@ -1193,8 +1129,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 			task.GetType(),
 			timeoutType,
 			eventID,
-			task.GetTaskID(),
-			lockToken)
+			task.GetTaskID())
 	}
 
 	if deleteTimerTask != nil {
@@ -1340,12 +1275,6 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.TaskType = v.(int)
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
-		case "visibility_time":
-			info.VisibilityTime = v.(time.Time)
-		case "lock_token":
-			info.LockToken = v.(gocql.UUID).String()
-		case "delivery_count":
-			info.DeliveryCount = v.(int)
 		}
 	}
 

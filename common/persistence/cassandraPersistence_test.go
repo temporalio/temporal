@@ -193,7 +193,6 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 }
 
 func (s *cassandraPersistenceSuite) TestTransferTasks() {
-	startTime := time.Now()
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-test"),
 		RunId: common.StringPtr("93c87aff-ed89-4ecb-b0fd-d5d1e25dc46d")}
 
@@ -211,9 +210,6 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Equal("queue1", task1.TaskList)
 	s.Equal(TaskListTypeDecision, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
-	s.NotNil(task1.LockToken)
-	s.True(task1.VisibilityTime.Before(startTime.Add(10 * time.Minute)))
-	s.Equal(1, task1.DeliveryCount)
 
 	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
 	s.Nil(err3)
