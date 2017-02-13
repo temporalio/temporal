@@ -10,6 +10,7 @@ struct RecordActivityTaskStartedRequest {
   10: optional shared.WorkflowExecution workflowExecution
   20: optional i64 (js.type = "Long") scheduleId
   30: optional i64 (js.type = "Long") taskId
+  35: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.
   40: optional shared.PollForActivityTaskRequest pollRequest
 }
 
@@ -22,6 +23,7 @@ struct RecordDecisionTaskStartedRequest {
   10: optional shared.WorkflowExecution workflowExecution
   20: optional i64 (js.type = "Long") scheduleId
   30: optional i64 (js.type = "Long") taskId
+  35: optional string requestId // Unique id of each poll request. Used to ensure at most once delivery of tasks.
   40: optional shared.PollForDecisionTaskRequest pollRequest
 }
 

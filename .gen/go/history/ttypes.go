@@ -123,6 +123,7 @@ func (p *EventAlreadyStartedError) Error() string {
 //  - WorkflowExecution
 //  - ScheduleId
 //  - TaskId
+//  - RequestId
 //  - PollRequest
 type RecordActivityTaskStartedRequest struct {
 	// unused fields # 1 to 9
@@ -131,7 +132,9 @@ type RecordActivityTaskStartedRequest struct {
 	ScheduleId *int64 `thrift:"scheduleId,20" db:"scheduleId" json:"scheduleId,omitempty"`
 	// unused fields # 21 to 29
 	TaskId *int64 `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
-	// unused fields # 31 to 39
+	// unused fields # 31 to 34
+	RequestId *string `thrift:"requestId,35" db:"requestId" json:"requestId,omitempty"`
+	// unused fields # 36 to 39
 	PollRequest *shared.PollForActivityTaskRequest `thrift:"pollRequest,40" db:"pollRequest" json:"pollRequest,omitempty"`
 }
 
@@ -166,6 +169,15 @@ func (p *RecordActivityTaskStartedRequest) GetTaskId() int64 {
 	return *p.TaskId
 }
 
+var RecordActivityTaskStartedRequest_RequestId_DEFAULT string
+
+func (p *RecordActivityTaskStartedRequest) GetRequestId() string {
+	if !p.IsSetRequestId() {
+		return RecordActivityTaskStartedRequest_RequestId_DEFAULT
+	}
+	return *p.RequestId
+}
+
 var RecordActivityTaskStartedRequest_PollRequest_DEFAULT *shared.PollForActivityTaskRequest
 
 func (p *RecordActivityTaskStartedRequest) GetPollRequest() *shared.PollForActivityTaskRequest {
@@ -184,6 +196,10 @@ func (p *RecordActivityTaskStartedRequest) IsSetScheduleId() bool {
 
 func (p *RecordActivityTaskStartedRequest) IsSetTaskId() bool {
 	return p.TaskId != nil
+}
+
+func (p *RecordActivityTaskStartedRequest) IsSetRequestId() bool {
+	return p.RequestId != nil
 }
 
 func (p *RecordActivityTaskStartedRequest) IsSetPollRequest() bool {
@@ -214,6 +230,10 @@ func (p *RecordActivityTaskStartedRequest) Read(iprot thrift.TProtocol) error {
 			}
 		case 30:
 			if err := p.ReadField30(iprot); err != nil {
+				return err
+			}
+		case 35:
+			if err := p.ReadField35(iprot); err != nil {
 				return err
 			}
 		case 40:
@@ -261,6 +281,15 @@ func (p *RecordActivityTaskStartedRequest) ReadField30(iprot thrift.TProtocol) e
 	return nil
 }
 
+func (p *RecordActivityTaskStartedRequest) ReadField35(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadString(); err != nil {
+		return thrift.PrependError("error reading field 35: ", err)
+	} else {
+		p.RequestId = &v
+	}
+	return nil
+}
+
 func (p *RecordActivityTaskStartedRequest) ReadField40(iprot thrift.TProtocol) error {
 	p.PollRequest = &shared.PollForActivityTaskRequest{}
 	if err := p.PollRequest.Read(iprot); err != nil {
@@ -280,6 +309,9 @@ func (p *RecordActivityTaskStartedRequest) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField30(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField35(oprot); err != nil {
 		return err
 	}
 	if err := p.writeField40(oprot); err != nil {
@@ -334,6 +366,21 @@ func (p *RecordActivityTaskStartedRequest) writeField30(oprot thrift.TProtocol) 
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:taskId: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *RecordActivityTaskStartedRequest) writeField35(oprot thrift.TProtocol) (err error) {
+	if p.IsSetRequestId() {
+		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 35); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 35:requestId: ", p), err)
+		}
+		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.requestId (35) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 35:requestId: ", p), err)
 		}
 	}
 	return err
@@ -513,6 +560,7 @@ func (p *RecordActivityTaskStartedResponse) String() string {
 //  - WorkflowExecution
 //  - ScheduleId
 //  - TaskId
+//  - RequestId
 //  - PollRequest
 type RecordDecisionTaskStartedRequest struct {
 	// unused fields # 1 to 9
@@ -521,7 +569,9 @@ type RecordDecisionTaskStartedRequest struct {
 	ScheduleId *int64 `thrift:"scheduleId,20" db:"scheduleId" json:"scheduleId,omitempty"`
 	// unused fields # 21 to 29
 	TaskId *int64 `thrift:"taskId,30" db:"taskId" json:"taskId,omitempty"`
-	// unused fields # 31 to 39
+	// unused fields # 31 to 34
+	RequestId *string `thrift:"requestId,35" db:"requestId" json:"requestId,omitempty"`
+	// unused fields # 36 to 39
 	PollRequest *shared.PollForDecisionTaskRequest `thrift:"pollRequest,40" db:"pollRequest" json:"pollRequest,omitempty"`
 }
 
@@ -556,6 +606,15 @@ func (p *RecordDecisionTaskStartedRequest) GetTaskId() int64 {
 	return *p.TaskId
 }
 
+var RecordDecisionTaskStartedRequest_RequestId_DEFAULT string
+
+func (p *RecordDecisionTaskStartedRequest) GetRequestId() string {
+	if !p.IsSetRequestId() {
+		return RecordDecisionTaskStartedRequest_RequestId_DEFAULT
+	}
+	return *p.RequestId
+}
+
 var RecordDecisionTaskStartedRequest_PollRequest_DEFAULT *shared.PollForDecisionTaskRequest
 
 func (p *RecordDecisionTaskStartedRequest) GetPollRequest() *shared.PollForDecisionTaskRequest {
@@ -574,6 +633,10 @@ func (p *RecordDecisionTaskStartedRequest) IsSetScheduleId() bool {
 
 func (p *RecordDecisionTaskStartedRequest) IsSetTaskId() bool {
 	return p.TaskId != nil
+}
+
+func (p *RecordDecisionTaskStartedRequest) IsSetRequestId() bool {
+	return p.RequestId != nil
 }
 
 func (p *RecordDecisionTaskStartedRequest) IsSetPollRequest() bool {
@@ -604,6 +667,10 @@ func (p *RecordDecisionTaskStartedRequest) Read(iprot thrift.TProtocol) error {
 			}
 		case 30:
 			if err := p.ReadField30(iprot); err != nil {
+				return err
+			}
+		case 35:
+			if err := p.ReadField35(iprot); err != nil {
 				return err
 			}
 		case 40:
@@ -651,6 +718,15 @@ func (p *RecordDecisionTaskStartedRequest) ReadField30(iprot thrift.TProtocol) e
 	return nil
 }
 
+func (p *RecordDecisionTaskStartedRequest) ReadField35(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadString(); err != nil {
+		return thrift.PrependError("error reading field 35: ", err)
+	} else {
+		p.RequestId = &v
+	}
+	return nil
+}
+
 func (p *RecordDecisionTaskStartedRequest) ReadField40(iprot thrift.TProtocol) error {
 	p.PollRequest = &shared.PollForDecisionTaskRequest{}
 	if err := p.PollRequest.Read(iprot); err != nil {
@@ -670,6 +746,9 @@ func (p *RecordDecisionTaskStartedRequest) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField30(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField35(oprot); err != nil {
 		return err
 	}
 	if err := p.writeField40(oprot); err != nil {
@@ -724,6 +803,21 @@ func (p *RecordDecisionTaskStartedRequest) writeField30(oprot thrift.TProtocol) 
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:taskId: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *RecordDecisionTaskStartedRequest) writeField35(oprot thrift.TProtocol) (err error) {
+	if p.IsSetRequestId() {
+		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 35); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 35:requestId: ", p), err)
+		}
+		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.requestId (35) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 35:requestId: ", p), err)
 		}
 	}
 	return err

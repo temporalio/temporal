@@ -194,7 +194,8 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
 	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
-	scheduleID := *request.ScheduleId
+	scheduleID := request.GetScheduleId()
+	requestID := request.GetRequestId()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -205,13 +206,32 @@ Update_History_Loop:
 
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
-		if isRunning, startedID := builder.isDecisionTaskRunning(scheduleID); !isRunning || startedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, *request.TaskId, scheduleID, startedID,
-				isRunning)
+		isRunning, startedEvent := builder.isDecisionTaskRunning(scheduleID)
+
+		if !isRunning {
+			// Looks like DecisionTask already completed as a result of another call.
+			// It is OK to drop the task at this point.
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, request.GetTaskId(), requestID,
+				scheduleID, emptyEventID, isRunning)
+
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
-		event := builder.AddDecisionTaskStartedEvent(scheduleID, request.PollRequest)
+		if startedEvent != nil {
+			// If decision is started as part of the current request scope then return a positive response
+			if startedEvent.GetDecisionTaskStartedEventAttributes().GetRequestId() == requestID {
+				return e.createRecordDecisionTaskStartedResponse(context, startedEvent), nil
+			}
+
+			// Looks like DecisionTask already started as a result of another call.
+			// It is OK to drop the task at this point.
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, request.GetTaskId(), requestID,
+				scheduleID, startedEvent.GetEventId(), isRunning)
+
+			return nil, &workflow.EntityNotExistsError{Message: "Decision task already started."}
+		}
+
+		event := builder.AddDecisionTaskStartedEvent(scheduleID, requestID, request.PollRequest)
 		if event == nil {
 			// Let's retry and see if the decision still exist.
 			continue Update_History_Loop
@@ -241,35 +261,53 @@ Update_History_Loop:
 func (e *historyEngineImpl) RecordActivityTaskStarted(
 	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
 	context := newWorkflowExecutionContext(e, *request.WorkflowExecution)
-	scheduleID := *request.ScheduleId
+	scheduleID := request.GetScheduleId()
+	requestID := request.GetRequestId()
 
+	var builder *historyBuilder
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowMutableState()
-		if err1 != nil {
-			return nil, err1
+		msBuilder, err0 := context.loadWorkflowMutableState()
+		if err0 != nil {
+			return nil, err0
 		}
 
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		isRunning, ai := msBuilder.isActivityRunning(scheduleID)
 		if !isRunning {
-			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), scheduleID, emptyEventID,
-				isRunning)
-			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
-		}
-		if ai.StartedID != emptyEventID {
-			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), scheduleID, ai.StartedID,
-				isRunning)
+			// Looks like ActivityTask already completed as a result of another call.
+			// It is OK to drop the task at this point.
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), requestID,
+				scheduleID, emptyEventID, isRunning)
+
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
-		builder, err1 := context.loadWorkflowExecution()
+		if ai.StartedID != emptyEventID {
+			// If activity is started as part of the current request scope then return a positive response
+			if builder != nil && ai.RequestID == requestID {
+				response := h.NewRecordActivityTaskStartedResponse()
+				response.StartedEvent = builder.GetEvent(ai.StartedID)
+				response.ScheduledEvent = builder.GetEvent(scheduleID)
+				return response, nil
+			}
+
+			// Looks like ActivityTask already started as a result of another call.
+			// It is OK to drop the task at this point.
+			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeActivity, request.GetTaskId(), requestID,
+				scheduleID, ai.StartedID, isRunning)
+
+			return nil, &workflow.EntityNotExistsError{Message: "Activity task already started."}
+		}
+
+		var err1 error
+		builder, err1 = context.loadWorkflowExecution()
 		if err1 != nil {
 			return nil, err1
 		}
 
-		event := builder.AddActivityTaskStartedEvent(scheduleID, request.PollRequest)
+		event := builder.AddActivityTaskStartedEvent(scheduleID, requestID, request.PollRequest)
 		if event == nil {
 			// Let's retry and see if the activity still exist.
 			continue Update_History_Loop
@@ -289,9 +327,11 @@ Update_History_Loop:
 		}
 		if start2HeartBeatTimeoutTask != nil {
 			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
-			ai.StartedID = event.GetEventId()
-			msBuilder.UpdatePendingActivity(scheduleID, ai)
 		}
+
+		ai.StartedID = event.GetEventId()
+		ai.RequestID = requestID
+		msBuilder.UpdatePendingActivity(scheduleID, ai)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operationi again.
@@ -339,11 +379,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		isRunning, startedID := builder.isDecisionTaskRunning(scheduleID)
-		if !isRunning || startedID == emptyEventID {
+		isRunning, startedEvent := builder.isDecisionTaskRunning(scheduleID)
+		if !isRunning || startedEvent == nil {
 			return &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
+		startedID := startedEvent.GetEventId()
 		completedEvent := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request)
 		completedID := completedEvent.GetEventId()
 		isComplete := false
@@ -473,11 +514,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		isRunning, startedID := builder.isActivityTaskRunning(scheduleID)
-		if !isRunning || startedID == emptyEventID {
+		isRunning, startedEvent := builder.isActivityTaskRunning(scheduleID)
+		if !isRunning || startedEvent == nil {
 			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
+		startedID := startedEvent.GetEventId()
 		if builder.AddActivityTaskCompletedEvent(scheduleID, startedID, request) == nil {
 			// Let's retry and see if the activity still exist.
 			continue Update_History_Loop
@@ -540,11 +582,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
-		isRunning, startedID := builder.isActivityTaskRunning(scheduleID)
-		if !isRunning || startedID == emptyEventID {
+		isRunning, startedEvent := builder.isActivityTaskRunning(scheduleID)
+		if !isRunning || startedEvent == nil {
 			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
+		startedID := startedEvent.GetEventId()
 		if builder.AddActivityTaskFailedEvent(scheduleID, startedID, request) == nil {
 			// Let's retry and see if the activity still exist.
 			continue Update_History_Loop
@@ -885,17 +928,4 @@ func (t *pendingTaskTracker) completeTask(taskID int64) {
 	if updatedMin != -1 {
 		t.txProcessor.UpdateMaxAllowedReadLevel(updatedMin)
 	}
-}
-
-// PrintHistory prints history
-func PrintHistory(history *workflow.History, logger bark.Logger) {
-	serializer := newJSONHistorySerializer()
-	data, err := serializer.Serialize(history.GetEvents())
-	if err != nil {
-		logger.Errorf("Error serializing history: %v\n", err)
-	}
-
-	logger.Info("******************************************")
-	logger.Infof("History: %v", string(data))
-	logger.Info("******************************************")
 }

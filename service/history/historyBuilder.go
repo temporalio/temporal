@@ -82,14 +82,24 @@ func (b *historyBuilder) Serialize() ([]byte, error) {
 	return history, err
 }
 
-func (b *historyBuilder) isActivityTaskRunning(scheduleID int64) (bool, int64) {
+func (b *historyBuilder) isActivityTaskRunning(scheduleID int64) (bool, *workflow.HistoryEvent) {
 	startedID, ok := b.outstandingActivities[scheduleID]
-	return ok, startedID
+	if ok && startedID != emptyEventID {
+		startedEvent := b.GetEvent(startedID)
+		return ok, startedEvent
+	}
+
+	return ok, nil
 }
 
-func (b *historyBuilder) isDecisionTaskRunning(scheduleID int64) (bool, int64) {
+func (b *historyBuilder) isDecisionTaskRunning(scheduleID int64) (bool, *workflow.HistoryEvent) {
 	startedID, ok := b.outstandingDecisionTask[scheduleID]
-	return ok, startedID
+	if ok && startedID != emptyEventID {
+		startedEvent := b.GetEvent(startedID)
+		return ok, startedEvent
+	}
+
+	return ok, nil
 }
 
 func (b *historyBuilder) isTimerTaskRunning(startedID int64) (bool, string) {
@@ -146,9 +156,9 @@ func (b *historyBuilder) AddDecisionTaskScheduledEvent(taskList string,
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64,
+func (b *historyBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string,
 	request *workflow.PollForDecisionTaskRequest) *workflow.HistoryEvent {
-	event := newDecisionTaskStartedEvent(b.nextEventID, scheduleEventID, request)
+	event := newDecisionTaskStartedEvent(b.nextEventID, scheduleEventID, requestID, request)
 
 	return b.addEventToHistory(event)
 }
@@ -174,9 +184,9 @@ func (b *historyBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddActivityTaskStartedEvent(scheduleEventID int64,
+func (b *historyBuilder) AddActivityTaskStartedEvent(scheduleEventID int64, requestID string,
 	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
-	event := newActivityTaskStartedEvent(b.nextEventID, scheduleEventID, request)
+	event := newActivityTaskStartedEvent(b.nextEventID, scheduleEventID, requestID, request)
 
 	return b.addEventToHistory(event)
 }
@@ -425,12 +435,13 @@ func newDecisionTaskScheduledEvent(eventID int64, taskList string,
 	return historyEvent
 }
 
-func newDecisionTaskStartedEvent(eventID, scheduledEventID int64,
+func newDecisionTaskStartedEvent(eventID, scheduledEventID int64, requestID string,
 	request *workflow.PollForDecisionTaskRequest) *workflow.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, workflow.EventType_DecisionTaskStarted)
 	attributes := workflow.NewDecisionTaskStartedEventAttributes()
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
 	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.RequestId = common.StringPtr(requestID)
 	historyEvent.DecisionTaskStartedEventAttributes = attributes
 
 	return historyEvent
@@ -478,12 +489,13 @@ func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID i
 	return historyEvent
 }
 
-func newActivityTaskStartedEvent(eventID, scheduledEventID int64,
+func newActivityTaskStartedEvent(eventID, scheduledEventID int64, requestID string,
 	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, workflow.EventType_ActivityTaskStarted)
 	attributes := workflow.NewActivityTaskStartedEventAttributes()
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
 	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.RequestId = common.StringPtr(requestID)
 	historyEvent.ActivityTaskStartedEventAttributes = attributes
 
 	return historyEvent

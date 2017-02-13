@@ -145,6 +145,7 @@ type (
 	ActivityInfo struct {
 		ScheduleID             int64
 		StartedID              int64
+		RequestID              string
 		Details                []byte
 		ScheduleToStartTimeout int32
 		ScheduleToCloseTimeout int32

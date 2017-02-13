@@ -417,9 +417,10 @@ Update_History_Loop:
 			clearTimerTask = &persistence.DecisionTimeoutTask{TaskID: timerTask.TaskID}
 
 			scheduleID := timerTask.EventID
-			isRunning, startedID := builder.isDecisionTaskRunning(scheduleID)
-			if isRunning && startedID != emptyEventID {
+			isRunning, startedEvent := builder.isDecisionTaskRunning(scheduleID)
+			if isRunning && startedEvent != nil {
 				// Add a decision task timeout event.
+				startedID := startedEvent.GetEventId()
 				builder.AddDecisionTaskTimedOutEvent(scheduleID, startedID)
 				scheduleNewDecision = true
 			}

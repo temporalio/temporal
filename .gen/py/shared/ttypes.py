@@ -2021,6 +2021,7 @@ class DecisionTaskStartedEventAttributes:
   Attributes:
    - scheduledEventId
    - identity
+   - requestId
   """
 
   thrift_spec = (
@@ -2045,11 +2046,22 @@ class DecisionTaskStartedEventAttributes:
     None, # 18
     None, # 19
     (20, TType.STRING, 'identity', unicode, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.STRING, 'requestId', unicode, None, ), # 30
   )
 
-  def __init__(self, scheduledEventId=None, identity=None,):
+  def __init__(self, scheduledEventId=None, identity=None, requestId=None,):
     self.scheduledEventId = scheduledEventId
     self.identity = identity
+    self.requestId = requestId
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -2070,6 +2082,11 @@ class DecisionTaskStartedEventAttributes:
           self.identity = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.STRING:
+          self.requestId = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -2088,6 +2105,10 @@ class DecisionTaskStartedEventAttributes:
       oprot.writeFieldBegin('identity', TType.STRING, 20)
       oprot.writeString(self.identity.encode('utf-8'))
       oprot.writeFieldEnd()
+    if self.requestId is not None:
+      oprot.writeFieldBegin('requestId', TType.STRING, 30)
+      oprot.writeString(self.requestId.encode('utf-8'))
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -2099,6 +2120,7 @@ class DecisionTaskStartedEventAttributes:
     value = 17
     value = (value * 31) ^ hash(self.scheduledEventId)
     value = (value * 31) ^ hash(self.identity)
+    value = (value * 31) ^ hash(self.requestId)
     return value
 
   def __repr__(self):
@@ -2627,6 +2649,7 @@ class ActivityTaskStartedEventAttributes:
   Attributes:
    - scheduledEventId
    - identity
+   - requestId
   """
 
   thrift_spec = (
@@ -2651,11 +2674,22 @@ class ActivityTaskStartedEventAttributes:
     None, # 18
     None, # 19
     (20, TType.STRING, 'identity', unicode, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.STRING, 'requestId', unicode, None, ), # 30
   )
 
-  def __init__(self, scheduledEventId=None, identity=None,):
+  def __init__(self, scheduledEventId=None, identity=None, requestId=None,):
     self.scheduledEventId = scheduledEventId
     self.identity = identity
+    self.requestId = requestId
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -2676,6 +2710,11 @@ class ActivityTaskStartedEventAttributes:
           self.identity = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.STRING:
+          self.requestId = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -2694,6 +2733,10 @@ class ActivityTaskStartedEventAttributes:
       oprot.writeFieldBegin('identity', TType.STRING, 20)
       oprot.writeString(self.identity.encode('utf-8'))
       oprot.writeFieldEnd()
+    if self.requestId is not None:
+      oprot.writeFieldBegin('requestId', TType.STRING, 30)
+      oprot.writeString(self.requestId.encode('utf-8'))
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -2705,6 +2748,7 @@ class ActivityTaskStartedEventAttributes:
     value = 17
     value = (value * 31) ^ hash(self.scheduledEventId)
     value = (value * 31) ^ hash(self.identity)
+    value = (value * 31) ^ hash(self.requestId)
     return value
 
   def __repr__(self):
@@ -4135,7 +4179,6 @@ class PollForDecisionTaskRequest:
   Attributes:
    - taskList
    - identity
-   - requestId
   """
 
   thrift_spec = (
@@ -4160,22 +4203,11 @@ class PollForDecisionTaskRequest:
     None, # 18
     None, # 19
     (20, TType.STRING, 'identity', unicode, None, ), # 20
-    None, # 21
-    None, # 22
-    None, # 23
-    None, # 24
-    None, # 25
-    None, # 26
-    None, # 27
-    None, # 28
-    None, # 29
-    (30, TType.STRING, 'requestId', unicode, None, ), # 30
   )
 
-  def __init__(self, taskList=None, identity=None, requestId=None,):
+  def __init__(self, taskList=None, identity=None,):
     self.taskList = taskList
     self.identity = identity
-    self.requestId = requestId
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -4197,11 +4229,6 @@ class PollForDecisionTaskRequest:
           self.identity = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
-      elif fid == 30:
-        if ftype == TType.STRING:
-          self.requestId = iprot.readString().decode('utf-8')
-        else:
-          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -4220,10 +4247,6 @@ class PollForDecisionTaskRequest:
       oprot.writeFieldBegin('identity', TType.STRING, 20)
       oprot.writeString(self.identity.encode('utf-8'))
       oprot.writeFieldEnd()
-    if self.requestId is not None:
-      oprot.writeFieldBegin('requestId', TType.STRING, 30)
-      oprot.writeString(self.requestId.encode('utf-8'))
-      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -4235,7 +4258,6 @@ class PollForDecisionTaskRequest:
     value = 17
     value = (value * 31) ^ hash(self.taskList)
     value = (value * 31) ^ hash(self.identity)
-    value = (value * 31) ^ hash(self.requestId)
     return value
 
   def __repr__(self):
@@ -4590,7 +4612,6 @@ class PollForActivityTaskRequest:
   Attributes:
    - taskList
    - identity
-   - requestId
   """
 
   thrift_spec = (
@@ -4615,22 +4636,11 @@ class PollForActivityTaskRequest:
     None, # 18
     None, # 19
     (20, TType.STRING, 'identity', unicode, None, ), # 20
-    None, # 21
-    None, # 22
-    None, # 23
-    None, # 24
-    None, # 25
-    None, # 26
-    None, # 27
-    None, # 28
-    None, # 29
-    (30, TType.STRING, 'requestId', unicode, None, ), # 30
   )
 
-  def __init__(self, taskList=None, identity=None, requestId=None,):
+  def __init__(self, taskList=None, identity=None,):
     self.taskList = taskList
     self.identity = identity
-    self.requestId = requestId
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -4652,11 +4662,6 @@ class PollForActivityTaskRequest:
           self.identity = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
-      elif fid == 30:
-        if ftype == TType.STRING:
-          self.requestId = iprot.readString().decode('utf-8')
-        else:
-          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -4675,10 +4680,6 @@ class PollForActivityTaskRequest:
       oprot.writeFieldBegin('identity', TType.STRING, 20)
       oprot.writeString(self.identity.encode('utf-8'))
       oprot.writeFieldEnd()
-    if self.requestId is not None:
-      oprot.writeFieldBegin('requestId', TType.STRING, 30)
-      oprot.writeString(self.requestId.encode('utf-8'))
-      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -4690,7 +4691,6 @@ class PollForActivityTaskRequest:
     value = 17
     value = (value * 31) ^ hash(self.taskList)
     value = (value * 31) ^ hash(self.identity)
-    value = (value * 31) ^ hash(self.requestId)
     return value
 
   def __repr__(self):

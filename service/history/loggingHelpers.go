@@ -84,10 +84,10 @@ func logPersistantStoreErrorEvent(logger bark.Logger, operation string, err erro
 	}).Errorf("Persistent store operation failure. Operation Details: %v", details)
 }
 
-func logDuplicateTaskEvent(logger bark.Logger, taskType int, taskID int64, scheduleID, startedID int64,
+func logDuplicateTaskEvent(lg bark.Logger, taskType int, taskID int64, requestID string, scheduleID, startedID int64,
 	isRunning bool) {
-	logger.WithFields(bark.Fields{
+	lg.WithFields(bark.Fields{
 		tagWorkflowEventID: duplicateTaskEventID,
-	}).Debugf("Potentially duplicate task.  TaskID: %v, TaskType: %v, scheduleID: %v, startedID: %v, isRunning: %v",
-		taskID, taskType, scheduleID, startedID, isRunning)
+	}).Debugf("Potentially duplicate task.  TaskID: %v, TaskType: %v, RequestID: %v, scheduleID: %v, startedID: %v, isRunning: %v",
+		taskID, taskType, requestID, scheduleID, startedID, isRunning)
 }

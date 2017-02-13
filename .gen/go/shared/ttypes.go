@@ -3393,11 +3393,14 @@ func (p *DecisionTaskScheduledEventAttributes) String() string {
 // Attributes:
 //  - ScheduledEventId
 //  - Identity
+//  - RequestId
 type DecisionTaskStartedEventAttributes struct {
 	// unused fields # 1 to 9
 	ScheduledEventId *int64 `thrift:"scheduledEventId,10" db:"scheduledEventId" json:"scheduledEventId,omitempty"`
 	// unused fields # 11 to 19
 	Identity *string `thrift:"identity,20" db:"identity" json:"identity,omitempty"`
+	// unused fields # 21 to 29
+	RequestId *string `thrift:"requestId,30" db:"requestId" json:"requestId,omitempty"`
 }
 
 func NewDecisionTaskStartedEventAttributes() *DecisionTaskStartedEventAttributes {
@@ -3421,12 +3424,25 @@ func (p *DecisionTaskStartedEventAttributes) GetIdentity() string {
 	}
 	return *p.Identity
 }
+
+var DecisionTaskStartedEventAttributes_RequestId_DEFAULT string
+
+func (p *DecisionTaskStartedEventAttributes) GetRequestId() string {
+	if !p.IsSetRequestId() {
+		return DecisionTaskStartedEventAttributes_RequestId_DEFAULT
+	}
+	return *p.RequestId
+}
 func (p *DecisionTaskStartedEventAttributes) IsSetScheduledEventId() bool {
 	return p.ScheduledEventId != nil
 }
 
 func (p *DecisionTaskStartedEventAttributes) IsSetIdentity() bool {
 	return p.Identity != nil
+}
+
+func (p *DecisionTaskStartedEventAttributes) IsSetRequestId() bool {
+	return p.RequestId != nil
 }
 
 func (p *DecisionTaskStartedEventAttributes) Read(iprot thrift.TProtocol) error {
@@ -3449,6 +3465,10 @@ func (p *DecisionTaskStartedEventAttributes) Read(iprot thrift.TProtocol) error 
 			}
 		case 20:
 			if err := p.ReadField20(iprot); err != nil {
+				return err
+			}
+		case 30:
+			if err := p.ReadField30(iprot); err != nil {
 				return err
 			}
 		default:
@@ -3484,6 +3504,15 @@ func (p *DecisionTaskStartedEventAttributes) ReadField20(iprot thrift.TProtocol)
 	return nil
 }
 
+func (p *DecisionTaskStartedEventAttributes) ReadField30(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadString(); err != nil {
+		return thrift.PrependError("error reading field 30: ", err)
+	} else {
+		p.RequestId = &v
+	}
+	return nil
+}
+
 func (p *DecisionTaskStartedEventAttributes) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("DecisionTaskStartedEventAttributes"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -3492,6 +3521,9 @@ func (p *DecisionTaskStartedEventAttributes) Write(oprot thrift.TProtocol) error
 		return err
 	}
 	if err := p.writeField20(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField30(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -3528,6 +3560,21 @@ func (p *DecisionTaskStartedEventAttributes) writeField20(oprot thrift.TProtocol
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 20:identity: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *DecisionTaskStartedEventAttributes) writeField30(oprot thrift.TProtocol) (err error) {
+	if p.IsSetRequestId() {
+		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 30); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:requestId: ", p), err)
+		}
+		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.requestId (30) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:requestId: ", p), err)
 		}
 	}
 	return err
@@ -4456,11 +4503,14 @@ func (p *ActivityTaskScheduledEventAttributes) String() string {
 // Attributes:
 //  - ScheduledEventId
 //  - Identity
+//  - RequestId
 type ActivityTaskStartedEventAttributes struct {
 	// unused fields # 1 to 9
 	ScheduledEventId *int64 `thrift:"scheduledEventId,10" db:"scheduledEventId" json:"scheduledEventId,omitempty"`
 	// unused fields # 11 to 19
 	Identity *string `thrift:"identity,20" db:"identity" json:"identity,omitempty"`
+	// unused fields # 21 to 29
+	RequestId *string `thrift:"requestId,30" db:"requestId" json:"requestId,omitempty"`
 }
 
 func NewActivityTaskStartedEventAttributes() *ActivityTaskStartedEventAttributes {
@@ -4484,12 +4534,25 @@ func (p *ActivityTaskStartedEventAttributes) GetIdentity() string {
 	}
 	return *p.Identity
 }
+
+var ActivityTaskStartedEventAttributes_RequestId_DEFAULT string
+
+func (p *ActivityTaskStartedEventAttributes) GetRequestId() string {
+	if !p.IsSetRequestId() {
+		return ActivityTaskStartedEventAttributes_RequestId_DEFAULT
+	}
+	return *p.RequestId
+}
 func (p *ActivityTaskStartedEventAttributes) IsSetScheduledEventId() bool {
 	return p.ScheduledEventId != nil
 }
 
 func (p *ActivityTaskStartedEventAttributes) IsSetIdentity() bool {
 	return p.Identity != nil
+}
+
+func (p *ActivityTaskStartedEventAttributes) IsSetRequestId() bool {
+	return p.RequestId != nil
 }
 
 func (p *ActivityTaskStartedEventAttributes) Read(iprot thrift.TProtocol) error {
@@ -4512,6 +4575,10 @@ func (p *ActivityTaskStartedEventAttributes) Read(iprot thrift.TProtocol) error 
 			}
 		case 20:
 			if err := p.ReadField20(iprot); err != nil {
+				return err
+			}
+		case 30:
+			if err := p.ReadField30(iprot); err != nil {
 				return err
 			}
 		default:
@@ -4547,6 +4614,15 @@ func (p *ActivityTaskStartedEventAttributes) ReadField20(iprot thrift.TProtocol)
 	return nil
 }
 
+func (p *ActivityTaskStartedEventAttributes) ReadField30(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadString(); err != nil {
+		return thrift.PrependError("error reading field 30: ", err)
+	} else {
+		p.RequestId = &v
+	}
+	return nil
+}
+
 func (p *ActivityTaskStartedEventAttributes) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("ActivityTaskStartedEventAttributes"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -4555,6 +4631,9 @@ func (p *ActivityTaskStartedEventAttributes) Write(oprot thrift.TProtocol) error
 		return err
 	}
 	if err := p.writeField20(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField30(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -4591,6 +4670,21 @@ func (p *ActivityTaskStartedEventAttributes) writeField20(oprot thrift.TProtocol
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 20:identity: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *ActivityTaskStartedEventAttributes) writeField30(oprot thrift.TProtocol) (err error) {
+	if p.IsSetRequestId() {
+		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 30); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:requestId: ", p), err)
+		}
+		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.requestId (30) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:requestId: ", p), err)
 		}
 	}
 	return err
@@ -7260,14 +7354,11 @@ func (p *StartWorkflowExecutionResponse) String() string {
 // Attributes:
 //  - TaskList
 //  - Identity
-//  - RequestId
 type PollForDecisionTaskRequest struct {
 	// unused fields # 1 to 9
 	TaskList *TaskList `thrift:"taskList,10" db:"taskList" json:"taskList,omitempty"`
 	// unused fields # 11 to 19
 	Identity *string `thrift:"identity,20" db:"identity" json:"identity,omitempty"`
-	// unused fields # 21 to 29
-	RequestId *string `thrift:"requestId,30" db:"requestId" json:"requestId,omitempty"`
 }
 
 func NewPollForDecisionTaskRequest() *PollForDecisionTaskRequest {
@@ -7291,25 +7382,12 @@ func (p *PollForDecisionTaskRequest) GetIdentity() string {
 	}
 	return *p.Identity
 }
-
-var PollForDecisionTaskRequest_RequestId_DEFAULT string
-
-func (p *PollForDecisionTaskRequest) GetRequestId() string {
-	if !p.IsSetRequestId() {
-		return PollForDecisionTaskRequest_RequestId_DEFAULT
-	}
-	return *p.RequestId
-}
 func (p *PollForDecisionTaskRequest) IsSetTaskList() bool {
 	return p.TaskList != nil
 }
 
 func (p *PollForDecisionTaskRequest) IsSetIdentity() bool {
 	return p.Identity != nil
-}
-
-func (p *PollForDecisionTaskRequest) IsSetRequestId() bool {
-	return p.RequestId != nil
 }
 
 func (p *PollForDecisionTaskRequest) Read(iprot thrift.TProtocol) error {
@@ -7332,10 +7410,6 @@ func (p *PollForDecisionTaskRequest) Read(iprot thrift.TProtocol) error {
 			}
 		case 20:
 			if err := p.ReadField20(iprot); err != nil {
-				return err
-			}
-		case 30:
-			if err := p.ReadField30(iprot); err != nil {
 				return err
 			}
 		default:
@@ -7370,15 +7444,6 @@ func (p *PollForDecisionTaskRequest) ReadField20(iprot thrift.TProtocol) error {
 	return nil
 }
 
-func (p *PollForDecisionTaskRequest) ReadField30(iprot thrift.TProtocol) error {
-	if v, err := iprot.ReadString(); err != nil {
-		return thrift.PrependError("error reading field 30: ", err)
-	} else {
-		p.RequestId = &v
-	}
-	return nil
-}
-
 func (p *PollForDecisionTaskRequest) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("PollForDecisionTaskRequest"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -7387,9 +7452,6 @@ func (p *PollForDecisionTaskRequest) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField20(oprot); err != nil {
-		return err
-	}
-	if err := p.writeField30(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -7426,21 +7488,6 @@ func (p *PollForDecisionTaskRequest) writeField20(oprot thrift.TProtocol) (err e
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 20:identity: ", p), err)
-		}
-	}
-	return err
-}
-
-func (p *PollForDecisionTaskRequest) writeField30(oprot thrift.TProtocol) (err error) {
-	if p.IsSetRequestId() {
-		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 30); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:requestId: ", p), err)
-		}
-		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T.requestId (30) field write error: ", p), err)
-		}
-		if err := oprot.WriteFieldEnd(); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:requestId: ", p), err)
 		}
 	}
 	return err
@@ -8042,14 +8089,11 @@ func (p *RespondDecisionTaskCompletedRequest) String() string {
 // Attributes:
 //  - TaskList
 //  - Identity
-//  - RequestId
 type PollForActivityTaskRequest struct {
 	// unused fields # 1 to 9
 	TaskList *TaskList `thrift:"taskList,10" db:"taskList" json:"taskList,omitempty"`
 	// unused fields # 11 to 19
 	Identity *string `thrift:"identity,20" db:"identity" json:"identity,omitempty"`
-	// unused fields # 21 to 29
-	RequestId *string `thrift:"requestId,30" db:"requestId" json:"requestId,omitempty"`
 }
 
 func NewPollForActivityTaskRequest() *PollForActivityTaskRequest {
@@ -8073,25 +8117,12 @@ func (p *PollForActivityTaskRequest) GetIdentity() string {
 	}
 	return *p.Identity
 }
-
-var PollForActivityTaskRequest_RequestId_DEFAULT string
-
-func (p *PollForActivityTaskRequest) GetRequestId() string {
-	if !p.IsSetRequestId() {
-		return PollForActivityTaskRequest_RequestId_DEFAULT
-	}
-	return *p.RequestId
-}
 func (p *PollForActivityTaskRequest) IsSetTaskList() bool {
 	return p.TaskList != nil
 }
 
 func (p *PollForActivityTaskRequest) IsSetIdentity() bool {
 	return p.Identity != nil
-}
-
-func (p *PollForActivityTaskRequest) IsSetRequestId() bool {
-	return p.RequestId != nil
 }
 
 func (p *PollForActivityTaskRequest) Read(iprot thrift.TProtocol) error {
@@ -8114,10 +8145,6 @@ func (p *PollForActivityTaskRequest) Read(iprot thrift.TProtocol) error {
 			}
 		case 20:
 			if err := p.ReadField20(iprot); err != nil {
-				return err
-			}
-		case 30:
-			if err := p.ReadField30(iprot); err != nil {
 				return err
 			}
 		default:
@@ -8152,15 +8179,6 @@ func (p *PollForActivityTaskRequest) ReadField20(iprot thrift.TProtocol) error {
 	return nil
 }
 
-func (p *PollForActivityTaskRequest) ReadField30(iprot thrift.TProtocol) error {
-	if v, err := iprot.ReadString(); err != nil {
-		return thrift.PrependError("error reading field 30: ", err)
-	} else {
-		p.RequestId = &v
-	}
-	return nil
-}
-
 func (p *PollForActivityTaskRequest) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("PollForActivityTaskRequest"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -8169,9 +8187,6 @@ func (p *PollForActivityTaskRequest) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField20(oprot); err != nil {
-		return err
-	}
-	if err := p.writeField30(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -8208,21 +8223,6 @@ func (p *PollForActivityTaskRequest) writeField20(oprot thrift.TProtocol) (err e
 		}
 		if err := oprot.WriteFieldEnd(); err != nil {
 			return thrift.PrependError(fmt.Sprintf("%T write field end error 20:identity: ", p), err)
-		}
-	}
-	return err
-}
-
-func (p *PollForActivityTaskRequest) writeField30(oprot thrift.TProtocol) (err error) {
-	if p.IsSetRequestId() {
-		if err := oprot.WriteFieldBegin("requestId", thrift.STRING, 30); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:requestId: ", p), err)
-		}
-		if err := oprot.WriteString(string(*p.RequestId)); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T.requestId (30) field write error: ", p), err)
-		}
-		if err := oprot.WriteFieldEnd(); err != nil {
-			return thrift.PrependError(fmt.Sprintf("%T write field end error 30:requestId: ", p), err)
 		}
 	}
 	return err

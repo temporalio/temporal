@@ -5,6 +5,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
@@ -15,6 +17,9 @@ import (
 type (
 	historyBuilderSuite struct {
 		suite.Suite
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
 		builder *historyBuilder
 		logger  bark.Logger
 	}
@@ -27,6 +32,8 @@ func TestHistoryBuilderSuite(t *testing.T) {
 
 func (s *historyBuilderSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
 	s.builder = newHistoryBuilder(s.logger)
 }
 
@@ -46,16 +53,18 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	decisionScheduledEvent := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.validateDecisionTaskScheduledEvent(decisionScheduledEvent, 2, tl, taskTimeout)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning0, decisionStartedID0 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning0, decisionStartedEvent0 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning0)
-	s.Equal(emptyEventID, decisionStartedID0)
+	s.Nil(decisionStartedEvent0)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
 	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, tl, identity)
 	s.validateDecisionTaskStartedEvent(decisionStartedEvent, 3, 2, identity)
 	s.Equal(int64(4), s.builder.nextEventID)
-	decisionRunning1, decisionStartedID1 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning1, decisionStartedEvent1 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning1)
+	s.NotNil(decisionStartedEvent1)
+	decisionStartedID1 := decisionStartedEvent1.GetEventId()
 	s.Equal(int64(3), decisionStartedID1)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
@@ -81,9 +90,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.validateActivityTaskScheduledEvent(activity1ScheduledEvent, 5, 4, activity1ID, activity1Type, activityTaskList,
 		activity1Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(6), s.builder.nextEventID)
-	activity1Running0, activity1Started0 := s.builder.isActivityTaskRunning(5)
+	activity1Running0, activity1StartedEvent0 := s.builder.isActivityTaskRunning(5)
 	s.True(activity1Running0)
-	s.Equal(emptyEventID, activity1Started0)
+	s.Nil(activity1StartedEvent0)
 	s.Equal(int64(3), s.builder.previousDecisionStartedEvent())
 
 	activity2ID := "activity2"
@@ -96,16 +105,18 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.validateActivityTaskScheduledEvent(activity2ScheduledEvent, 6, 4, activity2ID, activity2Type, activityTaskList,
 		activity2Input, activityTimeout, queueTimeout, hearbeatTimeout)
 	s.Equal(int64(7), s.builder.nextEventID)
-	activity2Running0, activity2Started0 := s.builder.isActivityTaskRunning(6)
+	activity2Running0, activity2StartedEvent0 := s.builder.isActivityTaskRunning(6)
 	s.True(activity2Running0)
-	s.Equal(emptyEventID, activity2Started0)
+	s.Nil(activity2StartedEvent0)
 	s.Equal(int64(3), s.builder.previousDecisionStartedEvent())
 
 	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
 	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity)
 	s.Equal(int64(8), s.builder.nextEventID)
-	activity1Running1, activity1Started1 := s.builder.isActivityTaskRunning(5)
+	activity1Running1, activity1StartedEvent1 := s.builder.isActivityTaskRunning(5)
 	s.True(activity1Running1)
+	s.NotNil(activity1StartedEvent1)
+	activity1Started1 := activity1StartedEvent1.GetEventId()
 	s.Equal(int64(7), activity1Started1)
 	s.Equal(int64(3), s.builder.previousDecisionStartedEvent())
 
@@ -119,16 +130,18 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	decisionScheduledEvent2 := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.validateDecisionTaskScheduledEvent(decisionScheduledEvent2, 9, tl, taskTimeout)
 	s.Equal(int64(10), s.builder.nextEventID)
-	decisionRunning3, decisionStartedID3 := s.builder.isDecisionTaskRunning(9)
+	decisionRunning3, decisionStartedEvent3 := s.builder.isDecisionTaskRunning(9)
 	s.True(decisionRunning3)
-	s.Equal(emptyEventID, decisionStartedID3)
+	s.Nil(decisionStartedEvent3)
 	s.Equal(int64(3), s.builder.previousDecisionStartedEvent())
 
 	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
 	s.validateActivityTaskStartedEvent(activity2StartedEvent, 10, 6, identity)
 	s.Equal(int64(11), s.builder.nextEventID)
-	activity2Running1, activity2Started1 := s.builder.isActivityTaskRunning(6)
+	activity2Running1, activity2StartedEvent1 := s.builder.isActivityTaskRunning(6)
 	s.True(activity2Running1)
+	s.NotNil(activity2StartedEvent1)
+	activity2Started1 := activity2StartedEvent1.GetEventId()
 	s.Equal(int64(10), activity2Started1)
 	s.Equal(int64(3), s.builder.previousDecisionStartedEvent())
 
@@ -156,17 +169,17 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	decisionScheduledEvent := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.validateDecisionTaskScheduledEvent(decisionScheduledEvent, 2, tl, taskTimeout)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning0, decisionStartedID0 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning0, decisionStartedEvent0 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning0)
-	s.Equal(emptyEventID, decisionStartedID0)
+	s.Nil(decisionStartedEvent0)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
 	workflowStartedEvent2 := s.addWorkflowExecutionStartedEvent(id, wt, tl, input, execTimeout, taskTimeout, identity)
 	s.Nil(workflowStartedEvent2)
 	s.Equal(int64(3), s.builder.nextEventID, s.printHistory())
-	decisionRunning1, decisionStartedID1 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning1, decisionStartedEvent1 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning1)
-	s.Equal(emptyEventID, decisionStartedID1)
+	s.Nil(decisionStartedEvent1)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 }
 
@@ -186,17 +199,17 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	decisionScheduledEvent := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.validateDecisionTaskScheduledEvent(decisionScheduledEvent, 2, tl, taskTimeout)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning0, decisionStartedID0 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning0, decisionStartedEvent0 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning0)
-	s.Equal(emptyEventID, decisionStartedID0)
+	s.Nil(decisionStartedEvent0)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
 	decisionScheduledEvent2 := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.Nil(decisionScheduledEvent2)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning1, decisionStartedID1 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning1, decisionStartedEvent1 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning1)
-	s.Equal(emptyEventID, decisionStartedID1)
+	s.Nil(decisionStartedEvent1)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 }
 
@@ -223,24 +236,26 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	decisionScheduledEvent := s.addDecisionTaskScheduledEvent(tl, taskTimeout)
 	s.validateDecisionTaskScheduledEvent(decisionScheduledEvent, 2, tl, taskTimeout)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning0, decisionStartedID0 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning0, decisionStartedEvent0 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning0)
-	s.Equal(emptyEventID, decisionStartedID0)
+	s.Nil(decisionStartedEvent0)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
 	decisionStartedEvent1 := s.addDecisionTaskStartedEvent(100, tl, identity)
 	s.Nil(decisionStartedEvent1)
 	s.Equal(int64(3), s.builder.nextEventID)
-	decisionRunning2, decisionStartedID2 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning2, decisionStartedEventID2 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning2)
-	s.Equal(emptyEventID, decisionStartedID2)
+	s.Nil(decisionStartedEventID2)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 
 	decisionStartedEvent2 := s.addDecisionTaskStartedEvent(2, tl, identity)
 	s.validateDecisionTaskStartedEvent(decisionStartedEvent2, 3, 2, identity)
 	s.Equal(int64(4), s.builder.nextEventID)
-	decisionRunning3, decisionStartedID3 := s.builder.isDecisionTaskRunning(2)
+	decisionRunning3, decisionStartedEvent3 := s.builder.isDecisionTaskRunning(2)
 	s.True(decisionRunning3)
+	s.NotNil(decisionStartedEvent3)
+	decisionStartedID3 := decisionStartedEvent3.GetEventId()
 	s.Equal(int64(3), decisionStartedID3)
 	s.Equal(emptyEventID, s.builder.previousDecisionStartedEvent())
 }
@@ -268,7 +283,7 @@ func (s *historyBuilderSuite) addDecisionTaskScheduledEvent(taskList string, tim
 
 func (s *historyBuilderSuite) addDecisionTaskStartedEvent(scheduleID int64,
 	taskList, identity string) *workflow.HistoryEvent {
-	e := s.builder.AddDecisionTaskStartedEvent(scheduleID, &workflow.PollForDecisionTaskRequest{
+	e := s.builder.AddDecisionTaskStartedEvent(scheduleID, uuid.New(), &workflow.PollForDecisionTaskRequest{
 		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
 		Identity: common.StringPtr(identity),
 	})
@@ -303,7 +318,7 @@ func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID 
 
 func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64,
 	taskList, identity string) *workflow.HistoryEvent {
-	e := s.builder.AddActivityTaskStartedEvent(scheduleID, &workflow.PollForActivityTaskRequest{
+	e := s.builder.AddActivityTaskStartedEvent(scheduleID, uuid.New(), &workflow.PollForActivityTaskRequest{
 		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
 		Identity: common.StringPtr(identity),
 	})

@@ -50,6 +50,8 @@ CREATE TYPE timer_task (
 CREATE TYPE activity_info (
   schedule_id               bigint,
   started_id                bigint,
+  -- Identifier used by matching engine for retrying history service calls for recording task is started
+  request_id                text,
   details                   blob,
   schedule_to_start_timeout int,
   schedule_to_close_timeout int,

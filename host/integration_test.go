@@ -284,7 +284,7 @@ retry:
 		}
 
 		if dumpHistory {
-			history.PrintHistory(response.GetHistory(), p.logger)
+			common.PrettyPrintHistory(response.GetHistory(), p.logger)
 		}
 
 		context, decisions := p.decisionHandler(response.GetWorkflowExecution(), response.GetWorkflowType(),

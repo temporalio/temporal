@@ -95,6 +95,7 @@ class RecordActivityTaskStartedRequest:
    - workflowExecution
    - scheduleId
    - taskId
+   - requestId
    - pollRequest
   """
 
@@ -134,7 +135,7 @@ class RecordActivityTaskStartedRequest:
     None, # 32
     None, # 33
     None, # 34
-    None, # 35
+    (35, TType.STRING, 'requestId', unicode, None, ), # 35
     None, # 36
     None, # 37
     None, # 38
@@ -142,10 +143,11 @@ class RecordActivityTaskStartedRequest:
     (40, TType.STRUCT, 'pollRequest', (shared.ttypes.PollForActivityTaskRequest, shared.ttypes.PollForActivityTaskRequest.thrift_spec), None, ), # 40
   )
 
-  def __init__(self, workflowExecution=None, scheduleId=None, taskId=None, pollRequest=None,):
+  def __init__(self, workflowExecution=None, scheduleId=None, taskId=None, requestId=None, pollRequest=None,):
     self.workflowExecution = workflowExecution
     self.scheduleId = scheduleId
     self.taskId = taskId
+    self.requestId = requestId
     self.pollRequest = pollRequest
 
   def read(self, iprot):
@@ -171,6 +173,11 @@ class RecordActivityTaskStartedRequest:
       elif fid == 30:
         if ftype == TType.I64:
           self.taskId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 35:
+        if ftype == TType.STRING:
+          self.requestId = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
       elif fid == 40:
@@ -201,6 +208,10 @@ class RecordActivityTaskStartedRequest:
       oprot.writeFieldBegin('taskId', TType.I64, 30)
       oprot.writeI64(self.taskId)
       oprot.writeFieldEnd()
+    if self.requestId is not None:
+      oprot.writeFieldBegin('requestId', TType.STRING, 35)
+      oprot.writeString(self.requestId.encode('utf-8'))
+      oprot.writeFieldEnd()
     if self.pollRequest is not None:
       oprot.writeFieldBegin('pollRequest', TType.STRUCT, 40)
       self.pollRequest.write(oprot)
@@ -217,6 +228,7 @@ class RecordActivityTaskStartedRequest:
     value = (value * 31) ^ hash(self.workflowExecution)
     value = (value * 31) ^ hash(self.scheduleId)
     value = (value * 31) ^ hash(self.taskId)
+    value = (value * 31) ^ hash(self.requestId)
     value = (value * 31) ^ hash(self.pollRequest)
     return value
 
@@ -335,6 +347,7 @@ class RecordDecisionTaskStartedRequest:
    - workflowExecution
    - scheduleId
    - taskId
+   - requestId
    - pollRequest
   """
 
@@ -374,7 +387,7 @@ class RecordDecisionTaskStartedRequest:
     None, # 32
     None, # 33
     None, # 34
-    None, # 35
+    (35, TType.STRING, 'requestId', unicode, None, ), # 35
     None, # 36
     None, # 37
     None, # 38
@@ -382,10 +395,11 @@ class RecordDecisionTaskStartedRequest:
     (40, TType.STRUCT, 'pollRequest', (shared.ttypes.PollForDecisionTaskRequest, shared.ttypes.PollForDecisionTaskRequest.thrift_spec), None, ), # 40
   )
 
-  def __init__(self, workflowExecution=None, scheduleId=None, taskId=None, pollRequest=None,):
+  def __init__(self, workflowExecution=None, scheduleId=None, taskId=None, requestId=None, pollRequest=None,):
     self.workflowExecution = workflowExecution
     self.scheduleId = scheduleId
     self.taskId = taskId
+    self.requestId = requestId
     self.pollRequest = pollRequest
 
   def read(self, iprot):
@@ -411,6 +425,11 @@ class RecordDecisionTaskStartedRequest:
       elif fid == 30:
         if ftype == TType.I64:
           self.taskId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 35:
+        if ftype == TType.STRING:
+          self.requestId = iprot.readString().decode('utf-8')
         else:
           iprot.skip(ftype)
       elif fid == 40:
@@ -441,6 +460,10 @@ class RecordDecisionTaskStartedRequest:
       oprot.writeFieldBegin('taskId', TType.I64, 30)
       oprot.writeI64(self.taskId)
       oprot.writeFieldEnd()
+    if self.requestId is not None:
+      oprot.writeFieldBegin('requestId', TType.STRING, 35)
+      oprot.writeString(self.requestId.encode('utf-8'))
+      oprot.writeFieldEnd()
     if self.pollRequest is not None:
       oprot.writeFieldBegin('pollRequest', TType.STRUCT, 40)
       self.pollRequest.write(oprot)
@@ -457,6 +480,7 @@ class RecordDecisionTaskStartedRequest:
     value = (value * 31) ^ hash(self.workflowExecution)
     value = (value * 31) ^ hash(self.scheduleId)
     value = (value * 31) ^ hash(self.taskId)
+    value = (value * 31) ^ hash(self.requestId)
     value = (value * 31) ^ hash(self.pollRequest)
     return value
 

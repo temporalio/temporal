@@ -172,8 +172,8 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 	})
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	builder.AddDecisionTaskStartedEvent(
-		scheduledEvent.GetEventId(), &workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
+	builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
+		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
@@ -283,8 +283,8 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 	})
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(
-		scheduledEvent.GetEventId(), &workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
+	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
+		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
@@ -325,7 +325,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste := b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste := b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 	history, err = b.Serialize()
 	s.Nil(err)
 
@@ -352,7 +352,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
@@ -382,7 +382,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{StartToCloseTimeout: 1})
@@ -445,7 +445,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
@@ -475,7 +475,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{ScheduleToCloseTimeout: 1})
@@ -509,7 +509,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			HeartbeatTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), &workflow.PollForActivityTaskRequest{})
+	aste = b.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	msBuilder = newMutableStateBuilder(s.logger)
 	msBuilder.UpdatePendingActivity(ase.GetEventId(), &persistence.ActivityInfo{
@@ -545,8 +545,8 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 	})
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(
-		scheduledEvent.GetEventId(), &workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
+	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
+		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
@@ -590,8 +590,8 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 	})
 	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(
-		scheduledEvent.GetEventId(), &workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
+	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
+		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 

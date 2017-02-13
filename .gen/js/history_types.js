@@ -73,6 +73,7 @@ var RecordActivityTaskStartedRequest = module.exports.RecordActivityTaskStartedR
   this.workflowExecution = null;
   this.scheduleId = null;
   this.taskId = null;
+  this.requestId = null;
   this.pollRequest = null;
   if (args) {
     if (args.workflowExecution !== undefined && args.workflowExecution !== null) {
@@ -83,6 +84,9 @@ var RecordActivityTaskStartedRequest = module.exports.RecordActivityTaskStartedR
     }
     if (args.taskId !== undefined && args.taskId !== null) {
       this.taskId = args.taskId;
+    }
+    if (args.requestId !== undefined && args.requestId !== null) {
+      this.requestId = args.requestId;
     }
     if (args.pollRequest !== undefined && args.pollRequest !== null) {
       this.pollRequest = new shared_ttypes.PollForActivityTaskRequest(args.pollRequest);
@@ -125,6 +129,13 @@ RecordActivityTaskStartedRequest.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 35:
+      if (ftype == Thrift.Type.STRING) {
+        this.requestId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
       case 40:
       if (ftype == Thrift.Type.STRUCT) {
         this.pollRequest = new shared_ttypes.PollForActivityTaskRequest();
@@ -157,6 +168,11 @@ RecordActivityTaskStartedRequest.prototype.write = function(output) {
   if (this.taskId !== null && this.taskId !== undefined) {
     output.writeFieldBegin('taskId', Thrift.Type.I64, 30);
     output.writeI64(this.taskId);
+    output.writeFieldEnd();
+  }
+  if (this.requestId !== null && this.requestId !== undefined) {
+    output.writeFieldBegin('requestId', Thrift.Type.STRING, 35);
+    output.writeString(this.requestId);
     output.writeFieldEnd();
   }
   if (this.pollRequest !== null && this.pollRequest !== undefined) {
@@ -241,6 +257,7 @@ var RecordDecisionTaskStartedRequest = module.exports.RecordDecisionTaskStartedR
   this.workflowExecution = null;
   this.scheduleId = null;
   this.taskId = null;
+  this.requestId = null;
   this.pollRequest = null;
   if (args) {
     if (args.workflowExecution !== undefined && args.workflowExecution !== null) {
@@ -251,6 +268,9 @@ var RecordDecisionTaskStartedRequest = module.exports.RecordDecisionTaskStartedR
     }
     if (args.taskId !== undefined && args.taskId !== null) {
       this.taskId = args.taskId;
+    }
+    if (args.requestId !== undefined && args.requestId !== null) {
+      this.requestId = args.requestId;
     }
     if (args.pollRequest !== undefined && args.pollRequest !== null) {
       this.pollRequest = new shared_ttypes.PollForDecisionTaskRequest(args.pollRequest);
@@ -293,6 +313,13 @@ RecordDecisionTaskStartedRequest.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 35:
+      if (ftype == Thrift.Type.STRING) {
+        this.requestId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
       case 40:
       if (ftype == Thrift.Type.STRUCT) {
         this.pollRequest = new shared_ttypes.PollForDecisionTaskRequest();
@@ -325,6 +352,11 @@ RecordDecisionTaskStartedRequest.prototype.write = function(output) {
   if (this.taskId !== null && this.taskId !== undefined) {
     output.writeFieldBegin('taskId', Thrift.Type.I64, 30);
     output.writeI64(this.taskId);
+    output.writeFieldEnd();
+  }
+  if (this.requestId !== null && this.requestId !== undefined) {
+    output.writeFieldBegin('requestId', Thrift.Type.STRING, 35);
+    output.writeString(this.requestId);
     output.writeFieldEnd();
   }
   if (this.pollRequest !== null && this.pollRequest !== undefined) {

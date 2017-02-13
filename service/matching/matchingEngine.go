@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
 	"math"
@@ -268,10 +269,14 @@ pollLoop:
 			}
 			return nil, err
 		}
+
+		// Generate a unique requestId for this task which will be used for all retries
+		requestID := uuid.New()
 		resp, err := tCtx.RecordDecisionTaskStartedWithRetry(&h.RecordDecisionTaskStartedRequest{
 			WorkflowExecution: &tCtx.workflowExecution,
 			ScheduleId:        &tCtx.info.ScheduleID,
 			TaskId:            &tCtx.info.TaskID,
+			RequestId:         common.StringPtr(requestID),
 			PollRequest:       request,
 		})
 		if err != nil {
@@ -317,10 +322,13 @@ pollLoop:
 			}
 			return nil, err
 		}
+		// Generate a unique requestId for this task which will be used for all retries
+		requestID := uuid.New()
 		resp, err := tCtx.RecordActivityTaskStartedWithRetry(&h.RecordActivityTaskStartedRequest{
 			WorkflowExecution: &tCtx.workflowExecution,
 			ScheduleId:        &tCtx.info.ScheduleID,
 			TaskId:            &tCtx.info.TaskID,
+			RequestId:         common.StringPtr(requestID),
 			PollRequest:       request,
 		})
 		if err != nil {

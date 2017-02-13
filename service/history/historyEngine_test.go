@@ -8,7 +8,9 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
@@ -21,7 +23,9 @@ import (
 type (
 	engineSuite struct {
 		suite.Suite
-		persistence.TestBase
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
 		builder            *historyBuilder
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
@@ -49,6 +53,9 @@ func (s *engineSuite) TearDownSuite() {
 }
 
 func (s *engineSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
@@ -385,7 +392,8 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
-		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history,
+			ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
 			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
@@ -1581,7 +1589,12 @@ func addDecisionTaskScheduledEvent(builder *historyBuilder, taskList string,
 
 func addDecisionTaskStartedEvent(builder *historyBuilder, scheduleID int64,
 	taskList, identity string) *workflow.HistoryEvent {
-	e := builder.AddDecisionTaskStartedEvent(scheduleID, &workflow.PollForDecisionTaskRequest{
+	return addDecisionTaskStartedEventWithRequestID(builder, scheduleID, uuid.New(), taskList, identity)
+}
+
+func addDecisionTaskStartedEventWithRequestID(builder *historyBuilder, scheduleID int64, requestID string,
+	taskList, identity string) *workflow.HistoryEvent {
+	e := builder.AddDecisionTaskStartedEvent(scheduleID, requestID, &workflow.PollForDecisionTaskRequest{
 		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
 		Identity: common.StringPtr(identity),
 	})
@@ -1616,7 +1629,7 @@ func addActivityTaskScheduledEvent(builder *historyBuilder, decisionCompletedID 
 
 func addActivityTaskStartedEvent(builder *historyBuilder, scheduleID int64,
 	taskList, identity string) *workflow.HistoryEvent {
-	e := builder.AddActivityTaskStartedEvent(scheduleID, &workflow.PollForActivityTaskRequest{
+	e := builder.AddActivityTaskStartedEvent(scheduleID, uuid.New(), &workflow.PollForActivityTaskRequest{
 		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
 		Identity: common.StringPtr(identity),
 	})

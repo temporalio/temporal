@@ -1,10 +1,12 @@
 package common
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 
 	farm "github.com/dgryski/go-farm"
+	"github.com/uber-common/bark"
 
 	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	"code.uber.internal/devexp/minions/common/backoff"
@@ -93,4 +95,17 @@ func IsPersistenceTransientError(err error) bool {
 func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 	hash := farm.Fingerprint32([]byte(workflowID))
 	return int(hash % uint32(numberOfShards))
+}
+
+// PrettyPrintHistory prints history in human readable format
+func PrettyPrintHistory(history *workflow.History, logger bark.Logger) {
+	data, err := json.MarshalIndent(history, "", "    ")
+
+	if err != nil {
+		logger.Errorf("Error serializing history: %v\n", err)
+	}
+
+	logger.Info("******************************************")
+	logger.Infof("History: %v", string(data))
+	logger.Info("******************************************")
 }

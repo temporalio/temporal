@@ -90,6 +90,7 @@ const (
 	templateActivityInfoType = `{` +
 		`schedule_id: ?, ` +
 		`started_id: ?, ` +
+		`request_id: ?, ` +
 		`details: ?, ` +
 		`schedule_to_start_timeout: ?, ` +
 		`schedule_to_close_timeout: ?, ` +
@@ -1150,6 +1151,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.ScheduleID,
 			a.ScheduleID,
 			a.StartedID,
+			a.RequestID,
 			a.Details,
 			a.ScheduleToStartTimeout,
 			a.ScheduleToCloseTimeout,
@@ -1289,6 +1291,8 @@ func createActivityInfo(result map[string]interface{}) *ActivityInfo {
 			info.ScheduleID = v.(int64)
 		case "started_id":
 			info.StartedID = v.(int64)
+		case "request_id":
+			info.RequestID = v.(string)
 		case "details":
 			info.Details = v.([]byte)
 		case "schedule_to_start_timeout":
