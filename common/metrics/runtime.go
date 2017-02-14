@@ -41,7 +41,7 @@ func (r *RuntimeMetricsReporter) report() {
 	r.scope.Gauge(NumGoRoutinesGauge).Update(float64(runtime.NumGoroutine()))
 	r.scope.Gauge(GoMaxProcsGauge).Update(float64(runtime.GOMAXPROCS(0)))
 	r.scope.Gauge(MemoryAllocatedGauge).Update(float64(memStats.Alloc))
-	r.scope.Gauge(MemoryAllocatedGauge).Update(float64(memStats.HeapAlloc))
+	r.scope.Gauge(MemoryHeapGauge).Update(float64(memStats.HeapAlloc))
 	r.scope.Gauge(MemoryHeapIdleGauge).Update(float64(memStats.HeapIdle))
 	r.scope.Gauge(MemoryHeapInuseGauge).Update(float64(memStats.HeapInuse))
 	r.scope.Gauge(MemoryStackGauge).Update(float64(memStats.StackInuse))
