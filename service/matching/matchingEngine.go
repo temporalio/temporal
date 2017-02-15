@@ -31,6 +31,8 @@ const (
 )
 
 // Implements matching.Engine
+// TODO: Switch implementation from lock/channel based to a partitioned agent
+// to simplify code and reduce possiblity of synchronization errors.
 type matchingEngineImpl struct {
 	taskManager                persistence.TaskManager
 	historyService             history.Client
@@ -74,7 +76,7 @@ type taskListContext struct {
 	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
 	// only if there is waiting poll that consumes from it.
 	syncMatch  chan *getTaskResult
-	shutdownCh chan struct{}
+	shutdownCh chan struct{} // Delivers stop to the pump that populates taskBuffer
 	stopped    int32
 
 	sync.Mutex
@@ -117,6 +119,19 @@ var (
 	errPumpClosed = errors.New("Task list pump closed its channel")
 )
 
+func (t *taskListID) String() string {
+	var r string
+	if t.taskType == persistence.TaskListTypeActivity {
+		r += "activity"
+	} else {
+		r += "decision"
+	}
+	r += " task list \""
+	r += t.taskListName
+	r += "\""
+	return r
+}
+
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
 // NewEngine creates an instance of matching engine
@@ -134,8 +149,55 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 	}
 }
 
+func (e *matchingEngineImpl) Start() {
+	// As task lists are initialized lazily nothing is done on startup at this point.
+}
+
+func (e *matchingEngineImpl) Stop() {
+	// Executes Stop() on each task list outside of lock
+	for _, l := range e.getTaskLists(math.MaxInt32) {
+		l.Stop()
+	}
+}
+
+func (e *matchingEngineImpl) getTaskLists(maxCount int) (lists []*taskListContext) {
+	e.taskListsLock.Lock()
+	lists = make([]*taskListContext, 0, len(e.taskLists))
+	count := 0
+	for _, tlCtx := range e.taskLists {
+		lists = append(lists, tlCtx)
+		count++
+		if count >= maxCount {
+			break
+		}
+	}
+	e.taskListsLock.Unlock()
+	return
+}
+
+func (e *matchingEngineImpl) String() string {
+	// Executes taskList.String() on each task list outside of lock
+	var r string
+	for _, l := range e.getTaskLists(1000) {
+		r += "\n"
+		r += l.String()
+	}
+	return r
+}
+
 // Returns taskListContext for a task list. If not already cached gets new range from DB and if successful creates one.
 func (e *matchingEngineImpl) getTaskListContext(taskList *taskListID) (*taskListContext, error) {
+	tCtx, err := e.getTaskListContextImpl(taskList)
+	if err != nil {
+		if _, ok := err.(*persistence.ConditionFailedError); ok {
+			tCtx.Stop()
+		}
+	}
+	return tCtx, err
+}
+
+// Returns taskListContext for a task list. If not already cached gets new range from DB and if successful creates one.
+func (e *matchingEngineImpl) getTaskListContextImpl(taskList *taskListID) (*taskListContext, error) {
 	e.taskListsLock.RLock()
 	if result, ok := e.taskLists[*taskList]; ok {
 		e.taskListsLock.RUnlock()
@@ -165,7 +227,14 @@ func (e *matchingEngineImpl) getTaskListContext(taskList *taskListID) (*taskList
 		return nil, err
 	}
 	ctx.Start()
+	e.logger.Infof("Loaded %v", taskList)
 	return ctx, nil
+}
+
+func (e *matchingEngineImpl) removeTaskListContext(id *taskListID) {
+	e.taskListsLock.Lock()
+	defer e.taskListsLock.Unlock()
+	delete(e.taskLists, *id)
 }
 
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
@@ -174,22 +243,22 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v",
 		addRequest.TaskList.Name, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(taskListName, persistence.TaskListTypeDecision)
-	t, err := e.getTaskListContext(taskList)
+	tlCtx, err := e.getTaskListContext(taskList)
 	if err != nil {
 		return err
 	}
-	_, err = t.executeWithRetry(func(rangeID int64) (interface{}, error) {
+	_, err = tlCtx.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		// TODO: Unify ActivityTask, DecisionTask, Task and potentially TaskInfo in a single structure
 		taskInfo := &persistence.TaskInfo{
 			RunID:      addRequest.GetExecution().GetRunId(),
 			WorkflowID: addRequest.GetExecution().GetWorkflowId(),
 			ScheduleID: addRequest.GetScheduleId(),
 		}
-		r, err := t.trySyncMatch(taskInfo)
+		r, err := tlCtx.trySyncMatch(taskInfo)
 		if err != nil || r != nil {
 			return r, err
 		}
-		taskID, err := t.initiateTaskAppend(e)
+		taskID, err := tlCtx.initiateTaskAppend(e)
 		if err != nil {
 			return nil, err
 		}
@@ -202,9 +271,11 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 			Execution: *addRequest.GetExecution(),
 			Data:      task,
 			TaskID:    task.TaskID,
-			RangeID:   rangeID,
+			// Do not use rangeID parameter as tlCtx.initiateTaskAppend could increment range.
+			// also do not use tlCtx.rangeID as it could be updated since taskID generation.
+			RangeID: rangeID,
 		})
-		t.completeTaskAppend(taskID)
+		tlCtx.completeTaskAppend(taskID)
 
 		return r, err
 	})
@@ -217,22 +288,22 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 	e.logger.Debugf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
 		taskListName, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(taskListName, persistence.TaskListTypeActivity)
-	t, err := e.getTaskListContext(taskList)
+	tlCtx, err := e.getTaskListContext(taskList)
 	if err != nil {
 		return err
 	}
-	_, err = t.executeWithRetry(func(rangeID int64) (interface{}, error) {
+	_, err = tlCtx.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		// TODO: Unify ActivityTask, DecisionTask, Task and potentially TaskInfo in a single structure
 		taskInfo := &persistence.TaskInfo{
 			RunID:      addRequest.GetExecution().GetRunId(),
 			WorkflowID: addRequest.GetExecution().GetWorkflowId(),
 			ScheduleID: addRequest.GetScheduleId(),
 		}
-		r, err := t.trySyncMatch(taskInfo)
+		r, err := tlCtx.trySyncMatch(taskInfo)
 		if err != nil || r != nil {
 			return r, err
 		}
-		taskID, err := t.initiateTaskAppend(e)
+		taskID, err := tlCtx.initiateTaskAppend(e)
 		if err != nil {
 			return nil, err
 		}
@@ -245,9 +316,11 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 			Execution: *addRequest.GetExecution(),
 			Data:      task,
 			TaskID:    task.TaskID,
-			RangeID:   rangeID,
+			// Do not use rangeID parameter as tlCtx.initiateTaskAppend could increment range.
+			// also do not use tlCtx.rangeID as it could be updated since taskID generation.
+			RangeID: rangeID,
 		})
-		t.completeTaskAppend(taskID)
+		tlCtx.completeTaskAppend(taskID)
 
 		return r, err
 	})
@@ -264,7 +337,8 @@ pollLoop:
 		taskList := newTaskListID(taskListName, persistence.TaskListTypeDecision)
 		tCtx, err := e.getTask(taskList)
 		if err != nil {
-			if err == ErrNoTasks {
+			// TODO: Is empty poll the best reply for errPumpClosed?
+			if err == ErrNoTasks || err == errPumpClosed {
 				return emptyPollForDecisionTaskResponse, nil
 			}
 			return nil, err
@@ -317,7 +391,8 @@ pollLoop:
 		taskList := newTaskListID(taskListName, persistence.TaskListTypeActivity)
 		tCtx, err := e.getTask(taskList)
 		if err != nil {
-			if err == ErrNoTasks {
+			// TODO: Is empty poll the best reply for errPumpClosed?
+			if err == ErrNoTasks || err == errPumpClosed {
 				return emptyPollForActivityTaskResponse, nil
 			}
 			return nil, err
@@ -429,7 +504,6 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 		ScheduleID: task.ScheduleID,
 	}
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
-	e.logger.Debugf("matchingEngineImpl.createPollForActivityTaskResponse=%v", token)
 	return response
 }
 
@@ -446,6 +520,22 @@ func (c *taskListContext) isEqualRangeID(rangeID int64) bool {
 	return c.rangeID == rangeID
 }
 
+// TODO: Update ackLevel on time based interval instead of on each GetTasks call
+func (c *taskListContext) persistAckLevel() error {
+	c.Lock()
+	updateTaskListRequest := &persistence.UpdateTaskListRequest{
+		TaskListInfo: &persistence.TaskListInfo{
+			Name:     c.taskListID.taskListName,
+			TaskType: c.taskListID.taskType,
+			AckLevel: c.taskAckManager.getAckLevel(),
+			RangeID:  c.rangeID,
+		},
+	}
+	c.Unlock()
+	_, err := c.engine.taskManager.UpdateTaskList(updateTaskListRequest)
+	return err
+}
+
 // Starts reading pump for the given task list.
 // The pump fills up taskBuffer from persistence.
 func (c *taskListContext) Start() {
@@ -454,23 +544,40 @@ func (c *taskListContext) Start() {
 		retrier := backoff.NewRetrier(emptyGetTasksRetryPolicy, backoff.SystemClock)
 	getTasksPumpLoop:
 		for {
-			rangeID := c.getRangeID()
-			tasks, err := c.getTaskBatch()
+			err := c.persistAckLevel()
+			//var err error
 			if err != nil {
-				if _, ok := err.(*persistence.ConditionFailedError); ok { // range changed
-					if !c.isEqualRangeID(rangeID) { // Could be still owning next range
-						continue getTasksPumpLoop
-					}
+				logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateTaskList, err,
+					fmt.Sprintf("{taskType: %v, taskList: %v}",
+						c.taskListID.taskType, c.taskListID.taskListName))
+				// keep going as saving ack is not critical
+			}
+			var tasks []*persistence.TaskInfo
+			tasks, err = c.getTaskBatch()
+
+			if err != nil {
+				if _, ok := err.(*persistence.ConditionFailedError); ok {
+					break getTasksPumpLoop
 				}
 				logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetTasks, err,
-					fmt.Sprintf("{taskType: %v, taskList: %v}", c.taskListID.taskType, c.taskListID.taskListName))
-				break getTasksPumpLoop
+					fmt.Sprintf("{taskType: %v, taskList: %v}",
+						c.taskListID.taskType, c.taskListID.taskListName))
+				// TODO: Should we ever stop retrying on db errors?
+				continue getTasksPumpLoop
 			}
 			// Exponential sleep on empty poll
 			if len(tasks) == 0 {
 				var next time.Duration
 				if next = retrier.NextBackOff(); next != done {
-					time.Sleep(next)
+					// Sleep for next time obeying shutdown request
+					timer := time.NewTimer(next)
+					select {
+					case <-timer.C:
+					case <-c.shutdownCh:
+						timer.Stop()
+						break getTasksPumpLoop
+					}
+					timer.Stop()
 				}
 				continue getTasksPumpLoop
 			}
@@ -497,7 +604,9 @@ func (c *taskListContext) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
 		return
 	}
+	c.logger.Infof("Unloaded %v", c.taskListID)
 	close(c.shutdownCh)
+	c.engine.removeTaskListContext(c.taskListID)
 }
 
 // initiateTaskAppend returns taskID to use to persist the task
@@ -516,18 +625,25 @@ func (c *taskListContext) initiateTaskAppend(e *matchingEngineImpl) (taskID int6
 
 // completeTaskAppend should be called after task append is done even if append has failed.
 // There is no correspondent initiateTaskAppend as append is initiated in getTaskID
-func (c *taskListContext) completeTaskAppend(taskID int64) (ackLevel int64) {
+func (c *taskListContext) completeTaskAppend(taskID int64) {
 	c.Lock()
 	defer c.Unlock()
-	return c.writeOffsetManager.completeTask(taskID)
+	c.writeOffsetManager.completeTask(taskID)
+}
+
+func (c *taskListContext) getAckLevel() (ackLevel int64) {
+	c.Lock()
+	defer c.Unlock()
+	return c.taskAckManager.getAckLevel()
 }
 
 // completeTaskPoll should be called after task poll is done even if append has failed.
 // There is no correspondent initiateTaskAppend as append is initiated in getTaskID
-func (c *taskListContext) completeTaskPoll(taskID int64) {
+func (c *taskListContext) completeTaskPoll(taskID int64) (ackLevel int64) {
 	c.Lock()
 	defer c.Unlock()
-	c.taskAckManager.completeTask(taskID)
+	ackLevel = c.taskAckManager.completeTask(taskID)
+	return
 }
 
 // Loads a task from DB or from sync match and wraps it in a task context
@@ -619,10 +735,33 @@ func (c *taskListContext) updateRangeIfNeededLocked(e *matchingEngineImpl) error
 	c.rangeID = tli.RangeID // Starts from 1
 	c.taskAckManager.setAckLevel(tli.AckLevel)
 	c.taskSequenceNumber = (tli.RangeID-1)*e.rangeSize + 1
+
 	c.writeOffsetManager.setAckLevel(c.taskSequenceNumber - 1) // maxReadLevel is inclusive
 	c.nextRangeSequenceNumber = (tli.RangeID)*e.rangeSize + 1
-	c.logger.Debugf("updateRangeLocked c.taskSequenceNumber=%v", c.taskSequenceNumber)
+	c.logger.Debugf("updateRangeLocked rangeID=%v, c.taskSequenceNumber=%v, c.nextRangeSequenceNumber=%v",
+		c.rangeID, c.taskSequenceNumber, c.nextRangeSequenceNumber)
 	return nil
+}
+
+func (c *taskListContext) String() string {
+	c.Lock()
+	defer c.Unlock()
+
+	var r string
+	if c.taskListID.taskType == persistence.TaskListTypeActivity {
+		r += "Activity"
+	} else {
+		r += "Decision"
+	}
+	r += " task list " + c.taskListID.taskListName + "\n"
+	r += fmt.Sprintf("RangeID=%v\n", c.rangeID)
+	r += fmt.Sprintf("TaskSequenceNumber=%v\n", c.taskSequenceNumber)
+	r += fmt.Sprintf("NextRangeSequenceNumber=%v\n", c.nextRangeSequenceNumber)
+	r += fmt.Sprintf("AckLevel=%v\n", c.taskAckManager.ackLevel)
+	r += fmt.Sprintf("MaxReadLevel=%v\n", c.writeOffsetManager.getAckLevel())
+	r += fmt.Sprintf("MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
+
+	return r
 }
 
 // Tries to match task to a poller that is already waiting on getTask.
@@ -642,8 +781,10 @@ func (c *taskListContext) trySyncMatch(task *persistence.TaskInfo) (*persistence
 	}
 }
 
-// Retry operation on transient error and on rangeID change.
-func (c *taskListContext) executeWithRetry(operation func(rangeID int64) (interface{}, error)) (result interface{}, err error) {
+// Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().
+func (c *taskListContext) executeWithRetry(
+	operation func(rangeID int64) (interface{}, error)) (result interface{}, err error) {
+
 	var rangeID int64
 	op := func() error {
 		rangeID = c.getRangeID()
@@ -651,10 +792,22 @@ func (c *taskListContext) executeWithRetry(operation func(rangeID int64) (interf
 		return err
 	}
 
+	var retryCount int64
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, func(err error) bool {
+		c.logger.Debugf("Retry executeWithRetry as task list range has changed. retryCount=%v, errType=%T", retryCount, err)
+
 		// Operation failed due to invalid range, but this task list has a different rangeID as well.
 		// Retry as the failure could be due to a rangeID update by this task list instance.
-		if _, ok := err.(*persistence.ConditionFailedError); ok && !c.isEqualRangeID(rangeID) {
+		if _, ok := err.(*persistence.ConditionFailedError); ok {
+			if c.isEqualRangeID(rangeID) {
+				c.logger.Debug("Retry range id didn't change. stopping task list")
+				c.Stop() // Some other instance owns the range, stop this one.
+				return false
+			}
+			// Our range has changed.
+			// Could be still owning the next range, so keep retrying.
+			c.logger.Debugf("Retry executeWithRetry as task list range has changed. retryCount=%v, errType=%T", retryCount, err)
+			retryCount++
 			return true
 		}
 		return common.IsPersistenceTransientError(err)
@@ -704,12 +857,13 @@ func (c *taskContext) completeTask(err error) {
 		// It is OK to succeed task creation as it was already completed
 		c.syncResponseCh <- &syncMatchResponse{
 			response: &persistence.CreateTaskResponse{}, err: err}
+		return
 	}
 
 	if err != nil {
 		return
 	}
-	ackLevel := tlCtx.completeTaskAppend(c.info.TaskID)
+	ackLevel := tlCtx.completeTaskPoll(c.info.TaskID)
 
 	_, err = tlCtx.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		return nil, tlCtx.engine.taskManager.CompleteTask(&persistence.CompleteTaskRequest{
@@ -736,7 +890,10 @@ func (m *ackManager) addTask(taskID int64) {
 			m.readLevel)
 	}
 	m.readLevel = taskID
-	m.outstandingTasks[taskID] = false
+	if _, ok := m.outstandingTasks[taskID]; ok {
+		m.logger.Fatalf("Already present in outstanding tasks: taskID=%v", taskID)
+	}
+	m.outstandingTasks[taskID] = false // true is for acked
 }
 
 func newAckManager(logger bark.Logger) ackManager {
@@ -773,7 +930,7 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 				m.ackLevel = current
 				delete(m.outstandingTasks, current)
 			} else {
-				return
+				return m.ackLevel
 			}
 		}
 	}

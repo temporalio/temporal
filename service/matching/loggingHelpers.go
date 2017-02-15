@@ -50,8 +50,10 @@ const (
 	tagValueActionTimerFired            = "add-timer-fired-event"
 
 	// tagStoreOperation values
-	tagValueStoreOperationGetTasks                = "get-tasks"
-	tagValueStoreOperationCompleteTask            = "complete-task"
+	tagValueStoreOperationGetTasks       = "get-tasks"
+	tagValueStoreOperationCompleteTask   = "complete-task"
+	tagValueStoreOperationUpdateTaskList = "update-task-list"
+
 	tagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
 	tagValueStoreOperationGetWorkflowMutableState = "get-wf-mutable-state"

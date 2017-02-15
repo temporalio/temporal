@@ -808,6 +808,8 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 		tli.AckLevel,
 		&tli.Name,
 		tli.TaskType,
+		rowTypeTaskList,
+		taskListTaskID,
 		tli.RangeID,
 	)
 

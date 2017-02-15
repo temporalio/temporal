@@ -2,12 +2,14 @@ package matching
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -24,11 +26,12 @@ import (
 type (
 	matchingEngineSuite struct {
 		suite.Suite
-		historyClient    *mocks.HistoryClient
-		matchingEngine   *matchingEngineImpl
-		mockTaskMgr      *mocks.TaskManager
-		mockExecutionMgr *mocks.ExecutionManager
-		logger           bark.Logger
+		historyClient        *mocks.HistoryClient
+		matchingEngine       *matchingEngineImpl
+		taskManager          *testTaskManager
+		mockExecutionManager *mocks.ExecutionManager
+		logger               bark.Logger
+		sync.Mutex
 	}
 )
 
@@ -44,33 +47,53 @@ func (s *matchingEngineSuite) SetupSuite() {
 	l := log.New()
 	//l.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(l)
+	http.Handle("/test/tasks", http.HandlerFunc(s.TasksHandler))
 	// Get pprof HTTP UI at http://localhost:6060/debug/pprof/
-	// Add the following import _ "net/http/pprof"
+	// Add the following
+	// import _ "net/http/pprof"
 	//go func() {
 	//	log.Println(http.ListenAndServe("localhost:6060", nil))
 	//}()
+}
+
+// Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
+// Uncomment HTTP server initialization in SetupSuite method to enable.
+func (s *matchingEngineSuite) TasksHandler(w http.ResponseWriter, r *http.Request) {
+	s.Lock()
+	defer s.Unlock()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintf(w, fmt.Sprintf("%v\n", s.taskManager))
+	fmt.Fprintf(w, fmt.Sprintf("%v\n", s.matchingEngine))
 }
 
 func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
-	s.mockTaskMgr = &mocks.TaskManager{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
+	s.Lock()
+	defer s.Unlock()
+	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.historyClient = &mocks.HistoryClient{}
-	s.matchingEngine = &matchingEngineImpl{
-		taskManager:                s.mockTaskMgr,
+	s.taskManager = newTestTaskManager(s.logger)
+	s.matchingEngine = s.newMatchingEngine(defaultRangeSize)
+	s.matchingEngine.Start()
+}
+
+func (s *matchingEngineSuite) newMatchingEngine(rangeSize int64) *matchingEngineImpl {
+	return &matchingEngineImpl{
+		taskManager:                s.taskManager,
 		historyService:             s.historyClient,
 		taskLists:                  make(map[taskListID]*taskListContext),
 		logger:                     s.logger,
 		tokenSerializer:            common.NewJSONTaskTokenSerializer(),
 		longPollExpirationInterval: 100 * time.Second, //time.Millisecond,
+		rangeSize:                  rangeSize,
 	}
 }
 
 func (s *matchingEngineSuite) TearDownTest() {
-	s.mockTaskMgr.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockExecutionManager.AssertExpectations(s.T())
+	s.matchingEngine.Stop()
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
@@ -131,8 +154,6 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	s.matchingEngine.rangeSize = 2 // to test that range is not updated without tasks
 	s.matchingEngine.longPollExpirationInterval = 10 * time.Millisecond
-	ttm := newTestTaskManager(s.logger)
-	s.matchingEngine.taskManager = ttm
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
 
@@ -156,7 +177,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 			s.Equal(emptyPollForDecisionTaskResponse, resp)
 		}
 	}
-	s.EqualValues(1, ttm.taskLists[*tlID].rangeID)
+	s.EqualValues(1, s.taskManager.taskLists[*tlID].rangeID)
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
@@ -168,8 +189,6 @@ func (s *matchingEngineSuite) TestAddDecisionTasks() {
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType int) {
-	ttm := newTestTaskManager(s.logger)
-	s.matchingEngine.taskManager = ttm
 	s.matchingEngine.rangeSize = 300 // override to low number for the test
 
 	tl := "makeToast"
@@ -204,7 +223,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 		}
 		s.NoError(err)
 	}
-	s.EqualValues(taskCount, ttm.getTaskCount(&taskListID{taskListName: tl, taskType: taskType}))
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(&taskListID{taskListName: tl, taskType: taskType}))
 
 }
 
@@ -222,9 +241,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	tl := "makeToast"
 	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	ttm := newTestTaskManager(s.logger)
-	ttm.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.taskManager = ttm
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
@@ -240,7 +257,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		err := s.matchingEngine.AddActivityTask(&addRequest)
 		s.NoError(err)
 	}
-	s.EqualValues(taskCount, ttm.getTaskCount(tlID))
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -297,13 +314,13 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(taskToken, result.TaskToken)
 		i++
 	}
-	s.EqualValues(0, ttm.getTaskCount(tlID))
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
@@ -320,9 +337,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	tl := "makeToast"
 	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	ttm := newTestTaskManager(s.logger)
-	ttm.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.taskManager = ttm
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
@@ -401,14 +416,14 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(string(taskToken), string(result.TaskToken))
 
 	}
-	s.EqualValues(0, ttm.getCreateTaskCount(tlID)) // Not tasks stored in persistence
-	s.EqualValues(0, ttm.getTaskCount(tlID))
+	s.EqualValues(0, s.taskManager.getCreateTaskCount(tlID)) // Not tasks stored in persistence
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
@@ -416,17 +431,15 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	workflowID := "workflow1"
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
-	const workerCount = 20
-	const taskCount = 1000
+	const workerCount = 200
+	const taskCount = 100
 	const initialRangeID = 0
 	const rangeSize = 3
 	var scheduleID int64 = 123
 
 	tl := "makeToast"
 	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	ttm := newTestTaskManager(s.logger)
-	ttm.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.taskManager = ttm
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
@@ -445,7 +458,8 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 				err := s.matchingEngine.AddActivityTask(&addRequest)
 				if err != nil {
-					panic(err)
+					s.logger.Infof("Failure in AddActivityTask: %v", err)
+					i--
 				}
 			}
 			wg.Done()
@@ -516,17 +530,16 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		}()
 	}
 	wg.Wait()
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
-	s.EqualValues(0, ttm.getTaskCount(tlID))
-	persisted := ttm.getCreateTaskCount(tlID)
+	persisted := s.taskManager.getCreateTaskCount(tlID)
 	s.True(persisted < totalTasks)
 	expectedRange := int64(initialRangeID + persisted/rangeSize)
 	if persisted%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
-
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
@@ -534,8 +547,8 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	workflowID := "workflow1"
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
-	const workerCount = 20
-	const taskCount = 1000
+	const workerCount = 200
+	const taskCount = 100
 	const initialRangeID = 0
 	const rangeSize = 5
 	var scheduleID int64 = 123
@@ -543,9 +556,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 	tl := "makeToast"
 	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeDecision}
-	ttm := newTestTaskManager(s.logger)
-	ttm.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.taskManager = ttm
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
@@ -641,16 +652,310 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		}()
 	}
 	wg.Wait()
-	s.EqualValues(0, ttm.getTaskCount(tlID))
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
-	persisted := ttm.getCreateTaskCount(tlID)
+	persisted := s.taskManager.getCreateTaskCount(tlID)
 	s.True(persisted < totalTasks)
 	expectedRange := int64(initialRangeID + persisted/rangeSize)
 	if persisted%rangeSize > 0 {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= ttm.getTaskListManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+}
+
+func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
+	runID := "run1"
+	workflowID := "workflow1"
+	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+
+	const engineCount = 2
+	const taskCount = 200
+	const iterations = 2
+	const initialRangeID = 0
+	const rangeSize = 10
+	var scheduleID int64 = 123
+
+	tl := "makeToast"
+	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
+	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+
+	var engines []*matchingEngineImpl
+
+	for p := 0; p < engineCount; p++ {
+		e := s.newMatchingEngine(rangeSize)
+		engines = append(engines, e)
+		e.Start()
+	}
+
+	for j := 0; j < iterations; j++ {
+		for p := 0; p < engineCount; p++ {
+			engine := engines[p]
+			for i := int64(0); i < taskCount; i++ {
+				addRequest := matching.AddActivityTaskRequest{
+					Execution:  &workflowExecution,
+					ScheduleId: &scheduleID,
+					TaskList:   taskList}
+
+				err := engine.AddActivityTask(&addRequest)
+				if err != nil {
+					if _, ok := err.(*persistence.ConditionFailedError); ok {
+						i-- // retry adding
+					} else {
+						panic(fmt.Sprintf("errType=%T, err=%v", err, err))
+					}
+				}
+			}
+		}
+	}
+	activityTypeName := "activity1"
+	activityID := "activityId1"
+	activityType := &workflow.ActivityType{Name: &activityTypeName}
+	activityInput := []byte("Activity1 Input")
+
+	var startedID int64 = 123456
+	identity := "nobody"
+
+	startedTasks := make(map[int64]bool)
+
+	// History service is using mock
+	s.historyClient.On("RecordActivityTaskStarted",
+		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
+		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
+				return nil
+			}
+			s.logger.Debugf("Mock Received RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId)
+
+			return &gohistory.RecordActivityTaskStartedResponse{
+				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
+					&workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:   &activityID,
+						TaskList:     &workflow.TaskList{Name: taskList.Name},
+						ActivityType: activityType,
+						Input:        activityInput,
+					}),
+				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
+					TaskList: &workflow.TaskList{Name: taskList.Name},
+					Identity: &identity,
+				})}
+		},
+		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) error {
+			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
+				s.logger.Debugf("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId)
+				return &workflow.EntityNotExistsError{Message: "already started"}
+			}
+			startedTasks[*taskRequest.TaskId] = true
+			return nil
+		})
+	for j := 0; j < iterations; j++ {
+		for p := 0; p < engineCount; p++ {
+			engine := engines[p]
+			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+				result, err := engine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+					TaskList: taskList,
+					Identity: &identity})
+				if err != nil {
+					panic(err)
+				}
+				s.NotNil(result)
+				if len(result.TaskToken) == 0 {
+					s.logger.Debugf("empty poll returned")
+					continue
+				}
+				s.EqualValues(activityID, *result.ActivityId)
+				s.EqualValues(activityType, result.ActivityType)
+				s.EqualValues(activityInput, result.Input)
+				s.EqualValues(startedID, *result.StartedEventId)
+				s.EqualValues(workflowExecution, *result.WorkflowExecution)
+				token := &common.TaskToken{
+					WorkflowID: workflowID,
+					RunID:      runID,
+					ScheduleID: scheduleID,
+				}
+				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
+				if err != nil {
+					panic(err)
+				}
+
+				//taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+				//s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
+				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				i++
+			}
+		}
+	}
+
+	for _, e := range engines {
+		e.Stop()
+	}
+
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	totalTasks := taskCount * engineCount * iterations
+	persisted := s.taskManager.getCreateTaskCount(tlID)
+	// No sync matching as all messages are published first
+	s.EqualValues(totalTasks, persisted)
+	expectedRange := int64(initialRangeID + persisted/rangeSize)
+	if persisted%rangeSize > 0 {
+		expectedRange++
+	}
+	// Due to conflicts some ids are skipped and more real ranges are used.
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+
+}
+
+func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
+	runID := "run1"
+	workflowID := "workflow1"
+	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+
+	const engineCount = 2
+	const taskCount = 200
+	const iterations = 2
+	const initialRangeID = 0
+	const rangeSize = 10
+	var scheduleID int64 = 123
+
+	tl := "makeToast"
+	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeDecision}
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
+	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+
+	var engines []*matchingEngineImpl
+
+	for p := 0; p < engineCount; p++ {
+		e := s.newMatchingEngine(rangeSize)
+		engines = append(engines, e)
+		e.Start()
+	}
+
+	for j := 0; j < iterations; j++ {
+		for p := 0; p < engineCount; p++ {
+			engine := engines[p]
+			for i := int64(0); i < taskCount; i++ {
+				addRequest := matching.AddDecisionTaskRequest{
+					Execution:  &workflowExecution,
+					ScheduleId: &scheduleID,
+					TaskList:   taskList}
+
+				err := engine.AddDecisionTask(&addRequest)
+				if err != nil {
+					if _, ok := err.(*persistence.ConditionFailedError); ok {
+						i-- // retry adding
+					} else {
+						panic(fmt.Sprintf("errType=%T, err=%v", err, err))
+					}
+				}
+			}
+		}
+	}
+	workflowTypeName := "workflowType1"
+	activityID := "workflow1"
+	activityTypeName := "activity1"
+	workflowType := &workflow.WorkflowType{Name: &workflowTypeName}
+	activityType := &workflow.ActivityType{Name: &activityTypeName}
+
+	decisionInput := []byte("Decision1 Input")
+
+	identity := "nobody"
+	var startedEventID int64 = 1412
+
+	startedTasks := make(map[int64]bool)
+
+	// History service is using mock
+	s.historyClient.On("RecordDecisionTaskStarted",
+		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
+		func(taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
+			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
+				return nil
+			}
+			s.logger.Debugf("Mock Received RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId)
+			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
+			return &gohistory.RecordDecisionTaskStartedResponse{
+				PreviousStartedEventId: &startedEventID,
+				StartedEventId:         &startedEventID,
+				WorkflowType:           workflowType,
+				History: &workflow.History{Events: []*workflow.HistoryEvent{
+					newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
+						&workflow.ScheduleActivityTaskDecisionAttributes{
+							ActivityId:   &activityID,
+							TaskList:     &workflow.TaskList{Name: taskList.Name},
+							ActivityType: activityType,
+							Input:        decisionInput,
+						}),
+					newActivityTaskStartedEvent(startedEventID, 0, &workflow.PollForActivityTaskRequest{
+						TaskList: &workflow.TaskList{Name: taskList.Name},
+						Identity: &identity,
+					})}}}
+		},
+		func(taskRequest *gohistory.RecordDecisionTaskStartedRequest) error {
+			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
+				s.logger.Debugf("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId)
+				return &workflow.EntityNotExistsError{Message: "already started"}
+			}
+			startedTasks[*taskRequest.TaskId] = true
+			return nil
+		})
+	for j := 0; j < iterations; j++ {
+		for p := 0; p < engineCount; p++ {
+			engine := engines[p]
+			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+				result, err := engine.PollForDecisionTask(&workflow.PollForDecisionTaskRequest{
+					TaskList: taskList,
+					Identity: &identity})
+				if err != nil {
+					panic(err)
+				}
+				s.NotNil(result)
+				if len(result.TaskToken) == 0 {
+					s.logger.Debugf("empty poll returned")
+					continue
+				}
+				s.EqualValues(workflowExecution, *result.WorkflowExecution)
+				s.EqualValues(workflowType, result.WorkflowType)
+				s.EqualValues(startedEventID, *result.StartedEventId)
+				s.EqualValues(workflowExecution, *result.WorkflowExecution)
+				token := &common.TaskToken{
+					WorkflowID: workflowID,
+					RunID:      runID,
+					ScheduleID: scheduleID,
+				}
+				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
+				if err != nil {
+					panic(err)
+				}
+
+				//taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
+				//s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
+				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
+				i++
+			}
+		}
+	}
+
+	for _, e := range engines {
+		e.Stop()
+	}
+
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	totalTasks := taskCount * engineCount * iterations
+	persisted := s.taskManager.getCreateTaskCount(tlID)
+	// No sync matching as all messages are published first
+	s.EqualValues(totalTasks, persisted)
+	expectedRange := int64(initialRangeID + persisted/rangeSize)
+	if persisted%rangeSize > 0 {
+		expectedRange++
+	}
+	// Due to conflicts some ids are skipped and more real ranges are used.
+	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+
 }
 
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
@@ -747,6 +1052,8 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.rangeID++
+	m.logger.Debugf("LeaseTaskList rangeID=%v", tlm.rangeID)
+
 	return &persistence.LeaseTaskListResponse{
 		TaskListInfo: &persistence.TaskListInfo{AckLevel: tlm.ackLevel, Name: request.TaskList, TaskType: request.TaskType, RangeID: tlm.rangeID},
 	}, nil
@@ -754,6 +1061,8 @@ func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListReques
 
 // UpdateTaskList provides a mock function with given fields: request
 func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequest) (*persistence.UpdateTaskListResponse, error) {
+	m.logger.Debugf("UpdateTaskList taskListInfo=%v, ackLevel=%v", request.TaskListInfo, request.TaskListInfo.AckLevel)
+
 	tli := request.TaskListInfo
 	tlm := m.getTaskListManager(newTaskListID(tli.Name, tli.TaskType))
 
@@ -770,11 +1079,17 @@ func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequ
 
 // CompleteTask provides a mock function with given fields: request
 func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
+	m.logger.Debugf("CompleteTask taskID=%v, ackLevel=%v", request.TaskID, request.TaskList.AckLevel)
+	if request.TaskID <= 0 {
+		panic(fmt.Errorf("Invalid taskID=%v", request.TaskID))
+	}
+
 	tli := request.TaskList
 	tlm := m.getTaskListManager(newTaskListID(tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
+
 	if tlm.rangeID != tli.RangeID {
 		return &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to complete task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
@@ -787,6 +1102,10 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTask(request *persistence.CreateTaskRequest) (*persistence.CreateTaskResponse, error) {
+	m.logger.Debugf("testTaskManager.CreateTask taskID=%v, rangeID=%v", request.TaskID, request.RangeID)
+	if request.TaskID <= 0 {
+		panic(fmt.Errorf("Invalid taskID=%v", request.TaskID))
+	}
 	var taskList string
 	var scheduleID int64
 	taskType := request.Data.GetType()
@@ -803,16 +1122,18 @@ func (m *testTaskManager) CreateTask(request *persistence.CreateTaskRequest) (*p
 	tlm.Lock()
 	defer tlm.Unlock()
 
-	tlm.createTaskCount++
 	if tlm.rangeID != request.RangeID {
+		m.logger.Debugf("testTaskManager.CreateTask ConditionFailedError taskID=%v, rangeID: %v, db rangeID: %v",
+			request.TaskID, request.RangeID, tlm.rangeID)
+
 		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
+			Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
 				taskList, taskType, request.RangeID, tlm.rangeID),
 		}
 	}
 	_, ok := tlm.tasks.Get(request.TaskID)
 	if ok {
-		return nil, fmt.Errorf("Duplicated TaskID %v", request.TaskID)
+		panic(fmt.Sprintf("Duplicated TaskID %v", request.TaskID))
 	}
 	tlm.tasks.Put(request.TaskID, &persistence.TaskInfo{
 		RunID:      *request.Execution.RunId,
@@ -820,17 +1141,20 @@ func (m *testTaskManager) CreateTask(request *persistence.CreateTaskRequest) (*p
 		TaskID:     request.TaskID,
 		WorkflowID: *request.Execution.WorkflowId,
 	})
+	tlm.createTaskCount++
 	return &persistence.CreateTaskResponse{}, nil
 }
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
+	m.logger.Debugf("testTaskManager.GetTasks readLevel=%v, maxReadLevel=%v", request.ReadLevel, request.MaxReadLevel)
+
 	tlm := m.getTaskListManager(newTaskListID(request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	if tlm.rangeID != request.RangeID {
 		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
+			Msg: fmt.Sprintf("testTaskManager.GetTasks failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
 				request.TaskList, request.TaskType, request.RangeID, tlm.rangeID),
 		}
 	}
@@ -866,4 +1190,31 @@ func (m *testTaskManager) getCreateTaskCount(taskList *taskListID) int {
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
+}
+
+func (m *testTaskManager) String() string {
+	m.Lock()
+	defer m.Unlock()
+	var result string
+	for id, tl := range m.taskLists {
+		tl.Lock()
+		if id.taskType == persistence.TaskListTypeActivity {
+			result += "Activity"
+		} else {
+			result += "Decision"
+		}
+		result += " task list " + id.taskListName
+		result += "\n"
+		result += fmt.Sprintf("AckLevel=%v\n", tl.ackLevel)
+		result += fmt.Sprintf("CreateTaskCount=%v\n", tl.createTaskCount)
+		result += fmt.Sprintf("RangeID=%v\n", tl.rangeID)
+		result += "Tasks=\n"
+		for _, t := range tl.tasks.Values() {
+			result += spew.Sdump(t)
+			result += "\n"
+
+		}
+		tl.Unlock()
+	}
+	return result
 }

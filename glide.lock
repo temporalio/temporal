@@ -1,8 +1,8 @@
-hash: c698886e4ee5cb3dfdad9e92a8ed1121284bfc6f49be8e9f470e48fd40936431
-updated: 2017-02-01T18:36:34.82430395-08:00
+hash: f2a85cbde4d5a2159f3cd03317bd09a2b0dccfc25f1b31feea02c87a074e2293
+updated: 2017-02-11T19:27:37.389606709-08:00
 imports:
 - name: code.uber.internal/go-common.git
-  version: 3eda30aa4057e008a280acef42e35a59a4ddcafe
+  version: 6394a71ddd49792dd379b6a0956a6b0a50ba3136
   subpackages:
   - x/backoff
   - x/config
@@ -20,7 +20,7 @@ imports:
   - x/tchannel/metrics
   - x/time
 - name: github.com/apache/thrift
-  version: 8d377fa6befb6ef9fd2364b5cc2972406e2a92a3
+  version: e1832c354391deb0e0ce94a62ff32e8ce1c83fd3
   subpackages:
   - lib/go/thrift
 - name: github.com/benbjohnson/clock
@@ -36,9 +36,16 @@ imports:
   subpackages:
   - spew
 - name: github.com/dgryski/go-farm
-  version: 83948bc0eb076b6b72c28abe5282fa8cf5240db6
+  version: f94e93e5a2b3a579af0f5367c84b54cb9aa00074
 - name: github.com/emirpasic/gods
-  version: ec46b0116df083cba218abbf72522c6d0c065e4e
+  version: fc3e4a43ff31b0accc20d750d64ea4b45ee61a5e
+  subpackages:
+  - containers
+  - maps
+  - maps/treemap
+  - trees
+  - trees/redblacktree
+  - utils
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/getsentry/raven-go
@@ -55,22 +62,22 @@ imports:
   subpackages:
   - gomock
 - name: github.com/golang/snappy
-  version: d9eb7a3d35ec988b8585d4a0068e462c27d28380
+  version: d7b1e156f50d3c4664f683603af70e3e47fa0aa2
 - name: github.com/hailocab/go-hostpool
   version: e80d13ce29ede4452c43dea11e79b9bc8a15b478
 - name: github.com/opentracing/opentracing-go
-  version: 0c3154a3c2ce79d3271985848659870599dfb77c
+  version: 6edb48674bd9467b8e91fda004f2bd7202d60ce4
   subpackages:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: 5007efa264d92316c43112bc573e754bc889b7b1
+  version: 1b00554d822231195d1babd97ff4a781231955c9
 - name: github.com/pmezard/go-difflib
   version: 792786c7400a136282c1664665ae0a8db921c6c2
   subpackages:
   - difflib
 - name: github.com/rcrowley/go-metrics
-  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
+  version: eeba7bd0dd01ace6e690fa833b3f22aaec29af43
 - name: github.com/Sirupsen/logrus
   version: 08a8a7c27e3d058a8989316a850daad1c10bf4ab
 - name: github.com/stretchr/objx
@@ -87,7 +94,7 @@ imports:
 - name: github.com/uber-go/atomic
   version: 0c9e689d64f004564b79d9a663634756df322902
 - name: github.com/uber-go/tally
-  version: 2750b4ae690cbeb294016efe18ceaeb80c4ce17c
+  version: 08e86c3c1eb55364d563bd6beb982040225f4bb7
 - name: github.com/uber/jaeger-client-go
   version: e39d0f1b622558cae3d9db0062a739cc6ffa700f
   subpackages:
@@ -131,11 +138,11 @@ imports:
   - trand
   - typed
 - name: golang.org/x/net
-  version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
+  version: a689eb3bc4b53af70390acc3cf68c9f549b6b8d6
   subpackages:
   - context
 - name: golang.org/x/sys
-  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
+  version: d4feaf1a7e61e1d9e79e6c4e76c6349e9cab0a03
   subpackages:
   - unix
 - name: gopkg.in/inf.v0
@@ -143,5 +150,5 @@ imports:
 - name: gopkg.in/validator.v2
   version: 3e4f037f12a1221a0864cf0dd2e81c452ab22448
 - name: gopkg.in/yaml.v2
-  version: 4c78c975fe7c825c6d1466c42be594d1d6f3aba6
+  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 testImports: []

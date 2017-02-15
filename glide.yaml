@@ -18,3 +18,4 @@ import:
   - hashring
 - package: github.com/dgryski/go-farm
 - package: github.com/emirpasic/gods
+- package: github.com/davecgh/go-spew
