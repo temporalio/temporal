@@ -279,7 +279,7 @@ func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (
 	p.m3Client.IncCounter(metrics.UpdateTaskListScope, metrics.WorkflowRequests)
 
 	sw := p.m3Client.StartTimer(metrics.UpdateTaskListScope, metrics.WorkflowLatency)
-	response, err := p.UpdateTaskList(request)
+	response, err := p.persistence.UpdateTaskList(request)
 	sw.Stop()
 
 	if err != nil {
