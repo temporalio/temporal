@@ -40,6 +40,6 @@ type (
 
 	timerQueueProcessor interface {
 		common.Daemon
-		NotifyNewTimer()
+		NotifyNewTimer(taskID int64)
 	}
 )

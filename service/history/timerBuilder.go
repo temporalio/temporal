@@ -15,12 +15,12 @@ import (
 
 // Timer constansts
 const (
-	TimerQueueSeqNumBits       = 26 // For timer-queues, use 38 bits of (expiry) timestamp, 26 bits of seqnum
-	TimerQueueSeqNumBitmask    = (int64(1) << TimerQueueSeqNumBits) - 1
-	TimerQueueTimeStampBitmask = math.MaxInt64 &^ TimerQueueSeqNumBitmask
-	SeqNumMax                  = math.MaxInt64 & TimerQueueSeqNumBitmask // The max allowed seqnum (subject to mode-specific bitmask)
-	MinTimerKey                = -1
-	MaxTimerKey                = math.MaxInt64
+	TimerQueueSeqNumBits                  = 26 // For timer-queues, use 38 bits of (expiry) timestamp, 26 bits of seqnum
+	TimerQueueSeqNumBitmask               = (int64(1) << TimerQueueSeqNumBits) - 1
+	TimerQueueTimeStampBitmask            = math.MaxInt64 &^ TimerQueueSeqNumBitmask
+	SeqNumMax                             = math.MaxInt64 & TimerQueueSeqNumBitmask // The max allowed seqnum (subject to mode-specific bitmask)
+	MinTimerKey                SequenceID = -1
+	MaxTimerKey                SequenceID = math.MaxInt64
 
 	DefaultScheduleToStartActivityTimeoutInSecs = 1
 	DefaultScheduleToCloseActivityTimeoutInSecs = 1

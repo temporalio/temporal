@@ -238,9 +238,9 @@ Update_History_Loop:
 		}
 
 		// Start a timer for the decision task.
-		defer e.timerProcessor.NotifyNewTimer()
 		timeOutTask := context.tBuilder.AddDecisionTimoutTask(scheduleID, builder)
 		timerTasks := []persistence.Task{timeOutTask}
+		defer e.timerProcessor.NotifyNewTimer(timeOutTask.GetTaskID())
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -315,7 +315,6 @@ Update_History_Loop:
 
 		// Start a timer for the activity task.
 		timerTasks := []persistence.Task{}
-		defer e.timerProcessor.NotifyNewTimer()
 		start2CloseTimeoutTask, err := context.tBuilder.AddStartToCloseActivityTimeout(scheduleID, msBuilder)
 		if err != nil {
 			return nil, err
@@ -328,6 +327,7 @@ Update_History_Loop:
 		if start2HeartBeatTimeoutTask != nil {
 			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
 		}
+		defer e.timerProcessor.NotifyNewTimer(start2CloseTimeoutTask.GetTaskID())
 
 		ai.StartedID = event.GetEventId()
 		ai.RequestID = requestID
@@ -406,7 +406,6 @@ Update_History_Loop:
 				})
 
 				// Create activity timeouts.
-				defer e.timerProcessor.NotifyNewTimer()
 				Schedule2StartTimeoutTask := context.tBuilder.AddScheduleToStartActivityTimeout(
 					scheduleEvent.GetEventId(), scheduleEvent, msBuilder)
 				timerTasks = append(timerTasks, Schedule2StartTimeoutTask)
@@ -417,6 +416,7 @@ Update_History_Loop:
 					return err
 				}
 				timerTasks = append(timerTasks, Schedule2CloseTimeoutTask)
+				defer e.timerProcessor.NotifyNewTimer(Schedule2StartTimeoutTask.GetTaskID())
 
 			case workflow.DecisionType_CompleteWorkflowExecution:
 				if isComplete || builder.hasPendingTasks() {
@@ -672,11 +672,11 @@ Update_History_Loop:
 		e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v", scheduleID, ai)
 
 		// Re-schedule next heartbeat.
-		defer e.timerProcessor.NotifyNewTimer()
 		start2HeartBeatTimeoutTask, _ := context.tBuilder.AddHeartBeatActivityTimeout(scheduleID, msBuilder)
 		timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
 		ai.Details = request.GetDetails()
 		msBuilder.UpdatePendingActivity(scheduleID, ai)
+		defer e.timerProcessor.NotifyNewTimer(start2HeartBeatTimeoutTask.GetTaskID())
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.

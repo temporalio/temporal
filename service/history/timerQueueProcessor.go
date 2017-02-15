@@ -14,17 +14,24 @@ import (
 	"github.com/uber-common/bark"
 )
 
+const (
+	timerTaskBatchSize          = 10
+	processTimerTaskWorkerCount = 5
+)
+
 type (
 	timerQueueProcessorImpl struct {
-		historyService   *historyEngineImpl
-		executionManager persistence.ExecutionManager
-		isStarted        int32
-		isStopped        int32
-		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
-		newTimerCh       chan struct{}
-		logger           bark.Logger
-		timerFiredCount  uint64
+		historyService    *historyEngineImpl
+		executionManager  persistence.ExecutionManager
+		isStarted         int32
+		isStopped         int32
+		shutdownWG        sync.WaitGroup
+		shutdownCh        chan struct{}
+		newTimerCh        chan struct{}
+		logger            bark.Logger
+		timerFiredCount   uint64
+		lock              sync.Mutex // Used to synchronize pending timers.
+		minPendingTimerID SequenceID // Track the minimum timer ID in memory.
 	}
 
 	timeGate struct {
@@ -103,10 +110,11 @@ func (t *timeGate) String() string {
 
 func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager persistence.ExecutionManager, logger bark.Logger) timerQueueProcessor {
 	return &timerQueueProcessorImpl{
-		historyService:   historyService,
-		executionManager: executionManager,
-		shutdownCh:       make(chan struct{}),
-		newTimerCh:       make(chan struct{}, 1),
+		historyService:    historyService,
+		executionManager:  executionManager,
+		shutdownCh:        make(chan struct{}),
+		newTimerCh:        make(chan struct{}, 1),
+		minPendingTimerID: MaxTimerKey,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueTimerQueueComponent,
 		}),
@@ -141,7 +149,15 @@ func (t *timerQueueProcessorImpl) Stop() {
 }
 
 // NotifyNewTimer - Notify the processor about the new timer arrival.
-func (t *timerQueueProcessorImpl) NotifyNewTimer() {
+func (t *timerQueueProcessorImpl) NotifyNewTimer(taskID int64) {
+
+	t.lock.Lock()
+	taskSeqID := SequenceID(taskID)
+	if taskSeqID < t.minPendingTimerID {
+		t.minPendingTimerID = taskSeqID
+	}
+	t.lock.Unlock()
+
 	select {
 	case t.newTimerCh <- struct{}{}:
 		// Notified about new timer.
@@ -154,13 +170,26 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer() {
 func (t *timerQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
 
+	// Workers to process timer tasks that are expired.
+	tasksCh := make(chan SequenceID, timerTaskBatchSize)
+	var workerWG sync.WaitGroup
+	for i := 0; i < processTimerTaskWorkerCount; i++ {
+		workerWG.Add(1)
+		go t.processTaskWorker(tasksCh, &workerWG)
+	}
+
 RetryProcessor:
 	for {
 		select {
 		case <-t.shutdownCh:
+			t.logger.Info("Timer queue processor pump shutting down.")
+			close(tasksCh)
+			if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
+				t.logger.Warn("Timer queue processor timed out on worker shutdown.")
+			}
 			break RetryProcessor
 		default:
-			err := t.internalProcessor()
+			err := t.internalProcessor(tasksCh)
 			if err != nil {
 				t.logger.Error("processor pump failed with error: ", err)
 			}
@@ -169,7 +198,7 @@ RetryProcessor:
 	t.logger.Info("Timer processor exiting.")
 }
 
-func (t *timerQueueProcessorImpl) internalProcessor() error {
+func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- SequenceID) error {
 	nextKey, err := t.getInitialSeed()
 	if err != nil {
 		return err
@@ -215,30 +244,31 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 
 		if isWokeByNewTimer {
 			t.logger.Debugf("Woke up by the timer")
-			//// We have a new timer msg, see if it is earlier than what we know.
-			//earlyTimeKey := SequenceID(time.Now().UnixNano() - int64(time.Second))
-			//tempKey, err := t.getNextKey(earlyTimeKey, nextKey)
-			tempKey, err := t.getInitialSeed()
-			if err != nil {
-				return err
-			}
-			if tempKey != MaxTimerKey {
+			tempKey := MaxTimerKey
+			t.lock.Lock()
+			tempKey, t.minPendingTimerID = t.minPendingTimerID, tempKey
+			t.lock.Unlock()
+
+			if tempKey != MaxTimerKey && tempKey < nextKey {
 				nextKey = tempKey
 			}
+			t.logger.Debugf("Next key after woke up by timer: %v, tempKey: %v", nextKey, tempKey)
 		}
 
+		pendingNextKeysList := []SequenceID{}
 		for nextKey != MaxTimerKey && t.isProcessNow(nextKey) {
 			// We have a timer to fire.
-			err = t.processTimerTask(nextKey)
-			if err != nil && err != ErrMaxAttemptsExceeded {
-				return err
-			}
+			tasksCh <- nextKey
 
 			// Get next key.
-			nextKey, err = t.getNextKey(nextKey, MaxTimerKey)
-			if err != nil {
-				return err
+			if len(pendingNextKeysList) == 0 {
+				pendingNextKeysList, err = t.getNextKey(nextKey+1, MaxTimerKey)
+				if err != nil {
+					return err
+				}
 			}
+			nextKey = pendingNextKeysList[0]
+			pendingNextKeysList = pendingNextKeysList[1:]
 		}
 
 		if nextKey != MaxTimerKey {
@@ -252,7 +282,11 @@ func (t *timerQueueProcessorImpl) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorImpl) getInitialSeed() (SequenceID, error) {
-	return t.getNextKey(MinTimerKey, MaxTimerKey)
+	keys, err := t.getNextKey(MinTimerKey, MaxTimerKey)
+	if err != nil {
+		return MaxTimerKey, err
+	}
+	return keys[0], nil
 }
 
 func (t *timerQueueProcessorImpl) isProcessNow(key SequenceID) bool {
@@ -260,15 +294,19 @@ func (t *timerQueueProcessorImpl) isProcessNow(key SequenceID) bool {
 	return expiryTime <= time.Now().UnixNano()
 }
 
-func (t *timerQueueProcessorImpl) getNextKey(minKey SequenceID, maxKey SequenceID) (SequenceID, error) {
-	tasks, err := t.getTimerTasks(minKey, maxKey, 1)
+func (t *timerQueueProcessorImpl) getNextKey(minKey SequenceID, maxKey SequenceID) ([]SequenceID, error) {
+	tasks, err := t.getTimerTasks(minKey, maxKey, timerTaskBatchSize)
 	if err != nil {
-		return MaxTimerKey, err
+		return []SequenceID{MaxTimerKey}, err
 	}
+	keys := []SequenceID{}
 	if len(tasks) > 0 {
-		return SequenceID(tasks[0].TaskID), nil
+		for _, ti := range tasks {
+			keys = append(keys, SequenceID(ti.TaskID))
+		}
+		return keys, nil
 	}
-	return MaxTimerKey, nil
+	return []SequenceID{MaxTimerKey}, nil
 }
 
 func (t *timerQueueProcessorImpl) getTimerTasks(minKey SequenceID, maxKey SequenceID, batchSize int) ([]*persistence.TimerTaskInfo, error) {
@@ -281,6 +319,23 @@ func (t *timerQueueProcessorImpl) getTimerTasks(minKey SequenceID, maxKey Sequen
 		return nil, err
 	}
 	return response.Timers, nil
+}
+
+func (t *timerQueueProcessorImpl) processTaskWorker(tasksCh <-chan SequenceID, workerWG *sync.WaitGroup) {
+	defer workerWG.Done()
+	for {
+		select {
+		case key, ok := <-tasksCh:
+			if !ok {
+				return
+			}
+
+			err := t.processTimerTask(key)
+			if err != nil {
+				t.logger.Errorf("Failed to process timer with SequenceID: %s with error: %v", key, err)
+			}
+		}
+	}
 }
 
 func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {

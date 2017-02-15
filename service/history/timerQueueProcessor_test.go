@@ -100,7 +100,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(timerInfo, "Expected non empty timers list")
 	s.Equal(1, len(timerInfo))
@@ -109,7 +109,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 	processor.Start()
 
 	for {
-		timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
 			processor.Stop()
@@ -118,7 +118,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	timerInfo, err = s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err = s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
 }
@@ -133,7 +133,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(timerInfo, "Expected non empty timers list")
 	s.Equal(3, len(timerInfo))
@@ -142,7 +142,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	processor.Start()
 
 	for {
-		timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 		// fmt.Printf("TestManyTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
@@ -152,7 +152,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 		time.Sleep(1000 * time.Millisecond)
 	}
 
-	timerInfo, err = s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err = s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
 
@@ -181,7 +181,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.Empty(timerInfo, "Expected empty timers list")
 
@@ -196,10 +196,10 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	err2 := s.UpdateWorkflowExecution(info, nil, nil, int64(3), timerTasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	processor.NotifyNewTimer()
+	processor.NotifyNewTimer(timeOutTask.GetTaskID())
 
 	for {
-		timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 		//fmt.Printf("TestAfterTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
@@ -209,7 +209,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 		time.Sleep(1000 * time.Millisecond)
 	}
 
-	timerInfo, err = s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+	timerInfo, err = s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
 
@@ -218,7 +218,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 
 func (s *timerQueueProcessorSuite) waitForTimerTasksToProcess(p timerQueueProcessor) {
 	for {
-		timerInfo, err := s.GetTimerIndexTasks(MinTimerKey, MaxTimerKey)
+		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 		//fmt.Printf("TestAfterTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
@@ -309,7 +309,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	processor.NotifyNewTimer()
+	processor.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
@@ -336,7 +336,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	msBuilder.updateActivityInfos[0].StartedID = aste.GetEventId()
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -366,7 +366,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -400,7 +400,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil /* since activity is completed */, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -429,7 +429,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -459,7 +459,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -493,7 +493,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil /* since it is completed */, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -524,7 +524,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	s.Nil(err)
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, msBuilder.updateActivityInfos, nil)
-	p.NotifyNewTimer()
+	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -570,7 +570,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	timerTasks := []persistence.Task{t1}
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, msBuilder.updateTimerInfos)
-	processor.NotifyNewTimer()
+	processor.NotifyNewTimer(t1.GetTaskID())
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
@@ -609,7 +609,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	startTimerEvent2 := builder.AddTimerStartedEvent(decisionTaskStartEvent.GetEventId(),
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 
-	_, err := tBuilder.AddUserTimer("tid1", 1, startTimerEvent1.GetEventId(), msBuilder)
+	t1, err := tBuilder.AddUserTimer("tid1", 1, startTimerEvent1.GetEventId(), msBuilder)
 	s.Nil(err)
 
 	msBuilder = newMutableStateBuilder(s.logger)
@@ -622,7 +622,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	timerTasks := []persistence.Task{t2}
 
 	s.updateHistoryAndTimers(workflowExecution, history, timerTasks, nil, msBuilder.updateTimerInfos)
-	processor.NotifyNewTimer()
+	processor.NotifyNewTimer(t1.GetTaskID())
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
