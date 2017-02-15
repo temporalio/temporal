@@ -19,3 +19,6 @@ import:
 - package: github.com/dgryski/go-farm
 - package: github.com/emirpasic/gods
 - package: github.com/davecgh/go-spew
+- package: github.com/uber-go/timer
+  subpackages:
+  - twheel

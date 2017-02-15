@@ -28,6 +28,25 @@ func TestActorCast(t *testing.T) {
 	assert.EqualValues(t, 42, atomic.LoadInt64(&calledWith))
 }
 
+func TestActorScheduleCast(t *testing.T) {
+	a := New("test")
+	var calledWith int64
+	done := make(chan struct{})
+	a.RegisterCast(0, func(req interface{}) {
+		atomic.StoreInt64(&calledWith, int64(req.(int)))
+		close(done)
+	})
+	a.Start()
+	defer a.Stop()
+
+	assert.EqualValues(t, 0, atomic.LoadInt64(&calledWith))
+	before := time.Now()
+	a.ScheduleCast(0, 42, 10*time.Millisecond)
+	<-done
+	assert.True(t, time.Now().Sub(before) >= 9*time.Millisecond) // 9 as timer has 1 ms resolution
+	assert.EqualValues(t, 42, atomic.LoadInt64(&calledWith))
+}
+
 func TestActorCall(t *testing.T) {
 	a := New("test")
 	a.RegisterCall(0, func(req interface{}) (interface{}, error) {

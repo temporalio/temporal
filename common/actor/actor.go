@@ -5,9 +5,11 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/timer/twheel"
 )
 
 type (
@@ -22,6 +24,8 @@ type (
 	AsyncCallFunc func(req interface{}, resp *Response)
 	// StopFunc is a function called when actor is terminating
 	StopFunc func()
+	// CancelFunc cancels a scheduled call
+	CancelFunc func() (canceled bool)
 )
 
 const (
@@ -291,6 +295,33 @@ func (a *Actor) Cast(id Action, req interface{}) {
 		req:  req,
 		cast: cast,
 	}
+}
+
+type scheduledCall struct {
+	id  Action
+	req interface{}
+}
+
+func (a *Actor) callScheduled(arg interface{}) {
+	s := arg.(*scheduledCall)
+	a.Cast(s.id, s.req)
+}
+
+func emptyFunc() bool { return false }
+
+var timeoutWheel = twheel.NewTimeoutWheel()
+
+// ScheduleCast schedules a cast action with a specified delay.
+// Returns a function which can be called to cancel the scheduled action.
+// Cancelling is not atomic so it doesn't guarantee that the scheduled action is not going to execute.
+func (a *Actor) ScheduleCast(id Action, req interface{}, d time.Duration) CancelFunc {
+	timeout, err := timeoutWheel.Schedule(d, a.callScheduled,
+		&scheduledCall{id: id, req: req})
+	if err != nil {
+		a.logger.Debug("Schedule called on stopped actor")
+		return emptyFunc
+	}
+	return timeout.Stop
 }
 
 func (a *Actor) process() {

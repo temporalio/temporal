@@ -1,5 +1,5 @@
-hash: f2a85cbde4d5a2159f3cd03317bd09a2b0dccfc25f1b31feea02c87a074e2293
-updated: 2017-02-11T19:27:37.389606709-08:00
+hash: 93569201460489da61f6f94398e805428961fcef80bed2bbdc7594c86539c1af
+updated: 2017-02-15T13:44:18.74803304-08:00
 imports:
 - name: code.uber.internal/go-common.git
   version: 6394a71ddd49792dd379b6a0956a6b0a50ba3136
@@ -95,6 +95,10 @@ imports:
   version: 0c9e689d64f004564b79d9a663634756df322902
 - name: github.com/uber-go/tally
   version: 08e86c3c1eb55364d563bd6beb982040225f4bb7
+- name: github.com/uber-go/timer
+  version: 65109e3ba73e9381daba2aaecef1ee4e1cc8fceb
+  subpackages:
+  - twheel
 - name: github.com/uber/jaeger-client-go
   version: e39d0f1b622558cae3d9db0062a739cc6ffa700f
   subpackages:
