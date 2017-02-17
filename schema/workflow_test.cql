@@ -11,6 +11,7 @@ CREATE TYPE shard (
   range_id            bigint,
   -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
   stolen_since_renew  int,
+  updated_at          timestamp,
   transfer_ack_level  bigint,
 );
 

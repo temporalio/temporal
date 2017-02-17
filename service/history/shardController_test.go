@@ -11,6 +11,9 @@ import (
 
 	"errors"
 
+	"sync"
+	"time"
+
 	"code.uber.internal/devexp/minions/common/membership"
 	mmocks "code.uber.internal/devexp/minions/common/mocks"
 	"code.uber.internal/devexp/minions/common/persistence"
@@ -195,4 +198,226 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	for shardID := 0; shardID < numShards; shardID++ {
 		s.NotNil(s.controller.getEngineForShard(shardID))
 	}
+}
+
+func (s *shardControllerSuite) TestHistoryEngineClosed() {
+	numShards := 4
+	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger)
+	historyEngines := make(map[int]*MockHistoryEngine)
+	for shardID := 0; shardID < numShards; shardID++ {
+		mockEngine := &MockHistoryEngine{}
+		historyEngines[shardID] = mockEngine
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
+	}
+
+	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
+		mock.Anything).Return(nil)
+	s.controller.Start()
+	var workerWG sync.WaitGroup
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			for attempt := 0; attempt < 10; attempt++ {
+				for shardID := 0; shardID < numShards; shardID++ {
+					engine, err := s.controller.getEngineForShard(shardID)
+					s.Nil(err)
+					s.NotNil(engine)
+				}
+			}
+			workerWG.Done()
+		}()
+	}
+
+	workerWG.Wait()
+
+	differentHostInfo := membership.NewHostInfo("another-host", nil)
+	for shardID := 0; shardID < 2; shardID++ {
+		mockEngine := historyEngines[shardID]
+		mockEngine.On("Stop").Return().Once()
+		s.mockServiceResolver.On("Lookup", string(shardID)).Return(differentHostInfo, nil)
+		s.controller.shardClosedCh <- shardID
+	}
+
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			for attempt := 0; attempt < 10; attempt++ {
+				for shardID := 2; shardID < numShards; shardID++ {
+					engine, err := s.controller.getEngineForShard(shardID)
+					s.Nil(err)
+					s.NotNil(engine)
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+			workerWG.Done()
+		}()
+	}
+
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			shardLost := false
+			for attempt := 0; !shardLost && attempt < 10; attempt++ {
+				for shardID := 0; shardID < 2; shardID++ {
+					_, err := s.controller.getEngineForShard(shardID)
+					if err != nil {
+						s.logger.Errorf("ShardLost: %v", err)
+						shardLost = true
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+
+			s.True(shardLost)
+			workerWG.Done()
+		}()
+	}
+
+	workerWG.Wait()
+
+	for _, mockEngine := range historyEngines {
+		mockEngine.AssertExpectations(s.T())
+	}
+}
+
+func (s *shardControllerSuite) TestRingUpdated() {
+	numShards := 4
+	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger)
+	historyEngines := make(map[int]*MockHistoryEngine)
+	for shardID := 0; shardID < numShards; shardID++ {
+		mockEngine := &MockHistoryEngine{}
+		historyEngines[shardID] = mockEngine
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
+	}
+
+	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
+		mock.Anything).Return(nil)
+	s.controller.Start()
+
+	differentHostInfo := membership.NewHostInfo("another-host", nil)
+	for shardID := 0; shardID < 2; shardID++ {
+		mockEngine := historyEngines[shardID]
+		mockEngine.On("Stop").Return().Once()
+		s.mockServiceResolver.On("Lookup", string(shardID)).Return(differentHostInfo, nil)
+	}
+	s.mockServiceResolver.On("Lookup", string(2)).Return(s.hostInfo, nil)
+	s.mockServiceResolver.On("Lookup", string(3)).Return(s.hostInfo, nil)
+	s.controller.membershipUpdateCh <- &membership.ChangedEvent{}
+
+	var workerWG sync.WaitGroup
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			for attempt := 0; attempt < 10; attempt++ {
+				for shardID := 2; shardID < numShards; shardID++ {
+					engine, err := s.controller.getEngineForShard(shardID)
+					s.Nil(err)
+					s.NotNil(engine)
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+			workerWG.Done()
+		}()
+	}
+
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			shardLost := false
+			for attempt := 0; !shardLost && attempt < 10; attempt++ {
+				for shardID := 0; shardID < 2; shardID++ {
+					_, err := s.controller.getEngineForShard(shardID)
+					if err != nil {
+						s.logger.Errorf("ShardLost: %v", err)
+						shardLost = true
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+
+			s.True(shardLost)
+			workerWG.Done()
+		}()
+	}
+
+	workerWG.Wait()
+
+	for _, mockEngine := range historyEngines {
+		mockEngine.AssertExpectations(s.T())
+	}
+}
+
+func (s *shardControllerSuite) TestShardControllerClosed() {
+	numShards := 4
+	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger)
+	historyEngines := make(map[int]*MockHistoryEngine)
+	for shardID := 0; shardID < numShards; shardID++ {
+		mockEngine := &MockHistoryEngine{}
+		historyEngines[shardID] = mockEngine
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
+	}
+
+	s.mockServiceResolver.On("AddListener", shardControllerMembershipUpdateListenerName,
+		mock.Anything).Return(nil)
+	s.controller.Start()
+
+	var workerWG sync.WaitGroup
+	for w := 0; w < 10; w++ {
+		workerWG.Add(1)
+		go func() {
+			shardLost := false
+			for attempt := 0; !shardLost && attempt < 10; attempt++ {
+				for shardID := 0; shardID < numShards; shardID++ {
+					_, err := s.controller.getEngineForShard(shardID)
+					if err != nil {
+						s.logger.Errorf("ShardLost: %v", err)
+						shardLost = true
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+
+			s.True(shardLost)
+			workerWG.Done()
+		}()
+	}
+
+	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	for shardID := 0; shardID < numShards; shardID++ {
+		mockEngine := historyEngines[shardID]
+		mockEngine.On("Stop").Return().Once()
+		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+	}
+	s.controller.Stop()
+	workerWG.Wait()
+}
+
+func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *MockHistoryEngine, currentRangeID,
+	newRangeID int64) {
+	mockExecutionMgr := &mmocks.ExecutionManager{}
+	s.mockExecutionMgrFactory.On("CreateExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
+	mockEngine.On("Start").Return().Once()
+	s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
+	s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(mockEngine).Once()
+	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
+		&persistence.GetShardResponse{
+			ShardInfo: &persistence.ShardInfo{
+				ShardID: shardID,
+				Owner:   s.hostInfo.Identity(),
+				RangeID: currentRangeID,
+			},
+		}, nil).Once()
+	s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
+		ShardInfo: &persistence.ShardInfo{
+			ShardID:          shardID,
+			Owner:            s.hostInfo.Identity(),
+			RangeID:          newRangeID,
+			StolenSinceRenew: 1,
+			TransferAckLevel: 0,
+		},
+		PreviousRangeID: currentRangeID,
+	}).Return(nil).Once()
 }

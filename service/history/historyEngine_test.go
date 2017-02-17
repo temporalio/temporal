@@ -30,6 +30,8 @@ type (
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
 		mockExecutionMgr   *mocks.ExecutionManager
+		mockShardManager   *mocks.ShardManager
+		shardClosedCh      chan int
 		logger             bark.Logger
 	}
 )
@@ -59,12 +61,18 @@ func (s *engineSuite) SetupTest() {
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
+	s.mockShardManager = &mocks.ShardManager{}
+	s.shardClosedCh = make(chan int, 100)
 
 	mockShard := &shardContextImpl{
-		shardInfo:              &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber: 1,
-		executionManager:       s.mockExecutionMgr,
-		logger:                 s.logger,
+		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
+		transferSequenceNumber:    1,
+		executionManager:          s.mockExecutionMgr,
+		shardManager:              s.mockShardManager,
+		rangeSize:                 defaultRangeSize,
+		maxTransferSequenceNumber: 100000,
+		closeCh:                   s.shardClosedCh,
+		logger:                    s.logger,
 	}
 
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient)
@@ -84,6 +92,7 @@ func (s *engineSuite) SetupTest() {
 func (s *engineSuite) TearDownTest() {
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockShardManager.AssertExpectations(s.T())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {

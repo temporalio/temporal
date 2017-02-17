@@ -78,12 +78,8 @@ func (s *testShardContext) GetExecutionManager() ExecutionManager {
 	return s.executionMgr
 }
 
-func (s *testShardContext) GetTransferTaskID() int64 {
-	return atomic.AddInt64(&s.transferSequenceNumber, 1)
-}
-
-func (s *testShardContext) GetRangeID() int64 {
-	return atomic.LoadInt64(&s.shardInfo.RangeID)
+func (s *testShardContext) GetNextTransferTaskID() (int64, error) {
+	return atomic.AddInt64(&s.transferSequenceNumber, 1), nil
 }
 
 func (s *testShardContext) GetTransferAckLevel() int64 {
@@ -103,6 +99,15 @@ func (s *testShardContext) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
+func (s *testShardContext) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (
+	*CreateWorkflowExecutionResponse, error) {
+	return s.executionMgr.CreateWorkflowExecution(request)
+}
+
+func (s *testShardContext) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
+	return s.executionMgr.UpdateWorkflowExecution(request)
+}
+
 func (s *testShardContext) GetLogger() bark.Logger {
 	return s.logger
 }
@@ -110,6 +115,10 @@ func (s *testShardContext) GetLogger() bark.Logger {
 func (s *testShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.RangeID, 0)
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
+}
+
+func (s *testShardContext) GetRangeID() int64 {
+	return atomic.LoadInt64(&s.shardInfo.RangeID)
 }
 
 func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster,
@@ -286,6 +295,16 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task,
 	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64,
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
+		s.ShardContext.GetRangeID(), condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfo,
+		upsertTimerInfos, deleteTimerInfos)
+}
+
+// UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
+	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64,
+	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{TaskList: updatedInfo.TaskList,
@@ -303,7 +322,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		TimerTasks:          timerTasks,
 		Condition:           condition,
 		DeleteTimerTask:     deleteTimerTask,
-		RangeID:             s.ShardContext.GetRangeID(),
+		RangeID:             rangeID,
 		UpsertActivityInfos: upsertActivityInfos,
 		DeleteActivityInfo:  deleteActivityInfo,
 		UpserTimerInfos:     upsertTimerInfos,
@@ -324,7 +343,6 @@ func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) 
 		ReadLevel:    s.GetReadLevel(),
 		MaxReadLevel: s.GetMaxAllowedReadLevel(),
 		BatchSize:    batchSize,
-		RangeID:      s.ShardContext.GetRangeID(),
 	})
 
 	if err != nil {
@@ -501,7 +519,8 @@ func (s *TestBase) TearDownWorkflowStore() {
 
 // GetNextSequenceNumber generates a unique sequence number for can be used for transfer queue taskId
 func (s *TestBase) GetNextSequenceNumber() int64 {
-	return s.ShardContext.GetTransferTaskID()
+	taskID, _ := s.ShardContext.GetNextTransferTaskID()
+	return taskID
 }
 
 // GetReadLevel returns the current read level for shard

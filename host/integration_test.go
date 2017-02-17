@@ -93,7 +93,7 @@ func (s *integrationSuite) SetupSuite() {
 	}
 
 	logger := log.New()
-	//logger.Level = log.DebugLevel
+	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 
 	s.ch, _ = tchannel.NewChannel("cadence-integration-test", nil)

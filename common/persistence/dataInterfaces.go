@@ -37,12 +37,18 @@ type (
 		Msg string
 	}
 
+	// ShardOwnershipLostError is returned when conditional update fails due to RangeID for the shard
+	ShardOwnershipLostError struct {
+		Msg string
+	}
+
 	// ShardInfo describes a shard
 	ShardInfo struct {
 		ShardID          int
 		Owner            string
 		RangeID          int64
 		StolenSinceRenew int
+		UpdatedAt        time.Time
 		TransferAckLevel int64
 	}
 
@@ -234,7 +240,6 @@ type (
 		ReadLevel    int64
 		MaxReadLevel int64
 		BatchSize    int
-		RangeID      int64
 	}
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
@@ -369,6 +374,10 @@ func (e *ConditionFailedError) Error() string {
 }
 
 func (e *ShardAlreadyExistError) Error() string {
+	return e.Msg
+}
+
+func (e *ShardOwnershipLostError) Error() string {
 	return e.Msg
 }
 

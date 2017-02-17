@@ -483,7 +483,14 @@ Update_History_Loop:
 
 		if scheduleNewDecision {
 			// Schedule a new decision.
-			id := t.historyService.tracker.getNextTaskID()
+			id, err := t.historyService.tracker.getNextTaskID()
+			if err != nil {
+				if isShardOwnershiptLostError(err) {
+					// Shard is stolen.  Stop timer processing to reduce duplicates
+					t.Stop()
+				}
+				return err
+			}
 			defer t.historyService.tracker.completeTask(id)
 			newDecisionEvent := builder.ScheduleDecisionTask()
 			transferTasks = []persistence.Task{&persistence.DecisionTask{

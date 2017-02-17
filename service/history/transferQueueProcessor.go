@@ -40,10 +40,12 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	ackManager struct {
-		shard               ShardContext
-		executionMgr        persistence.ExecutionManager
-		logger              bark.Logger
-		lk                  sync.RWMutex
+		processor    transferQueueProcessor
+		shard        ShardContext
+		executionMgr persistence.ExecutionManager
+		logger       bark.Logger
+
+		sync.RWMutex
 		outstandingTasks    map[int64]bool
 		readLevel           int64
 		ackLevel            int64
@@ -59,8 +61,7 @@ type (
 func newTransferQueueProcessor(shard ShardContext, matching matching.Client) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
-	return &transferQueueProcessorImpl{
-		ackMgr:           newAckManager(shard, executionManager, logger),
+	processor := &transferQueueProcessorImpl{
 		executionManager: executionManager,
 		matchingClient:   matching,
 		shutdownCh:       make(chan struct{}),
@@ -68,11 +69,16 @@ func newTransferQueueProcessor(shard ShardContext, matching matching.Client) tra
 			tagWorkflowComponent: tagValueTransferQueueComponent,
 		}),
 	}
+	processor.ackMgr = newAckManager(processor, shard, executionManager, logger)
+
+	return processor
 }
 
-func newAckManager(shard ShardContext, executionMgr persistence.ExecutionManager, logger bark.Logger) *ackManager {
+func newAckManager(processor transferQueueProcessor, shard ShardContext, executionMgr persistence.ExecutionManager,
+	logger bark.Logger) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
+		processor:           processor,
 		shard:               shard,
 		executionMgr:        executionMgr,
 		outstandingTasks:    make(map[int64]bool),
@@ -235,11 +241,14 @@ ProcessRetryLoop:
 }
 
 func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error) {
+	a.RLock()
+	rLevel := a.readLevel
+	mLevel := a.maxAllowedReadLevel
+	a.RUnlock()
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel:    atomic.LoadInt64(&a.readLevel),
-		MaxReadLevel: atomic.LoadInt64(&a.maxAllowedReadLevel),
+		ReadLevel:    rLevel,
+		MaxReadLevel: mLevel,
 		BatchSize:    transferTaskBatchSize,
-		RangeID:      a.shard.GetRangeID(),
 	})
 
 	if err != nil {
@@ -251,7 +260,7 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error
 		return tasks, nil
 	}
 
-	a.lk.Lock()
+	a.Lock()
 	for _, task := range tasks {
 		if a.readLevel >= task.TaskID {
 			a.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", task.TaskID,
@@ -261,22 +270,22 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error
 		a.readLevel = task.TaskID
 		a.outstandingTasks[a.readLevel] = false
 	}
-	a.lk.Unlock()
+	a.Unlock()
 
 	return tasks, nil
 }
 
 func (a *ackManager) completeTask(taskID int64) {
-	a.lk.Lock()
+	a.Lock()
 	if _, ok := a.outstandingTasks[taskID]; ok {
 		a.outstandingTasks[taskID] = true
 	}
-	a.lk.Unlock()
+	a.Unlock()
 }
 
 func (a *ackManager) updateAckLevel() {
-	updatedAckLevel := int64(-1)
-	a.lk.Lock()
+	updatedAckLevel := a.ackLevel
+	a.Lock()
 MoveAckLevelLoop:
 	for current := a.ackLevel + 1; current <= a.readLevel; current++ {
 		if acked, ok := a.outstandingTasks[current]; ok {
@@ -307,20 +316,25 @@ MoveAckLevelLoop:
 			}
 		}
 	}
-	a.lk.Unlock()
+	a.Unlock()
 
-	if updatedAckLevel != -1 {
-		a.shard.UpdateAckLevel(updatedAckLevel)
+	// Always update ackLevel to detect if the shared is stolen
+	if err := a.shard.UpdateAckLevel(updatedAckLevel); err != nil {
+		if isShardOwnershiptLostError(err) {
+			// Shard is stolen, stop the processor
+			a.processor.Stop()
+		}
 	}
+
 }
 
 func (a *ackManager) updateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
-	a.lk.Lock()
+	a.Lock()
 	a.logger.Debugf("Updating max allowed read level for transfer tasks: %v", maxAllowedReadLevel)
-	if maxAllowedReadLevel > atomic.LoadInt64(&a.maxAllowedReadLevel) {
-		atomic.StoreInt64(&a.maxAllowedReadLevel, maxAllowedReadLevel)
+	if maxAllowedReadLevel > a.maxAllowedReadLevel {
+		a.maxAllowedReadLevel = maxAllowedReadLevel
 	}
-	a.lk.Unlock()
+	a.Unlock()
 }
 
 func minDuration(x, y time.Duration) time.Duration {

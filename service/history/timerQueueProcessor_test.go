@@ -20,8 +20,10 @@ type (
 	timerQueueProcessorSuite struct {
 		suite.Suite
 		persistence.TestBase
-		engineImpl *historyEngineImpl
-		logger     bark.Logger
+		engineImpl       *historyEngineImpl
+		mockShardManager *mocks.ShardManager
+		shardClosedCh    chan int
+		logger           bark.Logger
 	}
 )
 
@@ -42,12 +44,22 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
 	shardID := 0
+	s.mockShardManager = &mocks.ShardManager{}
 	resp, err := s.ShardMgr.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	shard := &shardContextImpl{shardInfo: resp.ShardInfo, executionManager: s.WorkflowMgr, logger: s.logger}
+	shard := &shardContextImpl{
+		shardInfo:                 resp.ShardInfo,
+		transferSequenceNumber:    1,
+		executionManager:          s.WorkflowMgr,
+		shardManager:              s.mockShardManager,
+		rangeSize:                 defaultRangeSize,
+		maxTransferSequenceNumber: 100000,
+		closeCh:                   s.shardClosedCh,
+		logger:                    s.logger,
+	}
 	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{})
 	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
@@ -62,6 +74,10 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 
 func (s *timerQueueProcessorSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
+}
+
+func (s *timerQueueProcessorSuite) TearDownTest() {
+	s.mockShardManager.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessorSuite) getHistoryAndTimers(timeOuts []int32) ([]byte, []persistence.Task) {

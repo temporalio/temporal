@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -17,6 +18,9 @@ type (
 	cassandraPersistenceSuite struct {
 		suite.Suite
 		TestBase
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
 	}
 )
 
@@ -38,6 +42,8 @@ func (s *cassandraPersistenceSuite) TearDownSuite() {
 }
 
 func (s *cassandraPersistenceSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
 	s.ClearTransferQueue()
 }
 
@@ -50,8 +56,27 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 
 	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
 	s.NotNil(err1, "Expected workflow creation to fail.")
-	s.Empty(task1, "Expected empty task identifier.")
 	log.Infof("Unable to start workflow execution: %v", err1)
+	s.IsType(&gen.WorkflowExecutionAlreadyStartedError{}, err1)
+	s.Empty(task1, "Expected empty task identifier.")
+
+	response, err2 := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		Execution:          workflowExecution,
+		TaskList:           "queue1",
+		History:            []byte("event1"),
+		ExecutionContext:   nil,
+		NextEventID:        int64(3),
+		LastProcessedEvent: 0,
+		RangeID:            s.ShardContext.GetRangeID() - 1,
+		TransferTasks: []Task{
+			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: "queue1", ScheduleID: int64(2)},
+		},
+		TimerTasks: nil})
+
+	s.NotNil(err2, "Expected workflow creation to fail.")
+	s.Nil(response)
+	log.Infof("Unable to start workflow execution: %v", err1)
+	s.IsType(&ShardOwnershipLostError{}, err2)
 }
 
 func (s *cassandraPersistenceSuite) TestGetWorkflow() {
@@ -129,7 +154,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.NotNil(err4, "expected non nil error.")
 	s.IsType(&ConditionFailedError{}, err4)
-	log.Infof("Conditional update failed with error: %v", err4)
+	log.Errorf("Conditional update failed with error: %v", err4)
 
 	info2, err4 := s.GetWorkflowExecutionInfo(workflowExecution)
 	s.Nil(err4, "No error expected.")
@@ -145,6 +170,30 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(true, info2.DecisionPending)
 	s.Equal(true, validateTimeRange(info2.LastUpdatedTimestamp, time.Hour))
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
+
+	failedUpdatedInfo2 := copyWorkflowExecutionInfo(info1)
+	failedUpdatedInfo2.History = []byte(`event4`)
+	failedUpdatedInfo2.NextEventID = int64(6)
+	failedUpdatedInfo2.LastProcessedEvent = int64(3)
+	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil)
+	s.NotNil(err5, "expected non nil error.")
+	s.IsType(&ShardOwnershipLostError{}, err5)
+	log.Errorf("Conditional update failed with error: %v", err5)
+
+	info3, err6 := s.GetWorkflowExecutionInfo(workflowExecution)
+	s.Nil(err6, "No error expected.")
+	s.NotNil(info3, "Valid Workflow info expected.")
+	s.Equal("update-workflow-test", info3.WorkflowID)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", info3.RunID)
+	s.Equal("queue1", info3.TaskList)
+	s.Equal("event2", string(info3.History))
+	s.Equal([]byte(nil), info3.ExecutionContext)
+	s.Equal(WorkflowStateCreated, info3.State)
+	s.Equal(int64(5), info3.NextEventID)
+	s.Equal(int64(2), info3.LastProcessedEvent)
+	s.Equal(true, info3.DecisionPending)
+	s.Equal(true, validateTimeRange(info3.LastUpdatedTimestamp, time.Hour))
+	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 }
 
 func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {

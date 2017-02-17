@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	gen "code.uber.internal/devexp/minions/.gen/go/shared"
@@ -14,6 +15,9 @@ type (
 	shardPersistenceSuite struct {
 		suite.Suite
 		TestBase
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
 	}
 )
 
@@ -28,6 +32,11 @@ func (s *shardPersistenceSuite) SetupSuite() {
 	}
 
 	s.SetupWorkflowStore()
+}
+
+func (s *shardPersistenceSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
 }
 
 func (s *shardPersistenceSuite) TearDownSuite() {
@@ -104,7 +113,7 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	failedUpdateInfo.Owner = "failed_owner"
 	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.RangeID)
 	s.NotNil(err4)
-	s.IsType(&ConditionFailedError{}, err4)
+	s.IsType(&ShardOwnershipLostError{}, err4)
 	log.Infof("Update shard failed with error: %v", err4)
 
 	info2, err5 := s.GetShard(shardID)

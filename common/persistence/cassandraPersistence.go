@@ -53,6 +53,7 @@ const (
 		`owner: ?, ` +
 		`range_id: ?, ` +
 		`stolen_since_renew: ?, ` +
+		`updated_at: ?, ` +
 		`transfer_ack_level: ?` +
 		`}`
 
@@ -374,6 +375,7 @@ func NewCassandraTaskPersistence(hosts string, keyspace string, logger bark.Logg
 }
 
 func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
+	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
@@ -385,6 +387,7 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 		shardInfo.Owner,
 		shardInfo.RangeID,
 		shardInfo.StolenSinceRenew,
+		cqlNowTimestamp,
 		shardInfo.TransferAckLevel,
 		shardInfo.RangeID)
 
@@ -435,6 +438,7 @@ func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResp
 }
 
 func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
+	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 
 	query := d.session.Query(templateUpdateShardQuery,
@@ -442,6 +446,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		shardInfo.Owner,
 		shardInfo.RangeID,
 		shardInfo.StolenSinceRenew,
+		cqlNowTimestamp,
 		shardInfo.TransferAckLevel,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
@@ -465,7 +470,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		return &ConditionFailedError{
+		return &ShardOwnershipLostError{
 			Msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",
 				request.PreviousRangeID, strings.Join(columns, ",")),
 		}
@@ -525,15 +530,30 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	}
 
 	if !applied {
+		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+			// CreateWorkflowExecution failed because rangeID was modified
+			return nil, &ShardOwnershipLostError{
+				Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
+					request.RangeID, rangeID),
+			}
+		}
+
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		execution := previous["execution"].(map[string]interface{})
-		return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-			Message: fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-				execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ",")),
+		if execution, ok := previous["execution"].(map[string]interface{}); ok {
+			// CreateWorkflowExecution failed because it already exists
+			return nil, &workflow.WorkflowExecutionAlreadyStartedError{
+				Message: fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
+					execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ",")),
+			}
+		}
+
+		return nil, &ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
+				request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
@@ -614,14 +634,30 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	}
 
 	if !applied {
+		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+			// UpdateWorkflowExecution failed because rangeID was modified
+			return &ShardOwnershipLostError{
+				Msg: fmt.Sprintf("Failed to update workflow execution.  Request RangeID: %v, Actual RangeID: %v",
+					request.RangeID, rangeID),
+			}
+		}
+
+		if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
+			// CreateWorkflowExecution failed because next event ID is unexpected
+			return &ConditionFailedError{
+				Msg: fmt.Sprintf("Failed to update workflow execution.  Request Condition: %v, Actual Value: %v",
+					request.Condition, nextEventID),
+			}
+		}
+
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
 		return &ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update workflow execution.  condition: %v, columns: (%v)",
-				request.Condition, strings.Join(columns, ",")),
+			Msg: fmt.Sprintf("Failed to update workflow execution.  RangeID: %v, Condition: %v, columns: (%v)",
+				request.RangeID, request.Condition, strings.Join(columns, ",")),
 		}
 	}
 
@@ -1225,6 +1261,8 @@ func createShardInfo(result map[string]interface{}) *ShardInfo {
 			info.RangeID = v.(int64)
 		case "stolen_since_renew":
 			info.StolenSinceRenew = v.(int)
+		case "updated_at":
+			info.UpdatedAt = v.(time.Time)
 		case "transfer_ack_level":
 			info.TransferAckLevel = v.(int64)
 		}

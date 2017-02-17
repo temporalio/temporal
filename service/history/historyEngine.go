@@ -138,9 +138,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		return nil, serializedError
 	}
 
-	id := e.tracker.getNextTaskID()
+	id, err0 := e.tracker.getNextTaskID()
+	if err0 != nil {
+		return nil, err0
+	}
 	defer e.tracker.completeTask(id)
-	_, err := e.executionManager.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+	_, err := e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 		Execution:          workflowExecution,
 		TaskList:           request.GetTaskList().GetName(),
 		History:            h,
@@ -151,7 +154,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 			TaskID:   id,
 			TaskList: taskList, ScheduleID: dt.GetEventId(),
 		}},
-		RangeID: e.shard.GetRangeID(),
 	})
 
 	if err != nil {
@@ -397,7 +399,10 @@ Update_History_Loop:
 			case workflow.DecisionType_ScheduleActivityTask:
 				attributes := d.GetScheduleActivityTaskDecisionAttributes()
 				scheduleEvent := builder.AddActivityTaskScheduledEvent(completedID, attributes)
-				id := e.tracker.getNextTaskID()
+				id, err2 := e.tracker.getNextTaskID()
+				if err2 != nil {
+					return err2
+				}
 				defer e.tracker.completeTask(id)
 				transferTasks = append(transferTasks, &persistence.ActivityTask{
 					TaskID:     id,
@@ -456,7 +461,10 @@ Update_History_Loop:
 		// Schedule another decision task if new events came in during this decision
 		if (completedID - startedID) > 1 {
 			newDecisionEvent := builder.ScheduleDecisionTask()
-			id := e.tracker.getNextTaskID()
+			id, err2 := e.tracker.getNextTaskID()
+			if err2 != nil {
+				return err2
+			}
 			defer e.tracker.completeTask(id)
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
 				TaskID:     id,
@@ -530,7 +538,10 @@ Update_History_Loop:
 		var transferTasks []persistence.Task
 		if !builder.hasPendingDecisionTask() {
 			newDecisionEvent := builder.ScheduleDecisionTask()
-			id := e.tracker.getNextTaskID()
+			id, err2 := e.tracker.getNextTaskID()
+			if err2 != nil {
+				return err2
+			}
 			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
 				TaskID:     id,
@@ -601,7 +612,10 @@ Update_History_Loop:
 			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
 			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
 				startAttributes.GetTaskStartToCloseTimeoutSeconds())
-			id := e.tracker.getNextTaskID()
+			id, err2 := e.tracker.getNextTaskID()
+			if err2 != nil {
+				return err2
+			}
 			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
 				TaskID:     id,
@@ -724,7 +738,7 @@ func (e *historyEngineImpl) deleteWorkflowExecutionWithRetry(
 func (e *historyEngineImpl) updateWorkflowExecutionWithRetry(
 	request *persistence.UpdateWorkflowExecutionRequest) error {
 	op := func() error {
-		return e.executionManager.UpdateWorkflowExecution(request)
+		return e.shard.UpdateWorkflowExecution(request)
 
 	}
 
@@ -835,7 +849,8 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 	return c.updateWorkflowExecution(transferTasks, timerTasks)
 }
 
-func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task, timerTasks []persistence.Task) error {
+func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
+	timerTasks []persistence.Task) error {
 	updatedHistory, err := c.builder.Serialize()
 	if err != nil {
 		logHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
@@ -854,7 +869,6 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		TimerTasks:          timerTasks,
 		Condition:           c.updateCondition,
 		DeleteTimerTask:     c.deleteTimerTask,
-		RangeID:             c.historyService.shard.GetRangeID(),
 		UpsertActivityInfos: c.msBuilder.updateActivityInfos,
 		DeleteActivityInfo:  c.msBuilder.deleteActivityInfo,
 		UpserTimerInfos:     c.msBuilder.updateTimerInfos,
@@ -889,31 +903,37 @@ func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 	return err
 }
 
-func (t *pendingTaskTracker) getNextTaskID() int64 {
+func (t *pendingTaskTracker) getNextTaskID() (int64, error) {
 	t.lk.Lock()
-	nextID := t.shard.GetTransferTaskID()
+	defer t.lk.Unlock()
+
+	nextID, err := t.shard.GetNextTransferTaskID()
+	if err != nil {
+		t.logger.Debugf("Error generating next taskID: %v", err)
+		return -1, err
+	}
+
 	if nextID != t.maxID+1 {
 		t.logger.Fatalf("No holes allowed for nextID.  nextID: %v, MaxID: %v", nextID, t.maxID)
 	}
 	t.pendingTasks[nextID] = false
 	t.maxID = nextID
-	t.lk.Unlock()
 
 	t.logger.Debugf("Generated new transfer task ID: %v", nextID)
-	return nextID
+	return nextID, nil
 }
 
 func (t *pendingTaskTracker) completeTask(taskID int64) {
 	t.lk.Lock()
 	updatedMin := int64(-1)
 	if _, ok := t.pendingTasks[taskID]; ok {
-		t.logger.Debugf("Completing transfer task ID: %v", taskID)
+		t.logger.Debugf("Completing transfer task ID: %v, minID: %v, maxID: %v", taskID, t.minID, t.maxID)
 		t.pendingTasks[taskID] = true
 
 	UpdateMinLoop:
 		for newMin := t.minID + 1; newMin <= t.maxID; newMin++ {
+			t.logger.Debugf("minID: %v, maxID: %v", newMin, t.maxID)
 			if done, ok := t.pendingTasks[newMin]; ok && done {
-				t.logger.Debugf("Updating minID for pending transfer tasks: %v", newMin)
 				t.minID = newMin
 				updatedMin = newMin
 				delete(t.pendingTasks, newMin)
