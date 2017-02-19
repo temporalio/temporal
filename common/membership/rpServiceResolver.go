@@ -44,7 +44,7 @@ func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.
 		service:    service,
 		rp:         rp,
 		logger:     logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
-		ring:       hashring.New(farm.Fingerprint32, 1),
+		ring:       hashring.New(farm.Fingerprint32, 100),
 		listeners:  make(map[string]chan<- *ChangedEvent),
 		shutdownCh: make(chan struct{}),
 	}
