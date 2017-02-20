@@ -11,12 +11,23 @@ const (
 	// HistoryBuilder events
 	invalidHistoryActionEventID = 1000
 
-	// Engine events
-	persistentStoreErrorEventID      = 2000
-	historySerializationErrorEventID = 2001
-	duplicateTaskEventID             = 2002
+	// History Engine events
+	historyEngineStarting            = 2000
+	historyEngineStarted             = 2001
+	historyEngineShuttingDown        = 2002
+	historyEngineShutdown            = 2003
+	persistentStoreErrorEventID      = 2010
+	historySerializationErrorEventID = 2020
+	duplicateTaskEventID             = 2030
 
-	// Shard lifecycle events
+	// Transfer Queue Processor events
+	transferQueueProcessorStarting         = 2100
+	transferQueueProcessorStarted          = 2101
+	transferQueueProcessorShuttingDown     = 2102
+	transferQueueProcessorShutdown         = 2103
+	transferQueueProcessorShutdownTimedout = 2104
+
+	// Shard context events
 	shardRangeUpdatedEventID = 3000
 
 	// ShardController events
@@ -25,6 +36,7 @@ const (
 	shardControllerShuttingDown     = 4002
 	shardControllerShutdownTimedout = 4003
 	ringMembershipChangedEvent      = 4004
+	shardClosedEvent                = 4005
 	shardItemCreated                = 4010
 	shardItemRemoved                = 4011
 	shardEngineCreating             = 4020
@@ -96,6 +108,30 @@ func logHistorySerializationErrorEvent(logger bark.Logger, err error, msg string
 	}).Errorf("Error serializing workflow execution history.  Msg: %v", msg)
 }
 
+func logHistoryEngineStartingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: historyEngineStarting,
+	}).Info("HistoryEngine starting.")
+}
+
+func logHistoryEngineStartedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: historyEngineStarted,
+	}).Info("HistoryEngine started.")
+}
+
+func logHistoryEngineShuttingDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: historyEngineShuttingDown,
+	}).Info("HistoryEngine shutting down.")
+}
+
+func logHistoryEngineShutdownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: historyEngineShutdown,
+	}).Info("HistoryEngine shutdown.")
+}
+
 func logPersistantStoreErrorEvent(logger bark.Logger, operation string, err error, details string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: persistentStoreErrorEventID,
@@ -112,98 +148,120 @@ func logDuplicateTaskEvent(lg bark.Logger, taskType int, taskID int64, requestID
 		taskID, taskType, requestID, scheduleID, startedID, isRunning)
 }
 
+func logTransferQueueProcesorStartingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: transferQueueProcessorStarting,
+	}).Info("Transfer queue processor starting.")
+}
+
+func logTransferQueueProcesorStartedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: transferQueueProcessorStarted,
+	}).Info("Transfer queue processor started.")
+}
+
+func logTransferQueueProcesorShuttingDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: transferQueueProcessorShuttingDown,
+	}).Info("Transfer queue processor shutting down.")
+}
+
+func logTransferQueueProcesorShutdownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: transferQueueProcessorShutdown,
+	}).Info("Transfer queue processor shutdown.")
+}
+
+func logTransferQueueProcesorShutdownTimedoutEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: transferQueueProcessorShutdownTimedout,
+	}).Warn("Transfer queue processor timedout on shutdown.")
+}
+
 func logShardRangeUpdatedEvent(logger bark.Logger, shardID int, rangeID, startSequence, endSequence int64) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardRangeUpdatedEventID,
-	})
-	logger.Infof("Range updated for shardID '%v'.  RangeID: %v, StartSequence: %v, EndSequence: %v", shardID,
+	}).Infof("Range updated for shardID '%v'.  RangeID: %v, StartSequence: %v, EndSequence: %v", shardID,
 		rangeID, startSequence, endSequence)
 }
 
 func logShardControllerStartedEvent(logger bark.Logger, host string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardControllerStarted,
-	})
-	logger.Infof("ShardController started on host: %v", host)
+	}).Infof("ShardController started on host: %v", host)
 }
 
 func logShardControllerShutdownEvent(logger bark.Logger, host string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardControllerShutdown,
-	})
-	logger.Infof("ShardController stopped on host: %v", host)
+	}).Infof("ShardController stopped on host: %v", host)
 }
 
 func logShardControllerShuttingDownEvent(logger bark.Logger, host string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardControllerShuttingDown,
-	})
-	logger.Infof("ShardController stopping on host: %v", host)
+	}).Infof("ShardController stopping on host: %v", host)
 }
 
 func logShardControllerShutdownTimedoutEvent(logger bark.Logger, host string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardControllerShutdownTimedout,
-	})
-	logger.Warnf("ShardController timed out during shutdown on host: %v", host)
+	}).Warnf("ShardController timed out during shutdown on host: %v", host)
 }
 
 func logRingMembershipChangedEvent(logger bark.Logger, host string, added, removed, updated int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: ringMembershipChangedEvent,
-	})
-	logger.Infof("ShardController on host '%v' received ring membership changed event: {Added: %v, Removed: %v, Updated: %v}",
+	}).Infof("ShardController on host '%v' received ring membership changed event: {Added: %v, Removed: %v, Updated: %v}",
 		host, added, removed, updated)
+}
+
+func logShardClosedEvent(logger bark.Logger, shardID int) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: shardClosedEvent,
+		tagHistoryShardID:  shardID,
+	}).Infof("ShardController on host '%v' received shard closed event for shardID: %v", shardID)
 }
 
 func logShardItemCreatedEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardItemCreated,
-		tagHistoryShardID:  shardID,
-	})
-	logger.Infof("ShardController on host '%v' created a shard item for shardID '%v'.", host, shardID)
+	}).Infof("ShardController on host '%v' created a shard item for shardID '%v'.", host, shardID)
 }
 
 func logShardItemRemovedEvent(logger bark.Logger, host string, shardID int, remainingShards int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardItemRemoved,
-		tagHistoryShardID:  shardID,
-	})
-	logger.Infof("ShardController on host '%v' removed shard item for shardID '%v'.  Remaining number of shards: %v",
+	}).Infof("ShardController on host '%v' removed shard item for shardID '%v'.  Remaining number of shards: %v",
 		host, shardID, remainingShards)
 }
 
 func logShardEngineCreatingEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardEngineCreating,
-	})
-	logger.Infof("ShardController on host '%v' creating engine for shardID '%v'.", host, shardID)
+	}).Infof("ShardController on host '%v' creating engine for shardID '%v'.", host, shardID)
 }
 
 func logShardEngineCreatedEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardEngineCreated,
-	})
-	logger.Infof("ShardController on host '%v' created engine for shardID '%v'.", host, shardID)
+	}).Infof("ShardController on host '%v' created engine for shardID '%v'.", host, shardID)
 }
 
 func logShardEngineStoppingEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardEngineStopping,
-	})
-	logger.Infof("ShardController on host '%v' stopping engine for shardID '%v'.", host, shardID)
+	}).Infof("ShardController on host '%v' stopping engine for shardID '%v'.", host, shardID)
 }
 
 func logShardEngineStoppedEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardEngineStopped,
-	})
-	logger.Infof("ShardController on host '%v' stopped engine for shardID '%v'.", host, shardID)
+	}).Infof("ShardController on host '%v' stopped engine for shardID '%v'.", host, shardID)
 }
 
 func logOperationFailedEvent(logger bark.Logger, msg string, err error) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: operationFailed,
-	})
-	logger.Warnf("%v.  Error: %v", msg, err)
+	}).Warnf("%v.  Error: %v", msg, err)
 }

@@ -86,10 +86,19 @@ func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.Unlock()
 
-	return s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
+	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID,
 	})
+
+	if err != nil {
+		// Shard is stolen, trigger history engine shutdown
+		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
+			s.close()
+		}
+	}
+
+	return err
 }
 
 func (s *shardContextImpl) GetTimerSequenceNumber() int64 {

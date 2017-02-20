@@ -94,6 +94,9 @@ func (t *transferQueueProcessorImpl) Start() {
 		return
 	}
 
+	logTransferQueueProcesorStartingEvent(t.logger)
+	defer logTransferQueueProcesorStartedEvent(t.logger)
+
 	t.shutdownWG.Add(1)
 	go t.processorPump()
 
@@ -105,15 +108,16 @@ func (t *transferQueueProcessorImpl) Stop() {
 		return
 	}
 
+	logTransferQueueProcesorShuttingDownEvent(t.logger)
+	defer logTransferQueueProcesorShutdownEvent(t.logger)
+
 	if atomic.LoadInt32(&t.isStarted) == 1 {
 		close(t.shutdownCh)
 	}
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
-		t.logger.Warn("Transfer queue processor timed out on shutdown.")
+		logTransferQueueProcesorShutdownTimedoutEvent(t.logger)
 	}
-
-	t.logger.Info("Transfer queue processor stopped.")
 }
 
 func (t *transferQueueProcessorImpl) UpdateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
@@ -320,10 +324,7 @@ MoveAckLevelLoop:
 
 	// Always update ackLevel to detect if the shared is stolen
 	if err := a.shard.UpdateAckLevel(updatedAckLevel); err != nil {
-		if isShardOwnershiptLostError(err) {
-			// Shard is stolen, stop the processor
-			a.processor.Stop()
-		}
+		logOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 	}
 
 }

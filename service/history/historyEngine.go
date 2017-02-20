@@ -104,12 +104,18 @@ func NewEngineWithShardContext(shard ShardContext, matching matching.Client) Eng
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
+	logHistoryEngineStartingEvent(e.logger)
+	defer logHistoryEngineStartedEvent(e.logger)
+
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
 }
 
 // Stop the service.
 func (e *historyEngineImpl) Stop() {
+	logHistoryEngineShuttingDownEvent(e.logger)
+	defer logHistoryEngineShutdownEvent(e.logger)
+
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
 }
