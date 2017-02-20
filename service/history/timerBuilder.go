@@ -22,10 +22,9 @@ const (
 	MinTimerKey                SequenceID = -1
 	MaxTimerKey                SequenceID = math.MaxInt64
 
-	DefaultScheduleToStartActivityTimeoutInSecs = 1
-	DefaultScheduleToCloseActivityTimeoutInSecs = 1
-	DefaultStartToCloseActivityTimeoutInSecs    = 1
-	DefaultHeartbeatActivityTimeoutInSecs       = 1
+	DefaultScheduleToStartActivityTimeoutInSecs = 10
+	DefaultScheduleToCloseActivityTimeoutInSecs = 10
+	DefaultStartToCloseActivityTimeoutInSecs    = 10
 
 	emptyTimerID = -1
 )
@@ -151,9 +150,6 @@ func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, sche
 		startToCloseTimeout = DefaultStartToCloseActivityTimeoutInSecs
 	}
 	heartbeatTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetHeartbeatTimeoutSeconds()
-	if heartbeatTimeout <= 0 {
-		heartbeatTimeout = DefaultHeartbeatActivityTimeoutInSecs
-	}
 
 	t := tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_START, scheduleToStartTimeout)
 

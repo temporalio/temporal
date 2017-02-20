@@ -407,6 +407,20 @@ Update_History_Loop:
 			switch d.GetDecisionType() {
 			case workflow.DecisionType_ScheduleActivityTask:
 				attributes := d.GetScheduleActivityTaskDecisionAttributes()
+				if attributes.GetStartToCloseTimeoutSeconds() <= 0 {
+					return &workflow.BadRequestError{Message: "Missing StartToCloseTimeoutSeconds in the activity scheduling parameters."}
+				}
+				if attributes.GetScheduleToStartTimeoutSeconds() <= 0 {
+					return &workflow.BadRequestError{Message: "Missing ScheduleToStartTimeoutSeconds in the activity scheduling parameters."}
+				}
+				if attributes.GetScheduleToCloseTimeoutSeconds() <= 0 {
+					return &workflow.BadRequestError{Message: "Missing ScheduleToCloseTimeoutSeconds in the activity scheduling parameters."}
+				}
+				if attributes.GetHeartbeatTimeoutSeconds() < 0 {
+					// Sanity check on server. HeartBeat of Zero is allowed.
+					return &workflow.BadRequestError{Message: "Invalid HeartbeatTimeoutSeconds value in the activity scheduling parameters."}
+				}
+
 				scheduleEvent := builder.AddActivityTaskScheduledEvent(completedID, attributes)
 				id, err2 := e.tracker.getNextTaskID()
 				if err2 != nil {
