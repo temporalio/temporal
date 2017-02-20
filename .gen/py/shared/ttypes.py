@@ -38,22 +38,25 @@ class TimeoutType:
 
 class DecisionType:
   ScheduleActivityTask = 0
-  StartTimer = 1
-  CompleteWorkflowExecution = 2
-  FailWorkflowExecution = 3
+  RequestCancelActivityTask = 1
+  StartTimer = 2
+  CompleteWorkflowExecution = 3
+  FailWorkflowExecution = 4
 
   _VALUES_TO_NAMES = {
     0: "ScheduleActivityTask",
-    1: "StartTimer",
-    2: "CompleteWorkflowExecution",
-    3: "FailWorkflowExecution",
+    1: "RequestCancelActivityTask",
+    2: "StartTimer",
+    3: "CompleteWorkflowExecution",
+    4: "FailWorkflowExecution",
   }
 
   _NAMES_TO_VALUES = {
     "ScheduleActivityTask": 0,
-    "StartTimer": 1,
-    "CompleteWorkflowExecution": 2,
-    "FailWorkflowExecution": 3,
+    "RequestCancelActivityTask": 1,
+    "StartTimer": 2,
+    "CompleteWorkflowExecution": 3,
+    "FailWorkflowExecution": 4,
   }
 
 class EventType:
@@ -70,9 +73,12 @@ class EventType:
   ActivityTaskCompleted = 10
   ActivityTaskFailed = 11
   ActivityTaskTimedOut = 12
-  TimerStarted = 13
-  TimerFired = 14
-  CompleteWorkflowExecutionFailed = 15
+  ActivityTaskCancelRequested = 13
+  RequestCancelActivityTaskFailed = 14
+  ActivityTaskCanceled = 15
+  TimerStarted = 16
+  TimerFired = 17
+  CompleteWorkflowExecutionFailed = 18
 
   _VALUES_TO_NAMES = {
     0: "WorkflowExecutionStarted",
@@ -88,9 +94,12 @@ class EventType:
     10: "ActivityTaskCompleted",
     11: "ActivityTaskFailed",
     12: "ActivityTaskTimedOut",
-    13: "TimerStarted",
-    14: "TimerFired",
-    15: "CompleteWorkflowExecutionFailed",
+    13: "ActivityTaskCancelRequested",
+    14: "RequestCancelActivityTaskFailed",
+    15: "ActivityTaskCanceled",
+    16: "TimerStarted",
+    17: "TimerFired",
+    18: "CompleteWorkflowExecutionFailed",
   }
 
   _NAMES_TO_VALUES = {
@@ -107,9 +116,12 @@ class EventType:
     "ActivityTaskCompleted": 10,
     "ActivityTaskFailed": 11,
     "ActivityTaskTimedOut": 12,
-    "TimerStarted": 13,
-    "TimerFired": 14,
-    "CompleteWorkflowExecutionFailed": 15,
+    "ActivityTaskCancelRequested": 13,
+    "RequestCancelActivityTaskFailed": 14,
+    "ActivityTaskCanceled": 15,
+    "TimerStarted": 16,
+    "TimerFired": 17,
+    "CompleteWorkflowExecutionFailed": 18,
   }
 
 class WorkflowCompleteFailedCause:
@@ -932,6 +944,80 @@ class ScheduleActivityTaskDecisionAttributes:
   def __ne__(self, other):
     return not (self == other)
 
+class RequestCancelActivityTaskDecisionAttributes:
+  """
+  Attributes:
+   - activityId
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.STRING, 'activityId', unicode, None, ), # 10
+  )
+
+  def __init__(self, activityId=None,):
+    self.activityId = activityId
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.STRING:
+          self.activityId = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('RequestCancelActivityTaskDecisionAttributes')
+    if self.activityId is not None:
+      oprot.writeFieldBegin('activityId', TType.STRING, 10)
+      oprot.writeString(self.activityId.encode('utf-8'))
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.activityId)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
 class StartTimerDecisionAttributes:
   """
   Attributes:
@@ -1206,6 +1292,7 @@ class Decision:
    - startTimerDecisionAttributes
    - completeWorkflowExecutionDecisionAttributes
    - failWorkflowExecutionDecisionAttributes
+   - requestCancelActivityTaskDecisionAttributes
   """
 
   thrift_spec = (
@@ -1245,14 +1332,20 @@ class Decision:
     None, # 33
     None, # 34
     (35, TType.STRUCT, 'failWorkflowExecutionDecisionAttributes', (FailWorkflowExecutionDecisionAttributes, FailWorkflowExecutionDecisionAttributes.thrift_spec), None, ), # 35
+    None, # 36
+    None, # 37
+    None, # 38
+    None, # 39
+    (40, TType.STRUCT, 'requestCancelActivityTaskDecisionAttributes', (RequestCancelActivityTaskDecisionAttributes, RequestCancelActivityTaskDecisionAttributes.thrift_spec), None, ), # 40
   )
 
-  def __init__(self, decisionType=None, scheduleActivityTaskDecisionAttributes=None, startTimerDecisionAttributes=None, completeWorkflowExecutionDecisionAttributes=None, failWorkflowExecutionDecisionAttributes=None,):
+  def __init__(self, decisionType=None, scheduleActivityTaskDecisionAttributes=None, startTimerDecisionAttributes=None, completeWorkflowExecutionDecisionAttributes=None, failWorkflowExecutionDecisionAttributes=None, requestCancelActivityTaskDecisionAttributes=None,):
     self.decisionType = decisionType
     self.scheduleActivityTaskDecisionAttributes = scheduleActivityTaskDecisionAttributes
     self.startTimerDecisionAttributes = startTimerDecisionAttributes
     self.completeWorkflowExecutionDecisionAttributes = completeWorkflowExecutionDecisionAttributes
     self.failWorkflowExecutionDecisionAttributes = failWorkflowExecutionDecisionAttributes
+    self.requestCancelActivityTaskDecisionAttributes = requestCancelActivityTaskDecisionAttributes
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -1292,6 +1385,12 @@ class Decision:
           self.failWorkflowExecutionDecisionAttributes.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 40:
+        if ftype == TType.STRUCT:
+          self.requestCancelActivityTaskDecisionAttributes = RequestCancelActivityTaskDecisionAttributes()
+          self.requestCancelActivityTaskDecisionAttributes.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -1322,6 +1421,10 @@ class Decision:
       oprot.writeFieldBegin('failWorkflowExecutionDecisionAttributes', TType.STRUCT, 35)
       self.failWorkflowExecutionDecisionAttributes.write(oprot)
       oprot.writeFieldEnd()
+    if self.requestCancelActivityTaskDecisionAttributes is not None:
+      oprot.writeFieldBegin('requestCancelActivityTaskDecisionAttributes', TType.STRUCT, 40)
+      self.requestCancelActivityTaskDecisionAttributes.write(oprot)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -1336,6 +1439,7 @@ class Decision:
     value = (value * 31) ^ hash(self.startTimerDecisionAttributes)
     value = (value * 31) ^ hash(self.completeWorkflowExecutionDecisionAttributes)
     value = (value * 31) ^ hash(self.failWorkflowExecutionDecisionAttributes)
+    value = (value * 31) ^ hash(self.requestCancelActivityTaskDecisionAttributes)
     return value
 
   def __repr__(self):
@@ -3194,6 +3298,382 @@ class ActivityTaskTimedOutEventAttributes:
   def __ne__(self, other):
     return not (self == other)
 
+class ActivityTaskCancelRequestedEventAttributes:
+  """
+  Attributes:
+   - activityId
+   - decisionTaskCompletedEventId
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.STRING, 'activityId', unicode, None, ), # 10
+    None, # 11
+    None, # 12
+    None, # 13
+    None, # 14
+    None, # 15
+    None, # 16
+    None, # 17
+    None, # 18
+    None, # 19
+    (20, TType.I64, 'decisionTaskCompletedEventId', None, None, ), # 20
+  )
+
+  def __init__(self, activityId=None, decisionTaskCompletedEventId=None,):
+    self.activityId = activityId
+    self.decisionTaskCompletedEventId = decisionTaskCompletedEventId
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.STRING:
+          self.activityId = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.I64:
+          self.decisionTaskCompletedEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('ActivityTaskCancelRequestedEventAttributes')
+    if self.activityId is not None:
+      oprot.writeFieldBegin('activityId', TType.STRING, 10)
+      oprot.writeString(self.activityId.encode('utf-8'))
+      oprot.writeFieldEnd()
+    if self.decisionTaskCompletedEventId is not None:
+      oprot.writeFieldBegin('decisionTaskCompletedEventId', TType.I64, 20)
+      oprot.writeI64(self.decisionTaskCompletedEventId)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.activityId)
+    value = (value * 31) ^ hash(self.decisionTaskCompletedEventId)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class RequestCancelActivityTaskFailedEventAttributes:
+  """
+  Attributes:
+   - activityId
+   - cause
+   - decisionTaskCompletedEventId
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.STRING, 'activityId', unicode, None, ), # 10
+    None, # 11
+    None, # 12
+    None, # 13
+    None, # 14
+    None, # 15
+    None, # 16
+    None, # 17
+    None, # 18
+    None, # 19
+    (20, TType.STRING, 'cause', unicode, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.I64, 'decisionTaskCompletedEventId', None, None, ), # 30
+  )
+
+  def __init__(self, activityId=None, cause=None, decisionTaskCompletedEventId=None,):
+    self.activityId = activityId
+    self.cause = cause
+    self.decisionTaskCompletedEventId = decisionTaskCompletedEventId
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.STRING:
+          self.activityId = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.STRING:
+          self.cause = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.I64:
+          self.decisionTaskCompletedEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('RequestCancelActivityTaskFailedEventAttributes')
+    if self.activityId is not None:
+      oprot.writeFieldBegin('activityId', TType.STRING, 10)
+      oprot.writeString(self.activityId.encode('utf-8'))
+      oprot.writeFieldEnd()
+    if self.cause is not None:
+      oprot.writeFieldBegin('cause', TType.STRING, 20)
+      oprot.writeString(self.cause.encode('utf-8'))
+      oprot.writeFieldEnd()
+    if self.decisionTaskCompletedEventId is not None:
+      oprot.writeFieldBegin('decisionTaskCompletedEventId', TType.I64, 30)
+      oprot.writeI64(self.decisionTaskCompletedEventId)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.activityId)
+    value = (value * 31) ^ hash(self.cause)
+    value = (value * 31) ^ hash(self.decisionTaskCompletedEventId)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class ActivityTaskCanceledEventAttributes:
+  """
+  Attributes:
+   - details
+   - latestCancelRequestedEventId
+   - scheduledEventId
+   - startedEventId
+   - identity
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.STRING, 'details', str, None, ), # 10
+    None, # 11
+    None, # 12
+    None, # 13
+    None, # 14
+    None, # 15
+    None, # 16
+    None, # 17
+    None, # 18
+    None, # 19
+    (20, TType.I64, 'latestCancelRequestedEventId', None, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.I64, 'scheduledEventId', None, None, ), # 30
+    None, # 31
+    None, # 32
+    None, # 33
+    None, # 34
+    None, # 35
+    None, # 36
+    None, # 37
+    None, # 38
+    None, # 39
+    (40, TType.I64, 'startedEventId', None, None, ), # 40
+    None, # 41
+    None, # 42
+    None, # 43
+    None, # 44
+    None, # 45
+    None, # 46
+    None, # 47
+    None, # 48
+    None, # 49
+    (50, TType.STRING, 'identity', unicode, None, ), # 50
+  )
+
+  def __init__(self, details=None, latestCancelRequestedEventId=None, scheduledEventId=None, startedEventId=None, identity=None,):
+    self.details = details
+    self.latestCancelRequestedEventId = latestCancelRequestedEventId
+    self.scheduledEventId = scheduledEventId
+    self.startedEventId = startedEventId
+    self.identity = identity
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.STRING:
+          self.details = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.I64:
+          self.latestCancelRequestedEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.I64:
+          self.scheduledEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 40:
+        if ftype == TType.I64:
+          self.startedEventId = iprot.readI64();
+        else:
+          iprot.skip(ftype)
+      elif fid == 50:
+        if ftype == TType.STRING:
+          self.identity = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('ActivityTaskCanceledEventAttributes')
+    if self.details is not None:
+      oprot.writeFieldBegin('details', TType.STRING, 10)
+      oprot.writeString(self.details)
+      oprot.writeFieldEnd()
+    if self.latestCancelRequestedEventId is not None:
+      oprot.writeFieldBegin('latestCancelRequestedEventId', TType.I64, 20)
+      oprot.writeI64(self.latestCancelRequestedEventId)
+      oprot.writeFieldEnd()
+    if self.scheduledEventId is not None:
+      oprot.writeFieldBegin('scheduledEventId', TType.I64, 30)
+      oprot.writeI64(self.scheduledEventId)
+      oprot.writeFieldEnd()
+    if self.startedEventId is not None:
+      oprot.writeFieldBegin('startedEventId', TType.I64, 40)
+      oprot.writeI64(self.startedEventId)
+      oprot.writeFieldEnd()
+    if self.identity is not None:
+      oprot.writeFieldBegin('identity', TType.STRING, 50)
+      oprot.writeString(self.identity.encode('utf-8'))
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.details)
+    value = (value * 31) ^ hash(self.latestCancelRequestedEventId)
+    value = (value * 31) ^ hash(self.scheduledEventId)
+    value = (value * 31) ^ hash(self.startedEventId)
+    value = (value * 31) ^ hash(self.identity)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
 class TimerStartedEventAttributes:
   """
   Attributes:
@@ -3430,6 +3910,9 @@ class HistoryEvent:
    - timerStartedEventAttributes
    - timerFiredEventAttributes
    - completeWorkflowExecutionFailedEventAttributes
+   - activityTaskCancelRequestedEventAttributes
+   - requestCancelActivityTaskFailedEventAttributes
+   - activityTaskCanceledEventAttributes
   """
 
   thrift_spec = (
@@ -3539,9 +4022,34 @@ class HistoryEvent:
     None, # 103
     None, # 104
     (105, TType.STRUCT, 'completeWorkflowExecutionFailedEventAttributes', (CompleteWorkflowExecutionFailedEventAttributes, CompleteWorkflowExecutionFailedEventAttributes.thrift_spec), None, ), # 105
+    None, # 106
+    None, # 107
+    None, # 108
+    None, # 109
+    (110, TType.STRUCT, 'activityTaskCancelRequestedEventAttributes', (ActivityTaskCancelRequestedEventAttributes, ActivityTaskCancelRequestedEventAttributes.thrift_spec), None, ), # 110
+    None, # 111
+    None, # 112
+    None, # 113
+    None, # 114
+    None, # 115
+    None, # 116
+    None, # 117
+    None, # 118
+    None, # 119
+    (120, TType.STRUCT, 'requestCancelActivityTaskFailedEventAttributes', (RequestCancelActivityTaskFailedEventAttributes, RequestCancelActivityTaskFailedEventAttributes.thrift_spec), None, ), # 120
+    None, # 121
+    None, # 122
+    None, # 123
+    None, # 124
+    None, # 125
+    None, # 126
+    None, # 127
+    None, # 128
+    None, # 129
+    (130, TType.STRUCT, 'activityTaskCanceledEventAttributes', (ActivityTaskCanceledEventAttributes, ActivityTaskCanceledEventAttributes.thrift_spec), None, ), # 130
   )
 
-  def __init__(self, eventId=None, timestamp=None, eventType=None, workflowExecutionStartedEventAttributes=None, workflowExecutionCompletedEventAttributes=None, workflowExecutionFailedEventAttributes=None, workflowExecutionTimedOutEventAttributes=None, decisionTaskScheduledEventAttributes=None, decisionTaskStartedEventAttributes=None, decisionTaskTimedOutEventAttributes=None, decisionTaskCompletedEventAttributes=None, activityTaskScheduledEventAttributes=None, activityTaskStartedEventAttributes=None, activityTaskCompletedEventAttributes=None, activityTaskFailedEventAttributes=None, activityTaskTimedOutEventAttributes=None, timerStartedEventAttributes=None, timerFiredEventAttributes=None, completeWorkflowExecutionFailedEventAttributes=None,):
+  def __init__(self, eventId=None, timestamp=None, eventType=None, workflowExecutionStartedEventAttributes=None, workflowExecutionCompletedEventAttributes=None, workflowExecutionFailedEventAttributes=None, workflowExecutionTimedOutEventAttributes=None, decisionTaskScheduledEventAttributes=None, decisionTaskStartedEventAttributes=None, decisionTaskTimedOutEventAttributes=None, decisionTaskCompletedEventAttributes=None, activityTaskScheduledEventAttributes=None, activityTaskStartedEventAttributes=None, activityTaskCompletedEventAttributes=None, activityTaskFailedEventAttributes=None, activityTaskTimedOutEventAttributes=None, timerStartedEventAttributes=None, timerFiredEventAttributes=None, completeWorkflowExecutionFailedEventAttributes=None, activityTaskCancelRequestedEventAttributes=None, requestCancelActivityTaskFailedEventAttributes=None, activityTaskCanceledEventAttributes=None,):
     self.eventId = eventId
     self.timestamp = timestamp
     self.eventType = eventType
@@ -3561,6 +4069,9 @@ class HistoryEvent:
     self.timerStartedEventAttributes = timerStartedEventAttributes
     self.timerFiredEventAttributes = timerFiredEventAttributes
     self.completeWorkflowExecutionFailedEventAttributes = completeWorkflowExecutionFailedEventAttributes
+    self.activityTaskCancelRequestedEventAttributes = activityTaskCancelRequestedEventAttributes
+    self.requestCancelActivityTaskFailedEventAttributes = requestCancelActivityTaskFailedEventAttributes
+    self.activityTaskCanceledEventAttributes = activityTaskCanceledEventAttributes
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -3682,6 +4193,24 @@ class HistoryEvent:
           self.completeWorkflowExecutionFailedEventAttributes.read(iprot)
         else:
           iprot.skip(ftype)
+      elif fid == 110:
+        if ftype == TType.STRUCT:
+          self.activityTaskCancelRequestedEventAttributes = ActivityTaskCancelRequestedEventAttributes()
+          self.activityTaskCancelRequestedEventAttributes.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 120:
+        if ftype == TType.STRUCT:
+          self.requestCancelActivityTaskFailedEventAttributes = RequestCancelActivityTaskFailedEventAttributes()
+          self.requestCancelActivityTaskFailedEventAttributes.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 130:
+        if ftype == TType.STRUCT:
+          self.activityTaskCanceledEventAttributes = ActivityTaskCanceledEventAttributes()
+          self.activityTaskCanceledEventAttributes.read(iprot)
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -3768,6 +4297,18 @@ class HistoryEvent:
       oprot.writeFieldBegin('completeWorkflowExecutionFailedEventAttributes', TType.STRUCT, 105)
       self.completeWorkflowExecutionFailedEventAttributes.write(oprot)
       oprot.writeFieldEnd()
+    if self.activityTaskCancelRequestedEventAttributes is not None:
+      oprot.writeFieldBegin('activityTaskCancelRequestedEventAttributes', TType.STRUCT, 110)
+      self.activityTaskCancelRequestedEventAttributes.write(oprot)
+      oprot.writeFieldEnd()
+    if self.requestCancelActivityTaskFailedEventAttributes is not None:
+      oprot.writeFieldBegin('requestCancelActivityTaskFailedEventAttributes', TType.STRUCT, 120)
+      self.requestCancelActivityTaskFailedEventAttributes.write(oprot)
+      oprot.writeFieldEnd()
+    if self.activityTaskCanceledEventAttributes is not None:
+      oprot.writeFieldBegin('activityTaskCanceledEventAttributes', TType.STRUCT, 130)
+      self.activityTaskCanceledEventAttributes.write(oprot)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -3796,6 +4337,9 @@ class HistoryEvent:
     value = (value * 31) ^ hash(self.timerStartedEventAttributes)
     value = (value * 31) ^ hash(self.timerFiredEventAttributes)
     value = (value * 31) ^ hash(self.completeWorkflowExecutionFailedEventAttributes)
+    value = (value * 31) ^ hash(self.activityTaskCancelRequestedEventAttributes)
+    value = (value * 31) ^ hash(self.requestCancelActivityTaskFailedEventAttributes)
+    value = (value * 31) ^ hash(self.activityTaskCanceledEventAttributes)
     return value
 
   def __repr__(self):
@@ -5009,9 +5553,27 @@ class RecordActivityTaskHeartbeatRequest:
     return not (self == other)
 
 class RecordActivityTaskHeartbeatResponse:
+  """
+  Attributes:
+   - cancelRequested
+  """
 
   thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.BOOL, 'cancelRequested', None, None, ), # 10
   )
+
+  def __init__(self, cancelRequested=None,):
+    self.cancelRequested = cancelRequested
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -5022,6 +5584,11 @@ class RecordActivityTaskHeartbeatResponse:
       (fname, ftype, fid) = iprot.readFieldBegin()
       if ftype == TType.STOP:
         break
+      if fid == 10:
+        if ftype == TType.BOOL:
+          self.cancelRequested = iprot.readBool();
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -5032,6 +5599,10 @@ class RecordActivityTaskHeartbeatResponse:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('RecordActivityTaskHeartbeatResponse')
+    if self.cancelRequested is not None:
+      oprot.writeFieldBegin('cancelRequested', TType.BOOL, 10)
+      oprot.writeBool(self.cancelRequested)
+      oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
 
@@ -5041,6 +5612,7 @@ class RecordActivityTaskHeartbeatResponse:
 
   def __hash__(self):
     value = 17
+    value = (value * 31) ^ hash(self.cancelRequested)
     return value
 
   def __repr__(self):
@@ -5297,6 +5869,124 @@ class RespondActivityTaskFailedRequest:
     value = 17
     value = (value * 31) ^ hash(self.taskToken)
     value = (value * 31) ^ hash(self.reason)
+    value = (value * 31) ^ hash(self.details)
+    value = (value * 31) ^ hash(self.identity)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class RespondActivityTaskCanceledRequest:
+  """
+  Attributes:
+   - taskToken
+   - details
+   - identity
+  """
+
+  thrift_spec = (
+    None, # 0
+    None, # 1
+    None, # 2
+    None, # 3
+    None, # 4
+    None, # 5
+    None, # 6
+    None, # 7
+    None, # 8
+    None, # 9
+    (10, TType.STRING, 'taskToken', str, None, ), # 10
+    None, # 11
+    None, # 12
+    None, # 13
+    None, # 14
+    None, # 15
+    None, # 16
+    None, # 17
+    None, # 18
+    None, # 19
+    (20, TType.STRING, 'details', str, None, ), # 20
+    None, # 21
+    None, # 22
+    None, # 23
+    None, # 24
+    None, # 25
+    None, # 26
+    None, # 27
+    None, # 28
+    None, # 29
+    (30, TType.STRING, 'identity', unicode, None, ), # 30
+  )
+
+  def __init__(self, taskToken=None, details=None, identity=None,):
+    self.taskToken = taskToken
+    self.details = details
+    self.identity = identity
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 10:
+        if ftype == TType.STRING:
+          self.taskToken = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 20:
+        if ftype == TType.STRING:
+          self.details = iprot.readString();
+        else:
+          iprot.skip(ftype)
+      elif fid == 30:
+        if ftype == TType.STRING:
+          self.identity = iprot.readString().decode('utf-8')
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('RespondActivityTaskCanceledRequest')
+    if self.taskToken is not None:
+      oprot.writeFieldBegin('taskToken', TType.STRING, 10)
+      oprot.writeString(self.taskToken)
+      oprot.writeFieldEnd()
+    if self.details is not None:
+      oprot.writeFieldBegin('details', TType.STRING, 20)
+      oprot.writeString(self.details)
+      oprot.writeFieldEnd()
+    if self.identity is not None:
+      oprot.writeFieldBegin('identity', TType.STRING, 30)
+      oprot.writeString(self.identity.encode('utf-8'))
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.taskToken)
     value = (value * 31) ^ hash(self.details)
     value = (value * 31) ^ hash(self.identity)
     return value

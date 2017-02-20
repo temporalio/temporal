@@ -17,9 +17,10 @@ ttypes.TimeoutType = {
 };
 ttypes.DecisionType = {
   'ScheduleActivityTask' : 0,
-  'StartTimer' : 1,
-  'CompleteWorkflowExecution' : 2,
-  'FailWorkflowExecution' : 3
+  'RequestCancelActivityTask' : 1,
+  'StartTimer' : 2,
+  'CompleteWorkflowExecution' : 3,
+  'FailWorkflowExecution' : 4
 };
 ttypes.EventType = {
   'WorkflowExecutionStarted' : 0,
@@ -35,9 +36,12 @@ ttypes.EventType = {
   'ActivityTaskCompleted' : 10,
   'ActivityTaskFailed' : 11,
   'ActivityTaskTimedOut' : 12,
-  'TimerStarted' : 13,
-  'TimerFired' : 14,
-  'CompleteWorkflowExecutionFailed' : 15
+  'ActivityTaskCancelRequested' : 13,
+  'RequestCancelActivityTaskFailed' : 14,
+  'ActivityTaskCanceled' : 15,
+  'TimerStarted' : 16,
+  'TimerFired' : 17,
+  'CompleteWorkflowExecutionFailed' : 18
 };
 ttypes.WorkflowCompleteFailedCause = {
   'UNHANDLED_DECISION' : 0
@@ -663,6 +667,59 @@ ScheduleActivityTaskDecisionAttributes.prototype.write = function(output) {
   return;
 };
 
+var RequestCancelActivityTaskDecisionAttributes = module.exports.RequestCancelActivityTaskDecisionAttributes = function(args) {
+  this.activityId = null;
+  if (args) {
+    if (args.activityId !== undefined && args.activityId !== null) {
+      this.activityId = args.activityId;
+    }
+  }
+};
+RequestCancelActivityTaskDecisionAttributes.prototype = {};
+RequestCancelActivityTaskDecisionAttributes.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRING) {
+        this.activityId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+RequestCancelActivityTaskDecisionAttributes.prototype.write = function(output) {
+  output.writeStructBegin('RequestCancelActivityTaskDecisionAttributes');
+  if (this.activityId !== null && this.activityId !== undefined) {
+    output.writeFieldBegin('activityId', Thrift.Type.STRING, 10);
+    output.writeString(this.activityId);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
 var StartTimerDecisionAttributes = module.exports.StartTimerDecisionAttributes = function(args) {
   this.timerId = null;
   this.startToFireTimeoutSeconds = null;
@@ -854,6 +911,7 @@ var Decision = module.exports.Decision = function(args) {
   this.startTimerDecisionAttributes = null;
   this.completeWorkflowExecutionDecisionAttributes = null;
   this.failWorkflowExecutionDecisionAttributes = null;
+  this.requestCancelActivityTaskDecisionAttributes = null;
   if (args) {
     if (args.decisionType !== undefined && args.decisionType !== null) {
       this.decisionType = args.decisionType;
@@ -869,6 +927,9 @@ var Decision = module.exports.Decision = function(args) {
     }
     if (args.failWorkflowExecutionDecisionAttributes !== undefined && args.failWorkflowExecutionDecisionAttributes !== null) {
       this.failWorkflowExecutionDecisionAttributes = new ttypes.FailWorkflowExecutionDecisionAttributes(args.failWorkflowExecutionDecisionAttributes);
+    }
+    if (args.requestCancelActivityTaskDecisionAttributes !== undefined && args.requestCancelActivityTaskDecisionAttributes !== null) {
+      this.requestCancelActivityTaskDecisionAttributes = new ttypes.RequestCancelActivityTaskDecisionAttributes(args.requestCancelActivityTaskDecisionAttributes);
     }
   }
 };
@@ -925,6 +986,14 @@ Decision.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 40:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.requestCancelActivityTaskDecisionAttributes = new ttypes.RequestCancelActivityTaskDecisionAttributes();
+        this.requestCancelActivityTaskDecisionAttributes.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -959,6 +1028,11 @@ Decision.prototype.write = function(output) {
   if (this.failWorkflowExecutionDecisionAttributes !== null && this.failWorkflowExecutionDecisionAttributes !== undefined) {
     output.writeFieldBegin('failWorkflowExecutionDecisionAttributes', Thrift.Type.STRUCT, 35);
     this.failWorkflowExecutionDecisionAttributes.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.requestCancelActivityTaskDecisionAttributes !== null && this.requestCancelActivityTaskDecisionAttributes !== undefined) {
+    output.writeFieldBegin('requestCancelActivityTaskDecisionAttributes', Thrift.Type.STRUCT, 40);
+    this.requestCancelActivityTaskDecisionAttributes.write(output);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -2266,6 +2340,268 @@ ActivityTaskTimedOutEventAttributes.prototype.write = function(output) {
   return;
 };
 
+var ActivityTaskCancelRequestedEventAttributes = module.exports.ActivityTaskCancelRequestedEventAttributes = function(args) {
+  this.activityId = null;
+  this.decisionTaskCompletedEventId = null;
+  if (args) {
+    if (args.activityId !== undefined && args.activityId !== null) {
+      this.activityId = args.activityId;
+    }
+    if (args.decisionTaskCompletedEventId !== undefined && args.decisionTaskCompletedEventId !== null) {
+      this.decisionTaskCompletedEventId = args.decisionTaskCompletedEventId;
+    }
+  }
+};
+ActivityTaskCancelRequestedEventAttributes.prototype = {};
+ActivityTaskCancelRequestedEventAttributes.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRING) {
+        this.activityId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 20:
+      if (ftype == Thrift.Type.I64) {
+        this.decisionTaskCompletedEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+ActivityTaskCancelRequestedEventAttributes.prototype.write = function(output) {
+  output.writeStructBegin('ActivityTaskCancelRequestedEventAttributes');
+  if (this.activityId !== null && this.activityId !== undefined) {
+    output.writeFieldBegin('activityId', Thrift.Type.STRING, 10);
+    output.writeString(this.activityId);
+    output.writeFieldEnd();
+  }
+  if (this.decisionTaskCompletedEventId !== null && this.decisionTaskCompletedEventId !== undefined) {
+    output.writeFieldBegin('decisionTaskCompletedEventId', Thrift.Type.I64, 20);
+    output.writeI64(this.decisionTaskCompletedEventId);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var RequestCancelActivityTaskFailedEventAttributes = module.exports.RequestCancelActivityTaskFailedEventAttributes = function(args) {
+  this.activityId = null;
+  this.cause = null;
+  this.decisionTaskCompletedEventId = null;
+  if (args) {
+    if (args.activityId !== undefined && args.activityId !== null) {
+      this.activityId = args.activityId;
+    }
+    if (args.cause !== undefined && args.cause !== null) {
+      this.cause = args.cause;
+    }
+    if (args.decisionTaskCompletedEventId !== undefined && args.decisionTaskCompletedEventId !== null) {
+      this.decisionTaskCompletedEventId = args.decisionTaskCompletedEventId;
+    }
+  }
+};
+RequestCancelActivityTaskFailedEventAttributes.prototype = {};
+RequestCancelActivityTaskFailedEventAttributes.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRING) {
+        this.activityId = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 20:
+      if (ftype == Thrift.Type.STRING) {
+        this.cause = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 30:
+      if (ftype == Thrift.Type.I64) {
+        this.decisionTaskCompletedEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+RequestCancelActivityTaskFailedEventAttributes.prototype.write = function(output) {
+  output.writeStructBegin('RequestCancelActivityTaskFailedEventAttributes');
+  if (this.activityId !== null && this.activityId !== undefined) {
+    output.writeFieldBegin('activityId', Thrift.Type.STRING, 10);
+    output.writeString(this.activityId);
+    output.writeFieldEnd();
+  }
+  if (this.cause !== null && this.cause !== undefined) {
+    output.writeFieldBegin('cause', Thrift.Type.STRING, 20);
+    output.writeString(this.cause);
+    output.writeFieldEnd();
+  }
+  if (this.decisionTaskCompletedEventId !== null && this.decisionTaskCompletedEventId !== undefined) {
+    output.writeFieldBegin('decisionTaskCompletedEventId', Thrift.Type.I64, 30);
+    output.writeI64(this.decisionTaskCompletedEventId);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var ActivityTaskCanceledEventAttributes = module.exports.ActivityTaskCanceledEventAttributes = function(args) {
+  this.details = null;
+  this.latestCancelRequestedEventId = null;
+  this.scheduledEventId = null;
+  this.startedEventId = null;
+  this.identity = null;
+  if (args) {
+    if (args.details !== undefined && args.details !== null) {
+      this.details = args.details;
+    }
+    if (args.latestCancelRequestedEventId !== undefined && args.latestCancelRequestedEventId !== null) {
+      this.latestCancelRequestedEventId = args.latestCancelRequestedEventId;
+    }
+    if (args.scheduledEventId !== undefined && args.scheduledEventId !== null) {
+      this.scheduledEventId = args.scheduledEventId;
+    }
+    if (args.startedEventId !== undefined && args.startedEventId !== null) {
+      this.startedEventId = args.startedEventId;
+    }
+    if (args.identity !== undefined && args.identity !== null) {
+      this.identity = args.identity;
+    }
+  }
+};
+ActivityTaskCanceledEventAttributes.prototype = {};
+ActivityTaskCanceledEventAttributes.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRING) {
+        this.details = input.readBinary();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 20:
+      if (ftype == Thrift.Type.I64) {
+        this.latestCancelRequestedEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 30:
+      if (ftype == Thrift.Type.I64) {
+        this.scheduledEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 40:
+      if (ftype == Thrift.Type.I64) {
+        this.startedEventId = input.readI64();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 50:
+      if (ftype == Thrift.Type.STRING) {
+        this.identity = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+ActivityTaskCanceledEventAttributes.prototype.write = function(output) {
+  output.writeStructBegin('ActivityTaskCanceledEventAttributes');
+  if (this.details !== null && this.details !== undefined) {
+    output.writeFieldBegin('details', Thrift.Type.STRING, 10);
+    output.writeBinary(this.details);
+    output.writeFieldEnd();
+  }
+  if (this.latestCancelRequestedEventId !== null && this.latestCancelRequestedEventId !== undefined) {
+    output.writeFieldBegin('latestCancelRequestedEventId', Thrift.Type.I64, 20);
+    output.writeI64(this.latestCancelRequestedEventId);
+    output.writeFieldEnd();
+  }
+  if (this.scheduledEventId !== null && this.scheduledEventId !== undefined) {
+    output.writeFieldBegin('scheduledEventId', Thrift.Type.I64, 30);
+    output.writeI64(this.scheduledEventId);
+    output.writeFieldEnd();
+  }
+  if (this.startedEventId !== null && this.startedEventId !== undefined) {
+    output.writeFieldBegin('startedEventId', Thrift.Type.I64, 40);
+    output.writeI64(this.startedEventId);
+    output.writeFieldEnd();
+  }
+  if (this.identity !== null && this.identity !== undefined) {
+    output.writeFieldBegin('identity', Thrift.Type.STRING, 50);
+    output.writeString(this.identity);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
 var TimerStartedEventAttributes = module.exports.TimerStartedEventAttributes = function(args) {
   this.timerId = null;
   this.startToFireTimeoutSeconds = null;
@@ -2434,6 +2770,9 @@ var HistoryEvent = module.exports.HistoryEvent = function(args) {
   this.timerStartedEventAttributes = null;
   this.timerFiredEventAttributes = null;
   this.completeWorkflowExecutionFailedEventAttributes = null;
+  this.activityTaskCancelRequestedEventAttributes = null;
+  this.requestCancelActivityTaskFailedEventAttributes = null;
+  this.activityTaskCanceledEventAttributes = null;
   if (args) {
     if (args.eventId !== undefined && args.eventId !== null) {
       this.eventId = args.eventId;
@@ -2491,6 +2830,15 @@ var HistoryEvent = module.exports.HistoryEvent = function(args) {
     }
     if (args.completeWorkflowExecutionFailedEventAttributes !== undefined && args.completeWorkflowExecutionFailedEventAttributes !== null) {
       this.completeWorkflowExecutionFailedEventAttributes = new ttypes.CompleteWorkflowExecutionFailedEventAttributes(args.completeWorkflowExecutionFailedEventAttributes);
+    }
+    if (args.activityTaskCancelRequestedEventAttributes !== undefined && args.activityTaskCancelRequestedEventAttributes !== null) {
+      this.activityTaskCancelRequestedEventAttributes = new ttypes.ActivityTaskCancelRequestedEventAttributes(args.activityTaskCancelRequestedEventAttributes);
+    }
+    if (args.requestCancelActivityTaskFailedEventAttributes !== undefined && args.requestCancelActivityTaskFailedEventAttributes !== null) {
+      this.requestCancelActivityTaskFailedEventAttributes = new ttypes.RequestCancelActivityTaskFailedEventAttributes(args.requestCancelActivityTaskFailedEventAttributes);
+    }
+    if (args.activityTaskCanceledEventAttributes !== undefined && args.activityTaskCanceledEventAttributes !== null) {
+      this.activityTaskCanceledEventAttributes = new ttypes.ActivityTaskCanceledEventAttributes(args.activityTaskCanceledEventAttributes);
     }
   }
 };
@@ -2657,6 +3005,30 @@ HistoryEvent.prototype.read = function(input) {
         input.skip(ftype);
       }
       break;
+      case 110:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.activityTaskCancelRequestedEventAttributes = new ttypes.ActivityTaskCancelRequestedEventAttributes();
+        this.activityTaskCancelRequestedEventAttributes.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 120:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.requestCancelActivityTaskFailedEventAttributes = new ttypes.RequestCancelActivityTaskFailedEventAttributes();
+        this.requestCancelActivityTaskFailedEventAttributes.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 130:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.activityTaskCanceledEventAttributes = new ttypes.ActivityTaskCanceledEventAttributes();
+        this.activityTaskCanceledEventAttributes.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
       default:
         input.skip(ftype);
     }
@@ -2761,6 +3133,21 @@ HistoryEvent.prototype.write = function(output) {
   if (this.completeWorkflowExecutionFailedEventAttributes !== null && this.completeWorkflowExecutionFailedEventAttributes !== undefined) {
     output.writeFieldBegin('completeWorkflowExecutionFailedEventAttributes', Thrift.Type.STRUCT, 105);
     this.completeWorkflowExecutionFailedEventAttributes.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.activityTaskCancelRequestedEventAttributes !== null && this.activityTaskCancelRequestedEventAttributes !== undefined) {
+    output.writeFieldBegin('activityTaskCancelRequestedEventAttributes', Thrift.Type.STRUCT, 110);
+    this.activityTaskCancelRequestedEventAttributes.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.requestCancelActivityTaskFailedEventAttributes !== null && this.requestCancelActivityTaskFailedEventAttributes !== undefined) {
+    output.writeFieldBegin('requestCancelActivityTaskFailedEventAttributes', Thrift.Type.STRUCT, 120);
+    this.requestCancelActivityTaskFailedEventAttributes.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.activityTaskCanceledEventAttributes !== null && this.activityTaskCanceledEventAttributes !== undefined) {
+    output.writeFieldBegin('activityTaskCanceledEventAttributes', Thrift.Type.STRUCT, 130);
+    this.activityTaskCanceledEventAttributes.write(output);
     output.writeFieldEnd();
   }
   output.writeFieldStop();
@@ -3648,6 +4035,12 @@ RecordActivityTaskHeartbeatRequest.prototype.write = function(output) {
 };
 
 var RecordActivityTaskHeartbeatResponse = module.exports.RecordActivityTaskHeartbeatResponse = function(args) {
+  this.cancelRequested = null;
+  if (args) {
+    if (args.cancelRequested !== undefined && args.cancelRequested !== null) {
+      this.cancelRequested = args.cancelRequested;
+    }
+  }
 };
 RecordActivityTaskHeartbeatResponse.prototype = {};
 RecordActivityTaskHeartbeatResponse.prototype.read = function(input) {
@@ -3661,7 +4054,21 @@ RecordActivityTaskHeartbeatResponse.prototype.read = function(input) {
     if (ftype == Thrift.Type.STOP) {
       break;
     }
-    input.skip(ftype);
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.BOOL) {
+        this.cancelRequested = input.readBool();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
     input.readFieldEnd();
   }
   input.readStructEnd();
@@ -3670,6 +4077,11 @@ RecordActivityTaskHeartbeatResponse.prototype.read = function(input) {
 
 RecordActivityTaskHeartbeatResponse.prototype.write = function(output) {
   output.writeStructBegin('RecordActivityTaskHeartbeatResponse');
+  if (this.cancelRequested !== null && this.cancelRequested !== undefined) {
+    output.writeFieldBegin('cancelRequested', Thrift.Type.BOOL, 10);
+    output.writeBool(this.cancelRequested);
+    output.writeFieldEnd();
+  }
   output.writeFieldStop();
   output.writeStructEnd();
   return;
@@ -3847,6 +4259,88 @@ RespondActivityTaskFailedRequest.prototype.write = function(output) {
   }
   if (this.identity !== null && this.identity !== undefined) {
     output.writeFieldBegin('identity', Thrift.Type.STRING, 40);
+    output.writeString(this.identity);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var RespondActivityTaskCanceledRequest = module.exports.RespondActivityTaskCanceledRequest = function(args) {
+  this.taskToken = null;
+  this.details = null;
+  this.identity = null;
+  if (args) {
+    if (args.taskToken !== undefined && args.taskToken !== null) {
+      this.taskToken = args.taskToken;
+    }
+    if (args.details !== undefined && args.details !== null) {
+      this.details = args.details;
+    }
+    if (args.identity !== undefined && args.identity !== null) {
+      this.identity = args.identity;
+    }
+  }
+};
+RespondActivityTaskCanceledRequest.prototype = {};
+RespondActivityTaskCanceledRequest.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 10:
+      if (ftype == Thrift.Type.STRING) {
+        this.taskToken = input.readBinary();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 20:
+      if (ftype == Thrift.Type.STRING) {
+        this.details = input.readBinary();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 30:
+      if (ftype == Thrift.Type.STRING) {
+        this.identity = input.readString();
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+RespondActivityTaskCanceledRequest.prototype.write = function(output) {
+  output.writeStructBegin('RespondActivityTaskCanceledRequest');
+  if (this.taskToken !== null && this.taskToken !== undefined) {
+    output.writeFieldBegin('taskToken', Thrift.Type.STRING, 10);
+    output.writeBinary(this.taskToken);
+    output.writeFieldEnd();
+  }
+  if (this.details !== null && this.details !== undefined) {
+    output.writeFieldBegin('details', Thrift.Type.STRING, 20);
+    output.writeBinary(this.details);
+    output.writeFieldEnd();
+  }
+  if (this.identity !== null && this.identity !== undefined) {
+    output.writeFieldBegin('identity', Thrift.Type.STRING, 30);
     output.writeString(this.identity);
     output.writeFieldEnd();
   }

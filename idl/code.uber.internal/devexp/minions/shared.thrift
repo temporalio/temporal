@@ -25,6 +25,7 @@ enum TimeoutType {
 
 enum DecisionType {
   ScheduleActivityTask,
+  RequestCancelActivityTask,
   StartTimer,
   CompleteWorkflowExecution,
   FailWorkflowExecution,
@@ -44,6 +45,9 @@ enum EventType {
   ActivityTaskCompleted,
   ActivityTaskFailed,
   ActivityTaskTimedOut,
+  ActivityTaskCancelRequested,
+  RequestCancelActivityTaskFailed,
+  ActivityTaskCanceled,
   TimerStarted,
   TimerFired,
   CompleteWorkflowExecutionFailed,
@@ -81,6 +85,10 @@ struct ScheduleActivityTaskDecisionAttributes {
   60: optional i32 heartbeatTimeoutSeconds
 }
 
+struct RequestCancelActivityTaskDecisionAttributes {
+  10: optional string activityId
+}
+
 struct StartTimerDecisionAttributes {
   10: optional string timerId
   20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
@@ -101,6 +109,7 @@ struct Decision {
   25: optional StartTimerDecisionAttributes startTimerDecisionAttributes
   30: optional CompleteWorkflowExecutionDecisionAttributes completeWorkflowExecutionDecisionAttributes
   35: optional FailWorkflowExecutionDecisionAttributes failWorkflowExecutionDecisionAttributes
+  40: optional RequestCancelActivityTaskDecisionAttributes requestCancelActivityTaskDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -196,6 +205,25 @@ struct ActivityTaskTimedOutEventAttributes {
   30: optional TimeoutType timeoutType
 }
 
+struct ActivityTaskCancelRequestedEventAttributes {
+  10: optional string activityId
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+}
+
+struct RequestCancelActivityTaskFailedEventAttributes{
+  10: optional string activityId
+  20: optional string cause
+  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+}
+
+struct ActivityTaskCanceledEventAttributes {
+  10: optional binary details
+  20: optional i64 (js.type = "Long") latestCancelRequestedEventId
+  30: optional i64 (js.type = "Long") scheduledEventId
+  40: optional i64 (js.type = "Long") startedEventId
+  50: optional string identity
+}
+
 struct TimerStartedEventAttributes {
   10: optional string timerId
   20: optional i64 (js.type = "Long") startToFireTimeoutSeconds
@@ -227,6 +255,9 @@ struct HistoryEvent {
   95:  optional TimerStartedEventAttributes timerStartedEventAttributes
   100: optional TimerFiredEventAttributes timerFiredEventAttributes
   105: optional CompleteWorkflowExecutionFailedEventAttributes completeWorkflowExecutionFailedEventAttributes
+  110: optional ActivityTaskCancelRequestedEventAttributes activityTaskCancelRequestedEventAttributes
+  120: optional RequestCancelActivityTaskFailedEventAttributes requestCancelActivityTaskFailedEventAttributes
+  130: optional ActivityTaskCanceledEventAttributes activityTaskCanceledEventAttributes
 }
 
 struct History {
@@ -289,6 +320,7 @@ struct RecordActivityTaskHeartbeatRequest {
 }
 
 struct RecordActivityTaskHeartbeatResponse {
+  10: optional bool cancelRequested
 }
 
 struct RespondActivityTaskCompletedRequest {
@@ -302,6 +334,12 @@ struct RespondActivityTaskFailedRequest {
   20: optional string reason
   30: optional binary details
   40: optional string identity
+}
+
+struct RespondActivityTaskCanceledRequest {
+  10: optional binary taskToken
+  20: optional binary details
+  30: optional string identity
 }
 
 struct GetWorkflowExecutionHistoryRequest {

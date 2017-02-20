@@ -165,6 +165,22 @@ func (h *Handler) RespondActivityTaskFailed(ctx thrift.Context,
 	return engine.RespondActivityTaskFailed(failRequest)
 }
 
+// RespondActivityTaskCanceled - records failure of an activity task
+func (h *Handler) RespondActivityTaskCanceled(ctx thrift.Context,
+	cancelRequest *gen.RespondActivityTaskCanceledRequest) error {
+	h.startWG.Wait()
+	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.GetTaskToken())
+	if err0 != nil {
+		return &gen.BadRequestError{Message: "Error deserializing task token."}
+	}
+
+	engine, err1 := h.controller.GetEngine(token.WorkflowID)
+	if err1 != nil {
+		return err1
+	}
+	return engine.RespondActivityTaskCanceled(cancelRequest)
+}
+
 // RespondDecisionTaskCompleted - records completion of a decision task
 func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {

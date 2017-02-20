@@ -16,7 +16,10 @@ import (
 )
 
 const (
-	conditionalRetryCount = 5
+	conditionalRetryCount                     = 5
+	activityCancelationMsgActivityIDUnknown   = "ACTIVITY_ID_UNKNOWN"
+	activityCancelationMsgActivityNotStarted  = "ACTIVITY_ID_NOT_STARTED"
+	activityCancelationMsgActivityNoHeartBeat = "ACTIVITY_ID_NO_HEARTBEAT"
 )
 
 type (
@@ -458,6 +461,29 @@ Update_History_Loop:
 				if nextTimerTask != nil {
 					timerTasks = append(timerTasks, nextTimerTask)
 				}
+			case workflow.DecisionType_RequestCancelActivityTask:
+				attributes := d.GetRequestCancelActivityTaskDecisionAttributes()
+				actCancelReqEvent := builder.AddActivityTaskCancelRequestedEvent(completedID, attributes.GetActivityId())
+				isRunning, ai := msBuilder.isActivityRunningByActivityID(attributes.GetActivityId())
+				if !isRunning {
+					builder.AddRequestCancelActivityTaskFailedEvent(
+						completedID, attributes.GetActivityId(), activityCancelationMsgActivityIDUnknown)
+					continue Process_Decision_Loop
+				}
+
+				if ai.StartedID == emptyEventID {
+					// We haven't started the activity yet, we can cancel the activity right away.
+					builder.AddActivityTaskCanceledEvent(
+						ai.ScheduleID, ai.StartedID, actCancelReqEvent.GetEventId(), []byte(activityCancelationMsgActivityNotStarted), request.GetIdentity())
+					msBuilder.DeletePendingActivity(ai.ScheduleID)
+				} else {
+					// - We have the activity dispatched to worker.
+					// - The activity might not be heartbeat'ing, but the activity can still call RecordActivityHeartBeat()
+					//   to see cancellation while reporting progress of the activity.
+					ai.CancelRequested = true
+					ai.CancelRequestID = actCancelReqEvent.GetEventId()
+					msBuilder.UpdatePendingActivity(ai.ScheduleID, ai)
+				}
 
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
@@ -646,7 +672,86 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
+// RespondActivityTaskCanceled completes an activity task failure.
+func (e *historyEngineImpl) RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error {
+	token, err0 := e.tokenSerializer.Deserialize(request.GetTaskToken())
+	if err0 != nil {
+		return &workflow.BadRequestError{Message: "Error deserializing task token."}
+	}
+
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(token.WorkflowID),
+		RunId:      common.StringPtr(token.RunID),
+	}
+
+	context := newWorkflowExecutionContext(e, workflowExecution)
+
+Update_History_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		msBuilder, err1 := context.loadWorkflowMutableState()
+		if err1 != nil {
+			return err1
+		}
+
+		scheduleID := token.ScheduleID
+		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
+		// task is not outstanding than it is most probably a duplicate and complete the task.
+		isRunning, ai := msBuilder.isActivityRunning(scheduleID)
+		if !isRunning || ai.StartedID == emptyEventID {
+			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
+		}
+
+		builder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			return err1
+		}
+
+		if builder.AddActivityTaskCanceledEvent(scheduleID, ai.StartedID, ai.CancelRequestID, request.GetDetails(), request.GetIdentity()) == nil {
+			// Let's retry and see if the activity still exist.
+			continue Update_History_Loop
+		}
+
+		msBuilder.DeletePendingActivity(scheduleID)
+
+		var transferTasks []persistence.Task
+		if !builder.hasPendingDecisionTask() {
+			startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
+			startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
+			newDecisionEvent := builder.AddDecisionTaskScheduledEvent(startAttributes.GetTaskList().GetName(),
+				startAttributes.GetTaskStartToCloseTimeoutSeconds())
+			id, err2 := e.tracker.getNextTaskID()
+			if err2 != nil {
+				return err2
+			}
+
+			defer e.tracker.completeTask(id)
+			transferTasks = []persistence.Task{&persistence.DecisionTask{
+				TaskID:     id,
+				TaskList:   startAttributes.GetTaskList().GetName(),
+				ScheduleID: newDecisionEvent.GetEventId(),
+			}}
+		}
+
+		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
+		// the history and try the operation again.
+		if err := context.updateWorkflowExecution(transferTasks, nil); err != nil {
+			if err == ErrConflict {
+				continue Update_History_Loop
+			}
+
+			return err
+		}
+
+		return nil
+	}
+
+	return ErrMaxAttemptsExceeded
+}
+
 // RecordActivityTaskHeartbeat records an hearbeat for a task.
+// This method can be used for two purposes.
+// - For reporting liveness of the activity.
+// - For reporting progress of the activity, this can be done even if the liveness is not configured.
 func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 	token, err0 := e.tokenSerializer.Deserialize(request.GetTaskToken())
@@ -676,10 +781,7 @@ Update_History_Loop:
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
-		if ai.HeartbeatTimeout <= 0 {
-			e.logger.Debugf("Activity HeartBeat: Schedule activity attributes: %+v", ai)
-			return nil, &workflow.EntityNotExistsError{Message: "Activity task not configured to heartbeat."}
-		}
+		cancelRequested := ai.CancelRequested
 
 		_, err1 = context.loadWorkflowExecution()
 		if err1 != nil {
@@ -689,14 +791,19 @@ Update_History_Loop:
 		var timerTasks []persistence.Task
 		var transferTasks []persistence.Task
 
-		e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v", scheduleID, ai)
+		e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
+			scheduleID, ai, cancelRequested)
 
 		// Re-schedule next heartbeat.
 		start2HeartBeatTimeoutTask, _ := context.tBuilder.AddHeartBeatActivityTimeout(scheduleID, msBuilder)
-		timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
+		if start2HeartBeatTimeoutTask != nil {
+			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
+			defer e.timerProcessor.NotifyNewTimer(start2HeartBeatTimeoutTask.GetTaskID())
+		}
+
+		// Save progress reported.
 		ai.Details = request.GetDetails()
 		msBuilder.UpdatePendingActivity(scheduleID, ai)
-		defer e.timerProcessor.NotifyNewTimer(start2HeartBeatTimeoutTask.GetTaskID())
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -708,7 +815,7 @@ Update_History_Loop:
 			return nil, err
 		}
 
-		return &workflow.RecordActivityTaskHeartbeatResponse{}, nil
+		return &workflow.RecordActivityTaskHeartbeatResponse{CancelRequested: common.BoolPtr(cancelRequested)}, nil
 	}
 
 	return &workflow.RecordActivityTaskHeartbeatResponse{}, ErrMaxAttemptsExceeded

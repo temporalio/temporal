@@ -130,6 +130,20 @@ func (_m *HistoryClient) RespondActivityTaskFailed(request *shared.RespondActivi
 	return r0
 }
 
+// RespondActivityTaskCanceled provides a mock function with given fields: request
+func (_m *HistoryClient) RespondActivityTaskCanceled(request *shared.RespondActivityTaskCanceledRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*shared.RespondActivityTaskCanceledRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RespondDecisionTaskCompleted provides a mock function with given fields: request
 func (_m *HistoryClient) RespondDecisionTaskCompleted(request *shared.RespondDecisionTaskCompletedRequest) error {
 	ret := _m.Called(request)

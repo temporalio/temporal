@@ -32,6 +32,7 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print('  RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(RecordActivityTaskHeartbeatRequest heartbeatRequest)')
   print('  void RespondActivityTaskCompleted(RespondActivityTaskCompletedRequest completeRequest)')
   print('  void RespondActivityTaskFailed(RespondActivityTaskFailedRequest failRequest)')
+  print('  void RespondActivityTaskCanceled(RespondActivityTaskCanceledRequest canceledRequest)')
   print('')
   sys.exit(0)
 
@@ -135,6 +136,12 @@ elif cmd == 'RespondActivityTaskFailed':
     print('RespondActivityTaskFailed requires 1 args')
     sys.exit(1)
   pp.pprint(client.RespondActivityTaskFailed(eval(args[0]),))
+
+elif cmd == 'RespondActivityTaskCanceled':
+  if len(args) != 1:
+    print('RespondActivityTaskCanceled requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RespondActivityTaskCanceled(eval(args[0]),))
 
 else:
   print('Unrecognized method %s' % cmd)

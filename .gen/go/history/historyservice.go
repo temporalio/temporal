@@ -93,6 +93,16 @@ type HistoryService interface { //HistoryService provides API to start a new lon
 	// Parameters:
 	//  - FailRequest
 	RespondActivityTaskFailed(failRequest *shared.RespondActivityTaskFailedRequest) (err error)
+	// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
+	// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+	// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+	// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+	// anymore due to activity timeout.
+	//
+	//
+	// Parameters:
+	//  - CanceledRequest
+	RespondActivityTaskCanceled(canceledRequest *shared.RespondActivityTaskCanceledRequest) (err error)
 }
 
 //HistoryService provides API to start a new long running workflow instance, as well as query and update the history
@@ -871,6 +881,99 @@ func (p *HistoryServiceClient) recvRespondActivityTaskFailed() (err error) {
 	return
 }
 
+// RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
+// result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+// created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+// PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+// anymore due to activity timeout.
+//
+//
+// Parameters:
+//  - CanceledRequest
+func (p *HistoryServiceClient) RespondActivityTaskCanceled(canceledRequest *shared.RespondActivityTaskCanceledRequest) (err error) {
+	if err = p.sendRespondActivityTaskCanceled(canceledRequest); err != nil {
+		return
+	}
+	return p.recvRespondActivityTaskCanceled()
+}
+
+func (p *HistoryServiceClient) sendRespondActivityTaskCanceled(canceledRequest *shared.RespondActivityTaskCanceledRequest) (err error) {
+	oprot := p.OutputProtocol
+	if oprot == nil {
+		oprot = p.ProtocolFactory.GetProtocol(p.Transport)
+		p.OutputProtocol = oprot
+	}
+	p.SeqId++
+	if err = oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.CALL, p.SeqId); err != nil {
+		return
+	}
+	args := HistoryServiceRespondActivityTaskCanceledArgs{
+		CanceledRequest: canceledRequest,
+	}
+	if err = args.Write(oprot); err != nil {
+		return
+	}
+	if err = oprot.WriteMessageEnd(); err != nil {
+		return
+	}
+	return oprot.Flush()
+}
+
+func (p *HistoryServiceClient) recvRespondActivityTaskCanceled() (err error) {
+	iprot := p.InputProtocol
+	if iprot == nil {
+		iprot = p.ProtocolFactory.GetProtocol(p.Transport)
+		p.InputProtocol = iprot
+	}
+	method, mTypeId, seqId, err := iprot.ReadMessageBegin()
+	if err != nil {
+		return
+	}
+	if method != "RespondActivityTaskCanceled" {
+		err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "RespondActivityTaskCanceled failed: wrong method name")
+		return
+	}
+	if p.SeqId != seqId {
+		err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "RespondActivityTaskCanceled failed: out of sequence response")
+		return
+	}
+	if mTypeId == thrift.EXCEPTION {
+		error16 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
+		var error17 error
+		error17, err = error16.Read(iprot)
+		if err != nil {
+			return
+		}
+		if err = iprot.ReadMessageEnd(); err != nil {
+			return
+		}
+		err = error17
+		return
+	}
+	if mTypeId != thrift.REPLY {
+		err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "RespondActivityTaskCanceled failed: invalid message type")
+		return
+	}
+	result := HistoryServiceRespondActivityTaskCanceledResult{}
+	if err = result.Read(iprot); err != nil {
+		return
+	}
+	if err = iprot.ReadMessageEnd(); err != nil {
+		return
+	}
+	if result.BadRequestError != nil {
+		err = result.BadRequestError
+		return
+	} else if result.InternalServiceError != nil {
+		err = result.InternalServiceError
+		return
+	} else if result.EntityNotExistError != nil {
+		err = result.EntityNotExistError
+		return
+	}
+	return
+}
+
 type HistoryServiceProcessor struct {
 	processorMap map[string]thrift.TProcessorFunction
 	handler      HistoryService
@@ -891,16 +994,17 @@ func (p *HistoryServiceProcessor) ProcessorMap() map[string]thrift.TProcessorFun
 
 func NewHistoryServiceProcessor(handler HistoryService) *HistoryServiceProcessor {
 
-	self16 := &HistoryServiceProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
-	self16.processorMap["StartWorkflowExecution"] = &historyServiceProcessorStartWorkflowExecution{handler: handler}
-	self16.processorMap["GetWorkflowExecutionHistory"] = &historyServiceProcessorGetWorkflowExecutionHistory{handler: handler}
-	self16.processorMap["RecordDecisionTaskStarted"] = &historyServiceProcessorRecordDecisionTaskStarted{handler: handler}
-	self16.processorMap["RecordActivityTaskStarted"] = &historyServiceProcessorRecordActivityTaskStarted{handler: handler}
-	self16.processorMap["RespondDecisionTaskCompleted"] = &historyServiceProcessorRespondDecisionTaskCompleted{handler: handler}
-	self16.processorMap["RecordActivityTaskHeartbeat"] = &historyServiceProcessorRecordActivityTaskHeartbeat{handler: handler}
-	self16.processorMap["RespondActivityTaskCompleted"] = &historyServiceProcessorRespondActivityTaskCompleted{handler: handler}
-	self16.processorMap["RespondActivityTaskFailed"] = &historyServiceProcessorRespondActivityTaskFailed{handler: handler}
-	return self16
+	self18 := &HistoryServiceProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
+	self18.processorMap["StartWorkflowExecution"] = &historyServiceProcessorStartWorkflowExecution{handler: handler}
+	self18.processorMap["GetWorkflowExecutionHistory"] = &historyServiceProcessorGetWorkflowExecutionHistory{handler: handler}
+	self18.processorMap["RecordDecisionTaskStarted"] = &historyServiceProcessorRecordDecisionTaskStarted{handler: handler}
+	self18.processorMap["RecordActivityTaskStarted"] = &historyServiceProcessorRecordActivityTaskStarted{handler: handler}
+	self18.processorMap["RespondDecisionTaskCompleted"] = &historyServiceProcessorRespondDecisionTaskCompleted{handler: handler}
+	self18.processorMap["RecordActivityTaskHeartbeat"] = &historyServiceProcessorRecordActivityTaskHeartbeat{handler: handler}
+	self18.processorMap["RespondActivityTaskCompleted"] = &historyServiceProcessorRespondActivityTaskCompleted{handler: handler}
+	self18.processorMap["RespondActivityTaskFailed"] = &historyServiceProcessorRespondActivityTaskFailed{handler: handler}
+	self18.processorMap["RespondActivityTaskCanceled"] = &historyServiceProcessorRespondActivityTaskCanceled{handler: handler}
+	return self18
 }
 
 func (p *HistoryServiceProcessor) Process(iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
@@ -913,12 +1017,12 @@ func (p *HistoryServiceProcessor) Process(iprot, oprot thrift.TProtocol) (succes
 	}
 	iprot.Skip(thrift.STRUCT)
 	iprot.ReadMessageEnd()
-	x17 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function "+name)
+	x19 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function "+name)
 	oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
-	x17.Write(oprot)
+	x19.Write(oprot)
 	oprot.WriteMessageEnd()
 	oprot.Flush()
-	return false, x17
+	return false, x19
 
 }
 
@@ -1356,6 +1460,60 @@ func (p *historyServiceProcessorRespondActivityTaskFailed) Process(seqId int32, 
 		}
 	}
 	if err2 = oprot.WriteMessageBegin("RespondActivityTaskFailed", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type historyServiceProcessorRespondActivityTaskCanceled struct {
+	handler HistoryService
+}
+
+func (p *historyServiceProcessorRespondActivityTaskCanceled) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := HistoryServiceRespondActivityTaskCanceledArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush()
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	result := HistoryServiceRespondActivityTaskCanceledResult{}
+	var err2 error
+	if err2 = p.handler.RespondActivityTaskCanceled(args.CanceledRequest); err2 != nil {
+		switch v := err2.(type) {
+		case *shared.BadRequestError:
+			result.BadRequestError = v
+		case *shared.InternalServiceError:
+			result.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			result.EntityNotExistError = v
+		default:
+			x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondActivityTaskCanceled: "+err2.Error())
+			oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.EXCEPTION, seqId)
+			x.Write(oprot)
+			oprot.WriteMessageEnd()
+			oprot.Flush()
+			return true, err2
+		}
+	}
+	if err2 = oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.REPLY, seqId); err2 != nil {
 		err = err2
 	}
 	if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -4008,4 +4166,294 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("HistoryServiceRespondActivityTaskFailedResult(%+v)", *p)
+}
+
+// Attributes:
+//  - CanceledRequest
+type HistoryServiceRespondActivityTaskCanceledArgs struct {
+	CanceledRequest *shared.RespondActivityTaskCanceledRequest `thrift:"canceledRequest,1" db:"canceledRequest" json:"canceledRequest"`
+}
+
+func NewHistoryServiceRespondActivityTaskCanceledArgs() *HistoryServiceRespondActivityTaskCanceledArgs {
+	return &HistoryServiceRespondActivityTaskCanceledArgs{}
+}
+
+var HistoryServiceRespondActivityTaskCanceledArgs_CanceledRequest_DEFAULT *shared.RespondActivityTaskCanceledRequest
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) GetCanceledRequest() *shared.RespondActivityTaskCanceledRequest {
+	if !p.IsSetCanceledRequest() {
+		return HistoryServiceRespondActivityTaskCanceledArgs_CanceledRequest_DEFAULT
+	}
+	return p.CanceledRequest
+}
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) IsSetCanceledRequest() bool {
+	return p.CanceledRequest != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) Read(iprot thrift.TProtocol) error {
+	if _, err := iprot.ReadStructBegin(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+		if err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 1:
+			if err := p.ReadField1(iprot); err != nil {
+				return err
+			}
+		default:
+			if err := iprot.Skip(fieldTypeId); err != nil {
+				return err
+			}
+		}
+		if err := iprot.ReadFieldEnd(); err != nil {
+			return err
+		}
+	}
+	if err := iprot.ReadStructEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) ReadField1(iprot thrift.TProtocol) error {
+	p.CanceledRequest = &shared.RespondActivityTaskCanceledRequest{}
+	if err := p.CanceledRequest.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.CanceledRequest), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) Write(oprot thrift.TProtocol) error {
+	if err := oprot.WriteStructBegin("RespondActivityTaskCanceled_args"); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+	}
+	if err := p.writeField1(oprot); err != nil {
+		return err
+	}
+	if err := oprot.WriteFieldStop(); err != nil {
+		return thrift.PrependError("write field stop error: ", err)
+	}
+	if err := oprot.WriteStructEnd(); err != nil {
+		return thrift.PrependError("write struct stop error: ", err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err := oprot.WriteFieldBegin("canceledRequest", thrift.STRUCT, 1); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:canceledRequest: ", p), err)
+	}
+	if err := p.CanceledRequest.Write(oprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.CanceledRequest), err)
+	}
+	if err := oprot.WriteFieldEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write field end error 1:canceledRequest: ", p), err)
+	}
+	return err
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoryServiceRespondActivityTaskCanceledArgs(%+v)", *p)
+}
+
+// Attributes:
+//  - BadRequestError
+//  - InternalServiceError
+//  - EntityNotExistError
+type HistoryServiceRespondActivityTaskCanceledResult struct {
+	BadRequestError      *shared.BadRequestError      `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
+	InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+	EntityNotExistError  *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+}
+
+func NewHistoryServiceRespondActivityTaskCanceledResult() *HistoryServiceRespondActivityTaskCanceledResult {
+	return &HistoryServiceRespondActivityTaskCanceledResult{}
+}
+
+var HistoryServiceRespondActivityTaskCanceledResult_BadRequestError_DEFAULT *shared.BadRequestError
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) GetBadRequestError() *shared.BadRequestError {
+	if !p.IsSetBadRequestError() {
+		return HistoryServiceRespondActivityTaskCanceledResult_BadRequestError_DEFAULT
+	}
+	return p.BadRequestError
+}
+
+var HistoryServiceRespondActivityTaskCanceledResult_InternalServiceError_DEFAULT *shared.InternalServiceError
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) GetInternalServiceError() *shared.InternalServiceError {
+	if !p.IsSetInternalServiceError() {
+		return HistoryServiceRespondActivityTaskCanceledResult_InternalServiceError_DEFAULT
+	}
+	return p.InternalServiceError
+}
+
+var HistoryServiceRespondActivityTaskCanceledResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+	if !p.IsSetEntityNotExistError() {
+		return HistoryServiceRespondActivityTaskCanceledResult_EntityNotExistError_DEFAULT
+	}
+	return p.EntityNotExistError
+}
+func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetBadRequestError() bool {
+	return p.BadRequestError != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetInternalServiceError() bool {
+	return p.InternalServiceError != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetEntityNotExistError() bool {
+	return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) Read(iprot thrift.TProtocol) error {
+	if _, err := iprot.ReadStructBegin(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+		if err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 1:
+			if err := p.ReadField1(iprot); err != nil {
+				return err
+			}
+		case 2:
+			if err := p.ReadField2(iprot); err != nil {
+				return err
+			}
+		case 3:
+			if err := p.ReadField3(iprot); err != nil {
+				return err
+			}
+		default:
+			if err := iprot.Skip(fieldTypeId); err != nil {
+				return err
+			}
+		}
+		if err := iprot.ReadFieldEnd(); err != nil {
+			return err
+		}
+	}
+	if err := iprot.ReadStructEnd(); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) ReadField1(iprot thrift.TProtocol) error {
+	p.BadRequestError = &shared.BadRequestError{}
+	if err := p.BadRequestError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.BadRequestError), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) ReadField2(iprot thrift.TProtocol) error {
+	p.InternalServiceError = &shared.InternalServiceError{}
+	if err := p.InternalServiceError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.InternalServiceError), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) ReadField3(iprot thrift.TProtocol) error {
+	p.EntityNotExistError = &shared.EntityNotExistsError{}
+	if err := p.EntityNotExistError.Read(iprot); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) Write(oprot thrift.TProtocol) error {
+	if err := oprot.WriteStructBegin("RespondActivityTaskCanceled_result"); err != nil {
+		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+	}
+	if err := p.writeField1(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField2(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField3(oprot); err != nil {
+		return err
+	}
+	if err := oprot.WriteFieldStop(); err != nil {
+		return thrift.PrependError("write field stop error: ", err)
+	}
+	if err := oprot.WriteStructEnd(); err != nil {
+		return thrift.PrependError("write struct stop error: ", err)
+	}
+	return nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) writeField1(oprot thrift.TProtocol) (err error) {
+	if p.IsSetBadRequestError() {
+		if err := oprot.WriteFieldBegin("badRequestError", thrift.STRUCT, 1); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:badRequestError: ", p), err)
+		}
+		if err := p.BadRequestError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.BadRequestError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 1:badRequestError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) writeField2(oprot thrift.TProtocol) (err error) {
+	if p.IsSetInternalServiceError() {
+		if err := oprot.WriteFieldBegin("internalServiceError", thrift.STRUCT, 2); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 2:internalServiceError: ", p), err)
+		}
+		if err := p.InternalServiceError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.InternalServiceError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) writeField3(oprot thrift.TProtocol) (err error) {
+	if p.IsSetEntityNotExistError() {
+		if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err)
+		}
+		if err := p.EntityNotExistError.Write(oprot); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err)
+		}
+	}
+	return err
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoryServiceRespondActivityTaskCanceledResult(%+v)", *p)
 }

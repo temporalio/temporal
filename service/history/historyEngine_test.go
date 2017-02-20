@@ -1574,6 +1574,455 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.Equal(int64(3), info.LastProcessedEvent)
 }
 
+func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 5,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
+		activityType, tl, activityInput, 100, 10, 1)
+
+	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos[activityScheduledEvent.GetEventId()] = &persistence.ActivityInfo{
+		ScheduleID: activityScheduledEvent.GetEventId(), StartedID: emptyEventID, HeartbeatTimeout: 1, Details: []byte("details-old")}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{ActivitInfos: activityInfos}}
+
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&workflow.RespondActivityTaskCanceledRequest{
+		TaskToken: taskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.EntityNotExistsError{}, err)
+}
+
+func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 5,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
+		activityType, tl, activityInput, 100, 10, 1)
+	activityStartedEvent := addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
+	actCancelRequestEvent := builder.AddActivityTaskCancelRequestedEvent(decisionCompletedEvent.GetEventId(), activityID)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos[activityScheduledEvent.GetEventId()] = &persistence.ActivityInfo{
+		ScheduleID: activityScheduledEvent.GetEventId(), StartedID: activityStartedEvent.GetEventId(),
+		CancelRequested: true, CancelRequestID: actCancelRequestEvent.GetEventId(),
+		HeartbeatTimeout: 1,
+		Details:          []byte("details-old")}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{ActivitInfos: activityInfos}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&workflow.RespondActivityTaskCanceledRequest{
+		TaskToken: taskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(10), info.NextEventID)
+	s.Equal(int64(3), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(8)
+	s.Equal(workflow.EventType_ActivityTaskCanceled, updatedEvent.GetEventType())
+	s.Equal(activityScheduledEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetScheduledEventId())
+	s.Equal(activityStartedEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetStartedEventId())
+	s.Equal(actCancelRequestEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetLatestCancelRequestedEventId())
+	s.Equal("details", string(updatedEvent.GetActivityTaskCanceledEventAttributes().GetDetails()))
+}
+
+func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotScheduled() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelActivityTask),
+		RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+			ActivityId: common.StringPtr(activityID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(&persistence.GetWorkflowMutableStateResponse{}, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(7), info.NextEventID)
+	s.Equal(int64(3), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(6)
+	s.Equal(workflow.EventType_RequestCancelActivityTaskFailed, updatedEvent.GetEventType())
+	s.Equal(activityID, updatedEvent.GetRequestCancelActivityTaskFailedEventAttributes().GetActivityId())
+	s.Equal(activityCancelationMsgActivityIDUnknown, updatedEvent.GetRequestCancelActivityTaskFailedEventAttributes().GetCause())
+	s.Equal(int64(4), updatedEvent.GetRequestCancelActivityTaskFailedEventAttributes().GetDecisionTaskCompletedEventId())
+}
+
+func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 6,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
+		activityType, tl, activityInput, 100, 10, 1)
+	decisionScheduled2Event := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decisionScheduled2Event.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos[activityScheduledEvent.GetEventId()] = &persistence.ActivityInfo{
+		ScheduleID: activityScheduledEvent.GetEventId(), StartedID: emptyEventID, HeartbeatTimeout: 1,
+		ActivityID: activityID,
+		Details:    []byte("details-old")}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{ActivitInfos: activityInfos}}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelActivityTask),
+		RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+			ActivityId: common.StringPtr(activityID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(11), info.NextEventID)
+	s.Equal(int64(7), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(10)
+	s.Equal(workflow.EventType_ActivityTaskCanceled, updatedEvent.GetEventType())
+	s.Equal(activityScheduledEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetScheduledEventId())
+	s.Equal(emptyEventID, updatedEvent.GetActivityTaskCanceledEventAttributes().GetStartedEventId())
+	s.Equal(int64(9), updatedEvent.GetActivityTaskCanceledEventAttributes().GetLatestCancelRequestedEventId())
+	s.Equal(activityCancelationMsgActivityNotStarted, string(updatedEvent.GetActivityTaskCanceledEventAttributes().GetDetails()))
+}
+
+func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 7,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
+		activityType, tl, activityInput, 100, 10, 0 /* heart beat timeout */)
+	activityStartedEvent := addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
+	decisionScheduled2Event := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decisionScheduled2Event.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos[activityScheduledEvent.GetEventId()] = &persistence.ActivityInfo{
+		ScheduleID: activityScheduledEvent.GetEventId(), StartedID: activityStartedEvent.GetEventId(), HeartbeatTimeout: 0,
+		ActivityID: activityID,
+		Details:    []byte("details-old")}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{ActivitInfos: activityInfos}}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelActivityTask),
+		RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+			ActivityId: common.StringPtr(activityID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(11), info.NextEventID)
+	s.Equal(int64(8), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(10)
+	s.Equal(workflow.EventType_ActivityTaskCancelRequested, updatedEvent.GetEventType())
+
+	// Try recording activity heartbeat
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	activityTaskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 5,
+	})
+
+	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(&workflow.RecordActivityTaskHeartbeatRequest{
+		TaskToken: activityTaskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.Nil(err)
+	s.NotNil(hbResponse)
+	s.True(hbResponse.GetCancelRequested())
+
+	// Try cancelling the request.
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.RespondActivityTaskCanceled(&workflow.RespondActivityTaskCanceledRequest{
+		TaskToken: activityTaskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.Nil(err)
+
+	updatedBuilder = newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(13), info.NextEventID)
+	s.Equal(int64(8), info.LastProcessedEvent)
+
+	updatedEvent = updatedBuilder.GetEvent(11)
+	s.Equal(workflow.EventType_ActivityTaskCanceled, updatedEvent.GetEventType())
+	s.Equal(activityScheduledEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetScheduledEventId())
+	s.Equal(activityStartedEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetStartedEventId())
+	s.Equal(int64(10), updatedEvent.GetActivityTaskCanceledEventAttributes().GetLatestCancelRequestedEventId())
+	s.Equal("details", string(updatedEvent.GetActivityTaskCanceledEventAttributes().GetDetails()))
+}
+
+func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 7,
+	})
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
+		activityType, tl, activityInput, 100, 10, 1 /* heart beat timeout */)
+	activityStartedEvent := addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
+	decisionScheduled2Event := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decisionScheduled2Event.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	activityInfos := make(map[int64]*persistence.ActivityInfo)
+	activityInfos[activityScheduledEvent.GetEventId()] = &persistence.ActivityInfo{
+		ScheduleID: activityScheduledEvent.GetEventId(), StartedID: activityStartedEvent.GetEventId(), HeartbeatTimeout: 1,
+		ActivityID: activityID,
+		Details:    []byte("details-old")}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{ActivitInfos: activityInfos}}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelActivityTask),
+		RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+			ActivityId: common.StringPtr(activityID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(11), info.NextEventID)
+	s.Equal(int64(8), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(10)
+	s.Equal(workflow.EventType_ActivityTaskCancelRequested, updatedEvent.GetEventType())
+	s.Equal(activityID, updatedEvent.GetActivityTaskCancelRequestedEventAttributes().GetActivityId())
+	s.Equal(int64(9), updatedEvent.GetActivityTaskCancelRequestedEventAttributes().GetDecisionTaskCompletedEventId())
+
+	// Try recording activity heartbeat
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	activityTaskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 5,
+	})
+
+	hbResponse, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(&workflow.RecordActivityTaskHeartbeatRequest{
+		TaskToken: activityTaskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.Nil(err)
+	s.NotNil(hbResponse)
+	s.True(hbResponse.GetCancelRequested())
+
+	// Try cancelling the request.
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.RespondActivityTaskCanceled(&workflow.RespondActivityTaskCanceledRequest{
+		TaskToken: activityTaskToken,
+		Identity:  &identity,
+		Details:   []byte("details"),
+	})
+	s.Nil(err)
+
+	updatedBuilder = newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(13), info.NextEventID)
+	s.Equal(int64(8), info.LastProcessedEvent)
+
+	updatedEvent = updatedBuilder.GetEvent(11)
+	s.Equal(workflow.EventType_ActivityTaskCanceled, updatedEvent.GetEventType())
+	s.Equal(activityScheduledEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetScheduledEventId())
+	s.Equal(activityStartedEvent.GetEventId(), updatedEvent.GetActivityTaskCanceledEventAttributes().GetStartedEventId())
+	s.Equal(int64(10), updatedEvent.GetActivityTaskCanceledEventAttributes().GetLatestCancelRequestedEventId())
+	s.Equal("details", string(updatedEvent.GetActivityTaskCanceledEventAttributes().GetDetails()))
+}
+
 func addWorkflowExecutionStartedEvent(builder *historyBuilder, workflowID, workflowType, taskList string, input []byte,
 	executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) *workflow.HistoryEvent {
 	e := builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{

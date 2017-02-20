@@ -117,6 +117,19 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 }
 
+// RespondActivityTaskCanceled - Record Activity Task Heart beat
+func (wh *WorkflowHandler) RespondActivityTaskCanceled(
+	ctx thrift.Context,
+	cancelRequest *gen.RespondActivityTaskCanceledRequest) error {
+	err := wh.history.RespondActivityTaskCanceled(cancelRequest)
+	if err != nil {
+		logger := wh.getLoggerForTask(cancelRequest.GetTaskToken())
+		logger.Errorf("RespondActivityTaskCanceled. Error: %v", err)
+	}
+	return err
+
+}
+
 // RespondDecisionTaskCompleted - Record Activity Task Heart beat
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx thrift.Context,

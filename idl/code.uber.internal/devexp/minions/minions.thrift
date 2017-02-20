@@ -117,4 +117,18 @@ service WorkflowService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
     )
+
+  /**
+  * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
+  * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+  * anymore due to activity timeout.
+  **/
+  void RespondActivityTaskCanceled(1: shared.RespondActivityTaskCanceledRequest canceledRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
 }

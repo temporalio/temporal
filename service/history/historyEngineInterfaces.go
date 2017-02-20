@@ -19,6 +19,7 @@ type (
 		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
 		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error
+		RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error
 		RecordActivityTaskHeartbeat(
 			request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
 	}

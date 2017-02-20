@@ -398,10 +398,7 @@ Update_History_Loop:
 
 				if isExpired := context.tBuilder.IsTimerExpired(td, referenceExpiryTime); isExpired {
 					// Add TimerFired event to history.
-					_, err = builder.AddTimerFiredEvent(ti.StartedID, ti.TimerID)
-					if err != nil {
-						return err
-					}
+					builder.AddTimerFiredEvent(ti.StartedID, ti.TimerID)
 
 					// Remove timer from mutable state.
 					msBuilder.DeletePendingTimer(ti.TimerID)

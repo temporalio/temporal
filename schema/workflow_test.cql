@@ -51,13 +51,15 @@ CREATE TYPE timer_task (
 CREATE TYPE activity_info (
   schedule_id               bigint,
   started_id                bigint,
-  -- Identifier used by matching engine for retrying history service calls for recording task is started
-  request_id                text,
+  activity_id               text,    -- Client generated unique ID for the activity.
+  request_id                text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
   details                   blob,
   schedule_to_start_timeout int,
   schedule_to_close_timeout int,
   start_to_close_timeout    int,
   heart_beat_timeout        int,
+  cancel_requested          boolean, -- If a cancel request is made to cancel the activity in progress.
+  cancel_request_id         bigint,  -- Event ID that identifies the cancel request.
 );
 
 -- User timer details

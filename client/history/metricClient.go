@@ -120,6 +120,20 @@ func (c *metricClient) RespondActivityTaskFailed(request *workflow.RespondActivi
 	return err
 }
 
+func (c *metricClient) RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.WorkflowRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.WorkflowLatency)
+	err := c.client.RespondActivityTaskCanceled(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.WorkflowFailures)
+	}
+
+	return err
+}
+
 func (c *metricClient) RecordActivityTaskHeartbeat(
 	request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 	c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskHeartbeatScope, metrics.WorkflowRequests)

@@ -127,6 +127,20 @@ class Iface:
     """
     pass
 
+  def RespondActivityTaskCanceled(self, canceledRequest):
+    """
+    RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
+    result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+    created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+    PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+    anymore due to activity timeout.
+
+
+    Parameters:
+     - canceledRequest
+    """
+    pass
+
 
 class Client(Iface):
   """
@@ -482,6 +496,48 @@ class Client(Iface):
       raise result.entityNotExistError
     return
 
+  def RespondActivityTaskCanceled(self, canceledRequest):
+    """
+    RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
+    result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+    created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+    PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+    anymore due to activity timeout.
+
+
+    Parameters:
+     - canceledRequest
+    """
+    self.send_RespondActivityTaskCanceled(canceledRequest)
+    self.recv_RespondActivityTaskCanceled()
+
+  def send_RespondActivityTaskCanceled(self, canceledRequest):
+    self._oprot.writeMessageBegin('RespondActivityTaskCanceled', TMessageType.CALL, self._seqid)
+    args = RespondActivityTaskCanceled_args()
+    args.canceledRequest = canceledRequest
+    args.write(self._oprot)
+    self._oprot.writeMessageEnd()
+    self._oprot.trans.flush()
+
+  def recv_RespondActivityTaskCanceled(self):
+    iprot = self._iprot
+    (fname, mtype, rseqid) = iprot.readMessageBegin()
+    if mtype == TMessageType.EXCEPTION:
+      x = TApplicationException()
+      x.read(iprot)
+      iprot.readMessageEnd()
+      raise x
+    result = RespondActivityTaskCanceled_result()
+    result.read(iprot)
+    iprot.readMessageEnd()
+    if result.badRequestError is not None:
+      raise result.badRequestError
+    if result.internalServiceError is not None:
+      raise result.internalServiceError
+    if result.entityNotExistError is not None:
+      raise result.entityNotExistError
+    return
+
 
 class Processor(Iface, TProcessor):
   def __init__(self, handler):
@@ -495,6 +551,7 @@ class Processor(Iface, TProcessor):
     self._processMap["RecordActivityTaskHeartbeat"] = Processor.process_RecordActivityTaskHeartbeat
     self._processMap["RespondActivityTaskCompleted"] = Processor.process_RespondActivityTaskCompleted
     self._processMap["RespondActivityTaskFailed"] = Processor.process_RespondActivityTaskFailed
+    self._processMap["RespondActivityTaskCanceled"] = Processor.process_RespondActivityTaskCanceled
 
   def process(self, iprot, oprot):
     (name, type, seqid) = iprot.readMessageBegin()
@@ -655,6 +712,24 @@ class Processor(Iface, TProcessor):
     except shared.ttypes.EntityNotExistsError, entityNotExistError:
       result.entityNotExistError = entityNotExistError
     oprot.writeMessageBegin("RespondActivityTaskFailed", TMessageType.REPLY, seqid)
+    result.write(oprot)
+    oprot.writeMessageEnd()
+    oprot.trans.flush()
+
+  def process_RespondActivityTaskCanceled(self, seqid, iprot, oprot):
+    args = RespondActivityTaskCanceled_args()
+    args.read(iprot)
+    iprot.readMessageEnd()
+    result = RespondActivityTaskCanceled_result()
+    try:
+      self._handler.RespondActivityTaskCanceled(args.canceledRequest)
+    except shared.ttypes.BadRequestError, badRequestError:
+      result.badRequestError = badRequestError
+    except shared.ttypes.InternalServiceError, internalServiceError:
+      result.internalServiceError = internalServiceError
+    except shared.ttypes.EntityNotExistsError, entityNotExistError:
+      result.entityNotExistError = entityNotExistError
+    oprot.writeMessageBegin("RespondActivityTaskCanceled", TMessageType.REPLY, seqid)
     result.write(oprot)
     oprot.writeMessageEnd()
     oprot.trans.flush()
@@ -1998,6 +2073,166 @@ class RespondActivityTaskFailed_result:
       oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
       return
     oprot.writeStructBegin('RespondActivityTaskFailed_result')
+    if self.badRequestError is not None:
+      oprot.writeFieldBegin('badRequestError', TType.STRUCT, 1)
+      self.badRequestError.write(oprot)
+      oprot.writeFieldEnd()
+    if self.internalServiceError is not None:
+      oprot.writeFieldBegin('internalServiceError', TType.STRUCT, 2)
+      self.internalServiceError.write(oprot)
+      oprot.writeFieldEnd()
+    if self.entityNotExistError is not None:
+      oprot.writeFieldBegin('entityNotExistError', TType.STRUCT, 3)
+      self.entityNotExistError.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.badRequestError)
+    value = (value * 31) ^ hash(self.internalServiceError)
+    value = (value * 31) ^ hash(self.entityNotExistError)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class RespondActivityTaskCanceled_args:
+  """
+  Attributes:
+   - canceledRequest
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'canceledRequest', (shared.ttypes.RespondActivityTaskCanceledRequest, shared.ttypes.RespondActivityTaskCanceledRequest.thrift_spec), None, ), # 1
+  )
+
+  def __init__(self, canceledRequest=None,):
+    self.canceledRequest = canceledRequest
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.canceledRequest = shared.ttypes.RespondActivityTaskCanceledRequest()
+          self.canceledRequest.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('RespondActivityTaskCanceled_args')
+    if self.canceledRequest is not None:
+      oprot.writeFieldBegin('canceledRequest', TType.STRUCT, 1)
+      self.canceledRequest.write(oprot)
+      oprot.writeFieldEnd()
+    oprot.writeFieldStop()
+    oprot.writeStructEnd()
+
+  def validate(self):
+    return
+
+
+  def __hash__(self):
+    value = 17
+    value = (value * 31) ^ hash(self.canceledRequest)
+    return value
+
+  def __repr__(self):
+    L = ['%s=%r' % (key, value)
+      for key, value in self.__dict__.iteritems()]
+    return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+  def __eq__(self, other):
+    return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+  def __ne__(self, other):
+    return not (self == other)
+
+class RespondActivityTaskCanceled_result:
+  """
+  Attributes:
+   - badRequestError
+   - internalServiceError
+   - entityNotExistError
+  """
+
+  thrift_spec = (
+    None, # 0
+    (1, TType.STRUCT, 'badRequestError', (shared.ttypes.BadRequestError, shared.ttypes.BadRequestError.thrift_spec), None, ), # 1
+    (2, TType.STRUCT, 'internalServiceError', (shared.ttypes.InternalServiceError, shared.ttypes.InternalServiceError.thrift_spec), None, ), # 2
+    (3, TType.STRUCT, 'entityNotExistError', (shared.ttypes.EntityNotExistsError, shared.ttypes.EntityNotExistsError.thrift_spec), None, ), # 3
+  )
+
+  def __init__(self, badRequestError=None, internalServiceError=None, entityNotExistError=None,):
+    self.badRequestError = badRequestError
+    self.internalServiceError = internalServiceError
+    self.entityNotExistError = entityNotExistError
+
+  def read(self, iprot):
+    if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
+      fastbinary.decode_binary(self, iprot.trans, (self.__class__, self.thrift_spec))
+      return
+    iprot.readStructBegin()
+    while True:
+      (fname, ftype, fid) = iprot.readFieldBegin()
+      if ftype == TType.STOP:
+        break
+      if fid == 1:
+        if ftype == TType.STRUCT:
+          self.badRequestError = shared.ttypes.BadRequestError()
+          self.badRequestError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 2:
+        if ftype == TType.STRUCT:
+          self.internalServiceError = shared.ttypes.InternalServiceError()
+          self.internalServiceError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      elif fid == 3:
+        if ftype == TType.STRUCT:
+          self.entityNotExistError = shared.ttypes.EntityNotExistsError()
+          self.entityNotExistError.read(iprot)
+        else:
+          iprot.skip(ftype)
+      else:
+        iprot.skip(ftype)
+      iprot.readFieldEnd()
+    iprot.readStructEnd()
+
+  def write(self, oprot):
+    if oprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and self.thrift_spec is not None and fastbinary is not None:
+      oprot.trans.write(fastbinary.encode_binary(self, (self.__class__, self.thrift_spec)))
+      return
+    oprot.writeStructBegin('RespondActivityTaskCanceled_result')
     if self.badRequestError is not None:
       oprot.writeFieldBegin('badRequestError', TType.STRUCT, 1)
       self.badRequestError.write(oprot)

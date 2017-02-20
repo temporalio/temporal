@@ -89,3 +89,9 @@ func (c *clientImpl) RespondActivityTaskFailed(request *workflow.RespondActivity
 	defer cancel()
 	return c.client.RespondActivityTaskFailed(ctx, request)
 }
+
+func (c *clientImpl) RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error {
+	ctx, cancel := c.createContext()
+	defer cancel()
+	return c.client.RespondActivityTaskCanceled(ctx, request)
+}

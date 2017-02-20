@@ -65,7 +65,7 @@ type (
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision)
 	activityTaskHandler func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, takeToken []byte) ([]byte, error)
+		activityID string, startedEventID int64, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	taskPoller struct {
 		engine          frontend.Client
@@ -218,7 +218,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 	expectedActivity := int32(1)
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, error) {
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		id, _ := strconv.Atoi(activityID)
@@ -230,7 +230,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		s.Equal(expectedActivity, in)
 		expectedActivity++
 
-		return []byte("Activity Result."), nil
+		return []byte("Activity Result."), false, nil
 	}
 
 	poller := &taskPoller{
@@ -329,8 +329,17 @@ retry:
 		}
 		p.logger.Infof("Received Activity task: %v", response)
 
-		result, err2 := p.activityHandler(response.GetWorkflowExecution(), response.GetActivityType(), response.GetActivityId(),
+		result, cancel, err2 := p.activityHandler(response.GetWorkflowExecution(), response.GetActivityType(), response.GetActivityId(),
 			response.GetStartedEventId(), response.GetInput(), response.GetTaskToken())
+		if cancel {
+			p.logger.Info("Executing RespondActivityTaskCanceled")
+			return p.engine.RespondActivityTaskCanceled(&workflow.RespondActivityTaskCanceledRequest{
+				TaskToken: response.GetTaskToken(),
+				Details:   []byte("details"),
+				Identity:  common.StringPtr(p.identity),
+			})
+		}
+
 		if err2 != nil {
 			return p.engine.RespondActivityTaskFailed(&workflow.RespondActivityTaskFailedRequest{
 				TaskToken: response.GetTaskToken(),
@@ -415,11 +424,11 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, error) {
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		s.logger.Errorf("Activity ID: %v", activityID)
-		return []byte("Activity Result."), nil
+		return []byte("Activity Result."), false, nil
 	}
 
 	poller := &taskPoller{
@@ -517,7 +526,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, error) {
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
@@ -528,7 +537,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 			time.Sleep(10 * time.Millisecond)
 		}
 		activityExecutedCount++
-		return []byte("Activity Result."), nil
+		return []byte("Activity Result."), false, nil
 	}
 
 	poller := &taskPoller{
@@ -622,13 +631,13 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, error) {
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
 		// Timing out more than HB time.
 		time.Sleep(2 * time.Second)
 		activityExecutedCount++
-		return []byte("Activity Result."), nil
+		return []byte("Activity Result."), false, nil
 	}
 
 	poller := &taskPoller{
@@ -725,6 +734,130 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	s.False(workflowComplete)
 	s.Nil(poller.pollAndProcessDecisionTask(true, false))
 	s.True(workflowComplete)
+}
+
+func (s *integrationSuite) TestActivityCancelation() {
+	id := "integration-activity-cancelation-test"
+	wt := "integration-activity-cancelation-test-type"
+	tl := "integration-activity-cancelation-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_timer"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	activityCounter := int32(0)
+	scheduleActivity := true
+	requestCancellation := false
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if scheduleActivity {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(15),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(0),
+				},
+			}}
+		}
+
+		if requestCancellation {
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelActivityTask),
+				RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
+					ActivityId: common.StringPtr(strconv.Itoa(int(activityCounter))),
+				},
+			}}
+		}
+
+		s.logger.Info("Completing Workflow.")
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result_: []byte("Done."),
+			},
+		}}
+	}
+
+	activityExecutedCount := 0
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		s.Equal(id, execution.GetWorkflowId())
+		s.Equal(activityName, activityType.GetName())
+		for i := 0; i < 10; i++ {
+			s.logger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+			response, err := s.engine.RecordActivityTaskHeartbeat(&workflow.RecordActivityTaskHeartbeatRequest{
+				TaskToken: taskToken, Details: []byte("details")})
+			if response.GetCancelRequested() {
+				return []byte("Activity Cancelled."), true, nil
+			}
+			s.Nil(err)
+			time.Sleep(10 * time.Millisecond)
+		}
+		activityExecutedCount++
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.True(err == nil || err == matching.ErrNoTasks)
+
+	cancelCh := make(chan struct{})
+
+	go func() {
+		s.logger.Info("Trying to cancel the task in a different thread.")
+		scheduleActivity = false
+		requestCancellation = true
+		err := poller.pollAndProcessDecisionTask(false, false)
+		s.True(err == nil || err == matching.ErrNoTasks)
+		cancelCh <- struct{}{}
+	}()
+
+	err = poller.pollAndProcessActivityTask(false)
+	s.True(err == nil || err == matching.ErrNoTasks)
+
+	<-cancelCh
+	s.logger.Infof("Waiting for workflow to complete: RunId: %v", we.GetRunId())
 }
 
 func (s *integrationSuite) setupShards() {

@@ -126,6 +126,20 @@ func (c *clientImpl) RespondActivityTaskFailed(request *workflow.RespondActivity
 	return client.RespondActivityTaskFailed(ctx, request)
 }
 
+func (c *clientImpl) RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return err
+	}
+	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext()
+	defer cancel()
+	return client.RespondActivityTaskCanceled(ctx, request)
+}
+
 func (c *clientImpl) RecordActivityTaskHeartbeat(request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {

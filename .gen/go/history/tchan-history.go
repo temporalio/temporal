@@ -22,6 +22,7 @@ type TChanHistoryService interface {
 	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
 	RecordActivityTaskStarted(ctx thrift.Context, addRequest *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	RecordDecisionTaskStarted(ctx thrift.Context, addRequest *RecordDecisionTaskStartedRequest) (*RecordDecisionTaskStartedResponse, error)
+	RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *shared.RespondActivityTaskCanceledRequest) error
 	RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondActivityTaskCompletedRequest) error
 	RespondActivityTaskFailed(ctx thrift.Context, failRequest *shared.RespondActivityTaskFailedRequest) error
 	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondDecisionTaskCompletedRequest) error
@@ -137,6 +138,27 @@ func (c *tchanHistoryServiceClient) RecordDecisionTaskStarted(ctx thrift.Context
 	return resp.GetSuccess(), err
 }
 
+func (c *tchanHistoryServiceClient) RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *shared.RespondActivityTaskCanceledRequest) error {
+	var resp HistoryServiceRespondActivityTaskCanceledResult
+	args := HistoryServiceRespondActivityTaskCanceledArgs{
+		CanceledRequest: canceledRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "RespondActivityTaskCanceled", &args, &resp)
+	if err == nil && !success {
+		if e := resp.BadRequestError; e != nil {
+			err = e
+		}
+		if e := resp.InternalServiceError; e != nil {
+			err = e
+		}
+		if e := resp.EntityNotExistError; e != nil {
+			err = e
+		}
+	}
+
+	return err
+}
+
 func (c *tchanHistoryServiceClient) RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondActivityTaskCompletedRequest) error {
 	var resp HistoryServiceRespondActivityTaskCompletedResult
 	args := HistoryServiceRespondActivityTaskCompletedArgs{
@@ -243,6 +265,7 @@ func (s *tchanHistoryServiceServer) Methods() []string {
 		"RecordActivityTaskHeartbeat",
 		"RecordActivityTaskStarted",
 		"RecordDecisionTaskStarted",
+		"RespondActivityTaskCanceled",
 		"RespondActivityTaskCompleted",
 		"RespondActivityTaskFailed",
 		"RespondDecisionTaskCompleted",
@@ -260,6 +283,8 @@ func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string
 		return s.handleRecordActivityTaskStarted(ctx, protocol)
 	case "RecordDecisionTaskStarted":
 		return s.handleRecordDecisionTaskStarted(ctx, protocol)
+	case "RespondActivityTaskCanceled":
+		return s.handleRespondActivityTaskCanceled(ctx, protocol)
 	case "RespondActivityTaskCompleted":
 		return s.handleRespondActivityTaskCompleted(ctx, protocol)
 	case "RespondActivityTaskFailed":
@@ -431,6 +456,43 @@ func (s *tchanHistoryServiceServer) handleRecordDecisionTaskStarted(ctx thrift.C
 		}
 	} else {
 		res.Success = r
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanHistoryServiceServer) handleRespondActivityTaskCanceled(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req HistoryServiceRespondActivityTaskCanceledArgs
+	var res HistoryServiceRespondActivityTaskCanceledResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	err :=
+		s.handler.RespondActivityTaskCanceled(ctx, req.CanceledRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
 	}
 
 	return err == nil, &res, nil

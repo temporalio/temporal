@@ -27,6 +27,7 @@ type (
 		outstandingActivities            map[int64]int64
 		outstandingDecisionTask          map[int64]int64
 		outstandingTimerTask             map[int64]string // Timer started event ID -> Timer User ID.
+		outstandingActivityCancels       map[string]int64
 		previousDecisionTaskStartedEvent int64
 		nextEventID                      int64
 		state                            int
@@ -41,6 +42,7 @@ func newHistoryBuilder(logger bark.Logger) *historyBuilder {
 		outstandingActivities:            make(map[int64]int64),
 		outstandingDecisionTask:          make(map[int64]int64),
 		outstandingTimerTask:             make(map[int64]string),
+		outstandingActivityCancels:       make(map[string]int64),
 		previousDecisionTaskStartedEvent: emptyEventID,
 		nextEventID:                      firstEventID,
 		state:                            persistence.WorkflowStateCreated,
@@ -248,7 +250,7 @@ func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 }
 
 func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
-	timerID string) (*workflow.HistoryEvent, error) {
+	timerID string) *workflow.HistoryEvent {
 
 	attributes := workflow.NewTimerFiredEventAttributes()
 	attributes.TimerId = common.StringPtr(timerID)
@@ -257,7 +259,50 @@ func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
 	event := newHistoryEvent(b.nextEventID, workflow.EventType_TimerFired)
 	event.TimerFiredEventAttributes = attributes
 
-	return b.addEventToHistory(event), nil
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddActivityTaskCancelRequestedEvent(decisionCompletedEventID int64,
+	activityID string) *workflow.HistoryEvent {
+
+	attributes := workflow.NewActivityTaskCancelRequestedEventAttributes()
+	attributes.ActivityId = common.StringPtr(activityID)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_ActivityTaskCancelRequested)
+	event.ActivityTaskCancelRequestedEventAttributes = attributes
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID int64,
+	activityID string, cause string) *workflow.HistoryEvent {
+
+	attributes := workflow.NewRequestCancelActivityTaskFailedEventAttributes()
+	attributes.ActivityId = common.StringPtr(activityID)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
+	attributes.Cause = common.StringPtr(cause)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_RequestCancelActivityTaskFailed)
+	event.RequestCancelActivityTaskFailedEventAttributes = attributes
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEventID int64,
+	latestCancelRequestedEventID int64, details []byte, identity string) *workflow.HistoryEvent {
+
+	attributes := workflow.NewActivityTaskCanceledEventAttributes()
+	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
+	attributes.StartedEventId = common.Int64Ptr(startedEventID)
+	attributes.LatestCancelRequestedEventId = common.Int64Ptr(latestCancelRequestedEventID)
+	attributes.Details = details
+	attributes.Identity = common.StringPtr(identity)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_ActivityTaskCanceled)
+	event.ActivityTaskCanceledEventAttributes = attributes
+
+	return b.addEventToHistory(event)
 }
 
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
@@ -363,6 +408,51 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 			return nil
 		}
 		delete(b.outstandingActivities, scheduleEventID)
+
+	case workflow.EventType_ActivityTaskCanceled:
+		scheduleEventID := event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId()
+		startedEventID := event.GetActivityTaskCanceledEventAttributes().GetStartedEventId()
+		e, ok := b.outstandingActivities[scheduleEventID]
+		if !ok || startedEventID != e {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskCanceled, eventID, fmt.Sprintf(
+				"{ScheduleID: %v, StartedID: %v, Exist: %v, Value: %v}",
+				scheduleEventID, startedEventID, ok, e))
+			return nil
+		}
+		delete(b.outstandingActivities, scheduleEventID)
+
+		// Verify cancel request as well.
+		scheduledEvent := b.GetEvent(scheduleEventID)
+		activityID := scheduledEvent.GetActivityTaskScheduledEventAttributes().GetActivityId()
+		e, ok = b.outstandingActivityCancels[activityID]
+		if !ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskCanceled, eventID, fmt.Sprintf(
+				"{No outstanding cancel request. ScheduleID: %v, ActivityID: %v, Exist: %v, Value: %v}",
+				scheduleEventID, activityID, ok, e))
+			return nil
+		}
+		delete(b.outstandingActivityCancels, activityID)
+
+	case workflow.EventType_ActivityTaskCancelRequested:
+		activityID := event.GetActivityTaskCancelRequestedEventAttributes().GetActivityId()
+		e, ok := b.outstandingActivityCancels[activityID]
+		if ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskCancelRequest, eventID, fmt.Sprintf(
+				"{CancelRequestID: %v, Exist: %v, ActivityID: %v, Value: %v}", eventID, ok, activityID, e))
+			return nil
+		}
+		b.outstandingActivityCancels[activityID] = eventID
+
+	case workflow.EventType_RequestCancelActivityTaskFailed:
+		activityID := event.GetRequestCancelActivityTaskFailedEventAttributes().GetActivityId()
+		_, ok := b.outstandingActivityCancels[activityID]
+		if !ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionActivityTaskCancelRequestFailed, eventID, fmt.Sprintf(
+				"{ActivityID: %v, Exist: %v}", activityID, ok))
+			return nil
+		}
+		delete(b.outstandingActivityCancels, activityID)
+
 	case workflow.EventType_WorkflowExecutionCompleted:
 		if b.hasPendingTasks() || b.hasPendingDecisionTask() {
 			logInvalidHistoryActionEvent(b.logger, tagValueActionCompleteWorkflow, eventID, fmt.Sprintf(

@@ -12,6 +12,7 @@ type Client interface {
 	RecordActivityTaskHeartbeat(heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
 	RespondActivityTaskCompleted(completeRequest *shared.RespondActivityTaskCompletedRequest) error
 	RespondActivityTaskFailed(failRequest *shared.RespondActivityTaskFailedRequest) error
+	RespondActivityTaskCanceled(cancelRequest *shared.RespondActivityTaskCanceledRequest) error
 	RespondDecisionTaskCompleted(completeRequest *shared.RespondDecisionTaskCompletedRequest) error
 	StartWorkflowExecution(startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
 }

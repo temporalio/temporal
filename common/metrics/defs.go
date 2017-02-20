@@ -129,6 +129,8 @@ const (
 	HistoryClientRespondActivityTaskCompletedScope
 	// HistoryClientRespondActivityTaskFailedScope tracks RPC calls to history service
 	HistoryClientRespondActivityTaskFailedScope
+	// HistoryClientRespondActivityTaskCanceledScope tracks RPC calls to history service
+	HistoryClientRespondActivityTaskCanceledScope
 	// HistoryClientGetWorkflowExecutionHistoryScope tracks RPC calls to history service
 	HistoryClientGetWorkflowExecutionHistoryScope
 	// HistoryClientRecordDecisionTaskStartedScope tracks RPC calls to history service

@@ -1243,6 +1243,157 @@ WorkflowService_RespondActivityTaskFailed_result.prototype.write = function(outp
   return;
 };
 
+var WorkflowService_RespondActivityTaskCanceled_args = function(args) {
+  this.canceledRequest = null;
+  if (args) {
+    if (args.canceledRequest !== undefined && args.canceledRequest !== null) {
+      this.canceledRequest = new shared_ttypes.RespondActivityTaskCanceledRequest(args.canceledRequest);
+    }
+  }
+};
+WorkflowService_RespondActivityTaskCanceled_args.prototype = {};
+WorkflowService_RespondActivityTaskCanceled_args.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.canceledRequest = new shared_ttypes.RespondActivityTaskCanceledRequest();
+        this.canceledRequest.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 0:
+        input.skip(ftype);
+        break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+WorkflowService_RespondActivityTaskCanceled_args.prototype.write = function(output) {
+  output.writeStructBegin('WorkflowService_RespondActivityTaskCanceled_args');
+  if (this.canceledRequest !== null && this.canceledRequest !== undefined) {
+    output.writeFieldBegin('canceledRequest', Thrift.Type.STRUCT, 1);
+    this.canceledRequest.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
+var WorkflowService_RespondActivityTaskCanceled_result = function(args) {
+  this.badRequestError = null;
+  this.internalServiceError = null;
+  this.entityNotExistError = null;
+  if (args instanceof shared_ttypes.BadRequestError) {
+    this.badRequestError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.InternalServiceError) {
+    this.internalServiceError = args;
+    return;
+  }
+  if (args instanceof shared_ttypes.EntityNotExistsError) {
+    this.entityNotExistError = args;
+    return;
+  }
+  if (args) {
+    if (args.badRequestError !== undefined && args.badRequestError !== null) {
+      this.badRequestError = args.badRequestError;
+    }
+    if (args.internalServiceError !== undefined && args.internalServiceError !== null) {
+      this.internalServiceError = args.internalServiceError;
+    }
+    if (args.entityNotExistError !== undefined && args.entityNotExistError !== null) {
+      this.entityNotExistError = args.entityNotExistError;
+    }
+  }
+};
+WorkflowService_RespondActivityTaskCanceled_result.prototype = {};
+WorkflowService_RespondActivityTaskCanceled_result.prototype.read = function(input) {
+  input.readStructBegin();
+  while (true)
+  {
+    var ret = input.readFieldBegin();
+    var fname = ret.fname;
+    var ftype = ret.ftype;
+    var fid = ret.fid;
+    if (ftype == Thrift.Type.STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.badRequestError = new shared_ttypes.BadRequestError();
+        this.badRequestError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 2:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.internalServiceError = new shared_ttypes.InternalServiceError();
+        this.internalServiceError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      case 3:
+      if (ftype == Thrift.Type.STRUCT) {
+        this.entityNotExistError = new shared_ttypes.EntityNotExistsError();
+        this.entityNotExistError.read(input);
+      } else {
+        input.skip(ftype);
+      }
+      break;
+      default:
+        input.skip(ftype);
+    }
+    input.readFieldEnd();
+  }
+  input.readStructEnd();
+  return;
+};
+
+WorkflowService_RespondActivityTaskCanceled_result.prototype.write = function(output) {
+  output.writeStructBegin('WorkflowService_RespondActivityTaskCanceled_result');
+  if (this.badRequestError !== null && this.badRequestError !== undefined) {
+    output.writeFieldBegin('badRequestError', Thrift.Type.STRUCT, 1);
+    this.badRequestError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.internalServiceError !== null && this.internalServiceError !== undefined) {
+    output.writeFieldBegin('internalServiceError', Thrift.Type.STRUCT, 2);
+    this.internalServiceError.write(output);
+    output.writeFieldEnd();
+  }
+  if (this.entityNotExistError !== null && this.entityNotExistError !== undefined) {
+    output.writeFieldBegin('entityNotExistError', Thrift.Type.STRUCT, 3);
+    this.entityNotExistError.write(output);
+    output.writeFieldEnd();
+  }
+  output.writeFieldStop();
+  output.writeStructEnd();
+  return;
+};
+
 var WorkflowServiceClient = exports.Client = function(output, pClass) {
     this.output = output;
     this.pClass = pClass;
@@ -1682,6 +1833,59 @@ WorkflowServiceClient.prototype.recv_RespondActivityTaskFailed = function(input,
   }
   callback(null)
 };
+WorkflowServiceClient.prototype.RespondActivityTaskCanceled = function(canceledRequest, callback) {
+  this._seqid = this.new_seqid();
+  if (callback === undefined) {
+    var _defer = Q.defer();
+    this._reqs[this.seqid()] = function(error, result) {
+      if (error) {
+        _defer.reject(error);
+      } else {
+        _defer.resolve(result);
+      }
+    };
+    this.send_RespondActivityTaskCanceled(canceledRequest);
+    return _defer.promise;
+  } else {
+    this._reqs[this.seqid()] = callback;
+    this.send_RespondActivityTaskCanceled(canceledRequest);
+  }
+};
+
+WorkflowServiceClient.prototype.send_RespondActivityTaskCanceled = function(canceledRequest) {
+  var output = new this.pClass(this.output);
+  output.writeMessageBegin('RespondActivityTaskCanceled', Thrift.MessageType.CALL, this.seqid());
+  var args = new WorkflowService_RespondActivityTaskCanceled_args();
+  args.canceledRequest = canceledRequest;
+  args.write(output);
+  output.writeMessageEnd();
+  return this.output.flush();
+};
+
+WorkflowServiceClient.prototype.recv_RespondActivityTaskCanceled = function(input,mtype,rseqid) {
+  var callback = this._reqs[rseqid] || function() {};
+  delete this._reqs[rseqid];
+  if (mtype == Thrift.MessageType.EXCEPTION) {
+    var x = new Thrift.TApplicationException();
+    x.read(input);
+    input.readMessageEnd();
+    return callback(x);
+  }
+  var result = new WorkflowService_RespondActivityTaskCanceled_result();
+  result.read(input);
+  input.readMessageEnd();
+
+  if (null !== result.badRequestError) {
+    return callback(result.badRequestError);
+  }
+  if (null !== result.internalServiceError) {
+    return callback(result.internalServiceError);
+  }
+  if (null !== result.entityNotExistError) {
+    return callback(result.entityNotExistError);
+  }
+  callback(null)
+};
 var WorkflowServiceProcessor = exports.Processor = function(handler) {
   this._handler = handler
 }
@@ -2012,6 +2216,46 @@ WorkflowServiceProcessor.prototype.process_RespondActivityTaskFailed = function(
       } else {
         var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
         output.writeMessageBegin("RespondActivityTaskFailed", Thrift.MessageType.EXCEPTION, seqid);
+      }
+      result.write(output);
+      output.writeMessageEnd();
+      output.flush();
+    });
+  }
+}
+
+WorkflowServiceProcessor.prototype.process_RespondActivityTaskCanceled = function(seqid, input, output) {
+  var args = new WorkflowService_RespondActivityTaskCanceled_args();
+  args.read(input);
+  input.readMessageEnd();
+  if (this._handler.RespondActivityTaskCanceled.length === 1) {
+    Q.fcall(this._handler.RespondActivityTaskCanceled, args.canceledRequest)
+      .then(function(result) {
+        var result = new WorkflowService_RespondActivityTaskCanceled_result({success: result});
+        output.writeMessageBegin("RespondActivityTaskCanceled", Thrift.MessageType.REPLY, seqid);
+        result.write(output);
+        output.writeMessageEnd();
+        output.flush();
+      }, function (err) {
+        if (err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
+          var result = new WorkflowService_RespondActivityTaskCanceled_result(err);
+          output.writeMessageBegin("RespondActivityTaskCanceled", Thrift.MessageType.REPLY, seqid);
+        } else {
+          var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
+          output.writeMessageBegin("RespondActivityTaskCanceled", Thrift.MessageType.EXCEPTION, seqid);
+        }
+        result.write(output);
+        output.writeMessageEnd();
+        output.flush();
+      });
+  } else {
+    this._handler.RespondActivityTaskCanceled(args.canceledRequest, function (err, result) {
+      if (err == null || err instanceof shared_ttypes.BadRequestError || err instanceof shared_ttypes.InternalServiceError || err instanceof shared_ttypes.EntityNotExistsError) {
+        var result = new WorkflowService_RespondActivityTaskCanceled_result((err != null ? err : {success: result}));
+        output.writeMessageBegin("RespondActivityTaskCanceled", Thrift.MessageType.REPLY, seqid);
+      } else {
+        var result = new Thrift.TApplicationException(Thrift.TApplicationExceptionType.UNKNOWN, err.message);
+        output.writeMessageBegin("RespondActivityTaskCanceled", Thrift.MessageType.EXCEPTION, seqid);
       }
       result.write(output);
       output.writeMessageEnd();
