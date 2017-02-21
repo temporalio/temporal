@@ -36,12 +36,12 @@ import (
 	"encoding/binary"
 	"strconv"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/frontend"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/service/history"
-	"code.uber.internal/devexp/minions/service/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/history"
+	"github.com/uber/cadence/service/matching"
 )
 
 var (

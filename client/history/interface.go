@@ -1,8 +1,8 @@
 package history
 
 import (
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
 // Client is the interface exposed by history service client

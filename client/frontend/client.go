@@ -5,9 +5,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	m "code.uber.internal/devexp/minions/.gen/go/minions"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
+	m "github.com/uber/cadence/.gen/go/minions"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )

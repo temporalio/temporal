@@ -4,13 +4,13 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/service"
-	"code.uber.internal/devexp/minions/service/frontend"
-	"code.uber.internal/devexp/minions/service/history"
-	"code.uber.internal/devexp/minions/service/matching"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/service/frontend"
+	"github.com/uber/cadence/service/history"
+	"github.com/uber/cadence/service/matching"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )

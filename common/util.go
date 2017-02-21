@@ -8,8 +8,8 @@ import (
 	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common/backoff"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/backoff"
 )
 
 const (

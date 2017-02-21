@@ -9,11 +9,11 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 
-	m "code.uber.internal/devexp/minions/.gen/go/matching"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/mocks"
-	"code.uber.internal/devexp/minions/common/persistence"
+	m "github.com/uber/cadence/.gen/go/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (

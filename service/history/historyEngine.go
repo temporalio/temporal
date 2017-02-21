@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"sync"
 
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/matching"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/backoff"
-	"code.uber.internal/devexp/minions/common/persistence"
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/persistence"
 )
 
 const (

@@ -1,10 +1,10 @@
 package matching
 
 import (
-	m "code.uber.internal/devexp/minions/.gen/go/matching"
-	gen "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/service"
+	m "github.com/uber/cadence/.gen/go/matching"
+	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 

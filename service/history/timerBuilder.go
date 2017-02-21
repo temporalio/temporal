@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	w "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/persistence"
 	"github.com/uber-common/bark"
+	w "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 )
 
 // Timer constansts

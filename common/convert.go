@@ -1,6 +1,6 @@
 package common
 
-import s "code.uber.internal/devexp/minions/.gen/go/shared"
+import s "github.com/uber/cadence/.gen/go/shared"
 
 // IntPtr makes a copy and returns the pointer to an int.
 func IntPtr(v int) *int {

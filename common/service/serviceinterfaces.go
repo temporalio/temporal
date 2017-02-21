@@ -5,8 +5,8 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
 
-	"code.uber.internal/devexp/minions/client"
-	"code.uber.internal/devexp/minions/common/membership"
+	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common/membership"
 )
 
 type (

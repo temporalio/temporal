@@ -8,9 +8,9 @@ import (
 
 	"github.com/uber-common/bark"
 
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/membership"
-	"code.uber.internal/devexp/minions/common/persistence"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/persistence"
 )
 
 const (

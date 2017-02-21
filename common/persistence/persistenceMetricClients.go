@@ -1,8 +1,8 @@
 package persistence
 
 import (
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common/metrics"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/metrics"
 )
 
 type (

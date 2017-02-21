@@ -1,9 +1,9 @@
 package matching
 
 import (
-	m "code.uber.internal/devexp/minions/.gen/go/matching"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common/metrics"
+	m "github.com/uber/cadence/.gen/go/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)

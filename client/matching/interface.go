@@ -1,8 +1,8 @@
 package matching
 
 import (
-	m "code.uber.internal/devexp/minions/.gen/go/matching"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
+	m "github.com/uber/cadence/.gen/go/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
 // Client is the interface exposed by matching service client

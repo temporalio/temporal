@@ -3,7 +3,7 @@ package metrics
 import (
 	"time"
 
-	"code.uber.internal/devexp/minions/common"
+	"github.com/uber/cadence/common"
 
 	"github.com/uber-go/tally"
 )

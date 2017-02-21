@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"code.uber.internal/devexp/minions/client"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/logging"
-	"code.uber.internal/devexp/minions/common/membership"
-	"code.uber.internal/devexp/minions/common/metrics"
+	"github.com/uber/cadence/client"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/metrics"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"

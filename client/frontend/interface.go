@@ -1,7 +1,7 @@
 package frontend
 
 import (
-	"code.uber.internal/devexp/minions/.gen/go/shared"
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 // Client is the interface exposed by frontend service client

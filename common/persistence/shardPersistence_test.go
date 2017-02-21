@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	gen "code.uber.internal/devexp/minions/.gen/go/shared"
+	gen "github.com/uber/cadence/.gen/go/shared"
 )
 
 type (

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"code.uber.internal/devexp/minions/common/persistence"
+	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
 )

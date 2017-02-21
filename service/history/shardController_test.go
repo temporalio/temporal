@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/devexp/minions/common/membership"
-	mmocks "code.uber.internal/devexp/minions/common/mocks"
-	"code.uber.internal/devexp/minions/common/persistence"
+	"github.com/uber/cadence/common/membership"
+	mmocks "github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (

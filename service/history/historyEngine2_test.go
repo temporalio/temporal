@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/mocks"
-	"code.uber.internal/devexp/minions/common/persistence"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (

@@ -1,10 +1,10 @@
 package client
 
 import (
-	"code.uber.internal/devexp/minions/client/history"
-	"code.uber.internal/devexp/minions/client/matching"
-	"code.uber.internal/devexp/minions/common/membership"
-	"code.uber.internal/devexp/minions/common/metrics"
+	"github.com/uber/cadence/client/history"
+	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/metrics"
 	tchannel "github.com/uber/tchannel-go"
 )
 

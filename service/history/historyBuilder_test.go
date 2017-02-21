@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 )
 
 type (

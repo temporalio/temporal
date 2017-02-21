@@ -1,8 +1,8 @@
 package history
 
 import "github.com/stretchr/testify/mock"
-import gohistory "code.uber.internal/devexp/minions/.gen/go/history"
-import "code.uber.internal/devexp/minions/.gen/go/shared"
+import gohistory "github.com/uber/cadence/.gen/go/history"
+import "github.com/uber/cadence/.gen/go/shared"
 
 // MockHistoryEngine is used as mock implementation for HistoryEngine
 type MockHistoryEngine struct {

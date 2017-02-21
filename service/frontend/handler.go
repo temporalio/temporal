@@ -3,13 +3,13 @@ package frontend
 import (
 	"log"
 
-	"code.uber.internal/devexp/minions/.gen/go/minions"
-	gen "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/history"
-	"code.uber.internal/devexp/minions/client/matching"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/service"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/minions"
+	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/history"
+	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 

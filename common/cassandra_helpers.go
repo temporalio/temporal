@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"code.uber.internal/devexp/minions/common/logging"
+	"github.com/uber/cadence/common/logging"
 
 	"bytes"
 	"os/exec"

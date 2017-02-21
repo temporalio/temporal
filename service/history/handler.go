@@ -4,12 +4,12 @@ import (
 	"log"
 	"sync"
 
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	gen "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/matching"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/persistence"
-	"code.uber.internal/devexp/minions/common/service"
+	h "github.com/uber/cadence/.gen/go/history"
+	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service"
 	"github.com/uber/tchannel-go/thrift"
 )
 

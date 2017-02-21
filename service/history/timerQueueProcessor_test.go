@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/mocks"
-	"code.uber.internal/devexp/minions/common/persistence"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
 type (

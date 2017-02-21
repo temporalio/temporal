@@ -1,7 +1,7 @@
 package mocks
 
 import mock "github.com/stretchr/testify/mock"
-import membership "code.uber.internal/devexp/minions/common/membership"
+import membership "github.com/uber/cadence/common/membership"
 
 type ServiceResolver struct {
 	mock.Mock

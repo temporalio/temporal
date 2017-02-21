@@ -1,9 +1,9 @@
 package history
 
 import (
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/persistence"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (

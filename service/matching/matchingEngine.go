@@ -12,13 +12,13 @@ import (
 	"math"
 	"sync/atomic"
 
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	m "code.uber.internal/devexp/minions/.gen/go/matching"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/client/history"
-	"code.uber.internal/devexp/minions/common"
-	"code.uber.internal/devexp/minions/common/backoff"
-	"code.uber.internal/devexp/minions/common/persistence"
+	h "github.com/uber/cadence/.gen/go/history"
+	m "github.com/uber/cadence/.gen/go/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/history"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/persistence"
 )
 
 const (

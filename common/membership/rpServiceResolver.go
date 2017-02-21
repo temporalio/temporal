@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"code.uber.internal/devexp/minions/common"
+	"github.com/uber/cadence/common"
 
 	"github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"

@@ -1,7 +1,7 @@
 package matching
 
-import workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-import m "code.uber.internal/devexp/minions/.gen/go/matching"
+import workflow "github.com/uber/cadence/.gen/go/shared"
+import m "github.com/uber/cadence/.gen/go/matching"
 
 type (
 	// Engine exposes interfaces for clients to poll for activity and decision tasks.

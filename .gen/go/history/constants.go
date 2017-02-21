@@ -5,9 +5,9 @@ package history
 
 import (
 	"bytes"
-	"code.uber.internal/devexp/minions/.gen/go/shared"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 // (needed to ensure safety because of naive import list construction.)

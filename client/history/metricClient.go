@@ -1,9 +1,9 @@
 package history
 
 import (
-	h "code.uber.internal/devexp/minions/.gen/go/history"
-	workflow "code.uber.internal/devexp/minions/.gen/go/shared"
-	"code.uber.internal/devexp/minions/common/metrics"
+	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/metrics"
 )
 
 var _ Client = (*metricClient)(nil)
