@@ -219,11 +219,11 @@ func logRingMembershipChangedEvent(logger bark.Logger, host string, added, remov
 		host, added, removed, updated)
 }
 
-func logShardClosedEvent(logger bark.Logger, shardID int) {
+func logShardClosedEvent(logger bark.Logger, host string, shardID int) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: shardClosedEvent,
 		tagHistoryShardID:  shardID,
-	}).Infof("ShardController on host '%v' received shard closed event for shardID: %v", shardID)
+	}).Infof("ShardController on host '%v' received shard closed event for shardID: %v", host, shardID)
 }
 
 func logShardItemCreatedEvent(logger bark.Logger, host string, shardID int) {

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,14 +22,15 @@ type Cadence interface {
 	Stop()
 	FrontendAddress() string
 	MatchingServiceAddress() string
-	HistoryServiceAddress() string
+	HistoryServiceAddress() []string
 }
 
 type cadenceImpl struct {
 	frontendHandler       *frontend.WorkflowHandler
 	matchingHandler       *matching.Handler
-	historyHandler        *history.Handler
+	historyHandlers       []*history.Handler
 	numberOfHistoryShards int
+	numberOfHistoryHosts  int
 	logger                bark.Logger
 	shardMgr              persistence.ShardManager
 	taskMgr               persistence.TaskManager
@@ -39,9 +41,10 @@ type cadenceImpl struct {
 
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	taskMgr persistence.TaskManager, numberOfHistoryShards int, logger bark.Logger) Cadence {
+	taskMgr persistence.TaskManager, numberOfHistoryShards, numberOfHistoryHosts int, logger bark.Logger) Cadence {
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
+		numberOfHistoryHosts:  numberOfHistoryHosts,
 		logger:                logger,
 		shardMgr:              shardMgr,
 		taskMgr:               taskMgr,
@@ -54,7 +57,7 @@ func (c *cadenceImpl) Start() error {
 	var rpHosts []string
 	rpHosts = append(rpHosts, c.FrontendAddress())
 	rpHosts = append(rpHosts, c.MatchingServiceAddress())
-	rpHosts = append(rpHosts, c.HistoryServiceAddress())
+	rpHosts = append(rpHosts, c.HistoryServiceAddress()...)
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
@@ -67,14 +70,16 @@ func (c *cadenceImpl) Start() error {
 	startWG.Wait()
 	// Allow some time for the ring to stabilize
 	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 15)
 	return nil
 }
 
 func (c *cadenceImpl) Stop() {
 	c.shutdownWG.Add(3)
 	c.frontendHandler.Stop()
-	c.historyHandler.Stop()
+	for _, historyHandler := range c.historyHandlers {
+		historyHandler.Stop()
+	}
 	c.matchingHandler.Stop()
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
@@ -84,8 +89,16 @@ func (c *cadenceImpl) FrontendAddress() string {
 	return "127.0.0.1:7104"
 }
 
-func (c *cadenceImpl) HistoryServiceAddress() string {
-	return "127.0.0.1:7105"
+func (c *cadenceImpl) HistoryServiceAddress() []string {
+	hosts := []string{}
+	startPort := 7200
+	for i := 0; i < c.numberOfHistoryHosts; i++ {
+		port := startPort + i
+		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%v", port))
+	}
+
+	c.logger.Infof("History hosts: %v", hosts)
+	return hosts
 }
 
 func (c *cadenceImpl) MatchingServiceAddress() string {
@@ -111,14 +124,18 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 
 func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
-	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
-		return c.createTChannel(sName, c.HistoryServiceAddress(), thriftServices)
+	for _, hostport := range c.HistoryServiceAddress() {
+		tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
+			return c.createTChannel(sName, hostport, thriftServices)
+		}
+		scope := tally.NewTestScope("cadence-history", make(map[string]string))
+		service := service.New("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
+		var thriftServices []thrift.TChanServer
+		var handler *history.Handler
+		handler, thriftServices = history.NewHandler(service, shardMgr, executionMgrFactory, c.numberOfHistoryShards)
+		handler.Start(thriftServices)
+		c.historyHandlers = append(c.historyHandlers, handler)
 	}
-	scope := tally.NewTestScope("cadence-history", make(map[string]string))
-	service := service.New("cadence-history", logger, scope, tchanFactory, rpHosts, c.numberOfHistoryShards)
-	var thriftServices []thrift.TChanServer
-	c.historyHandler, thriftServices = history.NewHandler(service, shardMgr, executionMgrFactory, c.numberOfHistoryShards)
-	c.historyHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()

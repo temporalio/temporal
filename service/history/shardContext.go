@@ -227,6 +227,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, executionM
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.Owner = owner
 	context := &shardContextImpl{
+		shardID:          shardID,
 		shardManager:     shardManager,
 		executionManager: executionMgr,
 		shardInfo:        updatedShardInfo,

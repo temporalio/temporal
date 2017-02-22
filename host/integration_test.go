@@ -50,6 +50,7 @@ var (
 
 const (
 	testNumberOfHistoryShards = 4
+	testNumberOfHistoryHosts  = 1
 )
 
 type (
@@ -111,7 +112,8 @@ func (s *integrationSuite) SetupTest() {
 
 	s.setupShards()
 
-	s.host = NewCadence(s.ShardMgr, s.ExecutionMgrFactory, s.TaskMgr, testNumberOfHistoryShards, s.logger)
+	s.host = NewCadence(s.ShardMgr, s.ExecutionMgrFactory, s.TaskMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts,
+		s.logger)
 	s.host.Start()
 	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
 }

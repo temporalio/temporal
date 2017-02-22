@@ -99,8 +99,6 @@ func (t *transferQueueProcessorImpl) Start() {
 
 	t.shutdownWG.Add(1)
 	go t.processorPump()
-
-	t.logger.Info("Transfer queue processor started.")
 }
 
 func (t *transferQueueProcessorImpl) Stop() {

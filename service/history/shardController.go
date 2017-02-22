@@ -220,7 +220,7 @@ func (c *shardController) shardManagementPump() {
 				len(changedEvent.HostsRemoved), len(changedEvent.HostsUpdated))
 			c.acquireShards()
 		case shardID := <-c.shardClosedCh:
-			logShardClosedEvent(c.logger, shardID)
+			logShardClosedEvent(c.logger, c.host.Identity(), shardID)
 			c.removeEngineForShard(shardID)
 		}
 	}

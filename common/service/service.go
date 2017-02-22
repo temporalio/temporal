@@ -136,7 +136,7 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	h.clientFactory = client.NewTChannelClientFactory(h.ch, h.membershipMonitor, metricsClient, h.numberOfHistoryShards)
 
 	// The service is now started up
-	log.Info("service started")
+	h.logger.Info("service started")
 
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UTC().UnixNano())
