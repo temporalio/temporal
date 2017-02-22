@@ -1,26 +1,8 @@
-hash: 93569201460489da61f6f94398e805428961fcef80bed2bbdc7594c86539c1af
-updated: 2017-02-15T13:44:18.74803304-08:00
+hash: 4b7007272370a66c16f8b941a0c965718ea5eca9017b3243445c3c760014279a
+updated: 2017-02-21T16:11:34.099769066-08:00
 imports:
-- name: code.uber.internal/go-common.git
-  version: 6394a71ddd49792dd379b6a0956a6b0a50ba3136
-  subpackages:
-  - x/backoff
-  - x/config
-  - x/kafka
-  - x/log
-  - x/metrics
-  - x/metrics/customtransports
-  - x/metrics/idgeneration
-  - x/metrics/sampling
-  - x/metrics/thrift
-  - x/metrics/thriftudp
-  - x/pool
-  - x/tchannel
-  - x/tchannel/log
-  - x/tchannel/metrics
-  - x/time
 - name: github.com/apache/thrift
-  version: e1832c354391deb0e0ce94a62ff32e8ce1c83fd3
+  version: 655b9b6ef86c45b423a194abee2a9cd057a16a74
   subpackages:
   - lib/go/thrift
 - name: github.com/benbjohnson/clock
@@ -29,8 +11,6 @@ imports:
   version: d8eabe07bc70ff9ba6a56836cde99d1ea3d005f7
   subpackages:
   - statsd
-- name: github.com/codahale/hdrhistogram
-  version: f8ad88b59a584afeee9d334eff879b104439117b
 - name: github.com/davecgh/go-spew
   version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
@@ -48,8 +28,6 @@ imports:
   - utils
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
-- name: github.com/getsentry/raven-go
-  version: e39495fea085e98d1281fac0ff4d6eb8dc56f86d
 - name: github.com/gocql/gocql
   version: 8e63066b8432f0fbc02d63b7b04de8da132f0b21
   repo: gitolite@code.uber.internal:odp/cherami-gocql.git
@@ -99,18 +77,6 @@ imports:
   version: 65109e3ba73e9381daba2aaecef1ee4e1cc8fceb
   subpackages:
   - twheel
-- name: github.com/uber/jaeger-client-go
-  version: e39d0f1b622558cae3d9db0062a739cc6ffa700f
-  subpackages:
-  - config
-  - internal/spanlog
-  - testutils
-  - thrift-gen/agent
-  - thrift-gen/sampling
-  - thrift-gen/zipkincore
-  - transport
-  - transport/udp
-  - utils
 - name: github.com/uber/ringpop-go
   version: 33075b67ee125f2d5bbe79a99c081a138a61427e
   subpackages:
@@ -127,22 +93,17 @@ imports:
 - name: github.com/uber/tchannel-go
   version: 79387824978f91318be3bfb43ae12e04c38cfe97
   subpackages:
-  - http
-  - hyperbahn
-  - hyperbahn/gen-go/hyperbahn
   - internal/argreader
   - json
-  - pprof
   - raw
   - relay
-  - stats
   - thrift
   - thrift/gen-go/meta
   - tnet
   - trand
   - typed
 - name: golang.org/x/net
-  version: a689eb3bc4b53af70390acc3cf68c9f549b6b8d6
+  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
   subpackages:
   - context
 - name: golang.org/x/sys
@@ -151,8 +112,4 @@ imports:
   - unix
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
-- name: gopkg.in/validator.v2
-  version: 3e4f037f12a1221a0864cf0dd2e81c452ab22448
-- name: gopkg.in/yaml.v2
-  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 testImports: []
