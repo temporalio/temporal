@@ -8,10 +8,8 @@
 *.html
 .tmp/
 /vendor
-/minions
+/cadence
 .DS_Store
 
-# Executables produced by minions repo
-cmd/stress/stress
-cmd/demo/demo
-workflow/workflow
+# Executables produced by cadence repo
+

@@ -10,7 +10,7 @@ var Q = thrift.Q;
 var shared_ttypes = require('./shared_types');
 
 
-var ttypes = require('./minions_types');
+var ttypes = require('./cadence_types');
 //HELPER FUNCTIONS AND STRUCTURES
 
 var WorkflowService_StartWorkflowExecution_args = function(args) {

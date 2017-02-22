@@ -16,16 +16,23 @@ from thrift.transport import TSSLSocket
 from thrift.transport import THttpClient
 from thrift.protocol import TBinaryProtocol
 
-from minions import MatchingService
-from minions.ttypes import *
+from cadence import WorkflowService
+from cadence.ttypes import *
 
 if len(sys.argv) <= 1 or sys.argv[1] == '--help':
   print('')
   print('Usage: ' + sys.argv[0] + ' [-h host[:port]] [-u url] [-f[ramed]] [-s[sl]] function [arg1 [arg2...]]')
   print('')
   print('Functions:')
+  print('  StartWorkflowExecutionResponse StartWorkflowExecution(StartWorkflowExecutionRequest startRequest)')
+  print('  GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(GetWorkflowExecutionHistoryRequest getRequest)')
   print('  PollForDecisionTaskResponse PollForDecisionTask(PollForDecisionTaskRequest pollRequest)')
+  print('  void RespondDecisionTaskCompleted(RespondDecisionTaskCompletedRequest completeRequest)')
   print('  PollForActivityTaskResponse PollForActivityTask(PollForActivityTaskRequest pollRequest)')
+  print('  RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeat(RecordActivityTaskHeartbeatRequest heartbeatRequest)')
+  print('  void RespondActivityTaskCompleted(RespondActivityTaskCompletedRequest completeRequest)')
+  print('  void RespondActivityTaskFailed(RespondActivityTaskFailedRequest failRequest)')
+  print('  void RespondActivityTaskCanceled(RespondActivityTaskCanceledRequest canceledRequest)')
   print('')
   sys.exit(0)
 
@@ -79,20 +86,62 @@ else:
   else:
     transport = TTransport.TBufferedTransport(socket)
 protocol = TBinaryProtocol.TBinaryProtocol(transport)
-client = MatchingService.Client(protocol)
+client = WorkflowService.Client(protocol)
 transport.open()
 
-if cmd == 'PollForDecisionTask':
+if cmd == 'StartWorkflowExecution':
+  if len(args) != 1:
+    print('StartWorkflowExecution requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.StartWorkflowExecution(eval(args[0]),))
+
+elif cmd == 'GetWorkflowExecutionHistory':
+  if len(args) != 1:
+    print('GetWorkflowExecutionHistory requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.GetWorkflowExecutionHistory(eval(args[0]),))
+
+elif cmd == 'PollForDecisionTask':
   if len(args) != 1:
     print('PollForDecisionTask requires 1 args')
     sys.exit(1)
   pp.pprint(client.PollForDecisionTask(eval(args[0]),))
+
+elif cmd == 'RespondDecisionTaskCompleted':
+  if len(args) != 1:
+    print('RespondDecisionTaskCompleted requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RespondDecisionTaskCompleted(eval(args[0]),))
 
 elif cmd == 'PollForActivityTask':
   if len(args) != 1:
     print('PollForActivityTask requires 1 args')
     sys.exit(1)
   pp.pprint(client.PollForActivityTask(eval(args[0]),))
+
+elif cmd == 'RecordActivityTaskHeartbeat':
+  if len(args) != 1:
+    print('RecordActivityTaskHeartbeat requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RecordActivityTaskHeartbeat(eval(args[0]),))
+
+elif cmd == 'RespondActivityTaskCompleted':
+  if len(args) != 1:
+    print('RespondActivityTaskCompleted requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RespondActivityTaskCompleted(eval(args[0]),))
+
+elif cmd == 'RespondActivityTaskFailed':
+  if len(args) != 1:
+    print('RespondActivityTaskFailed requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RespondActivityTaskFailed(eval(args[0]),))
+
+elif cmd == 'RespondActivityTaskCanceled':
+  if len(args) != 1:
+    print('RespondActivityTaskCanceled requires 1 args')
+    sys.exit(1)
+  pp.pprint(client.RespondActivityTaskCanceled(eval(args[0]),))
 
 else:
   print('Unrecognized method %s' % cmd)

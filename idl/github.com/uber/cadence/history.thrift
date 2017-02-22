@@ -1,6 +1,6 @@
 include "shared.thrift"
 
-namespace java com.uber.devexp.minions
+namespace java com.uber.cadence
 
 exception EventAlreadyStartedError {
   1: required string message

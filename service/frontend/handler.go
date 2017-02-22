@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/uber-common/bark"
-	"github.com/uber/cadence/.gen/go/minions"
+	"github.com/uber/cadence/.gen/go/cadence"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
@@ -13,7 +13,7 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 )
 
-var _ minions.TChanWorkflowService = (*WorkflowHandler)(nil)
+var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
@@ -23,13 +23,13 @@ type WorkflowHandler struct {
 	service.Service
 }
 
-// NewWorkflowHandler creates a thrift handler for the minions service
+// NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(sVice service.Service) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 	}
-	return handler, []thrift.TChanServer{minions.NewTChanWorkflowServiceServer(handler)}
+	return handler, []thrift.TChanServer{cadence.NewTChanWorkflowServiceServer(handler)}
 }
 
 // Start starts the handler

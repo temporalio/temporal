@@ -1,4 +1,4 @@
-namespace java com.uber.devexp.minions
+namespace java com.uber.cadence
 
 exception BadRequestError {
   1: required string message
