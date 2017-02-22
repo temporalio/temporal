@@ -404,6 +404,10 @@ Update_History_Loop:
 
 	Process_Decision_Loop:
 		for _, d := range request.Decisions {
+			e.logger.Infof("WorkflowComplete Decision received: {WorkflowId: %v, RunId: %v, DecisionType: %v, ScheduledActivityDecision: %v, TimerStartedDecision: %v, RequestCancelActivityDevision: %v, CompleteWorkflowDecision: %v, FailWorkflowDecision: %v}",
+				token.WorkflowID, token.RunID, d.GetDecisionType(), d.GetScheduleActivityTaskDecisionAttributes(),
+				d.GetStartTimerDecisionAttributes(), d.GetRequestCancelActivityTaskDecisionAttributes(),
+				d.GetCompleteWorkflowExecutionDecisionAttributes(), d.GetFailWorkflowExecutionDecisionAttributes())
 			switch d.GetDecisionType() {
 			case workflow.DecisionType_ScheduleActivityTask:
 				attributes := d.GetScheduleActivityTaskDecisionAttributes()
