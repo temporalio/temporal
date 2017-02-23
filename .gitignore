@@ -10,6 +10,9 @@
 /vendor
 /cadence
 .DS_Store
+test
+test.log
 
 # Executables produced by cadence repo
+cadence
 
