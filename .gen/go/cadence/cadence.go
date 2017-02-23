@@ -505,6 +505,9 @@ func (p *WorkflowServiceClient) recvRespondDecisionTaskCompleted() (err error) {
   } else   if result.InternalServiceError != nil {
     err = result.InternalServiceError
     return 
+  } else   if result.EntityNotExistError != nil {
+    err = result.EntityNotExistError
+    return 
   }
   return
 }
@@ -1215,6 +1218,8 @@ func (p *workflowServiceProcessorRespondDecisionTaskCompleted) Process(seqId int
   result.BadRequestError = v
     case *shared.InternalServiceError:
   result.InternalServiceError = v
+    case *shared.EntityNotExistsError:
+  result.EntityNotExistError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondDecisionTaskCompleted: " + err2.Error())
     oprot.WriteMessageBegin("RespondDecisionTaskCompleted", thrift.EXCEPTION, seqId)
@@ -2484,9 +2489,11 @@ func (p *WorkflowServiceRespondDecisionTaskCompletedArgs) String() string {
 // Attributes:
 //  - BadRequestError
 //  - InternalServiceError
+//  - EntityNotExistError
 type WorkflowServiceRespondDecisionTaskCompletedResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
 }
 
 func NewWorkflowServiceRespondDecisionTaskCompletedResult() *WorkflowServiceRespondDecisionTaskCompletedResult {
@@ -2507,12 +2514,23 @@ func (p *WorkflowServiceRespondDecisionTaskCompletedResult) GetInternalServiceEr
   }
 return p.InternalServiceError
 }
+var WorkflowServiceRespondDecisionTaskCompletedResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+func (p *WorkflowServiceRespondDecisionTaskCompletedResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+  if !p.IsSetEntityNotExistError() {
+    return WorkflowServiceRespondDecisionTaskCompletedResult_EntityNotExistError_DEFAULT
+  }
+return p.EntityNotExistError
+}
 func (p *WorkflowServiceRespondDecisionTaskCompletedResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
 
 func (p *WorkflowServiceRespondDecisionTaskCompletedResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
+}
+
+func (p *WorkflowServiceRespondDecisionTaskCompletedResult) IsSetEntityNotExistError() bool {
+  return p.EntityNotExistError != nil
 }
 
 func (p *WorkflowServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TProtocol) error {
@@ -2534,6 +2552,10 @@ func (p *WorkflowServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TP
       }
     case 2:
       if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
         return err
       }
     default:
@@ -2567,12 +2589,21 @@ func (p *WorkflowServiceRespondDecisionTaskCompletedResult)  ReadField2(iprot th
   return nil
 }
 
+func (p *WorkflowServiceRespondDecisionTaskCompletedResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.EntityNotExistError = &shared.EntityNotExistsError{}
+  if err := p.EntityNotExistError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceRespondDecisionTaskCompletedResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RespondDecisionTaskCompleted_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2603,6 +2634,19 @@ func (p *WorkflowServiceRespondDecisionTaskCompletedResult) writeField2(oprot th
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceRespondDecisionTaskCompletedResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEntityNotExistError() {
+    if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err) }
+    if err := p.EntityNotExistError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
   }
   return err
 }
