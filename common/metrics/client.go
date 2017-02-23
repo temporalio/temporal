@@ -12,10 +12,9 @@ import (
 type ClientImpl struct {
 	//parentReporter is the parent scope for the metrics
 	parentScope tally.Scope
-
 	childScopes map[int]tally.Scope
-
-	metricDefs map[int]metricDefinition
+	metricDefs  map[int]metricDefinition
+	serviceIdx  ServiceIdx
 }
 
 // NewClient creates and returns a new instance of
@@ -30,6 +29,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		parentScope: scope,
 		childScopes: make(map[int]tally.Scope, totalScopes),
 		metricDefs:  getMetricDefs(serviceIdx),
+		serviceIdx:  serviceIdx,
 	}
 
 	metricsMap := make(map[MetricName]MetricType)
@@ -89,6 +89,12 @@ func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta float64) {
 	name := string(m.metricDefs[gaugeIdx].metricName)
 	m.childScopes[scopeIdx].Gauge(name).Update(delta)
+}
+
+// Tagged returns a client that adds the given tags to all metrics
+func (m *ClientImpl) Tagged(tags map[string]string) Client {
+	scope := m.parentScope.Tagged(tags)
+	return NewClient(scope, m.serviceIdx)
 }
 
 func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
