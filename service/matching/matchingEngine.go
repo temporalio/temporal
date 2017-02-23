@@ -277,6 +277,12 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 		})
 		tlCtx.completeTaskAppend(taskID)
 
+		if err != nil {
+			logPersistantStoreErrorEvent(tlCtx.logger, tagValueStoreOperationCreateTask, err,
+				fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
+					task.TaskID, tlCtx.taskListID.taskType, tlCtx.taskListID.taskListName))
+		}
+
 		return r, err
 	})
 	return err

@@ -51,6 +51,7 @@ const (
 
 	// tagStoreOperation values
 	tagValueStoreOperationGetTasks       = "get-tasks"
+	tagValueStoreOperationCreateTask     = "create-task"
 	tagValueStoreOperationCompleteTask   = "complete-task"
 	tagValueStoreOperationUpdateTaskList = "update-task-list"
 
