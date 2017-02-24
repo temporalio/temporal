@@ -14,6 +14,8 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber-go/tally"
 )
 
 const (
@@ -55,6 +57,7 @@ type (
 		timerSequeceNumber     int64
 		executionMgr           ExecutionManager
 		logger                 bark.Logger
+		metricsClient          metrics.Client
 	}
 
 	testExecutionMgrFactory struct {
@@ -71,6 +74,7 @@ func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, exe
 		transferSequenceNumber: transferSequenceNumber,
 		executionMgr:           executionMgr,
 		logger:                 logger,
+		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 }
 
@@ -110,6 +114,10 @@ func (s *testShardContext) UpdateWorkflowExecution(request *UpdateWorkflowExecut
 
 func (s *testShardContext) GetLogger() bark.Logger {
 	return s.logger
+}
+
+func (s *testShardContext) GetMetricsClient() metrics.Client {
+	return s.metricsClient
 }
 
 func (s *testShardContext) Reset() {

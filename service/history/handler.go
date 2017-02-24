@@ -52,12 +52,12 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	}
 	h.matchingServiceClient = matchingServiceClient
 
-	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver("cadence-history")
+	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
 	}
 	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager,
-		h.executionMgrFactory, h, h.GetLogger())
+		h.executionMgrFactory, h, h.GetLogger(), h.GetMetricsClient())
 	h.controller.Start()
 	h.startWG.Done()
 	return nil

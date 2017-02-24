@@ -33,7 +33,7 @@ const (
 
 // Service names for all services that emit metrics.
 const (
-	Common = iota
+	Common      = iota
 	Frontend
 	History
 	Matching
@@ -44,6 +44,7 @@ const (
 const (
 	HostnameTagName  = "hostname"
 	OperationTagName = "operation"
+	ShardTagName     = "shard"
 )
 
 // This package should hold all the metrics and tags for cadence
@@ -189,6 +190,8 @@ const (
 	HistoryRecordDecisionTaskStartedScope
 	// HistoryRecordActivityTaskStartedScope tracks RecordActivityTaskStarted API calls received by service
 	HistoryRecordActivityTaskStartedScope
+	// HistoryProcessTransferTasksScope tracks number of transfer tasks processed
+	HistoryProcessTransferTasksScope
 
 	NumHistoryScopes
 )
@@ -262,6 +265,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryGetWorkflowExecutionHistoryScope:  {operation: "GetWorkflowExecutionHistory"},
 		HistoryRecordDecisionTaskStartedScope:    {operation: "RecordDecisionTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:    {operation: "RecordActivityTaskStarted"},
+		HistoryProcessTransferTasksScope:         {operation: "ProcessTransferTask"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -272,22 +276,41 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 }
 
-// Metrics enum
+// Common Metrics enum
 const (
-	WorkflowRequests = iota
+	WorkflowRequests                         = iota
 	WorkflowFailures
 	WorkflowLatency
+	CadenceErrEntityNotExistsCounter
+	CadenceErrExecutionAlreadyStartedCounter
+	PersistenceErrShardExistsCounter
+	PersistenceErrShardOwnershipLostCounter
+	PersistenceErrConditionFailedCounter
+
+	NumCommonMetrics
+)
+
+// History Metrics enum
+const (
+	TransferTasksProcessedCounter = iota + NumCommonMetrics
 )
 
 // MetricDefs record the metrics for all services
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
-		WorkflowRequests: {metricName: "requests", metricType: Counter},
-		WorkflowFailures: {metricName: "errors", metricType: Counter},
-		WorkflowLatency:  {metricName: "latency", metricType: Timer},
+		WorkflowRequests:                         {metricName: "requests", metricType: Counter},
+		WorkflowFailures:                         {metricName: "errors", metricType: Counter},
+		WorkflowLatency:                          {metricName: "latency", metricType: Timer},
+		CadenceErrEntityNotExistsCounter:         {metricName: "cadence.errors.entity-not-exists", metricType: Counter},
+		CadenceErrExecutionAlreadyStartedCounter: {metricName: "cadence.errors.execution-already-started", metricType: Counter},
+		PersistenceErrShardExistsCounter:         {metricName: "persistence.errors.shard-exists", metricType: Counter},
+		PersistenceErrShardOwnershipLostCounter:  {metricName: "persistence.errors.shard-ownership-lost", metricType: Counter},
+		PersistenceErrConditionFailedCounter:     {metricName: "persistence.errors.condition-failed", metricType: Counter},
 	},
 	Frontend: {},
-	History:  {},
+	History: {
+		TransferTasksProcessedCounter: {metricName: "transfer-tasks-processed", metricType: Counter},
+	},
 	Matching: {},
 }
 

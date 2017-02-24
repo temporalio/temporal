@@ -12,6 +12,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -30,6 +31,7 @@ type (
 		timerProcessor   timerQueueProcessor
 		tokenSerializer  common.TaskTokenSerializer
 		tracker          *pendingTaskTracker
+		metricsReporter  metrics.Client
 		logger           bark.Logger
 	}
 

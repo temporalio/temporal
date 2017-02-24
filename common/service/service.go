@@ -47,6 +47,7 @@ type serviceImpl struct {
 	logger                 bark.Logger
 	metricsScope           tally.Scope
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+	metricsClient          metrics.Client
 }
 
 // New instantiates a Service Instance
@@ -54,8 +55,8 @@ type serviceImpl struct {
 // TODO: consider passing a config object if the parameter list gets too big
 // this is the object which holds all the common stuff
 // shared by all the services.
-func New(serviceName string, logger bark.Logger,
-	scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string, numberOfHistoryShards int) Service {
+func New(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string,
+	numberOfHistoryShards int) Service {
 	sVice := &serviceImpl{
 		sName:                 serviceName,
 		logger:                logger.WithField("Service", serviceName),
@@ -65,6 +66,7 @@ func New(serviceName string, logger bark.Logger,
 		numberOfHistoryShards: numberOfHistoryShards,
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(scope, time.Minute, sVice.logger)
+	sVice.metricsClient = metrics.NewClient(scope, getMetricsServiceIdx(serviceName, logger))
 
 	// Get the host name and set it on the service.  This is used for emitting metric with a tag for hostname
 	if hostName, e := os.Hostname(); e != nil {
@@ -132,8 +134,8 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	}
 	h.hostInfo = hostInfo
 
-	metricsClient := metrics.NewClient(h.metricsScope, h.getMetricsServiceIdx(h.sName))
-	h.clientFactory = client.NewTChannelClientFactory(h.ch, h.membershipMonitor, metricsClient, h.numberOfHistoryShards)
+	h.clientFactory = client.NewTChannelClientFactory(h.ch, h.membershipMonitor, h.metricsClient,
+		h.numberOfHistoryShards)
 
 	// The service is now started up
 	h.logger.Info("service started")
@@ -164,8 +166,8 @@ func (h *serviceImpl) GetLogger() bark.Logger {
 	return h.logger
 }
 
-func (h *serviceImpl) GetMetricsScope() tally.Scope {
-	return h.metricsScope
+func (h *serviceImpl) GetMetricsClient() metrics.Client {
+	return h.metricsClient
 }
 
 func (h *serviceImpl) GetClientFactory() client.Factory {
@@ -200,7 +202,7 @@ func (h *serviceImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []string) er
 	return err
 }
 
-func (h *serviceImpl) getMetricsServiceIdx(serviceName string) metrics.ServiceIdx {
+func getMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.ServiceIdx {
 	switch serviceName {
 	case common.FrontendServiceName:
 		return metrics.Frontend
@@ -209,7 +211,9 @@ func (h *serviceImpl) getMetricsServiceIdx(serviceName string) metrics.ServiceId
 	case common.MatchingServiceName:
 		return metrics.Matching
 	default:
-		h.logger.WithField("name", serviceName).Fatal("Unknown service name for metrics")
+		logger.Fatalf("Unknown service name '%v' for metrics!", serviceName)
 	}
-	panic("Fatal!") // this should never happen!
+
+	// this should never happen!
+	return metrics.NumServices
 }

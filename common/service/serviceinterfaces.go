@@ -2,11 +2,11 @@ package service
 
 import (
 	"github.com/uber-common/bark"
-	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/metrics"
 )
 
 type (
@@ -23,7 +23,7 @@ type (
 
 		GetLogger() bark.Logger
 
-		GetMetricsScope() tally.Scope
+		GetMetricsClient() metrics.Client
 
 		GetClientFactory() client.Factory
 

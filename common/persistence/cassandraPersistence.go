@@ -30,7 +30,7 @@ const (
 
 const (
 	// Row types for table executions
-	rowTypeShard = iota
+	rowTypeShard        = iota
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
@@ -38,7 +38,7 @@ const (
 
 const (
 	// Row types for table tasks
-	rowTypeTask = iota
+	rowTypeTask     = iota
 	rowTypeTaskList
 )
 
@@ -828,8 +828,8 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 	}
 	if !applied {
 		previousRangeID := previous["range_id"]
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
+		return nil, &ConditionFailedError{
+			Msg: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
 		}
 	}
 	tli := &TaskListInfo{Name: request.TaskList, TaskType: request.TaskType, RangeID: rangeID + 1, AckLevel: ackLevel}
@@ -873,7 +873,6 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 	}
 
 	return &UpdateTaskListResponse{}, nil
-
 }
 
 // From TaskManager interface

@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
@@ -26,6 +27,7 @@ type (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
 		GetLogger() bark.Logger
+		GetMetricsClient() metrics.Client
 	}
 
 	shardContextImpl struct {
@@ -37,6 +39,7 @@ type (
 		closeCh            chan<- int
 		isClosed           int32
 		logger             bark.Logger
+		metricsClient      metrics.Client
 
 		sync.RWMutex
 		shardInfo                 *persistence.ShardInfo
@@ -160,6 +163,10 @@ func (s *shardContextImpl) GetLogger() bark.Logger {
 	return s.logger
 }
 
+func (s *shardContextImpl) GetMetricsClient() metrics.Client {
+	return s.metricsClient
+}
+
 func (s *shardContextImpl) getRangeID() int64 {
 	s.RLock()
 	defer s.RUnlock()
@@ -217,7 +224,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func acquireShard(shardID int, shardManager persistence.ShardManager, executionMgr persistence.ExecutionManager,
-	owner string, closeCh chan<- int, logger bark.Logger) (ShardContext, error) {
+	owner string, closeCh chan<- int, logger bark.Logger, reporter metrics.Client) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -237,6 +244,10 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, executionM
 	context.logger = logger.WithFields(bark.Fields{
 		tagHistoryShardID: shardID,
 	})
+	tags := map[string]string{
+		metrics.ShardTagName: string(shardID),
+	}
+	context.metricsClient = reporter.Tagged(tags)
 
 	err1 := context.renewRangeLocked(true)
 	if err1 != nil {

@@ -12,6 +12,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -33,6 +34,7 @@ type (
 		shutdownWG       sync.WaitGroup
 		shutdownCh       chan struct{}
 		logger           bark.Logger
+		metricsClient    metrics.Client
 	}
 
 	// ackManager is created by transferQueueProcessor to keep track of the transfer queue ackLevel for the shard.
@@ -68,6 +70,7 @@ func newTransferQueueProcessor(shard ShardContext, matching matching.Client) tra
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueTransferQueueComponent,
 		}),
+		metricsClient: shard.GetMetricsClient(),
 	}
 	processor.ackMgr = newAckManager(processor, shard, executionManager, logger)
 
@@ -193,6 +196,7 @@ func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.Tran
 
 func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TransferTaskInfo) {
 	t.logger.Debugf("Processing transfer task: %v", task.TaskID)
+	t.metricsClient.AddCounter(metrics.HistoryProcessTransferTasksScope, metrics.TransferTasksProcessedCounter, 1)
 ProcessRetryLoop:
 	for retryCount := 0; retryCount < 10; retryCount++ {
 		select {
@@ -201,7 +205,7 @@ ProcessRetryLoop:
 		default:
 			var err error
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-				RunId: common.StringPtr(task.RunID)}
+				RunId:                                            common.StringPtr(task.RunID)}
 			switch task.TaskType {
 			case persistence.TaskListTypeActivity:
 				{
