@@ -1,9 +1,12 @@
-.PHONY: bins test clean
+.PHONY: test bins clean
 PROJECT_ROOT = github.com/uber/cadence
 
 export PATH := $(GOPATH)/bin:$(PATH)
 
 THRIFT_GENDIR=.gen
+
+# default target
+default: test
 
 # define the list of thrift files the service depends on
 # (if you have some)
@@ -19,6 +22,7 @@ BUILD := ./build
 export PATH := $(GOPATH)/bin:$(PATH)
 
 THRIFT_GEN=$(GOPATH)/bin/thrift-gen
+
 
 define thriftrule
 THRIFT_GEN_SRC += $(THRIFT_GENDIR)/go/$1/tchan-$1.go
@@ -58,9 +62,3 @@ test: bins
 clean:
 	rm -rf .gen
 	rm -rf cadence
-
-
-
-cadence: main.go \
-	$(wildcard config/*.go)  \
-	$(wildcard service/*.go) \

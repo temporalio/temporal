@@ -585,12 +585,10 @@ func (s *CassandraTestCluster) dropKeyspace() {
 }
 
 func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
-	cqlshDir := "./cassandra/bin/cqlsh"
+	cqlshDir := "cqlsh"
 	workflowSchemaDir := "./schema/"
 
 	if schemaDir != "" {
-		cqlshDir = schemaDir + "/cassandra/bin/cqlsh"
-		log.Error(cqlshDir)
 		workflowSchemaDir = schemaDir + "/schema/"
 	}
 

@@ -1,4 +1,0 @@
-[submodule "cassandra"]
-	path = cassandra
-	url = gitolite@code.uber.internal:personal/nx/cassandra
-        branch = 3.9
