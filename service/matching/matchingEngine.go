@@ -187,13 +187,7 @@ func (e *matchingEngineImpl) String() string {
 
 // Returns taskListContext for a task list. If not already cached gets new range from DB and if successful creates one.
 func (e *matchingEngineImpl) getTaskListContext(taskList *taskListID) (*taskListContext, error) {
-	tCtx, err := e.getTaskListContextImpl(taskList)
-	if err != nil {
-		if _, ok := err.(*persistence.ConditionFailedError); ok {
-			tCtx.Stop()
-		}
-	}
-	return tCtx, err
+	return e.getTaskListContextImpl(taskList)
 }
 
 // Returns taskListContext for a task list. If not already cached gets new range from DB and if successful creates one.

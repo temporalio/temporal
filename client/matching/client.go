@@ -88,7 +88,7 @@ func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, erro
 
 func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
-	return thrift.NewContext(time.Second * 10)
+	return thrift.NewContext(time.Minute * 1)
 }
 
 func (c *clientImpl) createLongPollContext() (thrift.Context, context.CancelFunc) {
