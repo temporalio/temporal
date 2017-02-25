@@ -198,7 +198,7 @@ func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.Trans
 	t.logger.Debugf("Processing transfer task: %v", task.TaskID)
 	t.metricsClient.AddCounter(metrics.HistoryProcessTransferTasksScope, metrics.TransferTasksProcessedCounter, 1)
 ProcessRetryLoop:
-	for retryCount := 0; retryCount < 10; retryCount++ {
+	for retryCount := 1; retryCount <= 100; retryCount++ {
 		select {
 		case <-t.shutdownCh:
 			return
@@ -233,7 +233,8 @@ ProcessRetryLoop:
 
 			if err != nil {
 				t.logger.WithField("error", err).Warn("Processor failed to create task")
-				time.Sleep(100 * time.Millisecond)
+				backoff := time.Duration(retryCount * 100)
+				time.Sleep(backoff * time.Millisecond)
 				continue ProcessRetryLoop
 			}
 
@@ -347,3 +348,4 @@ func minDuration(x, y time.Duration) time.Duration {
 
 	return y
 }
+
