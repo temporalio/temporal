@@ -3,10 +3,10 @@ package host
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/service/frontend"
@@ -14,7 +14,6 @@ import (
 	"github.com/uber/cadence/service/matching"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
-	"github.com/uber/cadence/common"
 )
 
 // Cadence hosts all of cadence services in one process
@@ -69,9 +68,6 @@ func (c *cadenceImpl) Start() error {
 	startWG.Add(1)
 	go c.startFrontend(c.logger, rpHosts, &startWG)
 	startWG.Wait()
-	// Allow some time for the ring to stabilize
-	// TODO: remove this after adding automatic retries on transient errors in clients
-	time.Sleep(time.Second * 15)
 	return nil
 }
 

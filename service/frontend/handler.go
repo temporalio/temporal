@@ -68,7 +68,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 		wh.Service.GetLogger().Errorf(
 			"PollForActivityTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
 	}
-	return resp, err
+	return resp, wrapError(err)
 }
 
 // PollForDecisionTask - Poll for a decision task.
@@ -81,7 +81,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		wh.Service.GetLogger().Errorf(
 			"PollForDecisionTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
 	}
-	return resp, err
+	return resp, wrapError(err)
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -89,7 +89,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
-	return wh.history.RecordActivityTaskHeartbeat(heartbeatRequest)
+	resp, err := wh.history.RecordActivityTaskHeartbeat(heartbeatRequest)
+	return resp, wrapError(err)
 }
 
 // RespondActivityTaskCompleted - Record Activity Task Heart beat
@@ -101,7 +102,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskCompleted. Error: %v", err)
 	}
-	return err
+	return wrapError(err)
 }
 
 // RespondActivityTaskFailed - Record Activity Task Heart beat
@@ -113,7 +114,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		logger := wh.getLoggerForTask(failRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
 	}
-	return err
+	return wrapError(err)
 
 }
 
@@ -126,7 +127,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 		logger := wh.getLoggerForTask(cancelRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskCanceled. Error: %v", err)
 	}
-	return err
+	return wrapError(err)
 
 }
 
@@ -139,7 +140,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
 		logger.Errorf("RespondDecisionTaskCompleted. Error: %v", err)
 	}
-	return err
+	return wrapError(err)
 }
 
 // StartWorkflowExecution - Record Activity Task Heart beat
@@ -151,7 +152,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if err != nil {
 		wh.Service.GetLogger().Errorf("StartWorkflowExecution failed. WorkflowID: %v. Error: %v", startRequest.GetWorkflowId(), err)
 	}
-	return resp, err
+	return resp, wrapError(err)
 }
 
 // GetWorkflowExecutionHistory - retrieves the hisotry of workflow execution
@@ -172,4 +173,26 @@ func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {
 		})
 	}
 	return logger
+}
+
+func wrapError(err error) error {
+	if err != nil && shouldWrapInInternalServiceError(err) {
+		return &gen.InternalServiceError{Message: err.Error()}
+	}
+	return err
+}
+
+func shouldWrapInInternalServiceError(err error) bool {
+	switch err.(type) {
+	case *gen.InternalServiceError:
+		return false
+	case *gen.BadRequestError:
+		return false
+	case *gen.EntityNotExistsError:
+		return false
+	case *gen.WorkflowExecutionAlreadyStartedError:
+		return false
+	}
+
+	return true
 }
