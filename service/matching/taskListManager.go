@@ -451,7 +451,7 @@ func (c *taskContext) RecordDecisionTaskStartedWithRetry(
 	request *h.RecordDecisionTaskStartedRequest) (resp *h.RecordDecisionTaskStartedResponse, err error) {
 	op := func() error {
 		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordDecisionTaskStarted(request)
+		resp, err = c.tlMgr.engine.historyService.RecordDecisionTaskStarted(nil, request)
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
@@ -467,7 +467,7 @@ func (c *taskContext) RecordActivityTaskStartedWithRetry(
 	request *h.RecordActivityTaskStartedRequest) (resp *h.RecordActivityTaskStartedResponse, err error) {
 	op := func() error {
 		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordActivityTaskStarted(request)
+		resp, err = c.tlMgr.engine.historyService.RecordActivityTaskStarted(nil, request)
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {

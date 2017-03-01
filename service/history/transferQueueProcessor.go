@@ -205,14 +205,14 @@ ProcessRetryLoop:
 		default:
 			var err error
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-				RunId:                                            common.StringPtr(task.RunID)}
+				RunId: common.StringPtr(task.RunID)}
 			switch task.TaskType {
 			case persistence.TaskListTypeActivity:
 				{
 					taskList := &workflow.TaskList{
 						Name: &task.TaskList,
 					}
-					err = t.matchingClient.AddActivityTask(&m.AddActivityTaskRequest{
+					err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
 						Execution:  &execution,
 						TaskList:   taskList,
 						ScheduleId: &task.ScheduleID,
@@ -223,7 +223,7 @@ ProcessRetryLoop:
 					taskList := &workflow.TaskList{
 						Name: &task.TaskList,
 					}
-					err = t.matchingClient.AddDecisionTask(&m.AddDecisionTaskRequest{
+					err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
 						Execution:  &execution,
 						TaskList:   taskList,
 						ScheduleId: &task.ScheduleID,
@@ -348,4 +348,3 @@ func minDuration(x, y time.Duration) time.Duration {
 
 	return y
 }
-

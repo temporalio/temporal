@@ -21,6 +21,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/tchannel-go/thrift"
 )
 
 type (
@@ -268,9 +269,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted",
+	s.historyClient.On("RecordActivityTaskStarted", nil,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
@@ -351,9 +352,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted",
+	s.historyClient.On("RecordActivityTaskStarted", nil,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
@@ -475,9 +476,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted",
+	s.historyClient.On("RecordActivityTaskStarted", nil,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
@@ -592,9 +593,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordDecisionTaskStarted",
+	s.historyClient.On("RecordDecisionTaskStarted", nil,
 		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
 			return &gohistory.RecordDecisionTaskStartedResponse{
 				PreviousStartedEventId: &startedEventID,
@@ -723,9 +724,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted",
+	s.historyClient.On("RecordActivityTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				return nil
 			}
@@ -744,7 +745,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					Identity: &identity,
 				})}
 		},
-		func(taskRequest *gohistory.RecordActivityTaskStartedRequest) error {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) error {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				s.logger.Debugf("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest for taskID=%v", taskRequest.TaskId)
 				return &workflow.EntityNotExistsError{Message: "already started"}
@@ -870,9 +871,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.historyClient.On("RecordDecisionTaskStarted",
+	s.historyClient.On("RecordDecisionTaskStarted", nil,
 		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
-		func(taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				return nil
 			}
@@ -895,7 +896,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 						Identity: &identity,
 					})}}}
 		},
-		func(taskRequest *gohistory.RecordDecisionTaskStartedRequest) error {
+		func(ctx thrift.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) error {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				s.logger.Debugf("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId)
 				return &workflow.EntityNotExistsError{Message: "already started"}

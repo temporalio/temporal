@@ -63,7 +63,7 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
-	resp, err := wh.matching.PollForActivityTask(pollRequest)
+	resp, err := wh.matching.PollForActivityTask(ctx, pollRequest)
 	if err != nil {
 		wh.Service.GetLogger().Errorf(
 			"PollForActivityTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
@@ -76,7 +76,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
-	resp, err := wh.matching.PollForDecisionTask(pollRequest)
+	resp, err := wh.matching.PollForDecisionTask(ctx, pollRequest)
 	if err != nil {
 		wh.Service.GetLogger().Errorf(
 			"PollForDecisionTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
@@ -89,7 +89,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
-	resp, err := wh.history.RecordActivityTaskHeartbeat(heartbeatRequest)
+	resp, err := wh.history.RecordActivityTaskHeartbeat(ctx, heartbeatRequest)
 	return resp, wrapError(err)
 }
 
@@ -97,7 +97,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
-	err := wh.history.RespondActivityTaskCompleted(completeRequest)
+	err := wh.history.RespondActivityTaskCompleted(ctx, completeRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskCompleted. Error: %v", err)
@@ -109,7 +109,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx thrift.Context,
 	failRequest *gen.RespondActivityTaskFailedRequest) error {
-	err := wh.history.RespondActivityTaskFailed(failRequest)
+	err := wh.history.RespondActivityTaskFailed(ctx, failRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(failRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
@@ -122,7 +122,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	ctx thrift.Context,
 	cancelRequest *gen.RespondActivityTaskCanceledRequest) error {
-	err := wh.history.RespondActivityTaskCanceled(cancelRequest)
+	err := wh.history.RespondActivityTaskCanceled(ctx, cancelRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(cancelRequest.GetTaskToken())
 		logger.Errorf("RespondActivityTaskCanceled. Error: %v", err)
@@ -135,7 +135,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
-	err := wh.history.RespondDecisionTaskCompleted(completeRequest)
+	err := wh.history.RespondDecisionTaskCompleted(ctx, completeRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
 		logger.Errorf("RespondDecisionTaskCompleted. Error: %v", err)
@@ -148,7 +148,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
 	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
-	resp, err := wh.history.StartWorkflowExecution(startRequest)
+	resp, err := wh.history.StartWorkflowExecution(ctx, startRequest)
 	if err != nil {
 		wh.Service.GetLogger().Errorf("StartWorkflowExecution failed. WorkflowID: %v. Error: %v", startRequest.GetWorkflowId(), err)
 	}
@@ -159,7 +159,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx thrift.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
-	return wh.history.GetWorkflowExecutionHistory(getRequest)
+	return wh.history.GetWorkflowExecutionHistory(ctx, getRequest)
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {

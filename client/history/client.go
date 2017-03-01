@@ -43,48 +43,52 @@ func NewClient(ch *tchannel.Channel, monitor membership.Monitor, numberOfShards 
 	return client, nil
 }
 
-func (c *clientImpl) StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
+func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
+	request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
 	client, err := c.getHostForRequest(request.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.StartWorkflowExecution(ctx, request)
 }
 
-func (c *clientImpl) GetWorkflowExecutionHistory(
+func (c *clientImpl) GetWorkflowExecutionHistory(context thrift.Context,
 	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
 	client, err := c.getHostForRequest(request.Execution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.GetWorkflowExecutionHistory(ctx, request)
 }
 
-func (c *clientImpl) RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+func (c *clientImpl) RecordDecisionTaskStarted(context thrift.Context,
+	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RecordDecisionTaskStarted(ctx, request)
 }
 
-func (c *clientImpl) RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
+func (c *clientImpl) RecordActivityTaskStarted(context thrift.Context,
+	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
 	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RecordActivityTaskStarted(ctx, request)
 }
 
-func (c *clientImpl) RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error {
+func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
+	request *workflow.RespondDecisionTaskCompletedRequest) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
@@ -93,12 +97,13 @@ func (c *clientImpl) RespondDecisionTaskCompleted(request *workflow.RespondDecis
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RespondDecisionTaskCompleted(ctx, request)
 }
 
-func (c *clientImpl) RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error {
+func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
+	request *workflow.RespondActivityTaskCompletedRequest) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
@@ -107,12 +112,13 @@ func (c *clientImpl) RespondActivityTaskCompleted(request *workflow.RespondActiv
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RespondActivityTaskCompleted(ctx, request)
 }
 
-func (c *clientImpl) RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error {
+func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
+	request *workflow.RespondActivityTaskFailedRequest) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
@@ -121,12 +127,13 @@ func (c *clientImpl) RespondActivityTaskFailed(request *workflow.RespondActivity
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RespondActivityTaskFailed(ctx, request)
 }
 
-func (c *clientImpl) RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error {
+func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
+	request *workflow.RespondActivityTaskCanceledRequest) error {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return err
@@ -135,12 +142,13 @@ func (c *clientImpl) RespondActivityTaskCanceled(request *workflow.RespondActivi
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RespondActivityTaskCanceled(ctx, request)
 }
 
-func (c *clientImpl) RecordActivityTaskHeartbeat(request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
+func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
+	request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -149,7 +157,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(request *workflow.RecordActivit
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.RecordActivityTaskHeartbeat(ctx, request)
 }
@@ -164,9 +172,15 @@ func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService
 	return c.getThriftClient(host.GetAddress()), nil
 }
 
-func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	return thrift.NewContext(time.Second * 30)
+func (c *clientImpl) createContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
+	timeout := time.Second * 30
+	if parent == nil {
+		// TODO: make timeout configurable
+		return thrift.NewContext(timeout)
+	}
+	builder := tchannel.NewContextBuilder(timeout)
+	builder.SetParentContext(parent)
+	return builder.Build()
 }
 
 func (c *clientImpl) getThriftClient(hostPort string) h.TChanHistoryService {

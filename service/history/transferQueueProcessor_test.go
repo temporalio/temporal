@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -71,7 +72,7 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.mockMatching.On("AddDecisionTask", createAddRequestFromTask(task)).Once().Return(nil)
+			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
 			s.processor.processTransferTask(task)
 		default:
 			break workerPump
@@ -98,7 +99,7 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.mockMatching.On("AddActivityTask", createAddRequestFromTask(task)).Once().Return(nil)
+			s.mockMatching.On("AddActivityTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
 			s.processor.processTransferTask(task)
 		default:
 			break workerPump

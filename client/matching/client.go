@@ -38,42 +38,46 @@ func NewClient(ch *tchannel.Channel, monitor membership.Monitor) (Client, error)
 	return client, nil
 }
 
-func (c *clientImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
+func (c *clientImpl) AddActivityTask(context thrift.Context,
+	addRequest *m.AddActivityTaskRequest) error {
 	client, err := c.getHostForRequest(addRequest.GetTaskList().GetName())
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.AddActivityTask(ctx, addRequest)
 }
 
-func (c *clientImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
+func (c *clientImpl) AddDecisionTask(context thrift.Context,
+	addRequest *m.AddDecisionTaskRequest) error {
 	client, err := c.getHostForRequest(addRequest.GetTaskList().GetName())
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext()
+	ctx, cancel := c.createContext(context)
 	defer cancel()
 	return client.AddDecisionTask(ctx, addRequest)
 }
 
-func (c *clientImpl) PollForActivityTask(pollRequest *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
+func (c *clientImpl) PollForActivityTask(context thrift.Context,
+	pollRequest *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
 	client, err := c.getHostForRequest(pollRequest.GetTaskList().GetName())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createLongPollContext()
+	ctx, cancel := c.createLongPollContext(context)
 	defer cancel()
 	return client.PollForActivityTask(ctx, pollRequest)
 }
 
-func (c *clientImpl) PollForDecisionTask(pollRequest *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error) {
+func (c *clientImpl) PollForDecisionTask(context thrift.Context,
+	pollRequest *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error) {
 	client, err := c.getHostForRequest(pollRequest.GetTaskList().GetName())
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createLongPollContext()
+	ctx, cancel := c.createLongPollContext(context)
 	defer cancel()
 	return client.PollForDecisionTask(ctx, pollRequest)
 }
@@ -86,14 +90,26 @@ func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, erro
 	return c.getThriftClient(host.GetAddress()), nil
 }
 
-func (c *clientImpl) createContext() (thrift.Context, context.CancelFunc) {
+func (c *clientImpl) createContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
-	return thrift.NewContext(time.Minute * 1)
+	timeout := time.Minute * 1
+	if parent == nil {
+		return thrift.NewContext(timeout)
+	}
+	builder := tchannel.NewContextBuilder(timeout)
+	builder.SetParentContext(parent)
+	return builder.Build()
 }
 
-func (c *clientImpl) createLongPollContext() (thrift.Context, context.CancelFunc) {
+func (c *clientImpl) createLongPollContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
-	return thrift.NewContext(time.Minute * 3)
+	timeout := time.Minute * 2
+	if parent == nil {
+		return thrift.NewContext(timeout)
+	}
+	builder := tchannel.NewContextBuilder(timeout)
+	builder.SetParentContext(parent)
+	return builder.Build()
 }
 
 func (c *clientImpl) getThriftClient(hostPort string) m.TChanMatchingService {
