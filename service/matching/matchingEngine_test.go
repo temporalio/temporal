@@ -83,7 +83,7 @@ func (s *matchingEngineSuite) newMatchingEngine(rangeSize int64) *matchingEngine
 	return &matchingEngineImpl{
 		taskManager:                s.taskManager,
 		historyService:             s.historyClient,
-		taskLists:                  make(map[taskListID]*taskListContext),
+		taskLists:                  make(map[taskListID]taskListManager),
 		logger:                     s.logger,
 		tokenSerializer:            common.NewJSONTaskTokenSerializer(),
 		longPollExpirationInterval: 100 * time.Second, //time.Millisecond,
