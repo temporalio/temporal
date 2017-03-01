@@ -1,4 +1,4 @@
-.PHONY: test bins clean
+.PHONY: test bins clean cover cover_ci
 PROJECT_ROOT = github.com/uber/cadence
 
 export PATH := $(GOPATH)/bin:$(PATH)
@@ -58,6 +58,23 @@ test: bins
 	@for dir in $(TEST_DIRS); do \
 		go test -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
+
+cover_profile: clean bins
+	@echo Testing packages:
+	@for dir in $(TEST_DIRS); do \
+		mkdir -p $(BUILD)/"$$dir"; \
+		go test "$$dir" $(TEST_ARG) -coverprofile=$(BUILD)/"$$dir"/coverage.out || exit 1; \
+	done;
+
+cover: cover_profile
+	@for dir in $(TEST_DIRS); do \
+		go tool cover -html=$(BUILD)/"$$dir"/coverage.out; \
+	done
+
+cover_ci: cover_profile
+	@for dir in $(TEST_DIRS); do \
+		goveralls -coverprofile=$(BUILD)/"$$dir"/coverage.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+	done
 
 clean:
 	rm -rf .gen

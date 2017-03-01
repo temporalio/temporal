@@ -1,7 +1,0 @@
-{
-    "phabricator.uri": "https://code.uberinternal.com/",
-    "git.default-relative-commit": "origin/master",
-
-    "unit.engine": "ConfigurableGolangTestEngine",
-    "unit.golang.command": "make clean && make bins && make -j2 test-xml TEST_FLAGS=\"-short -parallel 5\" JUNIT_XML=%s COVERAGE_XML=%s"
-}
