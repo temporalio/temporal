@@ -86,6 +86,7 @@ const (
 	tagValueActionUnknownEvent                    = "add-unknown-event"
 	tagValueActionTimerStarted                    = "add-timer-started-event"
 	tagValueActionTimerFired                      = "add-timer-fired-event"
+	tagValueActionTimerCanceled                   = "add-timer-Canceled-event"
 
 	// tagStoreOperation values
 	tagValueStoreOperationGetTasks                = "get-tasks"

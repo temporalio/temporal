@@ -2023,6 +2023,125 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.Equal("details", string(updatedEvent.GetActivityTaskCanceledEventAttributes().GetDetails()))
 }
 
+func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 6,
+	})
+	identity := "testIdentity"
+	timerID := "t1"
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	// Verify cancel timer with a start event.
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(builder, decisionScheduledEvent.GetEventId(),
+		decisionStartedEvent.GetEventId(), nil, identity)
+	timerStartedEvent := addTimerStartedEvent(builder, decisionCompletedEvent.GetEventId(), timerID, 10)
+	decision2ScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decision2ScheduledEvent.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	timerInfos := make(map[string]*persistence.TimerInfo)
+	timerInfos[timerID] = &persistence.TimerInfo{TimerID: timerID, StartedID: timerStartedEvent.GetEventId()}
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{TimerInfos: timerInfos}}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CancelTimer),
+		CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
+			TimerId: common.StringPtr(timerID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(10), info.NextEventID)
+	s.Equal(int64(7), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(9)
+	s.Equal(workflow.EventType_TimerCanceled, updatedEvent.GetEventType())
+	s.Equal(timerID, updatedEvent.GetTimerCanceledEventAttributes().GetTimerId())
+}
+
+func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer() {
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	timerID := "t1"
+
+	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	// Verify cancel timer with a start event.
+	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, tl, 30)
+	addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), tl, identity)
+
+	history, _ := builder.Serialize()
+	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+	wfResponse := &persistence.GetWorkflowExecutionResponse{
+		ExecutionInfo: info,
+	}
+
+	timerInfos := make(map[string]*persistence.TimerInfo)
+	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: &persistence.WorkflowMutableState{TimerInfos: timerInfos}}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CancelTimer),
+		CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
+			TimerId: common.StringPtr(timerID),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: []byte("context"),
+		Identity:         &identity,
+	})
+	s.Nil(err)
+
+	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
+	updatedBuilder.loadExecutionInfo(info)
+	s.Equal(int64(6), info.NextEventID)
+	s.Equal(int64(3), info.LastProcessedEvent)
+
+	updatedEvent := updatedBuilder.GetEvent(5)
+	s.Equal(workflow.EventType_CancelTimerFailed, updatedEvent.GetEventType())
+	s.Equal(timerID, updatedEvent.GetCancelTimerFailedEventAttributes().GetTimerId())
+	s.Equal(timerCancelationMsgTimerIDUnknown, updatedEvent.GetCancelTimerFailedEventAttributes().GetCause())
+}
+
 func addWorkflowExecutionStartedEvent(builder *historyBuilder, workflowID, workflowType, taskList string, input []byte,
 	executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) *workflow.HistoryEvent {
 	e := builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
@@ -2112,6 +2231,16 @@ func addActivityTaskFailedEvent(builder *historyBuilder, scheduleID, startedID i
 		Details:  details,
 		Identity: common.StringPtr(identity),
 	})
+
+	return e
+}
+
+func addTimerStartedEvent(builder *historyBuilder, decisionCompletedEventID int64, timerID string, timeOut int64) *workflow.HistoryEvent {
+	e := builder.AddTimerStartedEvent(decisionCompletedEventID,
+		&workflow.StartTimerDecisionAttributes{
+			TimerId:                   common.StringPtr(timerID),
+			StartToFireTimeoutSeconds: common.Int64Ptr(timeOut),
+		})
 
 	return e
 }

@@ -29,6 +29,7 @@ enum DecisionType {
   StartTimer,
   CompleteWorkflowExecution,
   FailWorkflowExecution,
+  CancelTimer,
 }
 
 enum EventType {
@@ -51,6 +52,8 @@ enum EventType {
   TimerStarted,
   TimerFired,
   CompleteWorkflowExecutionFailed,
+  CancelTimerFailed,
+  TimerCanceled,
 }
 
 enum WorkflowCompleteFailedCause {
@@ -103,6 +106,10 @@ struct FailWorkflowExecutionDecisionAttributes {
   20: optional binary details
 }
 
+struct CancelTimerDecisionAttributes {
+  10: optional string timerId
+}
+
 struct Decision {
   10: optional DecisionType decisionType
   20: optional ScheduleActivityTaskDecisionAttributes scheduleActivityTaskDecisionAttributes
@@ -110,6 +117,7 @@ struct Decision {
   30: optional CompleteWorkflowExecutionDecisionAttributes completeWorkflowExecutionDecisionAttributes
   35: optional FailWorkflowExecutionDecisionAttributes failWorkflowExecutionDecisionAttributes
   40: optional RequestCancelActivityTaskDecisionAttributes requestCancelActivityTaskDecisionAttributes
+  50: optional CancelTimerDecisionAttributes cancelTimerDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -235,6 +243,20 @@ struct TimerFiredEventAttributes {
   20: optional i64 (js.type = "Long") startedEventId
 }
 
+struct TimerCanceledEventAttributes {
+  10: optional string timerId
+  20: optional i64 (js.type = "Long") startedEventId
+  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  40: optional string identity
+}
+
+struct CancelTimerFailedEventAttributes {
+  10: optional string timerId
+  20: optional string cause
+  30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  40: optional string identity
+}
+
 struct HistoryEvent {
   10:  optional i64 (js.type = "Long") eventId
   20:  optional i64 (js.type = "Long") timestamp
@@ -258,6 +280,8 @@ struct HistoryEvent {
   110: optional ActivityTaskCancelRequestedEventAttributes activityTaskCancelRequestedEventAttributes
   120: optional RequestCancelActivityTaskFailedEventAttributes requestCancelActivityTaskFailedEventAttributes
   130: optional ActivityTaskCanceledEventAttributes activityTaskCanceledEventAttributes
+  140: optional TimerCanceledEventAttributes timerCanceledEventAttributes
+  150: optional CancelTimerFailedEventAttributes cancelTimerFailedEventAttributes
 }
 
 struct History {

@@ -21,6 +21,7 @@ const (
 	activityCancelationMsgActivityIDUnknown   = "ACTIVITY_ID_UNKNOWN"
 	activityCancelationMsgActivityNotStarted  = "ACTIVITY_ID_NOT_STARTED"
 	activityCancelationMsgActivityNoHeartBeat = "ACTIVITY_ID_NO_HEARTBEAT"
+	timerCancelationMsgTimerIDUnknown         = "TIMER_ID_UNKNOWN"
 )
 
 type (
@@ -499,6 +500,17 @@ Update_History_Loop:
 					ai.CancelRequested = true
 					ai.CancelRequestID = actCancelReqEvent.GetEventId()
 					msBuilder.UpdatePendingActivity(ai.ScheduleID, ai)
+				}
+
+			case workflow.DecisionType_CancelTimer:
+				attributes := d.GetCancelTimerDecisionAttributes()
+				isTimerRunning, ti := msBuilder.isTimerRunning(attributes.GetTimerId())
+				if !isTimerRunning {
+					builder.AddCancelTimerFailedEvent(attributes.GetTimerId(), completedID, timerCancelationMsgTimerIDUnknown, request.GetIdentity())
+				} else {
+					// Timer is running.
+					builder.AddTimerCanceledEvent(ti.StartedID, completedID, attributes.GetTimerId(), request.GetIdentity())
+					msBuilder.DeletePendingTimer(attributes.GetTimerId())
 				}
 
 			default:

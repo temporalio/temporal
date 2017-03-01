@@ -13,6 +13,6 @@ cass_pid_file="/tmp/cassandra.pid"
 if [ ! -f $cass_pid_file ]
 then
 	# pid file doesn't exist. start cassandra and write it to pid file
-	./cassandra/bin/cassandra -p /tmp/cassandra.pid 2>&1 >/tmp/cassandra.log
+	cassandra -p /tmp/cassandra.pid 2>&1 >/tmp/cassandra.log
 fi
 wait_for_cassandra $port

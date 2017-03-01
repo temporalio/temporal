@@ -94,6 +94,9 @@ func (s *integrationSuite) SetupSuite() {
 	}
 
 	logger := log.New()
+	formatter := &log.TextFormatter{}
+	formatter.FullTimestamp = true
+	logger.Formatter = formatter
 	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 
@@ -225,7 +228,6 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		s.Equal(activityName, activityType.GetName())
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivity), id)
-		s.logger.Errorf("Input: %v", input)
 		buf := bytes.NewReader(input)
 		var in int32
 		binary.Read(buf, binary.LittleEndian, &in)
@@ -329,7 +331,7 @@ retry:
 			p.logger.Info("Dropping Activity task: ")
 			return nil
 		}
-		p.logger.Infof("Received Activity task: %v", response)
+		p.logger.Debugf("Received Activity task: %v", response)
 
 		result, cancel, err2 := p.activityHandler(response.GetWorkflowExecution(), response.GetActivityType(), response.GetActivityId(),
 			response.GetStartedEventId(), response.GetInput(), response.GetTaskToken())
@@ -389,7 +391,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
 
 	workflowComplete := false
-	activityCount := int32(10)
+	activityCount := int32(4)
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -429,7 +431,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
-		s.logger.Errorf("Activity ID: %v", activityID)
+		s.logger.Infof("Activity ID: %v", activityID)
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -442,7 +444,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		logger:          s.logger,
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 8; i++ {
 		dropDecisionTask := (i%2 == 0)
 		s.logger.Infof("Calling Decision Task: %d", i)
 		err := poller.pollAndProcessDecisionTask(false, dropDecisionTask)
@@ -691,7 +693,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
 
 	workflowComplete := false
-	timerCount := int32(10)
+	timerCount := int32(4)
 	timerCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
@@ -699,7 +701,6 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 			timerCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
-
 			return []byte(strconv.Itoa(int(timerCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_StartTimer),
 				StartTimerDecisionAttributes: &workflow.StartTimerDecisionAttributes{
@@ -727,9 +728,9 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		logger:          s.logger,
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 4; i++ {
 		err := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		s.logger.Info("pollAndProcessDecisionTask: completed")
 		s.Nil(err)
 	}
 

@@ -305,6 +305,36 @@ func (b *historyBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEv
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddTimerCanceledEvent(startedEventID int64,
+	decisionTaskCompletedEventID int64, timerID string, identity string) *workflow.HistoryEvent {
+
+	attributes := workflow.NewTimerCanceledEventAttributes()
+	attributes.StartedEventId = common.Int64Ptr(startedEventID)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	attributes.TimerId = common.StringPtr(timerID)
+	attributes.Identity = common.StringPtr(identity)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_TimerCanceled)
+	event.TimerCanceledEventAttributes = attributes
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddCancelTimerFailedEvent(timerID string, decisionTaskCompletedEventID int64,
+	cause string, identity string) *workflow.HistoryEvent {
+
+	attributes := workflow.NewCancelTimerFailedEventAttributes()
+	attributes.TimerId = common.StringPtr(timerID)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	attributes.Cause = common.StringPtr(cause)
+	attributes.Identity = common.StringPtr(identity)
+
+	event := newHistoryEvent(b.nextEventID, workflow.EventType_CancelTimerFailed)
+	event.CancelTimerFailedEventAttributes = attributes
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	//b.logger.Debugf("Adding EventId: %v, Event: %+v", event.GetEventId(), *event)
 	eventID := event.GetEventId()
@@ -486,6 +516,19 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 			return nil
 		}
 		delete(b.outstandingTimerTask, startedEventID)
+
+	case workflow.EventType_TimerCanceled:
+		startedEventID := event.GetTimerCanceledEventAttributes().GetStartedEventId()
+		e, ok := b.outstandingTimerTask[startedEventID]
+		if !ok {
+			logInvalidHistoryActionEvent(b.logger, tagValueActionTimerCanceled, eventID, fmt.Sprintf(
+				"{startedEventID: %v, Exist: %v, Value: %v}", startedEventID, ok, e))
+			return nil
+		}
+		delete(b.outstandingTimerTask, startedEventID)
+
+	case workflow.EventType_CancelTimerFailed:
+		// No Operation: We couldn't cancel it probably TIMER_ID_UNKNOWN
 
 	default:
 		logInvalidHistoryActionEvent(b.logger, tagValueActionUnknownEvent, eventID, fmt.Sprintf(

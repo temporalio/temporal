@@ -22,7 +22,7 @@ wait_for_cassandra() {
         if nc -z 127.0.0.1 $port >/dev/null 2>&1; then
         # cassandra is ready!
         # do a sanity check
-        ./cassandra/bin/cqlsh -e "SELECT * FROM system.local LIMIT 1" > /dev/null 2>&1
+        cqlsh -e "SELECT * FROM system.local LIMIT 1" > /dev/null 2>&1
         if [ $? -ne 0 ]
         then
             echo "unable to use cqlsh.. wait for some time"
