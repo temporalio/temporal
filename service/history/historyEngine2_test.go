@@ -81,6 +81,7 @@ func (s *engine2Suite) SetupTest() {
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      txProcessor,
 		tracker:          tracker,
+		cache:            newHistoryCache(mockShard, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 	}
@@ -582,6 +583,9 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 			Identity: common.StringPtr(identity),
 		},
 	})
+	if err != nil {
+		s.logger.Errorf("Unexpected Error: %v", err)
+	}
 	s.Nil(response)
 	s.NotNil(err)
 	s.IsType(&workflow.EntityNotExistsError{}, err)

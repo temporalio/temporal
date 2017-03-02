@@ -82,6 +82,7 @@ func (s *engineSuite) SetupTest() {
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      txProcessor,
 		tracker:          tracker,
+		cache:            newHistoryCache(mockShard, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 	}
@@ -1867,7 +1868,6 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
 	activityTaskToken, _ := json.Marshal(&common.TaskToken{
@@ -1886,7 +1886,6 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	s.True(hbResponse.GetCancelRequested())
 
 	// Try cancelling the request.
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
@@ -1980,7 +1979,6 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
 	activityTaskToken, _ := json.Marshal(&common.TaskToken{
@@ -1999,7 +1997,6 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.True(hbResponse.GetCancelRequested())
 
 	// Try cancelling the request.
-	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 

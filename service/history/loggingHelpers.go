@@ -63,6 +63,7 @@ const (
 	// tagWorkflowComponent Values
 	tagValueHistoryBuilderComponent = "history-builder"
 	tagValueHistoryEngineComponent  = "history-engine"
+	tagValueHistoryCacheComponent   = "history-cache"
 	tagValueTransferQueueComponent  = "transfer-queue-processor"
 	tagValueTimerQueueComponent     = "timer-queue-processor"
 	tagValueShardController         = "shard-controller"

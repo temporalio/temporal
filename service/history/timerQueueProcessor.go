@@ -22,6 +22,7 @@ const (
 type (
 	timerQueueProcessorImpl struct {
 		historyService    *historyEngineImpl
+		cache             *historyCache
 		executionManager  persistence.ExecutionManager
 		isStarted         int32
 		isStopped         int32
@@ -108,9 +109,11 @@ func (t *timeGate) String() string {
 	return fmt.Sprintf("timeGate [engaged=%v eox=%v tNext=%x tNow=%x]", t.engaged(), t.tNext == t.tEnd, t.tNext, t.tNow)
 }
 
-func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager persistence.ExecutionManager, logger bark.Logger) timerQueueProcessor {
+func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager persistence.ExecutionManager,
+	logger bark.Logger) timerQueueProcessor {
 	return &timerQueueProcessorImpl{
 		historyService:    historyService,
+		cache:             historyService.cache,
 		executionManager:  executionManager,
 		shutdownCh:        make(chan struct{}),
 		newTimerCh:        make(chan struct{}, 1),
@@ -160,10 +163,10 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer(taskID int64) {
 
 	select {
 	case t.newTimerCh <- struct{}{}:
-		// Notified about new timer.
+	// Notified about new timer.
 
 	default:
-		// Channel "full" -> drop and move on, since we are using it as an event.
+	// Channel "full" -> drop and move on, since we are using it as an event.
 	}
 }
 
@@ -231,7 +234,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- SequenceID) e
 				return nil
 
 			case <-gateC:
-				// Timer Fired.
+			// Timer Fired.
 
 			case <-t.newTimerCh:
 				// New Timer has arrived.
@@ -363,10 +366,17 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		RunId:      common.StringPtr(timerTask.RunID),
 	}
 
+	context, err0 := t.cache.getOrCreateWorkflowExecution(workflowExecution)
+	if err0 != nil {
+		return err0
+	}
+
+	context.Lock()
+	defer context.Unlock()
+
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		// Load the workflow execution information.
-		context := newWorkflowExecutionContext(t.historyService, workflowExecution)
 		builder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
@@ -425,6 +435,10 @@ Update_History_Loop:
 			clearTimerTask = &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
 
 			scheduleID := timerTask.EventID
+			if scheduleID >= builder.nextEventID {
+				context.clear()
+				continue Update_History_Loop
+			}
 
 			if isRunning, ai := msBuilder.isActivityRunning(scheduleID); isRunning {
 				timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
