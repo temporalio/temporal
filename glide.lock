@@ -1,8 +1,8 @@
-hash: 4b7007272370a66c16f8b941a0c965718ea5eca9017b3243445c3c760014279a
-updated: 2017-02-21T16:11:34.099769066-08:00
+hash: c38fdef9e213c113d3fc1f62056459a7547db7ca8e17bc6885321c2b9647c134
+updated: 2017-03-02T10:57:09.383624392-08:00
 imports:
 - name: github.com/apache/thrift
-  version: 655b9b6ef86c45b423a194abee2a9cd057a16a74
+  version: c89e172289129a0a700a20f11f4a157b7da789d2
   subpackages:
   - lib/go/thrift
 - name: github.com/benbjohnson/clock
@@ -29,8 +29,7 @@ imports:
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/gocql/gocql
-  version: 8e63066b8432f0fbc02d63b7b04de8da132f0b21
-  repo: gitolite@code.uber.internal:odp/cherami-gocql.git
+  version: 1f874493e9e5aebe46b312593cbd9cb5d3946eda
   subpackages:
   - internal/lru
   - internal/murmur
@@ -99,11 +98,12 @@ imports:
   - relay
   - thrift
   - thrift/gen-go/meta
+  - thrift/thrift-gen
   - tnet
   - trand
   - typed
 - name: golang.org/x/net
-  version: 6b27048ae5e6ad1ef927e72e437531493de612fe
+  version: 906cda9512f77671ab44f8c8563b13a8e707b230
   subpackages:
   - context
 - name: golang.org/x/sys

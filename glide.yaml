@@ -3,8 +3,8 @@ import:
 - package: github.com/uber/tchannel-go
   subpackages:
   - thrift
+  - thrift/thrift-gen
 - package: github.com/gocql/gocql
-  repo: gitolite@code.uber.internal:odp/cherami-gocql.git
   subpackages:
   - internal/lru
   - internal/murmur

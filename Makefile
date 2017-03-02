@@ -46,10 +46,18 @@ ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
 # all directories with *_test.go files in them
 TEST_DIRS := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 
-thriftc: $(THRIFT_GEN_SRC)
+glide:
+	glide install
+
+clean_thrift:
+	rm -rf .gen
+
+thriftc: clean_thrift glide $(THRIFT_GEN_SRC)
 
 bins: thriftc
-	glide install
+	go build -i -o cadence main.go
+
+bins_nothrift: glide
 	go build -i -o cadence main.go
 
 test: bins
@@ -59,7 +67,7 @@ test: bins
 		go test -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
-cover_profile: clean bins
+cover_profile: clean bins_nothrift
 	@echo Testing packages:
 	@for dir in $(TEST_DIRS); do \
 		mkdir -p $(BUILD)/"$$dir"; \
@@ -77,5 +85,4 @@ cover_ci: cover_profile
 	done
 
 clean:
-	rm -rf .gen
 	rm -rf cadence
