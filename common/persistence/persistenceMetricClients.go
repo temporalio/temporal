@@ -230,7 +230,10 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 	return resonse, err
 }
 
-func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error) {
+func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(
+	request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error) {
+	p.m3Client.IncCounter(metrics.GetWorkflowMutableStateScope, metrics.WorkflowRequests)
+
 	sw := p.m3Client.StartTimer(metrics.GetWorkflowMutableStateScope, metrics.WorkflowLatency)
 	resonse, err := p.persistence.GetWorkflowMutableState(request)
 	sw.Stop()
