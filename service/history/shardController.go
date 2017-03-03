@@ -184,7 +184,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 		return shardItem, nil
 	}
 
-	return nil, fmt.Errorf("Shard is owned by different host: %v", info.Identity())
+	return nil, createShardOwnershipLostError(c.host.Identity(), info.GetAddress())
 }
 
 func (c *shardController) removeHistoryShardItem(shardID int) (*historyShardsItem, error) {

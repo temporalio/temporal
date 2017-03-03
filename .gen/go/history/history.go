@@ -112,6 +112,145 @@ func (p *EventAlreadyStartedError) Error() string {
 }
 
 // Attributes:
+//  - Message
+//  - Owner
+type ShardOwnershipLostError struct {
+  // unused fields # 1 to 9
+  Message *string `thrift:"message,10" db:"message" json:"message,omitempty"`
+  // unused fields # 11 to 19
+  Owner *string `thrift:"owner,20" db:"owner" json:"owner,omitempty"`
+}
+
+func NewShardOwnershipLostError() *ShardOwnershipLostError {
+  return &ShardOwnershipLostError{}
+}
+
+var ShardOwnershipLostError_Message_DEFAULT string
+func (p *ShardOwnershipLostError) GetMessage() string {
+  if !p.IsSetMessage() {
+    return ShardOwnershipLostError_Message_DEFAULT
+  }
+return *p.Message
+}
+var ShardOwnershipLostError_Owner_DEFAULT string
+func (p *ShardOwnershipLostError) GetOwner() string {
+  if !p.IsSetOwner() {
+    return ShardOwnershipLostError_Owner_DEFAULT
+  }
+return *p.Owner
+}
+func (p *ShardOwnershipLostError) IsSetMessage() bool {
+  return p.Message != nil
+}
+
+func (p *ShardOwnershipLostError) IsSetOwner() bool {
+  return p.Owner != nil
+}
+
+func (p *ShardOwnershipLostError) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *ShardOwnershipLostError)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.Message = &v
+}
+  return nil
+}
+
+func (p *ShardOwnershipLostError)  ReadField20(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 20: ", err)
+} else {
+  p.Owner = &v
+}
+  return nil
+}
+
+func (p *ShardOwnershipLostError) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("ShardOwnershipLostError"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *ShardOwnershipLostError) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetMessage() {
+    if err := oprot.WriteFieldBegin("message", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:message: ", p), err) }
+    if err := oprot.WriteString(string(*p.Message)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.message (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:message: ", p), err) }
+  }
+  return err
+}
+
+func (p *ShardOwnershipLostError) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetOwner() {
+    if err := oprot.WriteFieldBegin("owner", thrift.STRING, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:owner: ", p), err) }
+    if err := oprot.WriteString(string(*p.Owner)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.owner (20) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:owner: ", p), err) }
+  }
+  return err
+}
+
+func (p *ShardOwnershipLostError) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("ShardOwnershipLostError(%+v)", *p)
+}
+
+func (p *ShardOwnershipLostError) Error() string {
+  return p.String()
+}
+
+// Attributes:
 //  - WorkflowExecution
 //  - ScheduleId
 //  - TaskId
@@ -1175,6 +1314,9 @@ func (p *HistoryServiceClient) recvStartWorkflowExecution() (value *shared.Start
   } else   if result.SessionAlreadyExistError != nil {
     err = result.SessionAlreadyExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   value = result.GetSuccess()
   return
@@ -1264,6 +1406,9 @@ func (p *HistoryServiceClient) recvGetWorkflowExecutionHistory() (value *shared.
     return 
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
+    return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
     return 
   }
   value = result.GetSuccess()
@@ -1359,6 +1504,9 @@ func (p *HistoryServiceClient) recvRecordDecisionTaskStarted() (value *RecordDec
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   value = result.GetSuccess()
   return
@@ -1453,6 +1601,9 @@ func (p *HistoryServiceClient) recvRecordActivityTaskStarted() (value *RecordAct
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   value = result.GetSuccess()
   return
@@ -1546,6 +1697,9 @@ func (p *HistoryServiceClient) recvRespondDecisionTaskCompleted() (err error) {
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   return
 }
@@ -1637,6 +1791,9 @@ func (p *HistoryServiceClient) recvRecordActivityTaskHeartbeat() (value *shared.
     return 
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
+    return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
     return 
   }
   value = result.GetSuccess()
@@ -1823,6 +1980,9 @@ func (p *HistoryServiceClient) recvRespondActivityTaskFailed() (err error) {
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   return
 }
@@ -1915,6 +2075,9 @@ func (p *HistoryServiceClient) recvRespondActivityTaskCanceled() (err error) {
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
   }
   return
 }
@@ -1998,6 +2161,8 @@ var retval *shared.StartWorkflowExecutionResponse
   result.InternalServiceError = v
     case *shared.WorkflowExecutionAlreadyStartedError:
   result.SessionAlreadyExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing StartWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("StartWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -2055,6 +2220,8 @@ var retval *shared.GetWorkflowExecutionHistoryResponse
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing GetWorkflowExecutionHistory: " + err2.Error())
     oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.EXCEPTION, seqId)
@@ -2114,6 +2281,8 @@ var retval *RecordDecisionTaskStartedResponse
   result.EventAlreadyStartedError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RecordDecisionTaskStarted: " + err2.Error())
     oprot.WriteMessageBegin("RecordDecisionTaskStarted", thrift.EXCEPTION, seqId)
@@ -2173,6 +2342,8 @@ var retval *RecordActivityTaskStartedResponse
   result.EventAlreadyStartedError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RecordActivityTaskStarted: " + err2.Error())
     oprot.WriteMessageBegin("RecordActivityTaskStarted", thrift.EXCEPTION, seqId)
@@ -2229,6 +2400,8 @@ func (p *historyServiceProcessorRespondDecisionTaskCompleted) Process(seqId int3
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondDecisionTaskCompleted: " + err2.Error())
     oprot.WriteMessageBegin("RespondDecisionTaskCompleted", thrift.EXCEPTION, seqId)
@@ -2284,6 +2457,8 @@ var retval *shared.RecordActivityTaskHeartbeatResponse
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RecordActivityTaskHeartbeat: " + err2.Error())
     oprot.WriteMessageBegin("RecordActivityTaskHeartbeat", thrift.EXCEPTION, seqId)
@@ -2394,6 +2569,8 @@ func (p *historyServiceProcessorRespondActivityTaskFailed) Process(seqId int32, 
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondActivityTaskFailed: " + err2.Error())
     oprot.WriteMessageBegin("RespondActivityTaskFailed", thrift.EXCEPTION, seqId)
@@ -2448,6 +2625,8 @@ func (p *historyServiceProcessorRespondActivityTaskCanceled) Process(seqId int32
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RespondActivityTaskCanceled: " + err2.Error())
     oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.EXCEPTION, seqId)
@@ -2575,11 +2754,13 @@ func (p *HistoryServiceStartWorkflowExecutionArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - SessionAlreadyExistError
+//  - ShardOwnershipLostError
 type HistoryServiceStartWorkflowExecutionResult struct {
   Success *shared.StartWorkflowExecutionResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   SessionAlreadyExistError *shared.WorkflowExecutionAlreadyStartedError `thrift:"sessionAlreadyExistError,3" db:"sessionAlreadyExistError" json:"sessionAlreadyExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceStartWorkflowExecutionResult() *HistoryServiceStartWorkflowExecutionResult {
@@ -2614,6 +2795,13 @@ func (p *HistoryServiceStartWorkflowExecutionResult) GetSessionAlreadyExistError
   }
 return p.SessionAlreadyExistError
 }
+var HistoryServiceStartWorkflowExecutionResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceStartWorkflowExecutionResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceStartWorkflowExecutionResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceStartWorkflowExecutionResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -2628,6 +2816,10 @@ func (p *HistoryServiceStartWorkflowExecutionResult) IsSetInternalServiceError()
 
 func (p *HistoryServiceStartWorkflowExecutionResult) IsSetSessionAlreadyExistError() bool {
   return p.SessionAlreadyExistError != nil
+}
+
+func (p *HistoryServiceStartWorkflowExecutionResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceStartWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -2657,6 +2849,10 @@ func (p *HistoryServiceStartWorkflowExecutionResult) Read(iprot thrift.TProtocol
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -2706,6 +2902,14 @@ func (p *HistoryServiceStartWorkflowExecutionResult)  ReadField3(iprot thrift.TP
   return nil
 }
 
+func (p *HistoryServiceStartWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceStartWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("StartWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -2714,6 +2918,7 @@ func (p *HistoryServiceStartWorkflowExecutionResult) Write(oprot thrift.TProtoco
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2770,6 +2975,19 @@ func (p *HistoryServiceStartWorkflowExecutionResult) writeField3(oprot thrift.TP
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:sessionAlreadyExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceStartWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -2878,11 +3096,13 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceGetWorkflowExecutionHistoryResult struct {
   Success *shared.GetWorkflowExecutionHistoryResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceGetWorkflowExecutionHistoryResult() *HistoryServiceGetWorkflowExecutionHistoryResult {
@@ -2917,6 +3137,13 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetEntityNotExistError
   }
 return p.EntityNotExistError
 }
+var HistoryServiceGetWorkflowExecutionHistoryResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceGetWorkflowExecutionHistoryResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -2931,6 +3158,10 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetInternalServiceEr
 
 func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TProtocol) error {
@@ -2960,6 +3191,10 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TPro
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -3009,6 +3244,14 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField3(iprot thri
   return nil
 }
 
+func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("GetWorkflowExecutionHistory_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -3017,6 +3260,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TPr
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -3073,6 +3317,19 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField3(oprot thri
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -3182,12 +3439,14 @@ func (p *HistoryServiceRecordDecisionTaskStartedArgs) String() string {
 //  - InternalServiceError
 //  - EventAlreadyStartedError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRecordDecisionTaskStartedResult struct {
   Success *RecordDecisionTaskStartedResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EventAlreadyStartedError *EventAlreadyStartedError `thrift:"eventAlreadyStartedError,3" db:"eventAlreadyStartedError" json:"eventAlreadyStartedError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,4" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,5" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRecordDecisionTaskStartedResult() *HistoryServiceRecordDecisionTaskStartedResult {
@@ -3229,6 +3488,13 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) GetEntityNotExistError()
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRecordDecisionTaskStartedResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRecordDecisionTaskStartedResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRecordDecisionTaskStartedResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -3247,6 +3513,10 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetEventAlreadyStarted
 
 func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRecordDecisionTaskStartedResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRecordDecisionTaskStartedResult) Read(iprot thrift.TProtocol) error {
@@ -3280,6 +3550,10 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) Read(iprot thrift.TProto
       }
     case 4:
       if err := p.ReadField4(iprot); err != nil {
+        return err
+      }
+    case 5:
+      if err := p.ReadField5(iprot); err != nil {
         return err
       }
     default:
@@ -3337,6 +3611,14 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult)  ReadField4(iprot thrift
   return nil
 }
 
+func (p *HistoryServiceRecordDecisionTaskStartedResult)  ReadField5(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRecordDecisionTaskStartedResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RecordDecisionTaskStarted_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -3346,6 +3628,7 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) Write(oprot thrift.TProt
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
     if err := p.writeField4(oprot); err != nil { return err }
+    if err := p.writeField5(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -3415,6 +3698,19 @@ func (p *HistoryServiceRecordDecisionTaskStartedResult) writeField4(oprot thrift
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 4:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRecordDecisionTaskStartedResult) writeField5(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 5); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 5:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 5:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -3524,12 +3820,14 @@ func (p *HistoryServiceRecordActivityTaskStartedArgs) String() string {
 //  - InternalServiceError
 //  - EventAlreadyStartedError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRecordActivityTaskStartedResult struct {
   Success *RecordActivityTaskStartedResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EventAlreadyStartedError *EventAlreadyStartedError `thrift:"eventAlreadyStartedError,3" db:"eventAlreadyStartedError" json:"eventAlreadyStartedError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,4" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,5" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRecordActivityTaskStartedResult() *HistoryServiceRecordActivityTaskStartedResult {
@@ -3571,6 +3869,13 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) GetEntityNotExistError()
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRecordActivityTaskStartedResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRecordActivityTaskStartedResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRecordActivityTaskStartedResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -3589,6 +3894,10 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetEventAlreadyStarted
 
 func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRecordActivityTaskStartedResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRecordActivityTaskStartedResult) Read(iprot thrift.TProtocol) error {
@@ -3622,6 +3931,10 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) Read(iprot thrift.TProto
       }
     case 4:
       if err := p.ReadField4(iprot); err != nil {
+        return err
+      }
+    case 5:
+      if err := p.ReadField5(iprot); err != nil {
         return err
       }
     default:
@@ -3679,6 +3992,14 @@ func (p *HistoryServiceRecordActivityTaskStartedResult)  ReadField4(iprot thrift
   return nil
 }
 
+func (p *HistoryServiceRecordActivityTaskStartedResult)  ReadField5(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRecordActivityTaskStartedResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RecordActivityTaskStarted_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -3688,6 +4009,7 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) Write(oprot thrift.TProt
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
     if err := p.writeField4(oprot); err != nil { return err }
+    if err := p.writeField5(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -3757,6 +4079,19 @@ func (p *HistoryServiceRecordActivityTaskStartedResult) writeField4(oprot thrift
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 4:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRecordActivityTaskStartedResult) writeField5(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 5); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 5:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 5:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -3864,10 +4199,12 @@ func (p *HistoryServiceRespondDecisionTaskCompletedArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRespondDecisionTaskCompletedResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRespondDecisionTaskCompletedResult() *HistoryServiceRespondDecisionTaskCompletedResult {
@@ -3895,6 +4232,13 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) GetEntityNotExistErro
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRespondDecisionTaskCompletedResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRespondDecisionTaskCompletedResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -3905,6 +4249,10 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetInternalServiceE
 
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TProtocol) error {
@@ -3930,6 +4278,10 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) Read(iprot thrift.TPr
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -3971,6 +4323,14 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult)  ReadField3(iprot thr
   return nil
 }
 
+func (p *HistoryServiceRespondDecisionTaskCompletedResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRespondDecisionTaskCompletedResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RespondDecisionTaskCompleted_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -3978,6 +4338,7 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) Write(oprot thrift.TP
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4021,6 +4382,19 @@ func (p *HistoryServiceRespondDecisionTaskCompletedResult) writeField3(oprot thr
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRespondDecisionTaskCompletedResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -4129,11 +4503,13 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRecordActivityTaskHeartbeatResult struct {
   Success *shared.RecordActivityTaskHeartbeatResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRecordActivityTaskHeartbeatResult() *HistoryServiceRecordActivityTaskHeartbeatResult {
@@ -4168,6 +4544,13 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult) GetEntityNotExistError
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRecordActivityTaskHeartbeatResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRecordActivityTaskHeartbeatResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRecordActivityTaskHeartbeatResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRecordActivityTaskHeartbeatResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -4182,6 +4565,10 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult) IsSetInternalServiceEr
 
 func (p *HistoryServiceRecordActivityTaskHeartbeatResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRecordActivityTaskHeartbeatResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRecordActivityTaskHeartbeatResult) Read(iprot thrift.TProtocol) error {
@@ -4211,6 +4598,10 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult) Read(iprot thrift.TPro
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -4260,6 +4651,14 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult)  ReadField3(iprot thri
   return nil
 }
 
+func (p *HistoryServiceRecordActivityTaskHeartbeatResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRecordActivityTaskHeartbeatResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RecordActivityTaskHeartbeat_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -4268,6 +4667,7 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult) Write(oprot thrift.TPr
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4324,6 +4724,19 @@ func (p *HistoryServiceRecordActivityTaskHeartbeatResult) writeField3(oprot thri
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRecordActivityTaskHeartbeatResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -4695,10 +5108,12 @@ func (p *HistoryServiceRespondActivityTaskFailedArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRespondActivityTaskFailedResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRespondActivityTaskFailedResult() *HistoryServiceRespondActivityTaskFailedResult {
@@ -4726,6 +5141,13 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) GetEntityNotExistError()
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRespondActivityTaskFailedResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRespondActivityTaskFailedResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRespondActivityTaskFailedResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRespondActivityTaskFailedResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -4736,6 +5158,10 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) IsSetInternalServiceErro
 
 func (p *HistoryServiceRespondActivityTaskFailedResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskFailedResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRespondActivityTaskFailedResult) Read(iprot thrift.TProtocol) error {
@@ -4761,6 +5187,10 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) Read(iprot thrift.TProto
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -4802,6 +5232,14 @@ func (p *HistoryServiceRespondActivityTaskFailedResult)  ReadField3(iprot thrift
   return nil
 }
 
+func (p *HistoryServiceRespondActivityTaskFailedResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRespondActivityTaskFailedResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RespondActivityTaskFailed_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -4809,6 +5247,7 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) Write(oprot thrift.TProt
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4852,6 +5291,19 @@ func (p *HistoryServiceRespondActivityTaskFailedResult) writeField3(oprot thrift
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRespondActivityTaskFailedResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }
@@ -4959,10 +5411,12 @@ func (p *HistoryServiceRespondActivityTaskCanceledArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ShardOwnershipLostError
 type HistoryServiceRespondActivityTaskCanceledResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
 func NewHistoryServiceRespondActivityTaskCanceledResult() *HistoryServiceRespondActivityTaskCanceledResult {
@@ -4990,6 +5444,13 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) GetEntityNotExistError
   }
 return p.EntityNotExistError
 }
+var HistoryServiceRespondActivityTaskCanceledResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceRespondActivityTaskCanceledResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceRespondActivityTaskCanceledResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
 func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -5000,6 +5461,10 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetInternalServiceEr
 
 func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
 }
 
 func (p *HistoryServiceRespondActivityTaskCanceledResult) Read(iprot thrift.TProtocol) error {
@@ -5025,6 +5490,10 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) Read(iprot thrift.TPro
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -5066,6 +5535,14 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult)  ReadField3(iprot thri
   return nil
 }
 
+func (p *HistoryServiceRespondActivityTaskCanceledResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRespondActivityTaskCanceledResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RespondActivityTaskCanceled_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -5073,6 +5550,7 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) Write(oprot thrift.TPr
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -5116,6 +5594,19 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) writeField3(oprot thri
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRespondActivityTaskCanceledResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
   }
   return err
 }

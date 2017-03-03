@@ -8,7 +8,7 @@ import (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated = iota
+	WorkflowStateCreated   = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -39,7 +39,8 @@ type (
 
 	// ShardOwnershipLostError is returned when conditional update fails due to RangeID for the shard
 	ShardOwnershipLostError struct {
-		Msg string
+		ShardID int
+		Msg     string
 	}
 
 	// ShardInfo describes a shard

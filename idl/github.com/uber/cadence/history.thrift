@@ -6,6 +6,11 @@ exception EventAlreadyStartedError {
   1: required string message
 }
 
+exception ShardOwnershipLostError {
+  10: optional string message
+  20: optional string owner
+}
+
 struct RecordActivityTaskStartedRequest {
   10: optional shared.WorkflowExecution workflowExecution
   20: optional i64 (js.type = "Long") scheduleId
@@ -50,6 +55,7 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.WorkflowExecutionAlreadyStartedError sessionAlreadyExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -61,6 +67,7 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -74,6 +81,7 @@ service HistoryService {
       2: shared.InternalServiceError internalServiceError,
       3: EventAlreadyStartedError eventAlreadyStartedError,
       4: shared.EntityNotExistsError entityNotExistError,
+      5: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -87,6 +95,7 @@ service HistoryService {
       2: shared.InternalServiceError internalServiceError,
       3: EventAlreadyStartedError eventAlreadyStartedError,
       4: shared.EntityNotExistsError entityNotExistError,
+      5: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -101,6 +110,7 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -115,6 +125,7 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -138,11 +149,12 @@ service HistoryService {
   * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
   * anymore due to activity timeout.
   **/
-  void  RespondActivityTaskFailed(1: shared.RespondActivityTaskFailedRequest failRequest)
+  void RespondActivityTaskFailed(1: shared.RespondActivityTaskFailedRequest failRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**
@@ -157,5 +169,6 @@ service HistoryService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
     )
 }

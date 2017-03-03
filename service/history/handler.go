@@ -1,13 +1,15 @@
 package history
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
-	h "github.com/uber/cadence/.gen/go/history"
+	hist "github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/tchannel-go/thrift"
@@ -19,13 +21,14 @@ type Handler struct {
 	shardManager          persistence.ShardManager
 	executionMgrFactory   persistence.ExecutionManagerFactory
 	matchingServiceClient matching.Client
+	hServiceResolver      membership.ServiceResolver
 	controller            *shardController
 	tokenSerializer       common.TaskTokenSerializer
 	startWG               sync.WaitGroup
 	service.Service
 }
 
-var _ h.TChanHistoryService = (*Handler)(nil)
+var _ hist.TChanHistoryService = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
@@ -40,7 +43,7 @@ func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
 	}
 	// prevent us from trying to serve requests before shard controller is started and ready
 	handler.startWG.Add(1)
-	return handler, []thrift.TChanServer{h.NewTChanHistoryServiceServer(handler)}
+	return handler, []thrift.TChanServer{hist.NewTChanHistoryServiceServer(handler)}
 }
 
 // Start starts the handler
@@ -56,6 +59,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	if err1 != nil {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
 	}
+	h.hServiceResolver = hServiceResolver
 	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager,
 		h.executionMgrFactory, h, h.GetLogger(), h.GetMetricsClient())
 	h.controller.Start()
@@ -94,12 +98,17 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx thrift.Context,
 		return nil, err1
 	}
 
-	return engine.RecordActivityTaskHeartbeat(heartbeatRequest)
+	response, err2 := engine.RecordActivityTaskHeartbeat(heartbeatRequest)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return response, nil
 }
 
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
-	recordRequest *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
+	recordRequest *hist.RecordActivityTaskStartedRequest) (*hist.RecordActivityTaskStartedResponse, error) {
 	h.startWG.Wait()
 	workflowExecution := recordRequest.GetWorkflowExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
@@ -107,12 +116,17 @@ func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
 		return nil, err1
 	}
 
-	return engine.RecordActivityTaskStarted(recordRequest)
+	response, err2 := engine.RecordActivityTaskStarted(recordRequest)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return response, nil
 }
 
 // RecordDecisionTaskStarted - Record Decision Task started.
 func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
-	recordRequest *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+	recordRequest *hist.RecordDecisionTaskStartedRequest) (*hist.RecordDecisionTaskStartedResponse, error) {
 	h.startWG.Wait()
 	h.Service.GetLogger().Debugf("RecordDecisionTaskStarted. WorkflowID: %v, RunID: %v, ScheduleID: %v",
 		recordRequest.GetWorkflowExecution().GetWorkflowId(),
@@ -129,7 +143,12 @@ func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
 		return nil, err1
 	}
 
-	return engine.RecordDecisionTaskStarted(recordRequest)
+	response, err2 := engine.RecordDecisionTaskStarted(recordRequest)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return response, nil
 }
 
 // RespondActivityTaskCompleted - records completion of an activity task
@@ -146,7 +165,12 @@ func (h *Handler) RespondActivityTaskCompleted(ctx thrift.Context,
 		return err1
 	}
 
-	return engine.RespondActivityTaskCompleted(completeRequest)
+	err2 := engine.RespondActivityTaskCompleted(completeRequest)
+	if err2 != nil {
+		return h.convertError(err2)
+	}
+
+	return nil
 }
 
 // RespondActivityTaskFailed - records failure of an activity task
@@ -162,7 +186,13 @@ func (h *Handler) RespondActivityTaskFailed(ctx thrift.Context,
 	if err1 != nil {
 		return err1
 	}
-	return engine.RespondActivityTaskFailed(failRequest)
+
+	err2 := engine.RespondActivityTaskFailed(failRequest)
+	if err2 != nil {
+		return h.convertError(err2)
+	}
+
+	return nil
 }
 
 // RespondActivityTaskCanceled - records failure of an activity task
@@ -178,7 +208,13 @@ func (h *Handler) RespondActivityTaskCanceled(ctx thrift.Context,
 	if err1 != nil {
 		return err1
 	}
-	return engine.RespondActivityTaskCanceled(cancelRequest)
+
+	err2 := engine.RespondActivityTaskCanceled(cancelRequest)
+	if err2 != nil {
+		return h.convertError(err2)
+	}
+
+	return nil
 }
 
 // RespondDecisionTaskCompleted - records completion of a decision task
@@ -199,7 +235,13 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 	if err1 != nil {
 		return err1
 	}
-	return engine.RespondDecisionTaskCompleted(completeRequest)
+
+	err2 := engine.RespondDecisionTaskCompleted(completeRequest)
+	if err2 != nil {
+		return h.convertError(err2)
+	}
+
+	return nil
 }
 
 // StartWorkflowExecution - creates a new workflow execution
@@ -210,7 +252,13 @@ func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 	if err1 != nil {
 		return nil, err1
 	}
-	return engine.StartWorkflowExecution(startRequest)
+
+	response, err2 := engine.StartWorkflowExecution(startRequest)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return response, nil
 }
 
 // GetWorkflowExecutionHistory - returns the complete history of a workflow execution
@@ -224,4 +272,29 @@ func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 	}
 
 	return engine.GetWorkflowExecutionHistory(getRequest)
+}
+
+// convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
+// HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
+// correct shard.
+func (h *Handler) convertError(err error) error {
+	switch err.(type) {
+	case *persistence.ShardOwnershipLostError:
+		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
+		info, err := h.hServiceResolver.Lookup(string(shardID))
+		if err != nil {
+			return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), info.GetAddress())
+		}
+		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
+	}
+
+	return err
+}
+
+func createShardOwnershipLostError(currentHost, ownerHost string) *hist.ShardOwnershipLostError {
+	shardLostErr := hist.NewShardOwnershipLostError()
+	shardLostErr.Message = common.StringPtr(fmt.Sprintf("Shard is not owned by host: %v", currentHost))
+	shardLostErr.Owner = common.StringPtr(ownerHost)
+
+	return shardLostErr
 }

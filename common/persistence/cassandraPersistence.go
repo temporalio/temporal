@@ -474,6 +474,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		}
 
 		return &ShardOwnershipLostError{
+			ShardID: d.shardID,
 			Msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",
 				request.PreviousRangeID, strings.Join(columns, ",")),
 		}
@@ -536,6 +537,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
 			// CreateWorkflowExecution failed because rangeID was modified
 			return nil, &ShardOwnershipLostError{
+				ShardID: d.shardID,
 				Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
 					request.RangeID, rangeID),
 			}
@@ -640,6 +642,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
 			// UpdateWorkflowExecution failed because rangeID was modified
 			return &ShardOwnershipLostError{
+				ShardID: d.shardID,
 				Msg: fmt.Sprintf("Failed to update workflow execution.  Request RangeID: %v, Actual RangeID: %v",
 					request.RangeID, rangeID),
 			}
