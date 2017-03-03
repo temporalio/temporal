@@ -203,7 +203,8 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 	}
 
 	timeOutTask := tb.createActivityTimeoutTask(fireTimeout, timeoutType, scheduleID)
-	tb.logger.Debugf("Adding Activity Timeout: %+v", timeOutTask)
+	tb.logger.Debugf("Adding Activity Timeout: SequenceID: %v, TimeoutType: %v, EventID: %v",
+		SequenceID(timeOutTask.TaskID), timeoutType.String(), timeOutTask.EventID)
 	return timeOutTask
 }
 

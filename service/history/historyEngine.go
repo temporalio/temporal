@@ -350,14 +350,16 @@ Update_History_Loop:
 			return nil, err
 		}
 		timerTasks = append(timerTasks, start2CloseTimeoutTask)
+		defer e.timerProcessor.NotifyNewTimer(start2CloseTimeoutTask.GetTaskID())
+
 		start2HeartBeatTimeoutTask, err := context.tBuilder.AddHeartBeatActivityTimeout(scheduleID, msBuilder)
 		if err != nil {
 			return nil, err
 		}
 		if start2HeartBeatTimeoutTask != nil {
 			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
+			defer e.timerProcessor.NotifyNewTimer(start2HeartBeatTimeoutTask.GetTaskID())
 		}
-		defer e.timerProcessor.NotifyNewTimer(start2CloseTimeoutTask.GetTaskID())
 
 		ai.StartedID = event.GetEventId()
 		ai.RequestID = requestID
@@ -462,6 +464,7 @@ Update_History_Loop:
 				Schedule2StartTimeoutTask := context.tBuilder.AddScheduleToStartActivityTimeout(
 					scheduleEvent.GetEventId(), scheduleEvent, msBuilder)
 				timerTasks = append(timerTasks, Schedule2StartTimeoutTask)
+				defer e.timerProcessor.NotifyNewTimer(Schedule2StartTimeoutTask.GetTaskID())
 
 				Schedule2CloseTimeoutTask, err := context.tBuilder.AddScheduleToCloseActivityTimeout(
 					scheduleEvent.GetEventId(), msBuilder)
@@ -469,7 +472,7 @@ Update_History_Loop:
 					return err
 				}
 				timerTasks = append(timerTasks, Schedule2CloseTimeoutTask)
-				defer e.timerProcessor.NotifyNewTimer(Schedule2StartTimeoutTask.GetTaskID())
+				defer e.timerProcessor.NotifyNewTimer(Schedule2CloseTimeoutTask.GetTaskID())
 
 			case workflow.DecisionType_CompleteWorkflowExecution:
 				if isComplete || builder.hasPendingTasks() {

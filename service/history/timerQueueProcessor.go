@@ -359,7 +359,9 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		return fmt.Errorf("The key didn't match - SequenceID: %d, found task: %v", key, timerTask)
 	}
 
-	t.logger.Debugf("Processing found timer: %s, timer: %+v", SequenceID(timerTask.TaskID), timerTask)
+	t.logger.Debugf("Processing found timer: %s, for WorkflowID: %v, RunID: %v, Type: %v, TimeoutTupe: %v, EventID: %v",
+		SequenceID(timerTask.TaskID), timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType,
+		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
 
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(timerTask.WorkflowID),
