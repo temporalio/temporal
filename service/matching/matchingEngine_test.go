@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
@@ -32,6 +34,7 @@ type (
 		taskManager          *testTaskManager
 		mockExecutionManager *mocks.ExecutionManager
 		logger               bark.Logger
+		callContext          thrift.Context
 		sync.Mutex
 	}
 )
@@ -55,6 +58,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 	//go func() {
 	//	log.Println(http.ListenAndServe("localhost:6060", nil))
 	//}()
+	s.callContext = thrift.Wrap(context.Background())
 }
 
 // Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
@@ -165,13 +169,13 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
-			resp, err := s.matchingEngine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+			resp, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: &identity})
 			s.NoError(err)
 			s.Equal(emptyPollForActivityTaskResponse, resp)
 		} else {
-			resp, err := s.matchingEngine.PollForDecisionTask(&workflow.PollForDecisionTaskRequest{
+			resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
 				TaskList: taskList,
 				Identity: &identity})
 			s.NoError(err)
@@ -290,7 +294,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; {
 		scheduleID := i * 3
 
-		result, err := s.matchingEngine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: &identity})
 
@@ -379,7 +383,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		var pollErr error
 		wg.Add(1)
 		go func() {
-			result, pollErr = s.matchingEngine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+			result, pollErr = s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
 				TaskList: taskList,
 				Identity: &identity})
 			wg.Done()
@@ -496,7 +500,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
 					TaskList: taskList,
 					Identity: &identity})
 				if err != nil {
@@ -617,7 +621,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForDecisionTask(&workflow.PollForDecisionTaskRequest{
+				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
 					TaskList: taskList,
 					Identity: &identity})
 				if err != nil {
@@ -663,6 +667,30 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+}
+
+func (s *matchingEngineSuite) TestPollWithExpiredContext() {
+	identity := "nobody"
+	tl := "makeToast"
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+
+	// Try with cancelled context
+	ctx, cancel := thrift.NewContext(time.Second)
+	cancel()
+	_, err := s.matchingEngine.PollForActivityTask(ctx, &workflow.PollForActivityTaskRequest{
+		TaskList: taskList,
+		Identity: &identity})
+
+	s.Equal(err, ctx.Err())
+
+	// Try with expired context
+	ctx, cancel = thrift.NewContext(time.Second)
+	_, err = s.matchingEngine.PollForActivityTask(ctx, &workflow.PollForActivityTaskRequest{
+		TaskList: taskList,
+		Identity: &identity})
+	s.Equal(err, ctx.Err())
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
@@ -757,7 +785,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForActivityTask(&workflow.PollForActivityTaskRequest{
+				result, err := engine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
 					TaskList: taskList,
 					Identity: &identity})
 				if err != nil {
@@ -908,7 +936,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForDecisionTask(&workflow.PollForDecisionTaskRequest{
+				result, err := engine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
 					TaskList: taskList,
 					Identity: &identity})
 				if err != nil {

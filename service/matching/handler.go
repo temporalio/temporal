@@ -64,7 +64,7 @@ func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionT
 func (h *Handler) PollForActivityTask(ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
 	h.Service.GetLogger().Debug("Engine Received PollForActivityTask")
-	response, error := h.engine.PollForActivityTask(pollRequest)
+	response, error := h.engine.PollForActivityTask(ctx, pollRequest)
 	h.Service.GetLogger().Debug("Engine returned from PollForActivityTask")
 	return response, error
 
@@ -74,7 +74,7 @@ func (h *Handler) PollForActivityTask(ctx thrift.Context,
 func (h *Handler) PollForDecisionTask(ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
 	h.Service.GetLogger().Debug("Engine Received PollForDecisionTask")
-	response, error := h.engine.PollForDecisionTask(pollRequest)
+	response, error := h.engine.PollForDecisionTask(ctx, pollRequest)
 	h.Service.GetLogger().Debug("Engine returned from PollForDecisionTask")
 	return response, error
 }

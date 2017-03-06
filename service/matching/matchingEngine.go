@@ -17,6 +17,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/tchannel-go/thrift"
 )
 
 // Implements matching.Engine
@@ -191,14 +192,19 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *matchingEngineImpl) PollForDecisionTask(request *workflow.PollForDecisionTaskRequest) (
+func (e *matchingEngineImpl) PollForDecisionTask(ctx thrift.Context, request *workflow.PollForDecisionTaskRequest) (
 	*workflow.PollForDecisionTaskResponse, error) {
 	taskListName := request.GetTaskList().GetName()
 	e.logger.Debugf("Received PollForDecisionTask for taskList=%v", taskListName)
 pollLoop:
 	for {
+		err := common.IsValidContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		taskList := newTaskListID(taskListName, persistence.TaskListTypeDecision)
-		tCtx, err := e.getTask(taskList)
+		tCtx, err := e.getTask(ctx, taskList)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -245,14 +251,19 @@ pollLoop:
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *matchingEngineImpl) PollForActivityTask(request *workflow.PollForActivityTaskRequest) (
+func (e *matchingEngineImpl) PollForActivityTask(ctx thrift.Context, request *workflow.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
 	taskListName := request.GetTaskList().GetName()
 	e.logger.Debugf("Received PollForActivityTask for taskList=%v", taskListName)
 pollLoop:
 	for {
+		err := common.IsValidContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		taskList := newTaskListID(taskListName, persistence.TaskListTypeActivity)
-		tCtx, err := e.getTask(taskList)
+		tCtx, err := e.getTask(ctx, taskList)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -296,12 +307,12 @@ pollLoop:
 }
 
 // Loads a task from persistence and wraps it in a task context
-func (e *matchingEngineImpl) getTask(taskList *taskListID) (*taskContext, error) {
+func (e *matchingEngineImpl) getTask(ctx thrift.Context, taskList *taskListID) (*taskContext, error) {
 	tlMgr, err := e.getTaskListManager(taskList)
 	if err != nil {
 		return nil, err
 	}
-	return tlMgr.GetTaskContext()
+	return tlMgr.GetTaskContext(ctx)
 }
 
 func (e *matchingEngineImpl) unloadTaskList(id *taskListID) {

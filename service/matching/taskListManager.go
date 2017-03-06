@@ -12,6 +12,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/tchannel-go/thrift"
 )
 
 const (
@@ -28,7 +29,7 @@ type taskListManager interface {
 	Start() error
 	Stop()
 	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error
-	GetTaskContext() (*taskContext, error)
+	GetTaskContext(ctx thrift.Context) (*taskContext, error)
 	String() string
 }
 
@@ -164,8 +165,8 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 }
 
 // Loads a task from DB or from sync match and wraps it in a task context
-func (c *taskListManagerImpl) GetTaskContext() (*taskContext, error) {
-	result, err := c.getTask()
+func (c *taskListManagerImpl) GetTaskContext(ctx thrift.Context) (*taskContext, error) {
+	result, err := c.getTask(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +251,7 @@ func (c *taskListManagerImpl) completeTaskPoll(taskID int64) (ackLevel int64) {
 }
 
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
-func (c *taskListManagerImpl) getTask() (*getTaskResult, error) {
+func (c *taskListManagerImpl) getTask(ctx thrift.Context) (*getTaskResult, error) {
 	timer := time.NewTimer(c.engine.longPollExpirationInterval)
 	defer timer.Stop()
 	select {
@@ -263,6 +264,8 @@ func (c *taskListManagerImpl) getTask() (*getTaskResult, error) {
 		return resultFromSyncMatch, nil
 	case <-timer.C:
 		return nil, ErrNoTasks
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
