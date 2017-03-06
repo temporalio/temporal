@@ -14,7 +14,7 @@ import (
 )
 
 // NewCassandraCluster creates a cassandra cluster given comma separated list of clusterHosts
-func NewCassandraCluster(clusterHosts string) *gocql.ClusterConfig {
+func NewCassandraCluster(clusterHosts string, dc string) *gocql.ClusterConfig {
 	var hosts []string
 	for _, h := range strings.Split(clusterHosts, ",") {
 		if host := strings.TrimSpace(h); len(host) > 0 {
@@ -24,6 +24,9 @@ func NewCassandraCluster(clusterHosts string) *gocql.ClusterConfig {
 
 	cluster := gocql.NewCluster(hosts...)
 	cluster.ProtoVersion = 4
+	if dc != "" {
+		cluster.HostFilter = gocql.DataCentreHostFilter(dc)
+	}
 	return cluster
 }
 

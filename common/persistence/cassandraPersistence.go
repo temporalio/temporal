@@ -30,7 +30,7 @@ const (
 
 const (
 	// Row types for table executions
-	rowTypeShard        = iota
+	rowTypeShard = iota
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
@@ -38,7 +38,7 @@ const (
 
 const (
 	// Row types for table tasks
-	rowTypeTask     = iota
+	rowTypeTask = iota
 	rowTypeTaskList
 )
 
@@ -331,11 +331,11 @@ type (
 )
 
 // NewCassandraShardPersistence is used to create an instance of ShardManager implementation
-func NewCassandraShardPersistence(hosts string, keyspace string, logger bark.Logger) (ShardManager, error) {
-	cluster := common.NewCassandraCluster(hosts)
+func NewCassandraShardPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (ShardManager, error) {
+	cluster := common.NewCassandraCluster(hosts, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.Quorum
+	cluster.Consistency = gocql.LocalQuorum
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -347,11 +347,11 @@ func NewCassandraShardPersistence(hosts string, keyspace string, logger bark.Log
 }
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string, shardID int, logger bark.Logger) (ExecutionManager, error) {
-	cluster := common.NewCassandraCluster(hosts)
+func NewCassandraWorkflowExecutionPersistence(hosts string, dc string, keyspace string, shardID int, logger bark.Logger) (ExecutionManager, error) {
+	cluster := common.NewCassandraCluster(hosts, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.Quorum
+	cluster.Consistency = gocql.LocalQuorum
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -363,11 +363,11 @@ func NewCassandraWorkflowExecutionPersistence(hosts string, keyspace string, sha
 }
 
 // NewCassandraTaskPersistence is used to create an instance of TaskManager implementation
-func NewCassandraTaskPersistence(hosts string, keyspace string, logger bark.Logger) (TaskManager, error) {
-	cluster := common.NewCassandraCluster(hosts)
+func NewCassandraTaskPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (TaskManager, error) {
+	cluster := common.NewCassandraCluster(hosts, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.Quorum
+	cluster.Consistency = gocql.LocalQuorum
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()

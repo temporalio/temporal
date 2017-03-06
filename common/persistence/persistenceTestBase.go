@@ -11,15 +11,16 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 
+	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber-go/tally"
 )
 
 const (
 	testWorkflowClusterHosts = "127.0.0.1"
+	testDatacenter           = ""
 	testSchemaDir            = "../.."
 )
 
@@ -28,6 +29,7 @@ type (
 	TestBaseOptions struct {
 		ClusterHost  string
 		KeySpace     string
+		Datacenter   string
 		DropKeySpace bool
 		SchemaDir    string
 	}
@@ -139,7 +141,7 @@ func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTest
 }
 
 func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
-	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.cassandra.keyspace, shardID, f.logger)
+	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.Datacenter, f.cassandra.keyspace, shardID, f.logger)
 }
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
@@ -149,7 +151,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	shardID := 0
 	var err error
-	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace, log)
+	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -159,7 +161,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, s.CassandraTestCluster.keyspace, log)
+	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -545,7 +547,7 @@ func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bo
 	if keySpace == "" {
 		keySpace = generateRandomKeyspace(10)
 	}
-	s.createCluster(testWorkflowClusterHosts, gocql.Consistency(1), keySpace)
+	s.createCluster(testWorkflowClusterHosts, testDatacenter, gocql.Consistency(1), keySpace)
 	s.createKeyspace(1, dropKeySpace)
 	s.loadSchema("workflow_test.cql", schemaDir)
 }
@@ -555,8 +557,8 @@ func (s *CassandraTestCluster) tearDownTestCluster() {
 	s.session.Close()
 }
 
-func (s *CassandraTestCluster) createCluster(clusterHosts string, cons gocql.Consistency, keyspace string) {
-	s.cluster = common.NewCassandraCluster(clusterHosts)
+func (s *CassandraTestCluster) createCluster(clusterHosts string, dc string, cons gocql.Consistency, keyspace string) {
+	s.cluster = common.NewCassandraCluster(clusterHosts, dc)
 	s.cluster.Consistency = cons
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second
