@@ -16,6 +16,10 @@ exception EntityNotExistsError {
   1: required string message
 }
 
+exception ServiceBusyError {
+  1: required string message
+}
+
 enum TimeoutType {
   START_TO_CLOSE,
   SCHEDULE_TO_START,

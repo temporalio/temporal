@@ -55,6 +55,8 @@ func (c *tchanMatchingServiceClient) AddActivityTask(ctx thrift.Context, addRequ
 			err = resp.BadRequestError
 		case resp.InternalServiceError != nil:
 			err = resp.InternalServiceError
+		case resp.ServiceBusyError != nil:
+			err = resp.ServiceBusyError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for AddActivityTask")
 		}
@@ -75,6 +77,8 @@ func (c *tchanMatchingServiceClient) AddDecisionTask(ctx thrift.Context, addRequ
 			err = resp.BadRequestError
 		case resp.InternalServiceError != nil:
 			err = resp.InternalServiceError
+		case resp.ServiceBusyError != nil:
+			err = resp.ServiceBusyError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for AddDecisionTask")
 		}
@@ -187,6 +191,11 @@ func (s *tchanMatchingServiceServer) handleAddActivityTask(ctx thrift.Context, p
 				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
 			}
 			res.InternalServiceError = v
+		case *shared.ServiceBusyError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for serviceBusyError returned non-nil error type *shared.ServiceBusyError but nil value")
+			}
+			res.ServiceBusyError = v
 		default:
 			return false, nil, err
 		}
@@ -219,6 +228,11 @@ func (s *tchanMatchingServiceServer) handleAddDecisionTask(ctx thrift.Context, p
 				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
 			}
 			res.InternalServiceError = v
+		case *shared.ServiceBusyError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for serviceBusyError returned non-nil error type *shared.ServiceBusyError but nil value")
+			}
+			res.ServiceBusyError = v
 		default:
 			return false, nil, err
 		}

@@ -50,6 +50,7 @@ service MatchingService {
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -60,5 +61,6 @@ service MatchingService {
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
     )
 }

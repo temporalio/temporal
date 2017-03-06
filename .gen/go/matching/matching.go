@@ -692,6 +692,9 @@ func (p *MatchingServiceClient) recvAddDecisionTask() (err error) {
   } else   if result.InternalServiceError != nil {
     err = result.InternalServiceError
     return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
+    return 
   }
   return
 }
@@ -777,6 +780,9 @@ func (p *MatchingServiceClient) recvAddActivityTask() (err error) {
     return 
   } else   if result.InternalServiceError != nil {
     err = result.InternalServiceError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   return
@@ -963,6 +969,8 @@ func (p *matchingServiceProcessorAddDecisionTask) Process(seqId int32, iprot, op
   result.BadRequestError = v
     case *shared.InternalServiceError:
   result.InternalServiceError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing AddDecisionTask: " + err2.Error())
     oprot.WriteMessageBegin("AddDecisionTask", thrift.EXCEPTION, seqId)
@@ -1015,6 +1023,8 @@ func (p *matchingServiceProcessorAddActivityTask) Process(seqId int32, iprot, op
   result.BadRequestError = v
     case *shared.InternalServiceError:
   result.InternalServiceError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing AddActivityTask: " + err2.Error())
     oprot.WriteMessageBegin("AddActivityTask", thrift.EXCEPTION, seqId)
@@ -1668,9 +1678,11 @@ func (p *MatchingServiceAddDecisionTaskArgs) String() string {
 // Attributes:
 //  - BadRequestError
 //  - InternalServiceError
+//  - ServiceBusyError
 type MatchingServiceAddDecisionTaskResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,3" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewMatchingServiceAddDecisionTaskResult() *MatchingServiceAddDecisionTaskResult {
@@ -1691,12 +1703,23 @@ func (p *MatchingServiceAddDecisionTaskResult) GetInternalServiceError() *shared
   }
 return p.InternalServiceError
 }
+var MatchingServiceAddDecisionTaskResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *MatchingServiceAddDecisionTaskResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return MatchingServiceAddDecisionTaskResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *MatchingServiceAddDecisionTaskResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
 
 func (p *MatchingServiceAddDecisionTaskResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
+}
+
+func (p *MatchingServiceAddDecisionTaskResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *MatchingServiceAddDecisionTaskResult) Read(iprot thrift.TProtocol) error {
@@ -1718,6 +1741,10 @@ func (p *MatchingServiceAddDecisionTaskResult) Read(iprot thrift.TProtocol) erro
       }
     case 2:
       if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
         return err
       }
     default:
@@ -1751,12 +1778,21 @@ func (p *MatchingServiceAddDecisionTaskResult)  ReadField2(iprot thrift.TProtoco
   return nil
 }
 
+func (p *MatchingServiceAddDecisionTaskResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *MatchingServiceAddDecisionTaskResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("AddDecisionTask_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -1787,6 +1823,19 @@ func (p *MatchingServiceAddDecisionTaskResult) writeField2(oprot thrift.TProtoco
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *MatchingServiceAddDecisionTaskResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -1893,9 +1942,11 @@ func (p *MatchingServiceAddActivityTaskArgs) String() string {
 // Attributes:
 //  - BadRequestError
 //  - InternalServiceError
+//  - ServiceBusyError
 type MatchingServiceAddActivityTaskResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,3" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewMatchingServiceAddActivityTaskResult() *MatchingServiceAddActivityTaskResult {
@@ -1916,12 +1967,23 @@ func (p *MatchingServiceAddActivityTaskResult) GetInternalServiceError() *shared
   }
 return p.InternalServiceError
 }
+var MatchingServiceAddActivityTaskResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *MatchingServiceAddActivityTaskResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return MatchingServiceAddActivityTaskResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *MatchingServiceAddActivityTaskResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
 
 func (p *MatchingServiceAddActivityTaskResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
+}
+
+func (p *MatchingServiceAddActivityTaskResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *MatchingServiceAddActivityTaskResult) Read(iprot thrift.TProtocol) error {
@@ -1943,6 +2005,10 @@ func (p *MatchingServiceAddActivityTaskResult) Read(iprot thrift.TProtocol) erro
       }
     case 2:
       if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
         return err
       }
     default:
@@ -1976,12 +2042,21 @@ func (p *MatchingServiceAddActivityTaskResult)  ReadField2(iprot thrift.TProtoco
   return nil
 }
 
+func (p *MatchingServiceAddActivityTaskResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *MatchingServiceAddActivityTaskResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("AddActivityTask_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2012,6 +2087,19 @@ func (p *MatchingServiceAddActivityTaskResult) writeField2(oprot thrift.TProtoco
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *MatchingServiceAddActivityTaskResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:serviceBusyError: ", p), err) }
   }
   return err
 }
