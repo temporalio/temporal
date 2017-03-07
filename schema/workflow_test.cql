@@ -26,6 +26,7 @@ CREATE TYPE workflow_execution (
   last_processed_event  bigint,
   last_updated_time     timestamp,
   decision_pending      boolean,
+  create_request_id     uuid,
 );
 
 -- TODO: Remove fields that are left over from activitiy and workflow tasks.

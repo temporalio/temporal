@@ -121,6 +121,8 @@ func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *Cr
 			p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.PersistenceErrShardOwnershipLostCounter)
 		case *ConditionFailedError:
 			p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.PersistenceErrConditionFailedCounter)
+		case *TimeoutError:
+			p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.PersistenceErrTimeoutCounter)
 		default:
 			p.m3Client.IncCounter(metrics.CreateWorkflowExecutionScope, metrics.WorkflowFailures)
 		}
@@ -209,7 +211,7 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *Compl
 		case *workflow.EntityNotExistsError:
 			p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.CadenceErrEntityNotExistsCounter)
 		default:
-				p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowFailures)
+			p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowFailures)
 		}
 	}
 

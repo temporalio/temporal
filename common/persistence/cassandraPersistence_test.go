@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -61,6 +62,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		RequestID:          uuid.New(),
 		Execution:          workflowExecution,
 		TaskList:           "queue1",
 		History:            []byte("event1"),
@@ -486,5 +488,6 @@ func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecu
 		LastProcessedEvent:   sourceInfo.LastProcessedEvent,
 		LastUpdatedTimestamp: sourceInfo.LastUpdatedTimestamp,
 		DecisionPending:      sourceInfo.DecisionPending,
+		CreateRequestID:      sourceInfo.CreateRequestID,
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
 	"github.com/uber-go/tally"
@@ -221,6 +222,7 @@ func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowEx
 	timerTasks []Task) (
 	string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		RequestID:          uuid.New(),
 		Execution:          workflowExecution,
 		TaskList:           taskList,
 		History:            []byte(history),
@@ -257,6 +259,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 	}
 
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		RequestID:          uuid.New(),
 		Execution:          workflowExecution,
 		TaskList:           taskList,
 		History:            []byte(history),

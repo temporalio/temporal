@@ -67,7 +67,8 @@ const (
 		`next_event_id: ?, ` +
 		`last_processed_event: ?, ` +
 		`last_updated_time: ?, ` +
-		`decision_pending: ?` +
+		`decision_pending: ?,` +
+		`create_request_id: ?` +
 		`}`
 
 	templateTransferTaskType = `{` +
@@ -336,6 +337,7 @@ func NewCassandraShardPersistence(hosts string, dc string, keyspace string, logg
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
+	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -352,6 +354,7 @@ func NewCassandraWorkflowExecutionPersistence(hosts string, dc string, keyspace 
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
+	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -368,6 +371,7 @@ func NewCassandraTaskPersistence(hosts string, dc string, keyspace string, logge
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
+	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
 
 	session, err := cluster.CreateSession()
@@ -512,6 +516,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		request.LastProcessedEvent,
 		cqlNowTimestamp,
 		true,
+		request.RequestID,
 		request.NextEventID,
 		rowTypeExecutionTaskID)
 
@@ -528,6 +533,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
+		if _, ok := err.(*gocql.RequestErrWriteTimeout); ok {
+			// Write may have succeeded, but we don't know
+			// return this info to the caller so they have the option of trying to find out by executing a read
+			return nil, &TimeoutError{Msg: fmt.Sprintf("CreateWorkflowExecution timed out. Error: %v", err)}
+		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err),
 		}
@@ -550,9 +560,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 		if execution, ok := previous["execution"].(map[string]interface{}); ok {
 			// CreateWorkflowExecution failed because it already exists
+			msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
+				execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ","))
 			return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-				Message: fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-					execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ",")),
+				Message:        common.StringPtr(msg),
+				StartRequestId: common.StringPtr(fmt.Sprintf("%v", execution["create_request_id"])),
 			}
 		}
 
@@ -573,7 +585,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 		rowTypeExecution,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
-		rowTypeExecutionTaskID).Consistency(d.lowConslevel)
+		rowTypeExecutionTaskID)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
@@ -610,6 +622,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.LastProcessedEvent,
 		cqlNowTimestamp,
 		executionInfo.DecisionPending,
+		executionInfo.CreateRequestID,
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
@@ -696,6 +709,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 		info.LastProcessedEvent,
 		cqlNowTimestamp,
 		info.DecisionPending,
+		info.CreateRequestID,
 		info.NextEventID,
 		rowTypeExecutionTaskID,
 		defaultDeleteTTLSeconds)
@@ -1303,6 +1317,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.LastUpdatedTimestamp = v.(time.Time)
 		case "decision_pending":
 			info.DecisionPending = v.(bool)
+		case "create_request_id":
+			info.CreateRequestID = v.(gocql.UUID).String()
 		}
 	}
 

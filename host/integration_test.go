@@ -28,6 +28,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	tchannel "github.com/uber/tchannel-go"
@@ -140,6 +141,7 @@ func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -173,6 +175,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -376,6 +379,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -477,6 +481,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -581,6 +586,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -678,6 +684,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,
@@ -753,6 +760,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
 		WorkflowId:   common.StringPtr(id),
 		WorkflowType: workflowType,
 		TaskList:     taskList,

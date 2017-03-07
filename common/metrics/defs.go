@@ -33,7 +33,7 @@ const (
 
 // Service names for all services that emit metrics.
 const (
-	Common      = iota
+	Common = iota
 	Frontend
 	History
 	Matching
@@ -278,7 +278,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 // Common Metrics enum
 const (
-	WorkflowRequests                         = iota
+	WorkflowRequests = iota
 	WorkflowFailures
 	WorkflowLatency
 	CadenceErrEntityNotExistsCounter
@@ -286,6 +286,7 @@ const (
 	PersistenceErrShardExistsCounter
 	PersistenceErrShardOwnershipLostCounter
 	PersistenceErrConditionFailedCounter
+	PersistenceErrTimeoutCounter
 
 	NumCommonMetrics
 )
@@ -306,6 +307,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrShardExistsCounter:         {metricName: "persistence.errors.shard-exists", metricType: Counter},
 		PersistenceErrShardOwnershipLostCounter:  {metricName: "persistence.errors.shard-ownership-lost", metricType: Counter},
 		PersistenceErrConditionFailedCounter:     {metricName: "persistence.errors.condition-failed", metricType: Counter},
+		PersistenceErrTimeoutCounter:             {metricName: "persistence.errors.timeout", metricType: Counter},
 	},
 	Frontend: {},
 	History: {

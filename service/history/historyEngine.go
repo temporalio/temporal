@@ -144,6 +144,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 	}
 	defer e.tracker.completeTask(id)
 	_, err := e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+		RequestID:          request.GetRequestId(),
 		Execution:          workflowExecution,
 		TaskList:           request.GetTaskList().GetName(),
 		History:            h,

@@ -8,7 +8,7 @@ import (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated   = iota
+	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -43,6 +43,11 @@ type (
 		Msg     string
 	}
 
+	// TimeoutError is returned when a write operation fails due to a timeout
+	TimeoutError struct {
+		Msg string
+	}
+
 	// ShardInfo describes a shard
 	ShardInfo struct {
 		ShardID          int
@@ -65,6 +70,7 @@ type (
 		LastProcessedEvent   int64
 		LastUpdatedTimestamp time.Time
 		DecisionPending      bool
+		CreateRequestID      string
 	}
 
 	// TransferTaskInfo describes a transfer task
@@ -194,6 +200,7 @@ type (
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
+		RequestID          string
 		Execution          workflow.WorkflowExecution
 		TaskList           string
 		History            []byte
@@ -382,6 +389,10 @@ func (e *ShardAlreadyExistError) Error() string {
 }
 
 func (e *ShardOwnershipLostError) Error() string {
+	return e.Msg
+}
+
+func (e *TimeoutError) Error() string {
 	return e.Msg
 }
 
