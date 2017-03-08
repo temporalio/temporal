@@ -265,10 +265,9 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
 	s.Nil(err3)
 
+	// no-op to complete the task again
 	err4 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
-	s.NotNil(err4)
-	log.Infof("Failed to complete task '%v'.  Error: %v", task1.TaskID, err4)
-	s.IsType(&gen.EntityNotExistsError{}, err4)
+	s.Nil(err4)
 }
 
 func (s *cassandraPersistenceSuite) TestCreateTask() {

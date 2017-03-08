@@ -108,6 +108,8 @@ const (
 	CompleteTransferTaskScope
 	// GetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
 	GetTimerIndexTasksScope
+	// CompleteTimerTasksScope tracks CompleteTimerTasks calls made by service to persistence layer
+	CompleteTimerTaskScope
 	// GetWorkflowMutableStateScope tracks GetWorkflowMutableState calls made by service to persistence layer
 	GetWorkflowMutableStateScope
 	// CreateTaskScope tracks CreateTask calls made by service to persistence layer
@@ -224,6 +226,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		GetTransferTasksScope:        {operation: "GetTransferTasks"},
 		CompleteTransferTaskScope:    {operation: "CompleteTransferTask"},
 		GetTimerIndexTasksScope:      {operation: "GetTimerIndexTasks"},
+		CompleteTimerTaskScope:       {operation: "CompleteTimerTask"},
 		GetWorkflowMutableStateScope: {operation: "GetWorkflowMutableState"},
 		CreateTaskScope:              {operation: "CreateTask"},
 		GetTasksScope:                {operation: "GetTasks"},

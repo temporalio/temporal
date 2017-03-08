@@ -209,12 +209,7 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *Compl
 	sw.Stop()
 
 	if err != nil {
-		switch err.(type) {
-		case *workflow.EntityNotExistsError:
-			p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.CadenceErrEntityNotExistsCounter)
-		default:
-			p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowFailures)
-		}
+		p.m3Client.IncCounter(metrics.CompleteTransferTaskScope, metrics.WorkflowFailures)
 	}
 
 	return err
@@ -232,6 +227,20 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 	}
 
 	return resonse, err
+}
+
+func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
+	p.m3Client.IncCounter(metrics.CompleteTimerTaskScope, metrics.WorkflowRequests)
+
+	sw := p.m3Client.StartTimer(metrics.CompleteTimerTaskScope, metrics.WorkflowLatency)
+	err := p.persistence.CompleteTimerTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.m3Client.IncCounter(metrics.CompleteTimerTaskScope, metrics.WorkflowFailures)
+	}
+
+	return err
 }
 
 func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(

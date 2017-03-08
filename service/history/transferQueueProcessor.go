@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -297,22 +296,11 @@ MoveAckLevelLoop:
 	for current := a.ackLevel + 1; current <= a.readLevel; current++ {
 		if acked, ok := a.outstandingTasks[current]; ok {
 			if acked {
-				err := a.executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-					Execution: workflow.WorkflowExecution{
-						WorkflowId: common.StringPtr(uuid.New()),
-						RunId:      common.StringPtr(uuid.New()),
-					},
-					TaskID: current,
-				})
+				err := a.executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: current})
 
 				if err != nil {
 					a.logger.Warnf("Processor unable to complete transfer task '%v': %v", current, err)
-					// It is possible that the task is already completed (e.g. due to a previous attempt that timed out)
-					// in this case move on.
-					_, ok := err.(*workflow.EntityNotExistsError)
-					if !ok {
-						break MoveAckLevelLoop
-					}
+					break MoveAckLevelLoop
 				}
 				a.logger.Debugf("Updating ack level: %v", current)
 				a.ackLevel = current

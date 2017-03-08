@@ -250,8 +250,7 @@ const (
 		`and type = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
-		`and task_id = ?` +
-		`IF EXISTS`
+		`and task_id = ?`
 
 	templateGetTimerTasksQuery = `SELECT timer ` +
 		`FROM executions ` +
@@ -768,7 +767,6 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 }
 
 func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
-	execution := request.Execution
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -776,18 +774,28 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 		rowTypeTransferRunID,
 		request.TaskID)
 
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
+	err := query.Exec()
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err),
 		}
 	}
 
-	if !applied {
-		return &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("Task not found.  WorkflowId: %v, RunId: %v, TaskId: %v", execution.GetWorkflowId(),
-				execution.GetRunId(), request.TaskID),
+	return nil
+}
+
+func (d *cassandraPersistence) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
+	query := d.session.Query(templateCompleteTimerTaskQuery,
+		d.shardID,
+		rowTypeTimerTask,
+		rowTypeTimerWorkflowID,
+		rowTypeTimerRunID,
+		request.TaskID)
+
+	err := query.Exec()
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
 		}
 	}
 

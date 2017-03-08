@@ -8,6 +8,20 @@ type ExecutionManager struct {
 	mock.Mock
 }
 
+// CompleteTimerTask provides a mock function with given fields: request
+func (_m *ExecutionManager) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.CompleteTimerTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CompleteTransferTask provides a mock function with given fields: request
 func (_m *ExecutionManager) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
 	ret := _m.Called(request)

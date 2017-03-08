@@ -260,8 +260,12 @@ type (
 
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
 	CompleteTransferTaskRequest struct {
-		Execution workflow.WorkflowExecution
-		TaskID    int64
+		TaskID int64
+	}
+
+	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
+	CompleteTimerTaskRequest struct {
+		TaskID int64
 	}
 
 	// LeaseTaskListRequest is used to request lease of a task list
@@ -360,6 +364,7 @@ type (
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 
 		// Workflow mutable state operations.
 		GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error)
