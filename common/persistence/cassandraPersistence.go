@@ -646,6 +646,11 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
+		if _, ok := err.(*gocql.RequestErrWriteTimeout); ok {
+			// Write may have succeeded, but we don't know
+			// return this info to the caller so they have the option of trying to find out by executing a read
+			return &TimeoutError{Msg: fmt.Sprintf("UpdateWorkflowExecution timed out. Error: %v", err)}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
 		}
