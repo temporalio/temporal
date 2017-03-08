@@ -163,6 +163,8 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *Up
 			p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.PersistenceErrShardOwnershipLostCounter)
 		case *ConditionFailedError:
 			p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.PersistenceErrConditionFailedCounter)
+		case *TimeoutError:
+			p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.PersistenceErrTimeoutCounter)
 		default:
 			p.m3Client.IncCounter(metrics.UpdateWorkflowExecutionScope, metrics.WorkflowFailures)
 		}
