@@ -775,7 +775,6 @@ func (s *integrationSuite) TestActivityCancelation() {
 
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
 
-	workflowComplete := false
 	activityCounter := int32(0)
 	scheduleActivity := true
 	requestCancellation := false
@@ -813,7 +812,6 @@ func (s *integrationSuite) TestActivityCancelation() {
 
 		s.logger.Info("Completing Workflow.")
 
-		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{

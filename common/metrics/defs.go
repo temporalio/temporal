@@ -186,6 +186,8 @@ const (
 	HistoryRespondActivityTaskCompletedScope
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
 	HistoryRespondActivityTaskFailedScope
+	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
+	HistoryRespondActivityTaskCanceledScope
 	// HistoryGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory API calls received by service
 	HistoryGetWorkflowExecutionHistoryScope
 	// HistoryRecordDecisionTaskStartedScope tracks RecordDecisionTaskStarted API calls received by service
@@ -265,6 +267,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRespondDecisionTaskCompletedScope: {operation: "RespondDecisionTaskCompleted"},
 		HistoryRespondActivityTaskCompletedScope: {operation: "RespondActivityTaskCompleted"},
 		HistoryRespondActivityTaskFailedScope:    {operation: "RespondActivityTaskFailed"},
+		HistoryRespondActivityTaskCanceledScope:  {operation: "RespondActivityTaskCanceled"},
 		HistoryGetWorkflowExecutionHistoryScope:  {operation: "GetWorkflowExecutionHistory"},
 		HistoryRecordDecisionTaskStartedScope:    {operation: "RecordDecisionTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:    {operation: "RecordActivityTaskStarted"},
@@ -281,11 +284,15 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 // Common Metrics enum
 const (
-	WorkflowRequests = iota
-	WorkflowFailures
-	WorkflowLatency
+	CadenceRequests = iota
+	CadenceFailures
+	CadenceLatency
+	CadenceErrBadRequestCounter
 	CadenceErrEntityNotExistsCounter
 	CadenceErrExecutionAlreadyStartedCounter
+	PersistenceRequests
+	PersistenceFailures
+	PersistenceLatency
 	PersistenceErrShardExistsCounter
 	PersistenceErrShardOwnershipLostCounter
 	PersistenceErrConditionFailedCounter
@@ -297,16 +304,22 @@ const (
 // History Metrics enum
 const (
 	TransferTasksProcessedCounter = iota + NumCommonMetrics
+	CadenceErrEventAlreadyStartedCounter
+	CadenceErrShardOwnershipLostCounter
 )
 
 // MetricDefs record the metrics for all services
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
-		WorkflowRequests:                         {metricName: "requests", metricType: Counter},
-		WorkflowFailures:                         {metricName: "errors", metricType: Counter},
-		WorkflowLatency:                          {metricName: "latency", metricType: Timer},
+		CadenceRequests:                          {metricName: "cadence.requests", metricType: Counter},
+		CadenceFailures:                          {metricName: "cadence.errors", metricType: Counter},
+		CadenceLatency:                           {metricName: "cadence.latency", metricType: Timer},
+		CadenceErrBadRequestCounter:              {metricName: "cadence.errors.bad-request", metricType: Counter},
 		CadenceErrEntityNotExistsCounter:         {metricName: "cadence.errors.entity-not-exists", metricType: Counter},
 		CadenceErrExecutionAlreadyStartedCounter: {metricName: "cadence.errors.execution-already-started", metricType: Counter},
+		PersistenceRequests:                      {metricName: "persistence.requests", metricType: Counter},
+		PersistenceFailures:                      {metricName: "persistence.errors", metricType: Counter},
+		PersistenceLatency:                       {metricName: "persistence.latency", metricType: Timer},
 		PersistenceErrShardExistsCounter:         {metricName: "persistence.errors.shard-exists", metricType: Counter},
 		PersistenceErrShardOwnershipLostCounter:  {metricName: "persistence.errors.shard-ownership-lost", metricType: Counter},
 		PersistenceErrConditionFailedCounter:     {metricName: "persistence.errors.condition-failed", metricType: Counter},
@@ -314,7 +327,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	},
 	Frontend: {},
 	History: {
-		TransferTasksProcessedCounter: {metricName: "transfer-tasks-processed", metricType: Counter},
+		TransferTasksProcessedCounter:        {metricName: "transfer-tasks-processed", metricType: Counter},
+		CadenceErrShardOwnershipLostCounter:  {metricName: "cadence.errors.shard-ownership-lost", metricType: Counter},
+		CadenceErrEventAlreadyStartedCounter: {metricName: "cadence.errors.event-already-started", metricType: Counter},
 	},
 	Matching: {},
 }
