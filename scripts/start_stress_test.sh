@@ -11,24 +11,27 @@
 # the default cqlsh listen port is 9042
 port=9042
 
-# the default keyspace is workflow
+# the default keyspace is cadence
 # TODO: probably allow getting this from command line
-workflow_keyspace="workflow"
+workflow_keyspace="cadence"
 
 DROP_UBER_MINIONS="$HOME/uber-minions"
 DROP_CMD=$DROP_UBER_MINIONS/cmd/stress/
 STRESS_LOG=stress_output.log
 
-# cmd/stress/stress -emitMetric=m3 -host="10.185.19.27,10.184.45.6,10.185.27.8,10.185.17.12,10.185.15.30"
-for host in 10.185.19.27
-do
-  echo Installing schema on cassandra cluster via $host
-  cqlsh --cqlversion=3.4.2 -f ./schema/drop_keyspace_stress_test.cql $host $port
-  cqlsh --cqlversion=3.4.2 -f ./schema/keyspace_prod.cql $host $port
-  cqlsh --cqlversion=3.4.2 -k $workflow_keyspace -f ./schema/workflow_test.cql $host $port
-  cqlsh --cqlversion=3.4.2 -k $workflow_keyspace -f ./schema/stress_schema_setup.cql $host $port
-done
+# This is our managed cassandra cluster.
+host=compute2487-dca1.prod.uber.internal
 
-echo "Starting stress on"
-cd $DROP_CMD
-nohup ./stress -emitMetric=m3 -host="10.185.19.27,10.184.45.6,10.185.27.8,10.185.17.12,10.185.15.30" > $STRESS_LOG 2>&1 &
+echo Installing schema on managed cassandra cluster via $host
+
+cqlsh --cqlversion=3.4.0 -f ./schema/drop_keyspace_stress_test.cql $host $port
+cqlsh --cqlversion=3.4.0 -f ./schema/keyspace_prod.cql $host $port
+cqlsh --cqlversion=3.4.0 -k $workflow_keyspace -f ./schema/workflow_test.cql $host $port
+cqlsh --cqlversion=3.4.0 -k $workflow_keyspace -f ./schema/stress_schema_setup.cql $host $port
+
+## We restart the stress by restarting the stress role on the uber-cadence.
+
+# The below steps are for kicking off separately on cherami boxes.
+#echo "Starting stress on"
+#cd $DROP_CMD
+#nohup ./stress -emitMetric=m3 -host="10.185.19.27,10.184.45.6,10.185.27.8,10.185.17.12,10.185.15.30" > $STRESS_LOG 2>&1 &
