@@ -128,10 +128,8 @@ func (tb *timerBuilder) UserTimer(taskID SequenceID) (bool, *persistence.TimerIn
 
 // AddDecisionTimoutTask - Add a decision timeout task.
 func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
-	builder *historyBuilder) *persistence.DecisionTimeoutTask {
-	startWorkflowExecutionEvent := builder.GetEvent(firstEventID)
-	startAttributes := startWorkflowExecutionEvent.GetWorkflowExecutionStartedEventAttributes()
-	timeOutTask := tb.createDecisionTimeoutTask(startAttributes.GetTaskStartToCloseTimeoutSeconds(), scheduleID)
+	startToCloseTimeout int32) *persistence.DecisionTimeoutTask {
+	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID)
 	return timeOutTask
 }
 
@@ -153,7 +151,7 @@ func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, sche
 
 	t := tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_START, scheduleToStartTimeout)
 
-	msBuilder.UpdatePendingActivity(scheduleID, &persistence.ActivityInfo{
+	msBuilder.UpdateActivity(scheduleID, &persistence.ActivityInfo{
 		ScheduleID:             scheduleID,
 		StartedID:              emptyEventID,
 		ActivityID:             scheduleEvent.GetActivityTaskScheduledEventAttributes().GetActivityId(),
@@ -170,7 +168,7 @@ func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, sche
 
 func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityRunning(scheduleID)
+	ok, ai := msBuilder.GetActivity(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("ScheduleToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}
@@ -179,7 +177,7 @@ func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
 
 func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityRunning(scheduleID)
+	ok, ai := msBuilder.GetActivity(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("StartToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}
@@ -188,7 +186,7 @@ func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
 
 func (tb *timerBuilder) AddHeartBeatActivityTimeout(scheduleID int64,
 	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.isActivityRunning(scheduleID)
+	ok, ai := msBuilder.GetActivity(scheduleID)
 	if !ok {
 		return nil, fmt.Errorf("HeartBeat: Unable to find activity Info in mutable state for event id: %d", scheduleID)
 	}
@@ -215,7 +213,7 @@ func (tb *timerBuilder) AddUserTimer(timerID string, fireTimeout int64, startedI
 		return nil, fmt.Errorf("Invalid user timerout specified")
 	}
 
-	if isRunning, ti := msBuilder.isTimerRunning(timerID); isRunning {
+	if isRunning, ti := msBuilder.GetUserTimer(timerID); isRunning {
 		return nil, fmt.Errorf("The timer ID already exist in activity timers list: %s, old timer: %+v", timerID, *ti)
 	}
 
@@ -223,7 +221,7 @@ func (tb *timerBuilder) AddUserTimer(timerID string, fireTimeout int64, startedI
 
 	// TODO: Time skew need to be taken in to account.
 	expiryTime := time.Now().Add(time.Duration(fireTimeout) * time.Second)
-	msBuilder.UpdatePendingTimers(timerID, &persistence.TimerInfo{
+	msBuilder.UpdateUserTimer(timerID, &persistence.TimerInfo{
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
 		StartedID:  startedID,
@@ -236,7 +234,7 @@ func (tb *timerBuilder) AddUserTimer(timerID string, fireTimeout int64, startedI
 		// Update the task ID tracking the corresponding timer task.
 		ti := tb.pendingUserTimers[tb.timers[0].SequenceID]
 		ti.TaskID = timerTask.GetTaskID()
-		msBuilder.UpdatePendingTimers(ti.TimerID, ti)
+		msBuilder.UpdateUserTimer(ti.TimerID, ti)
 	}
 
 	return timerTask, nil

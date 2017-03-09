@@ -44,6 +44,9 @@ const (
 	shardEngineStopping             = 4022
 	shardEngineStopped              = 4023
 
+	// MutableSateBuilder events
+	invalidMutableStateActionEventID = 4100
+
 	// General purpose events
 	operationFailed = 9000
 )
@@ -269,4 +272,10 @@ func logOperationFailedEvent(logger bark.Logger, msg string, err error) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: operationFailed,
 	}).Warnf("%v.  Error: %v", msg, err)
+}
+
+func logMutableStateInvalidAction(logger bark.Logger, errorMsg string) {
+	logger.WithFields(bark.Fields{
+		tagWorkflowEventID: invalidMutableStateActionEventID,
+	}).Errorf("%v.  ", errorMsg)
 }

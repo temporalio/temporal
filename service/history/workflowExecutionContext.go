@@ -74,10 +74,9 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*historyBuilder, err
 }
 
 func (c *workflowExecutionContext) loadWorkflowMutableState() (*mutableStateBuilder, error) {
-	// TODO: Disable caching for mutable state until it supports life-cycle
-	/*if c.msBuilder != nil {
+	if c.msBuilder != nil {
 		return c.msBuilder, nil
-	}*/
+	}
 	response, err := c.getWorkflowMutableStateWithRetry(&persistence.GetWorkflowMutableStateRequest{
 		WorkflowID: c.workflowExecution.GetWorkflowId(),
 		RunID:      c.workflowExecution.GetRunId()})
@@ -89,7 +88,7 @@ func (c *workflowExecutionContext) loadWorkflowMutableState() (*mutableStateBuil
 
 	msBuilder := newMutableStateBuilder(c.logger)
 	if response != nil && response.State != nil {
-		msBuilder.Load(response.State.ActivitInfos, response.State.TimerInfos)
+		msBuilder.Load(response.State.ActivitInfos, response.State.TimerInfos, response.State.Decision)
 	}
 
 	c.msBuilder = msBuilder
@@ -123,15 +122,20 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	c.executionInfo.History = updatedHistory
 	c.executionInfo.DecisionPending = c.builder.hasPendingDecisionTask()
 	c.executionInfo.State = c.builder.getWorklowState()
-	var upsertActivityInfos []*persistence.ActivityInfo
+
+	upsertActivityInfos := []*persistence.ActivityInfo{}
+	upsertTimerInfos := []*persistence.TimerInfo{}
+	deleteTimerInfos := []string{}
+
 	var deleteActivityInfo *int64
-	var upsertTimerInfos []*persistence.TimerInfo
-	var deleteTimerInfos []string
+	var decisionInfo *persistence.DecisionInfo
+
 	if c.msBuilder != nil {
-		upsertActivityInfos = c.msBuilder.updateActivityInfos
-		deleteActivityInfo = c.msBuilder.deleteActivityInfo
-		upsertTimerInfos = c.msBuilder.updateTimerInfos
-		deleteTimerInfos = c.msBuilder.deleteTimerInfos
+		upsertActivityInfos, c.msBuilder.updateActivityInfos = c.msBuilder.updateActivityInfos, upsertActivityInfos
+		deleteActivityInfo, c.msBuilder.deleteActivityInfo = c.msBuilder.deleteActivityInfo, deleteActivityInfo
+		upsertTimerInfos, c.msBuilder.updateTimerInfos = c.msBuilder.updateTimerInfos, upsertTimerInfos
+		deleteTimerInfos, c.msBuilder.deleteTimerInfos = c.msBuilder.deleteTimerInfos, deleteTimerInfos
+		decisionInfo, c.msBuilder.updatedDecision = c.msBuilder.updatedDecision, decisionInfo
 	}
 
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
@@ -144,6 +148,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		DeleteActivityInfo:  deleteActivityInfo,
 		UpserTimerInfos:     upsertTimerInfos,
 		DeleteTimerInfos:    deleteTimerInfos,
+		UpdateDecision:      decisionInfo,
 	}); err1 != nil {
 		// Clear all cached state in case of error
 		c.clear()
