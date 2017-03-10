@@ -1135,18 +1135,10 @@ func (m *testTaskManager) CreateTask(request *persistence.CreateTaskRequest) (*p
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("Invalid taskID=%v", request.TaskID))
 	}
-	var taskList string
-	var scheduleID int64
-	taskType := request.Data.GetType()
-	switch taskType {
-	case persistence.TaskListTypeActivity:
-		taskList = request.Data.(*persistence.ActivityTask).TaskList
-		scheduleID = request.Data.(*persistence.ActivityTask).ScheduleID
+	taskList := request.TaskList
+	scheduleID := request.Data.ScheduleID
+	taskType := request.TaskListType
 
-	case persistence.TaskListTypeDecision:
-		taskList = request.Data.(*persistence.DecisionTask).TaskList
-		scheduleID = request.Data.(*persistence.DecisionTask).ScheduleID
-	}
 	tlm := m.getTaskListManager(newTaskListID(taskList, taskType))
 	tlm.Lock()
 	defer tlm.Unlock()

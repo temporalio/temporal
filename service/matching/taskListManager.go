@@ -128,25 +128,12 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 			return nil, err
 		}
 
-		var task persistence.Task
-		// TODO: Unify ActivityTask, DecisionTask, Task and potentially TaskInfo in a single structure
-		if c.taskListID.taskType == persistence.TaskListTypeDecision {
-			task = &persistence.DecisionTask{
-				TaskList:   c.taskListID.taskListName,
-				ScheduleID: taskInfo.ScheduleID,
-				TaskID:     taskID,
-			}
-		} else {
-			task = &persistence.ActivityTask{
-				TaskList:   c.taskListID.taskListName,
-				ScheduleID: taskInfo.ScheduleID,
-				TaskID:     taskID,
-			}
-		}
 		r, err = c.engine.taskManager.CreateTask(&persistence.CreateTaskRequest{
-			Execution: *execution,
-			Data:      task,
-			TaskID:    task.GetTaskID(),
+			Execution:    *execution,
+			TaskList:     c.taskListID.taskListName,
+			TaskListType: c.taskListID.taskType,
+			Data:         taskInfo,
+			TaskID:       taskID,
 			// Note that initiateTaskAppend could increment range, so rangeID parameter
 			// might be out of sync. This is OK as it will just cause a retry.
 			RangeID: rangeID,
@@ -156,7 +143,7 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 		if err != nil {
 			logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationCreateTask, err,
 				fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
-					task.GetTaskID(), c.taskListID.taskType, c.taskListID.taskListName))
+					taskID, c.taskListID.taskType, c.taskListID.taskListName))
 		}
 
 		return r, err

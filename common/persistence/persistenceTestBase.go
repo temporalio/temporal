@@ -326,6 +326,24 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		upsertTimerInfos, deleteTimerInfos, updateDecision)
 }
 
+// UpdateWorkflowExecutionAndDelete is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecutionInfo, condition int64) error {
+	transferTasks := []Task{}
+	transferTasks = append(transferTasks, &DeleteExecutionTask{TaskID: s.GetNextSequenceNumber()})
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:       updatedInfo,
+		TransferTasks:       transferTasks,
+		TimerTasks:          nil,
+		Condition:           condition,
+		DeleteTimerTask:     nil,
+		RangeID:             s.ShardContext.GetRangeID(),
+		UpsertActivityInfos: nil,
+		DeleteActivityInfo:  nil,
+		UpserTimerInfos:     nil,
+		DeleteTimerInfos:    nil,
+	})
+}
+
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
@@ -333,12 +351,16 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string, updatedDecision *DecisionInfo) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
-		transferTasks = append(transferTasks, &DecisionTask{TaskList: updatedInfo.TaskList,
+		transferTasks = append(transferTasks, &DecisionTask{
+			TaskID:     s.GetNextSequenceNumber(),
+			TaskList:   updatedInfo.TaskList,
 			ScheduleID: int64(decisionScheduleID)})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
-		transferTasks = append(transferTasks, &ActivityTask{TaskList: updatedInfo.TaskList,
+		transferTasks = append(transferTasks, &ActivityTask{
+			TaskID:     s.GetNextSequenceNumber(),
+			TaskList:   updatedInfo.TaskList,
 			ScheduleID: int64(activityScheduleID)})
 	}
 
@@ -413,11 +435,14 @@ func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecuti
 
 	taskID := s.GetNextSequenceNumber()
 	_, err = s.TaskMgr.CreateTask(&CreateTaskRequest{
-		TaskID:    taskID,
-		Execution: workflowExecution,
-		Data: &DecisionTask{
+		TaskID:       taskID,
+		Execution:    workflowExecution,
+		TaskList:     taskList,
+		TaskListType: TaskListTypeDecision,
+		Data: &TaskInfo{
+			WorkflowID: workflowExecution.GetWorkflowId(),
+			RunID:      workflowExecution.GetRunId(),
 			TaskID:     taskID,
-			TaskList:   taskList,
 			ScheduleID: decisionScheduleID,
 		},
 		RangeID: leaseResponse.TaskListInfo.RangeID,
@@ -447,11 +472,14 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 		taskID := s.GetNextSequenceNumber()
 
 		_, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
-			TaskID:    taskID,
-			Execution: workflowExecution,
-			Data: &ActivityTask{
+			TaskID:       taskID,
+			Execution:    workflowExecution,
+			TaskList:     taskList,
+			TaskListType: TaskListTypeActivity,
+			Data: &TaskInfo{
+				WorkflowID: workflowExecution.GetWorkflowId(),
+				RunID:      workflowExecution.GetRunId(),
 				TaskID:     s.GetNextSequenceNumber(),
-				TaskList:   taskList,
 				ScheduleID: activityScheduleID,
 			},
 			RangeID: leaseResponse.TaskListInfo.RangeID,

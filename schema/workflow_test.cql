@@ -35,7 +35,7 @@ CREATE TYPE transfer_task (
   run_id           uuid,
   task_id          bigint,
   task_list        text,
-  type             int,  -- enum TaskType {ActivityTask, DecisionTask}
+  type             int,  -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution}
   schedule_id      bigint,
 );
 

@@ -265,7 +265,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
 	s.Equal(workflowExecution.GetRunId(), task1.RunID)
 	s.Equal("queue1", task1.TaskList)
-	s.Equal(TaskListTypeDecision, task1.TaskType)
+	s.Equal(TransferTaskTypeDecisionTask, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
 
 	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
@@ -274,6 +274,82 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	// no-op to complete the task again
 	err4 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
 	s.Nil(err4)
+}
+
+func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
+	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-through-update-test"),
+		RunId: common.StringPtr("30a9fa1f-0db1-4d7a-8c34-aa82c5dad3aa")}
+
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	tasks1, err1 := s.GetTransferTasks(1)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 decision task.")
+	task1 := tasks1[0]
+	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.Equal("queue1", task1.TaskList)
+	s.Equal(TransferTaskTypeDecisionTask, task1.TaskType)
+	s.Equal(int64(2), task1.ScheduleID)
+
+	err3 := s.CompleteTransferTask(workflowExecution, task1.TaskID)
+	s.Nil(err3)
+
+	info0, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.History = []byte(`event2`)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil, nil, nil)
+	s.Nil(err2, "No error expected.")
+
+	tasks2, err1 := s.GetTransferTasks(1)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(tasks2, "expected valid list of tasks.")
+	s.Equal(1, len(tasks2), "Expected 1 decision task.")
+	task2 := tasks2[0]
+	s.Equal(workflowExecution.GetWorkflowId(), task2.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task2.RunID)
+	s.Equal("queue1", task2.TaskList)
+	s.Equal(TransferTaskTypeActivityTask, task2.TaskType)
+	s.Equal(int64(4), task2.ScheduleID)
+
+	err4 := s.CompleteTransferTask(workflowExecution, task2.TaskID)
+	s.Nil(err4)
+
+	info1, _ := s.GetWorkflowExecutionInfo(workflowExecution)
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+	updatedInfo1.History = []byte(`event3`)
+	updatedInfo1.NextEventID = int64(6)
+	updatedInfo1.LastProcessedEvent = int64(2)
+	err5 := s.UpdateWorkflowExecutionAndDelete(updatedInfo1, int64(5))
+	s.Nil(err5, "No error expected.")
+
+	newExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-through-update-test"),
+		RunId: common.StringPtr("2a038c8f-b575-4151-8d2c-d443e999ab5a")}
+	_, err6 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	s.NotNil(err6, "Entity exist error expected.")
+
+	tasks3, err7 := s.GetTransferTasks(1)
+	s.Nil(err7, "No error expected.")
+	s.NotNil(tasks3, "expected valid list of tasks.")
+	s.Equal(1, len(tasks3), "Expected 1 decision task.")
+	task3 := tasks3[0]
+	s.Equal(workflowExecution.GetWorkflowId(), task3.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task3.RunID)
+	s.Equal(TransferTaskTypeDeleteExecution, task3.TaskType)
+
+	err8 := s.DeleteWorkflowExecution(info1)
+	s.Nil(err8)
+
+	err9 := s.CompleteTransferTask(workflowExecution, task3.TaskID)
+	s.Nil(err9)
+
+	_, err10 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	s.Nil(err10, "No error expected.")
 }
 
 func (s *cassandraPersistenceSuite) TestCreateTask() {

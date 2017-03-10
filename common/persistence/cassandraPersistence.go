@@ -930,25 +930,16 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
-	var taskList string
-	var scheduleID int64
-	taskType := request.Data.GetType()
-	switch taskType {
-	case TaskListTypeActivity:
-		taskList = request.Data.(*ActivityTask).TaskList
-		scheduleID = request.Data.(*ActivityTask).ScheduleID
-
-	case TaskListTypeDecision:
-		taskList = request.Data.(*DecisionTask).TaskList
-		scheduleID = request.Data.(*DecisionTask).ScheduleID
-	}
+	taskList := request.TaskList
+	scheduleID := request.Data.ScheduleID
+	taskListType := request.TaskListType
 
 	// Batch is used to include conditional update on range_id
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	batch.Query(templateCreateTaskQuery,
 		taskList,
-		request.Data.GetType(),
+		taskListType,
 		rowTypeTask,
 		request.TaskID,
 		request.Execution.GetWorkflowId(),
@@ -959,7 +950,7 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 	batch.Query(templateUpdateTaskListRangeOnlyQuery,
 		request.RangeID,
 		taskList,
-		taskType,
+		taskListType,
 		request.RangeID,
 	)
 	previous := make(map[string]interface{})
@@ -972,8 +963,8 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 	if !applied {
 		rangeID := previous["range_id"]
 		return nil, &ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
-				taskList, taskType, request.RangeID, rangeID),
+			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskListType: %v, rangeID: %v, db rangeID: %v",
+				taskList, taskListType, request.RangeID, rangeID),
 		}
 	}
 	return &CreateTaskResponse{}, nil
@@ -1171,11 +1162,11 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		var scheduleID int64
 
 		switch task.GetType() {
-		case TaskListTypeActivity:
+		case TransferTaskTypeActivityTask:
 			taskList = task.(*ActivityTask).TaskList
 			scheduleID = task.(*ActivityTask).ScheduleID
 
-		case TaskListTypeDecision:
+		case TransferTaskTypeDecisionTask:
 			taskList = task.(*DecisionTask).TaskList
 			scheduleID = task.(*DecisionTask).ScheduleID
 		}
@@ -1462,8 +1453,6 @@ func createTaskInfo(result map[string]interface{}) *TaskInfo {
 			info.WorkflowID = v.(string)
 		case "run_id":
 			info.RunID = v.(gocql.UUID).String()
-		case "task_id":
-			info.TaskID = v.(int64)
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
 		}

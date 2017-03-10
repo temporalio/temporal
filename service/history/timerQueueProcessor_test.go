@@ -60,10 +60,10 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		closeCh:                   s.shardClosedCh,
 		logger:                    s.logger,
 	}
-	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{})
-	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	cache := newHistoryCache(shard, s.logger)
 	cache.disabled = true
+	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{}, cache)
+	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		executionManager: s.WorkflowMgr,

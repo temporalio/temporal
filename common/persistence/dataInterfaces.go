@@ -8,7 +8,7 @@ import (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated = iota
+	WorkflowStateCreated   = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -17,6 +17,13 @@ const (
 const (
 	TaskListTypeDecision = iota
 	TaskListTypeActivity
+)
+
+// Transfer task types
+const (
+	TransferTaskTypeDecisionTask    = iota
+	TransferTaskTypeActivityTask
+	TransferTaskTypeDeleteExecution
 )
 
 // Types of timers
@@ -115,18 +122,23 @@ type (
 		GetTaskID() int64
 	}
 
-	// ActivityTask identifies an activity task
+	// ActivityTask identifies a transfer task for activity
 	ActivityTask struct {
 		TaskID     int64
 		TaskList   string
 		ScheduleID int64
 	}
 
-	// DecisionTask identifies a decision task
+	// DecisionTask identifies a transfer task for decision
 	DecisionTask struct {
 		TaskID     int64
 		TaskList   string
 		ScheduleID int64
+	}
+
+	// DeleteExecutionTask identifies a transfer task for deletion of execution
+	DeleteExecutionTask struct {
+		TaskID int64
 	}
 
 	// DecisionTimeoutTask identifies a timeout task.
@@ -303,10 +315,12 @@ type (
 
 	// CreateTaskRequest is used to create a new task for a workflow exectution
 	CreateTaskRequest struct {
-		Execution workflow.WorkflowExecution
-		Data      Task
-		TaskID    int64
-		RangeID   int64
+		Execution    workflow.WorkflowExecution
+		TaskList     string
+		TaskListType int
+		Data         *TaskInfo
+		TaskID       int64
+		RangeID      int64
 	}
 
 	// CreateTaskResponse is the response to CreateTaskRequest
@@ -416,7 +430,7 @@ func (e *TimeoutError) Error() string {
 
 // GetType returns the type of the activity task
 func (a *ActivityTask) GetType() int {
-	return TaskListTypeActivity
+	return TransferTaskTypeActivityTask
 }
 
 // GetTaskID returns the sequence ID of the activity task
@@ -426,12 +440,22 @@ func (a *ActivityTask) GetTaskID() int64 {
 
 // GetType returns the type of the decision task
 func (d *DecisionTask) GetType() int {
-	return TaskListTypeDecision
+	return TransferTaskTypeDecisionTask
 }
 
 // GetTaskID returns the sequence ID of the decision task.
 func (d *DecisionTask) GetTaskID() int64 {
 	return d.TaskID
+}
+
+// GetType returns the type of the delete execution task
+func (a *DeleteExecutionTask) GetType() int {
+	return TransferTaskTypeDeleteExecution
+}
+
+// GetTaskID returns the sequence ID of the delete execution task
+func (a *DeleteExecutionTask) GetTaskID() int64 {
+	return a.TaskID
 }
 
 // GetType returns the type of the timer task
