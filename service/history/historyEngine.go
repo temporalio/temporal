@@ -443,7 +443,10 @@ Update_History_Loop:
 		}
 
 		startedID := di.StartedID
-		completedID := e.completeDecisionTask(builder, msBuilder, scheduleID, startedID, request)
+		completedID, err1 := e.completeDecisionTask(builder, msBuilder, scheduleID, startedID, request)
+		if err1 != nil {
+			return err1
+		}
 		isComplete := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
@@ -960,17 +963,26 @@ func (e *historyEngineImpl) scheduleDecisionTask(builder *historyBuilder,
 }
 
 func (e *historyEngineImpl) completeDecisionTask(builder *historyBuilder, msBuilder *mutableStateBuilder,
-	scheduleID, startedID int64, request *workflow.RespondDecisionTaskCompletedRequest) int64 {
+	scheduleID, startedID int64, request *workflow.RespondDecisionTaskCompletedRequest) (int64, error) {
 	completedEvent := builder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request)
+	if completedEvent == nil {
+		// Unable to add DecisionTaskCompleted event to history
+		return emptyEventID,
+			&workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
+	}
 	msBuilder.DeleteDecision()
-	return completedEvent.GetEventId()
+	return completedEvent.GetEventId(), nil
 }
 
 func (e *historyEngineImpl) timeoutDecisionTask(builder *historyBuilder, msBuilder *mutableStateBuilder,
-	scheduleID, startedID int64) int64 {
+	scheduleID, startedID int64) error {
 	timeoutEvent := builder.AddDecisionTaskTimedOutEvent(scheduleID, startedID)
+	if timeoutEvent == nil {
+		// Unable to add DecisionTaskTimedout event to history
+		return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskTimedout event to history."}
+	}
 	msBuilder.DeleteDecision()
-	return timeoutEvent.GetEventId()
+	return nil
 }
 
 func (t *pendingTaskTracker) getNextTaskID() (int64, error) {

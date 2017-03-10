@@ -158,7 +158,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			return ErrConflict
 		}
 
-		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateWorkflowExecution, err,
+		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateWorkflowExecution, err1,
 			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 		return err1
 	}

@@ -596,7 +596,9 @@ Update_History_Loop:
 		isRunning, di := msBuilder.GetDecision(scheduleID)
 		if isRunning {
 			// Add a decision task timeout event.
-			t.historyService.timeoutDecisionTask(builder, msBuilder, scheduleID, di.StartedID)
+			if err := t.historyService.timeoutDecisionTask(builder, msBuilder, scheduleID, di.StartedID); err != nil {
+				return err
+			}
 			scheduleNewDecision = true
 		}
 

@@ -1115,7 +1115,7 @@ func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutab
 		rowTypeExecution,
 		request.WorkflowID,
 		request.RunID,
-		rowTypeExecutionTaskID).Consistency(d.lowConslevel)
+		rowTypeExecutionTaskID)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
