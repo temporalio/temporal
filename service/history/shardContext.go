@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
@@ -132,17 +134,9 @@ Create_Loop:
 				}
 			case *persistence.TimeoutError:
 				{
-					s.logger.Errorf("Request to create workflow execution timed out. WorkflowID: %v, RunID: %v",
-						request.Execution.WorkflowId, request.Execution.RunId)
 					// write may have made it, but we don't know.
 					// Check here to avoid giving an error to client if possible
-					if s.checkIfCreateSucceeded(request) != nil {
-						err = &shared.InternalServiceError{
-							Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err),
-						}
-					} else {
-						err = nil
-					}
+					err = s.checkIfCreateSucceeded(request, err)
 				}
 			}
 		}
@@ -243,17 +237,25 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 // checkIfCreateSucceeded checks if the execution was successfully created by the request
-func (s *shardContextImpl) checkIfCreateSucceeded(request *persistence.CreateWorkflowExecutionRequest) error {
-	resp, err := s.executionManager.GetWorkflowExecution(
+func (s *shardContextImpl) checkIfCreateSucceeded(request *persistence.CreateWorkflowExecutionRequest, err error) error {
+	// Because of Cassandra issue https://issues.apache.org/jira/browse/CASSANDRA-9328
+	// We get a relatively high timeout error rate, even though the writes eventually succeed.
+	// To avoid needlessly returning an error to clients, we try to issue a read to see if the
+	// write went through.
+	time.Sleep(time.Millisecond * 100)
+
+	resp, err1 := s.executionManager.GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{Execution: request.Execution})
-	if err != nil {
+	if err1 != nil {
+		// failed to read, just return the original error back
 		return err
 	}
-	if resp.ExecutionInfo.CreateRequestID == request.RequestID {
-		return nil
-	}
-	return &shared.InternalServiceError{
-		Message: fmt.Sprintf("Workflow was created by a different request"),
+	msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v",
+		resp.ExecutionInfo.WorkflowID, resp.ExecutionInfo.RunID)
+	return &shared.WorkflowExecutionAlreadyStartedError{
+		Message:        common.StringPtr(msg),
+		StartRequestId: common.StringPtr(resp.ExecutionInfo.CreateRequestID),
+		RunId:          common.StringPtr(resp.ExecutionInfo.RunID),
 	}
 }
 

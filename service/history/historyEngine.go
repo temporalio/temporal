@@ -167,6 +167,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 	})
 
 	if err != nil {
+		if t, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); ok {
+			if t.GetStartRequestId() == request.GetRequestId() {
+				return &workflow.StartWorkflowExecutionResponse{
+					RunId: t.RunId,
+				}, nil
+			}
+		}
 		logPersistantStoreErrorEvent(e.logger, tagValueStoreOperationCreateWorkflowExecution, err,
 			fmt.Sprintf("{WorkflowID: %v, RunID: %v}", executionID, runID))
 		return nil, err

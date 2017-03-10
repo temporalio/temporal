@@ -11,6 +11,7 @@ exception InternalServiceError {
 exception WorkflowExecutionAlreadyStartedError {
   10: optional string message
   20: optional string startRequestId
+  30: optional string runId
 }
 
 exception EntityNotExistsError {

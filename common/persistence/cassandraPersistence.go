@@ -584,6 +584,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 			return nil, &workflow.WorkflowExecutionAlreadyStartedError{
 				Message:        common.StringPtr(msg),
 				StartRequestId: common.StringPtr(fmt.Sprintf("%v", execution["create_request_id"])),
+				RunId:          common.StringPtr(fmt.Sprintf("%v", execution["run_id"])),
 			}
 		}
 
