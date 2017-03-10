@@ -2348,3 +2348,12 @@ func addTimerStartedEvent(builder *historyBuilder, decisionCompletedEventID int6
 
 	return e
 }
+
+func addCompleteWorkflowEvent(builder *historyBuilder, decisionCompletedEventID int64,
+	result []byte) *workflow.HistoryEvent {
+	e := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &workflow.CompleteWorkflowExecutionDecisionAttributes{
+		Result_: result,
+	})
+
+	return e
+}

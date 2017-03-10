@@ -115,7 +115,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 
 	taskList := "single-timer-queue"
 	h, tt := s.getHistoryAndTimers([]int32{1})
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, tt)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, tt)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -148,7 +148,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 
 	taskList := "multiple-timer-queue"
 	h, tt := s.getHistoryAndTimers([]int32{1, 2, 3})
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, tt)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, tt)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -196,7 +196,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -312,7 +312,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask() {
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -584,7 +584,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -629,7 +629,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	h, serializedError := builder.Serialize()
 	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, string(h), nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 

@@ -192,7 +192,7 @@ func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.Tran
 }
 
 func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TransferTaskInfo) {
-	t.logger.Debugf("Processing transfer task: %v", task.TaskID)
+	t.logger.Debugf("Processing transfer task: %v, type: %v", task.TaskID, task.TaskType)
 	t.metricsClient.AddCounter(metrics.HistoryProcessTransferTasksScope, metrics.TransferTasksProcessedCounter, 1)
 ProcessRetryLoop:
 	for retryCount := 1; retryCount <= 100; retryCount++ {
@@ -234,7 +234,7 @@ ProcessRetryLoop:
 					// for visibility purpose.
 					context.Lock()
 					_, err = context.loadWorkflowExecution()
-					if err != nil {
+					if err == nil {
 						err = context.deleteWorkflowExecution()
 					}
 					context.Unlock()

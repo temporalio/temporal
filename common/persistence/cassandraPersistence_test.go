@@ -51,11 +51,11 @@ func (s *cassandraPersistenceSuite) SetupTest() {
 func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("start-workflow-test"),
 		RunId: common.StringPtr("7f9fe8a0-9237-11e6-ae22-56b6b6499611")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task1, err1 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.NotNil(err1, "Expected workflow creation to fail.")
 	log.Infof("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*gen.WorkflowExecutionAlreadyStartedError)
@@ -92,7 +92,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 func (s *cassandraPersistenceSuite) TestGetWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-workflow-test"),
 		RunId: common.StringPtr("918e7b1d-bfa4-4fe0-86cb-604858f90ce4")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -116,7 +116,7 @@ func (s *cassandraPersistenceSuite) TestGetWorkflow() {
 func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("update-workflow-test"),
 		RunId: common.StringPtr("5ba5e531-e46b-48d9-b4b3-859919839553")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -210,7 +210,7 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("delete-workflow-test"),
 		RunId:      common.StringPtr("4e0917f2-9361-4a14-b16f-1fafe09b287a")}
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -255,7 +255,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-test"),
 		RunId: common.StringPtr("93c87aff-ed89-4ecb-b0fd-d5d1e25dc46d")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -282,7 +282,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-through-update-test"),
 		RunId: common.StringPtr("30a9fa1f-0db1-4d7a-8c34-aa82c5dad3aa")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -332,7 +332,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 
 	newExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-transfer-tasks-through-update-test"),
 		RunId: common.StringPtr("2a038c8f-b575-4151-8d2c-d443e999ab5a")}
-	_, err6 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	_, err6 := s.CreateWorkflowExecution(newExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.NotNil(err6, "Entity exist error expected.")
 
 	tasks3, err7 := s.GetTransferTasks(1)
@@ -350,7 +350,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	err9 := s.CompleteTransferTask(workflowExecution, task3.TaskID)
 	s.Nil(err9)
 
-	_, err10 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	_, err10 := s.CreateWorkflowExecution(newExecution, "queue1", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err10, "No error expected.")
 }
 
@@ -456,7 +456,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-timer-tasks-test"),
 		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", "history", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -488,7 +488,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("test-workflow-mutable-test"),
 		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", "history", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -523,7 +523,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Timers() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("test-workflow-mutable-timers-test"),
 		RunId: common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")}
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", "history", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, "taskList", []byte("event1"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 

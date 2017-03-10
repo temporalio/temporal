@@ -218,14 +218,14 @@ func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) er
 
 // CreateWorkflowExecution is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList string,
-	history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64,
+	history []byte, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64,
 	timerTasks []Task) (
 	string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:          uuid.New(),
 		Execution:          workflowExecution,
 		TaskList:           taskList,
-		History:            []byte(history),
+		History:            history,
 		ExecutionContext:   executionContext,
 		NextEventID:        nextEventID,
 		LastProcessedEvent: lastProcessedEventID,

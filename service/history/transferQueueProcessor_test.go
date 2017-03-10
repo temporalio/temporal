@@ -68,7 +68,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
 		RunId:                                                    common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "decisiontask-scheduled", nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, []byte("decisiontask-scheduled"), nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -117,18 +117,30 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
+	workflowID := "delete-execution-transfertasks-test"
+	runID := "79fc8984-f78f-41cf-8fa1-4d383edb2cfd"
 	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
-		RunId:      common.StringPtr("79fc8984-f78f-41cf-8fa1-4d383edb2cfd"),
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
 	}
 	taskList := "delete-execution-transfertasks-queue"
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "event1", nil, 3, 0, 2, nil)
+	identity := "delete-execution-transfertasks-test"
+	builder := newHistoryBuilder(s.logger)
+	addWorkflowExecutionStartedEvent(builder, workflowID, "wType", taskList, []byte("input"), 100, 200, identity)
+	scheduleEvent := addDecisionTaskScheduledEvent(builder, taskList, 100)
+	history1, _ := builder.Serialize()
+	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, history1, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
+	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), taskList, identity)
+	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, scheduleEvent.GetEventId(), startedEvent.GetEventId(),
+		nil, identity)
+	addCompleteWorkflowEvent(builder, completeDecisionEvent.GetEventId(), []byte("result"))
+	history2, _ := builder.Serialize()
 	info1, _ := s.GetWorkflowExecutionInfo(workflowExecution)
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
-	updatedInfo1.History = []byte(`event3`)
+	updatedInfo1.History = history2
 	updatedInfo1.NextEventID = int64(6)
 	updatedInfo1.LastProcessedEvent = int64(2)
 	err1 := s.UpdateWorkflowExecutionAndDelete(updatedInfo1, int64(3))
@@ -136,8 +148,9 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
-	_, err2 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	_, err2 := s.CreateWorkflowExecution(newExecution, taskList, history1, nil, 3, 0, 2, nil)
 	s.NotNil(err2, "Entity exist error expected.")
+	s.logger.Infof("Error creating new execution: %v", err2)
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
 	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
@@ -155,8 +168,9 @@ workerPump:
 		}
 	}
 
-	_, err3 := s.CreateWorkflowExecution(newExecution, "queue1", "event1", nil, 3, 0, 2, nil)
+	_, err3 := s.CreateWorkflowExecution(newExecution, taskList, history1, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
+	s.logger.Infof("Execution created successfully: %v", err3)
 	s.mockMatching.AssertExpectations(s.T())
 }
 
