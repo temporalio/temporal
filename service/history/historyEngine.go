@@ -531,6 +531,7 @@ Update_History_Loop:
 				}
 				if nextTimerTask != nil {
 					timerTasks = append(timerTasks, nextTimerTask)
+					defer e.timerProcessor.NotifyNewTimer(nextTimerTask.GetTaskID())
 				}
 			case workflow.DecisionType_RequestCancelActivityTask:
 				attributes := d.GetRequestCancelActivityTaskDecisionAttributes()
