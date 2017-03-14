@@ -19,7 +19,7 @@ const (
 	transferTaskBatchSize              = 10
 	transferProcessorMinPollInterval   = 10 * time.Millisecond
 	transferProcessorMaxPollInterval   = 10 * time.Second
-	transferProcessorUpdateAckInterval = time.Second
+	transferProcessorUpdateAckInterval = 10 * time.Second
 	taskWorkerCount                    = 10
 )
 
@@ -202,7 +202,7 @@ ProcessRetryLoop:
 		default:
 			var err error
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-				RunId:                                            common.StringPtr(task.RunID)}
+				RunId: common.StringPtr(task.RunID)}
 			switch task.TaskType {
 			case persistence.TransferTaskTypeActivityTask:
 				{

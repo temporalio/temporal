@@ -1,13 +1,9 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
@@ -88,10 +84,10 @@ func (s *shardContextImpl) GetTransferAckLevel() int64 {
 
 func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	s.Lock()
+	defer s.Unlock()
 	s.shardInfo.TransferAckLevel = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	updatedShardInfo := copyShardInfo(s.shardInfo)
-	s.Unlock()
 
 	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
@@ -114,6 +110,8 @@ func (s *shardContextImpl) GetTimerSequenceNumber() int64 {
 
 func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 	*persistence.CreateWorkflowExecutionResponse, error) {
+	s.Lock()
+	defer s.Unlock()
 Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
@@ -132,12 +130,6 @@ Create_Loop:
 						s.close()
 					}
 				}
-			case *persistence.TimeoutError:
-				{
-					// write may have made it, but we don't know.
-					// Check here to avoid giving an error to client if possible
-					err = s.checkIfCreateSucceeded(request, err)
-				}
 			}
 		}
 
@@ -148,6 +140,8 @@ Create_Loop:
 }
 
 func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
+	s.Lock()
+	defer s.Unlock()
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
@@ -181,9 +175,6 @@ func (s *shardContextImpl) GetMetricsClient() metrics.Client {
 }
 
 func (s *shardContextImpl) getRangeID() int64 {
-	s.RLock()
-	defer s.RUnlock()
-
 	return s.shardInfo.RangeID
 }
 
@@ -234,29 +225,6 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		s.maxTransferSequenceNumber)
 
 	return nil
-}
-
-// checkIfCreateSucceeded checks if the execution was successfully created by the request
-func (s *shardContextImpl) checkIfCreateSucceeded(request *persistence.CreateWorkflowExecutionRequest, err error) error {
-	// Because of Cassandra issue https://issues.apache.org/jira/browse/CASSANDRA-9328
-	// We get a relatively high timeout error rate, even though the writes eventually succeed.
-	// To avoid needlessly returning an error to clients, we try to issue a read to see if the
-	// write went through.
-	time.Sleep(time.Millisecond * 100)
-
-	resp, err1 := s.executionManager.GetWorkflowExecution(
-		&persistence.GetWorkflowExecutionRequest{Execution: request.Execution})
-	if err1 != nil {
-		// failed to read, just return the original error back
-		return err
-	}
-	msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v",
-		resp.ExecutionInfo.WorkflowID, resp.ExecutionInfo.RunID)
-	return &shared.WorkflowExecutionAlreadyStartedError{
-		Message:        common.StringPtr(msg),
-		StartRequestId: common.StringPtr(resp.ExecutionInfo.CreateRequestID),
-		RunId:          common.StringPtr(resp.ExecutionInfo.RunID),
-	}
 }
 
 func acquireShard(shardID int, shardManager persistence.ShardManager, executionMgr persistence.ExecutionManager,
