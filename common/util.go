@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
@@ -125,4 +127,9 @@ func IsValidContext(ctx thrift.Context) error {
 		}
 	}
 	return nil
+}
+
+// BackgroundThriftContext returns a wrapper around context.Background()
+func BackgroundThriftContext() thrift.Context {
+	return thrift.Wrap(context.Background())
 }

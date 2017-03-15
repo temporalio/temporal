@@ -49,9 +49,19 @@ func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.StartWorkflowExecution(ctx, request)
+	var response *workflow.StartWorkflowExecutionResponse
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		var err error
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		response, err = client.StartWorkflowExecution(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(context, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(context thrift.Context,
@@ -60,9 +70,19 @@ func (c *clientImpl) GetWorkflowExecutionHistory(context thrift.Context,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.GetWorkflowExecutionHistory(ctx, request)
+	var response *workflow.GetWorkflowExecutionHistoryResponse
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		var err error
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		response, err = client.GetWorkflowExecutionHistory(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(context, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) RecordDecisionTaskStarted(context thrift.Context,
@@ -71,9 +91,19 @@ func (c *clientImpl) RecordDecisionTaskStarted(context thrift.Context,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RecordDecisionTaskStarted(ctx, request)
+	var response *h.RecordDecisionTaskStartedResponse
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		var err error
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		response, err = client.RecordDecisionTaskStarted(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(context, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) RecordActivityTaskStarted(context thrift.Context,
@@ -82,9 +112,19 @@ func (c *clientImpl) RecordActivityTaskStarted(context thrift.Context,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RecordActivityTaskStarted(ctx, request)
+	var response *h.RecordActivityTaskStartedResponse
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		var err error
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		response, err = client.RecordActivityTaskStarted(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(context, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
@@ -97,9 +137,13 @@ func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RespondDecisionTaskCompleted(ctx, request)
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.RespondDecisionTaskCompleted(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
 }
 
 func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
@@ -112,9 +156,13 @@ func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RespondActivityTaskCompleted(ctx, request)
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.RespondActivityTaskCompleted(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
 }
 
 func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
@@ -127,9 +175,13 @@ func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RespondActivityTaskFailed(ctx, request)
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.RespondActivityTaskFailed(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
 }
 
 func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
@@ -142,9 +194,13 @@ func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RespondActivityTaskCanceled(ctx, request)
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.RespondActivityTaskCanceled(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
 }
 
 func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
@@ -157,9 +213,19 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(context)
-	defer cancel()
-	return client.RecordActivityTaskHeartbeat(ctx, request)
+	var response *workflow.RecordActivityTaskHeartbeatResponse
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		var err error
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		response, err = client.RecordActivityTaskHeartbeat(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(context, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService, error) {
@@ -206,4 +272,29 @@ func (c *clientImpl) getThriftClient(hostPort string) h.TChanHistoryService {
 		c.thriftCache[hostPort] = client
 	}
 	return client
+}
+
+func (c *clientImpl) executeWithRedirect(ctx thrift.Context, client h.TChanHistoryService,
+	op func(context thrift.Context, client h.TChanHistoryService) error) error {
+	var err error
+	if ctx == nil {
+		ctx = common.BackgroundThriftContext()
+	}
+redirectLoop:
+	for {
+		err = common.IsValidContext(ctx)
+		if err != nil {
+			break redirectLoop
+		}
+		err = op(ctx, client)
+		if err != nil {
+			if s, ok := err.(*h.ShardOwnershipLostError); ok {
+				// TODO: consider emitting a metric for number of redirects
+				client = c.getThriftClient(s.GetOwner())
+				continue redirectLoop
+			}
+		}
+		break redirectLoop
+	}
+	return err
 }

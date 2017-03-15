@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
@@ -58,7 +56,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 	//go func() {
 	//	log.Println(http.ListenAndServe("localhost:6060", nil))
 	//}()
-	s.callContext = thrift.Wrap(context.Background())
+	s.callContext = common.BackgroundThriftContext()
 }
 
 // Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
