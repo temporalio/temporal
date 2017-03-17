@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"time"
@@ -16,19 +15,19 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	ringpop "github.com/uber/ringpop-go"
-	"github.com/uber/ringpop-go/discovery/statichosts"
-	"github.com/uber/ringpop-go/swim"
 	"github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 )
 
 var cadenceServices = []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName}
 
-const rpAppNamePrefix string = "cadence"
-const maxRpJoinTimeout = 30 * time.Second
-
 // TChannelFactory creates a TChannel and Thrift server
 type TChannelFactory func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server)
+
+// RingpopFactory provides a bootstrapped ringpop
+type RingpopFactory interface {
+	CreateRingpop(ch *tchannel.Channel) (*ringpop.Ringpop, error)
+}
 
 // Service contains the objects specific to this service
 type serviceImpl struct {
@@ -39,7 +38,7 @@ type serviceImpl struct {
 	server                 *thrift.Server
 	ch                     *tchannel.Channel
 	rp                     *ringpop.Ringpop
-	rpSeedHosts            []string
+	rpFactory              RingpopFactory
 	membershipMonitor      membership.Monitor
 	tchannelFactory        TChannelFactory
 	clientFactory          client.Factory
@@ -55,13 +54,13 @@ type serviceImpl struct {
 // TODO: consider passing a config object if the parameter list gets too big
 // this is the object which holds all the common stuff
 // shared by all the services.
-func New(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory, rpHosts []string,
-	numberOfHistoryShards int) Service {
+func New(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory,
+	rpFactory RingpopFactory, numberOfHistoryShards int) Service {
 	sVice := &serviceImpl{
 		sName:                 serviceName,
 		logger:                logger.WithField("Service", serviceName),
 		tchannelFactory:       tchanFactory,
-		rpSeedHosts:           rpHosts,
+		rpFactory:             rpFactory,
 		metricsScope:          scope,
 		numberOfHistoryShards: numberOfHistoryShards,
 	}
@@ -103,14 +102,9 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 
 	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
 	h.hostPort = h.ch.PeerInfo().HostPort
-	h.rp, err = h.createRingpop(h.sName, h.ch)
+	h.rp, err = h.rpFactory.CreateRingpop(h.ch)
 	if err != nil {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop creation failed")
-	}
-
-	err = h.bootstrapRingpop(h.rp, h.rpSeedHosts)
-	if err != nil {
-		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Ringpop bootstrap failed")
 	}
 
 	labels, err := h.rp.Labels()
@@ -180,26 +174,6 @@ func (h *serviceImpl) GetMembershipMonitor() membership.Monitor {
 
 func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
 	return h.hostInfo
-}
-
-// createRingpop instantiates the ringpop for the provided channel and host,
-func (h *serviceImpl) createRingpop(service string, ch *tchannel.Channel) (*ringpop.Ringpop, error) {
-	rp, err := ringpop.New(fmt.Sprintf("%s", rpAppNamePrefix), ringpop.Channel(ch))
-
-	return rp, err
-}
-
-// bootstrapRingpop tries to bootstrap the given ringpop instance using the hosts list
-func (h *serviceImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []string) error {
-	// TODO: log ring hosts
-
-	bOptions := new(swim.BootstrapOptions)
-	bOptions.DiscoverProvider = statichosts.New(rpHosts...)
-	bOptions.MaxJoinDuration = maxRpJoinTimeout
-	bOptions.JoinSize = 1 // this ensures the first guy comes up quickly
-
-	_, err := rp.Bootstrap(bOptions)
-	return err
 }
 
 func getMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.ServiceIdx {
