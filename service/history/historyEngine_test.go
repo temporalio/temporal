@@ -120,7 +120,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addDecisionToMutableState(ms, 2, 3, uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -143,7 +143,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addDecisionToMutableState(ms, 2, 3, uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -182,11 +182,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 			State:                persistence.WorkflowStateRunning,
 			NextEventID:          builder.nextEventID,
 			LastProcessedEvent:   emptyEventID,
-			LastUpdatedTimestamp: time.Time{},
-			DecisionPending:      true},
+			LastUpdatedTimestamp: time.Time{}},
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, scheduleEvent.GetEventId(), startedEvent.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -217,7 +216,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 	addDecisionTaskCompletedEvent(builder, scheduleEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 
-	ms := &persistence.WorkflowMutableState{ActivitInfos: make(map[int64]*persistence.ActivityInfo)}
+	ms := createMutableState(5)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -243,7 +242,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 100, 200, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 100)
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addDecisionToMutableState(ms, 2, emptyEventID, "reqId", 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -311,7 +310,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 
 	history, _ := builder.Serialize()
 	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
@@ -320,16 +319,16 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		activity2StartedEvent.GetEventId(), activity2Result, identity)
 	history2, _ := builder.Serialize()
 	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(12)
 	addDecisionToMutableState(ms, decisionScheduledEvent2.GetEventId(), decisionStartedEvent2.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
-	ms2 := &persistence.WorkflowMutableState{}
+	ms2 := createMutableState(13)
 	addDecisionToMutableState(ms2, decisionScheduledEvent2.GetEventId(), decisionStartedEvent2.GetEventId(), uuid.New(), 1)
 	gwmsResponse2 := &persistence.GetWorkflowMutableStateResponse{State: ms2}
 
@@ -410,12 +409,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	for i := 0; i < conditionalRetryCount; i++ {
 		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history,
 			ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+			LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
 
-		ms := &persistence.WorkflowMutableState{}
+		ms := createMutableState(4)
 		addDecisionToMutableState(ms, scheduleEvent.GetEventId(), startEvent.GetEventId(), uuid.New(), 1)
 		gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -479,12 +478,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(12)
 	addDecisionToMutableState(ms, decisionScheduledEvent2.GetEventId(), decisionStartedEvent2.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -564,12 +563,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(12)
 	addDecisionToMutableState(ms, decisionScheduledEvent2.GetEventId(), decisionStartedEvent2.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -620,7 +619,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -639,7 +638,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 		},
 	}}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, scheduleEvent.GetEventId(), startedEvent.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -696,7 +695,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -708,7 +707,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		},
 	}}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, scheduleEvent.GetEventId(), startedEvent.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -759,7 +758,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -772,7 +771,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		},
 	}}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, scheduleEvent.GetEventId(), startedEvent.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -827,7 +826,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addActivityToMutableState(ms, 2, 3, "act-id1", 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -850,7 +849,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addActivityToMutableState(ms, 2, 3, "act-id1", 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -889,12 +888,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(7)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -936,7 +935,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 		activityResult, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 
-	ms := &persistence.WorkflowMutableState{ActivitInfos: make(map[int64]*persistence.ActivityInfo)}
+	ms := createMutableState(9)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -972,7 +971,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
 		activityType, tl, activityInput, 100, 10, 5)
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(6)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), emptyEventID, activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1002,7 +1001,6 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
 	activity2Input := []byte("input2")
-	activity2Result := []byte("activity2_result")
 
 	builder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(builder, "wId", "wType", tl, []byte("input"), 25, 200, identity)
@@ -1015,30 +1013,27 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2ScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent1.GetEventId(), activity2ID,
 		activity2Type, tl, activity2Input, 100, 10, 5)
 	activity1StartedEvent := addActivityTaskStartedEvent(builder, activity1ScheduledEvent.GetEventId(), tl, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(builder, activity2ScheduledEvent.GetEventId(), tl, identity)
+	addActivityTaskStartedEvent(builder, activity2ScheduledEvent.GetEventId(), tl, identity)
 
 	history, _ := builder.Serialize()
 	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
 
-	addActivityTaskCompletedEvent(builder, activity2ScheduledEvent.GetEventId(),
-		activity2StartedEvent.GetEventId(), activity2Result, identity)
-	addDecisionTaskScheduledEvent(builder, tl, 200)
 	history2, _ := builder.Serialize()
 	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
 
-	ms1 := &persistence.WorkflowMutableState{}
+	ms1 := createMutableState(9)
 	addActivityToMutableState(ms1, activity1ScheduledEvent.GetEventId(), activity1StartedEvent.GetEventId(), activity1ID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse1 := &persistence.GetWorkflowMutableStateResponse{State: ms1}
 
-	ms2 := &persistence.WorkflowMutableState{}
+	ms2 := createMutableState(9)
 	addActivityToMutableState(ms2, activity1ScheduledEvent.GetEventId(), activity1StartedEvent.GetEventId(), activity1ID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse2 := &persistence.GetWorkflowMutableStateResponse{State: ms2}
 
@@ -1058,10 +1053,10 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.Nil(err, string(history))
 	updatedBuilder := newHistoryBuilder(bark.NewLoggerFromLogrus(log.New()))
 	updatedBuilder.loadExecutionInfo(info2)
-	s.Equal(int64(12), info2.NextEventID)
+	s.Equal(int64(11), info2.NextEventID)
 	s.Equal(int64(3), info2.LastProcessedEvent)
 
-	completedEvent := updatedBuilder.GetEvent(11)
+	completedEvent := updatedBuilder.GetEvent(9)
 	s.Equal(workflow.EventType_ActivityTaskCompleted, completedEvent.GetEventType())
 	attributes := completedEvent.GetActivityTaskCompletedEventAttributes()
 	s.Equal(activity1ScheduledEvent.GetEventId(), attributes.GetScheduledEventId())
@@ -1096,12 +1091,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
 		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
 
-		ms := &persistence.WorkflowMutableState{}
+		ms := createMutableState(7)
 		addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 		gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1143,12 +1138,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(7)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1203,7 +1198,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addActivityToMutableState(ms, 2, 3, "act-id1", 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1226,7 +1221,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(3)
 	addActivityToMutableState(ms, 2, 3, "act-id1", 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1265,12 +1260,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	history, _ := builder.Serialize()
 
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(7)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1312,7 +1307,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		failReason, details, identity)
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 
-	ms := &persistence.WorkflowMutableState{ActivitInfos: make(map[int64]*persistence.ActivityInfo)}
+	ms := createMutableState(9)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Once()
@@ -1348,7 +1343,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
 		activityType, tl, activityInput, 100, 10, 5)
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(6)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), emptyEventID, activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1395,7 +1390,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 
 	history, _ := builder.Serialize()
 	info1 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse1 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info1,
 	}
@@ -1405,16 +1400,16 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	addDecisionTaskScheduledEvent(builder, tl, 200)
 	history2, _ := builder.Serialize()
 	info2 := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history2, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: decisionStartedEvent1.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 	wfResponse2 := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info2,
 	}
 
-	ms1 := &persistence.WorkflowMutableState{}
+	ms1 := createMutableState(9)
 	addActivityToMutableState(ms1, activity1ScheduledEvent.GetEventId(), activity1StartedEvent.GetEventId(), activity1ID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse1:= &persistence.GetWorkflowMutableStateResponse{State: ms1}
 
-	ms2 := &persistence.WorkflowMutableState{}
+	ms2 := createMutableState(11)
 	addActivityToMutableState(ms2, activity1ScheduledEvent.GetEventId(), activity1StartedEvent.GetEventId(), activity1ID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse2 := &persistence.GetWorkflowMutableStateResponse{State: ms2}
 
@@ -1473,12 +1468,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	history, _ := builder.Serialize()
 	for i := 0; i < conditionalRetryCount; i++ {
 		info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+			LastProcessedEvent: decisionStartedEvent.GetEventId(), LastUpdatedTimestamp: time.Time{}}
 		wfResponse := &persistence.GetWorkflowExecutionResponse{
 			ExecutionInfo: info,
 		}
 
-		ms := &persistence.WorkflowMutableState{}
+		ms := createMutableState(7)
 		addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 		gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1520,12 +1515,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(7)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1584,7 +1579,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	addActivityTaskStartedEvent(builder, activityScheduledEvent.GetEventId(), tl, identity)
 
 	// No HeartBeat timer running.
-	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(&persistence.GetWorkflowMutableStateResponse{}, nil).Once()
+	ms := createMutableState(7)
+	s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(&persistence.GetWorkflowMutableStateResponse{State: ms}, nil).Once()
 
 	detais := []byte("details")
 
@@ -1621,12 +1617,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(7)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1673,7 +1669,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	activityScheduledEvent := addActivityTaskScheduledEvent(builder, decisionCompletedEvent.GetEventId(), activityID,
 		activityType, tl, activityInput, 100, 10, 1)
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(6)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), emptyEventID, "act-id1", 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1714,12 +1710,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(8)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), "act-id1", 1, 1, 1, 1, actCancelRequestEvent.GetEventId())
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1765,7 +1761,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
@@ -1777,7 +1773,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 		},
 	}}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, decisionScheduledEvent.GetEventId(), decisionStartedEvent.GetEventId(), uuid.New(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
 
@@ -1831,12 +1827,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(8)
 	addDecisionToMutableState(ms, decisionScheduled2Event.GetEventId(), decisionStarted2Event.GetEventId(), uuid.New(), 1)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), emptyEventID, activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
@@ -1900,12 +1896,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(9)
 	addDecisionToMutableState(ms, decisionScheduled2Event.GetEventId(), decisionStart2Event.GetEventId(), uuid.New(), 1)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 0, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
@@ -2005,12 +2001,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(9)
 	addDecisionToMutableState(ms, decisionScheduled2Event.GetEventId(), decisionStarted2Event.GetEventId(), uuid.New(), 1)
 	addActivityToMutableState(ms, activityScheduledEvent.GetEventId(), activityStartedEvent.GetEventId(), activityID, 1, 1, 1, 1, emptyEventID)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
@@ -2109,12 +2105,12 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(8)
 	addDecisionToMutableState(ms, decision2ScheduledEvent.GetEventId(), decision2StartedEvent.GetEventId(), uuid.New(), 1)
 	addUserTimerToMutableState(ms, timerID, timerStartedEvent.GetEventId(), 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
@@ -2167,12 +2163,12 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 
 	history, _ := builder.Serialize()
 	info := &persistence.WorkflowExecutionInfo{WorkflowID: "wId", RunID: "rId", TaskList: tl, History: history, ExecutionContext: nil, State: persistence.WorkflowStateRunning, NextEventID: builder.nextEventID,
-		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}, DecisionPending: true}
+		LastProcessedEvent: emptyEventID, LastUpdatedTimestamp: time.Time{}}
 	wfResponse := &persistence.GetWorkflowExecutionResponse{
 		ExecutionInfo: info,
 	}
 
-	ms := &persistence.WorkflowMutableState{}
+	ms := createMutableState(4)
 	addDecisionToMutableState(ms, decisionScheduledEvent.GetEventId(), decisionStartedEvent.GetEventId(), uuid.New(), 1)
 	addUserTimerToMutableState(ms, "t1-diff", emptyEventID, 1)
 	gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
@@ -2300,6 +2296,16 @@ func addActivityTaskFailedEvent(builder *historyBuilder, scheduleID, startedID i
 	return e
 }
 
+func createMutableState(nextEventID int64)*persistence.WorkflowMutableState {
+	return &persistence.WorkflowMutableState{
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NextEventID: nextEventID,
+		},
+		ActivitInfos: make(map[int64]*persistence.ActivityInfo),
+		TimerInfos: make(map[string]*persistence.TimerInfo),
+	}
+}
+
 func addActivityToMutableState(wms *persistence.WorkflowMutableState, scheduleID, startedID int64, activityID string,
 	scheduleToStartTimeout, scheduleToCloseTimeout, startToCloseTimeout, heartBeatTimeout int32, cancelRequestedID int64) {
 	if wms.ActivitInfos == nil {
@@ -2318,12 +2324,10 @@ func addDecisionToMutableState(wms *persistence.WorkflowMutableState, scheduleID
 	if wms.ActivitInfos == nil {
 		wms.ActivitInfos = make(map[int64]*persistence.ActivityInfo)
 	}
-	wms.Decision = &persistence.DecisionInfo{
-		ScheduleID: scheduleID,
-		StartedID: startedID,
-		RequestID: requestID,
-		StartToCloseTimeout: startToCloseTimeout,
-	}
+	wms.ExecutionInfo.DecisionScheduleID = scheduleID
+	wms.ExecutionInfo.DecisionStartedID = startedID
+	wms.ExecutionInfo.DecisionRequestID = requestID
+	wms.ExecutionInfo.DecisionTimeout = startToCloseTimeout
 }
 
 func addUserTimerToMutableState(wms *persistence.WorkflowMutableState, timerID string, startedID int64,

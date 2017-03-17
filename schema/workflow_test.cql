@@ -15,21 +15,25 @@ CREATE TYPE shard (
   transfer_ack_level  bigint,
 );
 
+--- Workflow execution and mutable state ---
 CREATE TYPE workflow_execution (
-  workflow_id           text,
-  run_id                uuid,
-  task_list             text,
-  history               blob,
-  execution_context     blob,
-  state                 int,  -- enum WorkflowState {Created, Running, Completed}
-  next_event_id         bigint,
-  last_processed_event  bigint,
-  last_updated_time     timestamp,
-  decision_pending      boolean,
-  create_request_id     uuid,
+  workflow_id                       text,
+  run_id                            uuid,
+  task_list                         text,
+  history                           blob,
+  execution_context                 blob,
+  state                             int,  -- enum WorkflowState {Created, Running, Completed}
+  next_event_id                     bigint,
+  last_processed_event              bigint,
+  last_updated_time                 timestamp,
+  create_request_id                 uuid,
+  decision_schedule_id              bigint,
+  decision_started_id               bigint,
+  decision_request_id               text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
+  decision_timeout                  int,
 );
 
--- TODO: Remove fields that are left over from activitiy and workflow tasks.
+-- TODO: Remove fields that are left over from activity and workflow tasks.
 CREATE TYPE transfer_task (
   workflow_id      text,
   run_id           uuid,
@@ -94,7 +98,6 @@ CREATE TABLE executions (
   range_id           bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map       map<bigint, frozen<activity_info>>,
   timer_map          map<text, frozen<timer_info>>,
-  decision           frozen<decision_info>,
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
 );
 

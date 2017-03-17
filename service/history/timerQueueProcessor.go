@@ -11,12 +11,18 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 
+	"errors"
 	"github.com/uber-common/bark"
 )
 
 const (
 	timerTaskBatchSize          = 10
 	processTimerTaskWorkerCount = 5
+	updateFailureRetryCount     = 5
+)
+
+var (
+	errTimerTaskNotFound = errors.New("Timer task not found")
 )
 
 type (
@@ -130,7 +136,7 @@ func (t *timerQueueProcessorImpl) Start() {
 	}
 
 	t.shutdownWG.Add(1)
-	go t.processorPump()
+	go t.processorPump(processTimerTaskWorkerCount)
 
 	t.logger.Info("Timer queue processor started.")
 }
@@ -170,13 +176,13 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer(taskID int64) {
 	}
 }
 
-func (t *timerQueueProcessorImpl) processorPump() {
+func (t *timerQueueProcessorImpl) processorPump(taskWorkerCount int) {
 	defer t.shutdownWG.Done()
 
 	// Workers to process timer tasks that are expired.
 	tasksCh := make(chan SequenceID, timerTaskBatchSize)
 	var workerWG sync.WaitGroup
-	for i := 0; i < processTimerTaskWorkerCount; i++ {
+	for i := 0; i < taskWorkerCount; i++ {
 		workerWG.Add(1)
 		go t.processTaskWorker(tasksCh, &workerWG)
 	}
@@ -214,7 +220,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- SequenceID) e
 		gate.setNext(nextKey)
 	}
 
-	t.logger.Debugf("InitialSeed Key: %s", nextKey)
+	t.logger.Infof("InitialSeed Key: %s", nextKey)
 
 	for {
 		isWokeByNewTimer := false
@@ -333,9 +339,25 @@ func (t *timerQueueProcessorImpl) processTaskWorker(tasksCh <-chan SequenceID, w
 				return
 			}
 
-			err := t.processTimerTask(key)
-			if err != nil {
-				t.logger.Errorf("Failed to process timer with SequenceID: %s with error: %v", key, err)
+			var err error
+
+		UpdateFailureLoop:
+			for attempt := 1; attempt <= updateFailureRetryCount; attempt++ {
+				err = t.processTimerTask(key)
+				if err != nil && err != errTimerTaskNotFound {
+					// We will retry until we don't find the timer task any more.
+					t.logger.Infof("Failed to process timer with SequenceID: %s with error: %v", key, err)
+					backoff := time.Duration(attempt * 100)
+					time.Sleep(backoff * time.Millisecond)
+				} else {
+					// Completed processing the timer task.
+					break UpdateFailureLoop
+				}
+			}
+
+			if err != nil && err != errTimerTaskNotFound {
+				// We need to retry for this timer task ID
+				t.NotifyNewTimer(int64(key))
 			}
 		}
 	}
@@ -350,13 +372,15 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 	}
 
 	if len(tasks) != 1 {
-		return fmt.Errorf("Unable to find exact task for - SequenceID: %d, found task count: %d", key, len(tasks))
+		t.logger.Infof("Unable to find exact task for - SequenceID: %d, found task count: %d", key, len(tasks))
+		return errTimerTaskNotFound
 	}
 
 	timerTask := tasks[0]
 
 	if timerTask.TaskID != int64(key) {
-		return fmt.Errorf("The key didn't match - SequenceID: %d, found task: %v", key, timerTask)
+		t.logger.Infof("The key didn't match - SequenceID: %d, found task: %v", key, timerTask)
+		return errTimerTaskNotFound
 	}
 
 	t.logger.Debugf("Processing found timer: %s, for WorkflowID: %v, RunID: %v, Type: %v, TimeoutTupe: %v, EventID: %v",
@@ -375,7 +399,6 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 
 	context.Lock()
 	defer context.Unlock()
-	atomic.AddUint64(&t.timerFiredCount, 1)
 
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
@@ -386,6 +409,11 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		err = t.processDecisionTimeout(context, timerTask)
 	}
 
+	if err == nil {
+		// Tracking only successful ones.
+		atomic.AddUint64(&t.timerFiredCount, 1)
+	}
+
 	return err
 }
 
@@ -393,15 +421,25 @@ func (t *timerQueueProcessorImpl) processExpiredUserTimer(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		msBuilder, err1 := context.loadWorkflowMutableState()
+		if err1 != nil {
+			return err1
+		}
+
 		// Load the workflow execution information.
 		builder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
 		}
 
-		msBuilder, err1 := context.loadWorkflowMutableState()
-		if err1 != nil {
-			return err1
+		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
+		// some extreme cassandra failure cases.
+		if msBuilder.GetNextEventID() != builder.nextEventID {
+			t.logger.Debugf("processExpiredUserTimer: NextEventID mismatch. MS NextEventID: %v, builder NextEventID: %v",
+				msBuilder.GetNextEventID(), builder.nextEventID)
+			// Reload workflow execution history
+			context.clear()
+			continue Update_History_Loop
 		}
 
 		referenceExpiryTime, _ := DeconstructTimerKey(SequenceID(task.TaskID))
@@ -463,24 +501,39 @@ func (t *timerQueueProcessorImpl) processActivityTimeout(
 	context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		msBuilder, err1 := context.loadWorkflowMutableState()
+		if err1 != nil {
+			return err1
+		}
+
+		scheduleID := timerTask.EventID
+		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
+		// some extreme cassandra failure cases.
+		if scheduleID >= msBuilder.GetNextEventID() {
+			t.logger.Debugf("processActivityTimeout: scheduleID mismatch. MS NextEventID: %v, scheduleID: %v",
+				msBuilder.GetNextEventID(), scheduleID)
+			// Reload workflow execution history
+			context.clear()
+			continue Update_History_Loop
+		}
+
 		// Load the workflow execution information.
 		builder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
 		}
 
-		msBuilder, err1 := context.loadWorkflowMutableState()
-		if err1 != nil {
-			return err1
-		}
-
-		clearTimerTask := &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
-
-		scheduleID := timerTask.EventID
-		if scheduleID >= builder.nextEventID {
+		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
+		// some extreme cassandra failure cases.
+		if msBuilder.GetNextEventID() != builder.nextEventID {
+			t.logger.Debugf("processActivityTimeout: NextEventID mismatch. MS NextEventID: %v, builder NextEventID: %v",
+				msBuilder.GetNextEventID(), builder.nextEventID)
+			// Reload workflow execution history
 			context.clear()
 			continue Update_History_Loop
 		}
+
+		clearTimerTask := &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
 
 		scheduleNewDecision := false
 		updateHistory := false
@@ -573,19 +626,31 @@ func (t *timerQueueProcessorImpl) processDecisionTimeout(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		// Load the workflow execution information.
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-
 		msBuilder, err1 := context.loadWorkflowMutableState()
 		if err1 != nil {
 			return err1
 		}
 
 		scheduleID := task.EventID
-		if scheduleID >= builder.nextEventID {
+
+		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
+		// some extreme cassandra failure cases.
+		if scheduleID >= msBuilder.GetNextEventID() {
+			// Reload workflow execution history
+			context.clear()
+			continue Update_History_Loop
+		}
+
+		// Load the workflow execution information.
+		builder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			return err1
+		}
+
+		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
+		// some extreme cassandra failure cases.
+		if msBuilder.GetNextEventID() != builder.nextEventID {
+			// Reload workflow execution history
 			context.clear()
 			continue Update_History_Loop
 		}

@@ -1,1 +1,1 @@
-DROP KEYSPACE workflow;
+DROP KEYSPACE cadence_staging_dca1a;

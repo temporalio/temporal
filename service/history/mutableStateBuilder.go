@@ -1,8 +1,8 @@
 package history
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
@@ -20,14 +20,19 @@ type (
 		updateActivityInfos             []*persistence.ActivityInfo         // Modified activities from last update.
 		deleteActivityInfo              *int64                              // Deleted activities from last update.
 
-		pendingTimerInfoIDs             map[string]*persistence.TimerInfo   // User Timer ID -> Timer Info.
-		updateTimerInfos                []*persistence.TimerInfo            // Modified timers from last update.
-		deleteTimerInfos                []string                            // Deleted timers from last update.
+		pendingTimerInfoIDs map[string]*persistence.TimerInfo // User Timer ID -> Timer Info.
+		updateTimerInfos    []*persistence.TimerInfo          // Modified timers from last update.
+		deleteTimerInfos    []string                          // Deleted timers from last update.
 
-		pendingDecision                 *persistence.DecisionInfo           // The pending decision info.
-		updatedDecision                 *persistence.DecisionInfo           // Modified decision from last update.
+		execution   *persistence.WorkflowExecutionInfo // Workflow mutable state info.
+		logger bark.Logger
+	}
 
-		logger                          bark.Logger
+	decisionInfo struct {
+		ScheduleID      int64
+		StartedID       int64
+		RequestID       string
+		DecisionTimeout int32
 	}
 )
 
@@ -45,10 +50,10 @@ func newMutableStateBuilder(logger bark.Logger) *mutableStateBuilder {
 func (e *mutableStateBuilder) Load(
 	activityInfos map[int64]*persistence.ActivityInfo,
 	timerInfos map[string]*persistence.TimerInfo,
-	decision *persistence.DecisionInfo) {
+	execution *persistence.WorkflowExecutionInfo) {
 	e.pendingActivityInfoIDs = activityInfos
 	e.pendingTimerInfoIDs = timerInfos
-	e.pendingDecision = decision
+	e.execution = execution
 	for _, ai := range activityInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
 	}
@@ -126,30 +131,44 @@ func (e *mutableStateBuilder) DeleteUserTimer(timerID string) error {
 }
 
 // GetDecision returns details about the in-progress decision task
-func (e *mutableStateBuilder) GetDecision(scheduleEventID int64) (bool, *persistence.DecisionInfo) {
-	if e.updatedDecision != nil {
-		return e.updatedDecision.ScheduleID == scheduleEventID, e.updatedDecision
+func (e *mutableStateBuilder) GetDecision(scheduleEventID int64) (bool, *decisionInfo) {
+	di := &decisionInfo{
+		ScheduleID:      e.execution.DecisionScheduleID,
+		StartedID:       e.execution.DecisionStartedID,
+		RequestID:       e.execution.DecisionRequestID,
+		DecisionTimeout: e.execution.DecisionTimeout,
 	}
-	if e.pendingDecision != nil {
-		return e.pendingDecision.ScheduleID == scheduleEventID, e.pendingDecision
+	if scheduleEventID == di.ScheduleID {
+		return true, di
 	}
 	return false, nil
 }
 
 // UpdateDecision updates a decision task.
-func (e *mutableStateBuilder) UpdateDecision(di *persistence.DecisionInfo) {
-	e.updatedDecision = di
-	e.pendingDecision = di
+func (e *mutableStateBuilder) UpdateDecision(di *decisionInfo) {
+	e.execution.DecisionScheduleID = di.ScheduleID
+	e.execution.DecisionStartedID = di.StartedID
+	e.execution.DecisionRequestID = di.RequestID
+	e.execution.DecisionTimeout = di.DecisionTimeout
 }
 
 // DeleteDecision deletes a decision task.
 func (e *mutableStateBuilder) DeleteDecision() {
-	emptyDecisionInfo := &persistence.DecisionInfo{
-		ScheduleID:          emptyEventID,
-		StartedID:           emptyEventID,
-		RequestID:           emptyUuid,
-		StartToCloseTimeout: 0,
+	emptyDecisionInfo := &decisionInfo{
+		ScheduleID:      emptyEventID,
+		StartedID:       emptyEventID,
+		RequestID:       emptyUuid,
+		DecisionTimeout: 0,
 	}
-	e.updatedDecision = emptyDecisionInfo
-	e.pendingDecision = emptyDecisionInfo
+	e.UpdateDecision(emptyDecisionInfo)
+}
+
+// GetNextEventID returns next event ID
+func (e *mutableStateBuilder) GetNextEventID() int64 {
+	return e.execution.NextEventID
+}
+
+// UpdateExecutionInfo updates mutable state info.
+func (e *mutableStateBuilder) UpdateExecutionInfo(execution *persistence.WorkflowExecutionInfo) {
+	e.execution.NextEventID = execution.NextEventID
 }

@@ -67,8 +67,11 @@ const (
 		`next_event_id: ?, ` +
 		`last_processed_event: ?, ` +
 		`last_updated_time: ?, ` +
-		`decision_pending: ?,` +
-		`create_request_id: ?` +
+		`create_request_id: ?, ` +
+		`decision_schedule_id: ?, ` +
+		`decision_started_id: ?, ` +
+		`decision_request_id: ?, ` +
+		`decision_timeout: ?` +
 		`}`
 
 	templateTransferTaskType = `{` +
@@ -101,13 +104,6 @@ const (
 		`heart_beat_timeout: ?, ` +
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?` +
-		`}`
-
-	templateDecisionInfoType = `{` +
-		`schedule_id: ?, ` +
-		`started_id: ?, ` +
-		`request_id: ?, ` +
-		`start_to_close_timeout: ?` +
 		`}`
 
 	templateTimerInfoType = `{` +
@@ -155,8 +151,8 @@ const (
 		`VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
-		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id, decision) ` +
-		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ` + templateDecisionInfoType + `) IF NOT EXISTS`
+		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
+		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, workflow_id, run_id, transfer, task_id) ` +
@@ -179,7 +175,7 @@ const (
 		`and run_id = ? ` +
 		`and task_id = ?`
 
-	templateGetWorkflowMutableStateQuery = `SELECT activity_map, timer_map, decision ` +
+	templateGetWorkflowMutableStateQuery = `SELECT execution, activity_map, timer_map ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -198,15 +194,6 @@ const (
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
-
-	templateUpdateDecisionInfoQuery = `UPDATE executions ` +
-		`SET decision =` + templateDecisionInfoType + ` ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and workflow_id = ? ` +
@@ -530,14 +517,13 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		request.NextEventID,
 		request.LastProcessedEvent,
 		cqlNowTimestamp,
-		true,
 		request.RequestID,
+		request.DecisionScheduleID,
+		request.DecisionStartedID,
+		"", // Decision Start Request ID
+		request.DecisionStartToCloseTimeout,
 		request.NextEventID,
-		rowTypeExecutionTaskID,
-		request.Decision.ScheduleID,
-		request.Decision.StartedID,
-		request.Decision.RequestID,
-		request.Decision.StartToCloseTimeout)
+		rowTypeExecutionTaskID)
 
 	d.createTransferTasks(batch, request.TransferTasks, request.Execution.GetWorkflowId(), request.Execution.GetRunId(),
 		cqlNowTimestamp)
@@ -641,8 +627,11 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.NextEventID,
 		executionInfo.LastProcessedEvent,
 		cqlNowTimestamp,
-		executionInfo.DecisionPending,
 		executionInfo.CreateRequestID,
+		executionInfo.DecisionScheduleID,
+		executionInfo.DecisionStartedID,
+		executionInfo.DecisionRequestID,
+		executionInfo.DecisionTimeout,
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
@@ -662,9 +651,6 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 
 	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos,
 		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
-
-	d.updateDecisionInfo(batch, request.UpdateDecision, executionInfo.WorkflowID,
-		executionInfo.RunID, request.Condition, request.RangeID)
 
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
@@ -736,8 +722,11 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 		info.NextEventID,
 		info.LastProcessedEvent,
 		cqlNowTimestamp,
-		info.DecisionPending,
 		info.CreateRequestID,
+		info.DecisionScheduleID,
+		info.DecisionStartedID,
+		info.DecisionRequestID,
+		info.DecisionTimeout,
 		info.NextEventID,
 		rowTypeExecutionTaskID,
 		defaultDeleteTTLSeconds)
@@ -1134,6 +1123,12 @@ func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutab
 
 	state := &WorkflowMutableState{}
 
+	ei := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
+	// TODO: Removing this piece of code when history is moved out of execution info.
+	// This is just a safe way upstream mutable state doesn't hold on to it.
+	ei.History = nil
+	state.ExecutionInfo = ei
+
 	activityInfos := make(map[int64]*ActivityInfo)
 	aMap := result["activity_map"].(map[int64]map[string]interface{})
 	for key, value := range aMap {
@@ -1149,9 +1144,6 @@ func (d *cassandraPersistence) GetWorkflowMutableState(request *GetWorkflowMutab
 		timerInfos[key] = info
 	}
 	state.TimerInfos = timerInfos
-
-	di := result["decision"].(map[string]interface{})
-	state.Decision = createDecisionInfo(di)
 
 	return &GetWorkflowMutableStateResponse{State: state}, nil
 }
@@ -1228,25 +1220,6 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
 			deleteTimerTask.GetTaskID())
-	}
-}
-
-func (d *cassandraPersistence) updateDecisionInfo(batch *gocql.Batch, di *DecisionInfo,
-	workflowID string, runID string, condition int64, rangeID int64) {
-
-	if di != nil {
-		batch.Query(templateUpdateDecisionInfoQuery,
-			di.ScheduleID,
-			di.StartedID,
-			di.RequestID,
-			di.StartToCloseTimeout,
-			d.shardID,
-			rowTypeExecution,
-			workflowID,
-			runID,
-			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
 	}
 }
 
@@ -1365,10 +1338,16 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.LastProcessedEvent = v.(int64)
 		case "last_updated_time":
 			info.LastUpdatedTimestamp = v.(time.Time)
-		case "decision_pending":
-			info.DecisionPending = v.(bool)
 		case "create_request_id":
 			info.CreateRequestID = v.(gocql.UUID).String()
+		case "decision_schedule_id":
+			info.DecisionScheduleID = v.(int64)
+		case "decision_started_id":
+			info.DecisionStartedID = v.(int64)
+		case "decision_request_id":
+			info.DecisionRequestID = v.(string)
+		case "decision_timeout":
+			info.DecisionTimeout = int32(v.(int))
 		}
 	}
 
@@ -1483,22 +1462,3 @@ func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
 
 	return info
 }
-
-func createDecisionInfo(result map[string]interface{}) *DecisionInfo {
-	info := &DecisionInfo{}
-	for k, v := range result {
-		switch k {
-		case "schedule_id":
-			info.ScheduleID = v.(int64)
-		case "started_id":
-			info.StartedID = v.(int64)
-		case "request_id":
-			info.RequestID = v.(string)
-		case "start_to_close_timeout":
-			info.StartToCloseTimeout = int32(v.(int))
-		}
-	}
-
-	return info
-}
-

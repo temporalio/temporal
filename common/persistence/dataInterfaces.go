@@ -8,7 +8,7 @@ import (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated   = iota
+	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -21,7 +21,7 @@ const (
 
 // Transfer task types
 const (
-	TransferTaskTypeDecisionTask    = iota
+	TransferTaskTypeDecisionTask = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
 )
@@ -76,8 +76,11 @@ type (
 		NextEventID          int64
 		LastProcessedEvent   int64
 		LastUpdatedTimestamp time.Time
-		DecisionPending      bool
 		CreateRequestID      string
+		DecisionScheduleID   int64
+		DecisionStartedID    int64
+		DecisionRequestID    string
+		DecisionTimeout      int32
 	}
 
 	// TransferTaskInfo describes a transfer task
@@ -162,9 +165,9 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivitInfos map[int64]*ActivityInfo
-		TimerInfos   map[string]*TimerInfo
-		Decision     *DecisionInfo
+		ActivitInfos  map[int64]*ActivityInfo
+		TimerInfos    map[string]*TimerInfo
+		ExecutionInfo *WorkflowExecutionInfo
 	}
 
 	// ActivityInfo details.
@@ -180,14 +183,6 @@ type (
 		HeartbeatTimeout       int32
 		CancelRequested        bool
 		CancelRequestID        int64
-	}
-
-	// DecisionInfo details.
-	DecisionInfo struct {
-		ScheduleID          int64
-		StartedID           int64
-		RequestID           string
-		StartToCloseTimeout int32
 	}
 
 	// TimerInfo details - metadata about user timer info.
@@ -221,17 +216,19 @@ type (
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
-		RequestID          string
-		Execution          workflow.WorkflowExecution
-		TaskList           string
-		History            []byte
-		ExecutionContext   []byte
-		NextEventID        int64
-		LastProcessedEvent int64
-		TransferTasks      []Task
-		TimerTasks         []Task
-		RangeID            int64
-		Decision           *DecisionInfo
+		RequestID                   string
+		Execution                   workflow.WorkflowExecution
+		TaskList                    string
+		History                     []byte
+		ExecutionContext            []byte
+		NextEventID                 int64
+		LastProcessedEvent          int64
+		TransferTasks               []Task
+		TimerTasks                  []Task
+		RangeID                     int64
+		DecisionScheduleID          int64
+		DecisionStartedID           int64
+		DecisionStartToCloseTimeout int32
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -263,7 +260,6 @@ type (
 		DeleteActivityInfo  *int64
 		UpserTimerInfos     []*TimerInfo
 		DeleteTimerInfos    []string
-		UpdateDecision      *DecisionInfo
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

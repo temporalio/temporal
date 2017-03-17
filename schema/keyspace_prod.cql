@@ -2,4 +2,4 @@
 --- RF of 5 allows us to lose two replicas and still achieve quorum (with 3 nodes)
 --- When we move to the multi-dc setup, each DC can have a RF of 3
 
-CREATE KEYSPACE IF NOT EXISTS cadence WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '5'};
+CREATE KEYSPACE IF NOT EXISTS cadence_staging_dca1a WITH replication = { 'class' : 'NetworkTopologyStrategy', 'dca1' : 3};

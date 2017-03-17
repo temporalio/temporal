@@ -3,12 +3,12 @@
 # the default cqlsh listen port is 9042
 port=9042
 
-if ["$1" != "onebox"]; then
+if [ "$1" != "onebox" ]; then
     # Managed Cassandra
     host=compute2487-dca1.prod.uber.internal
     version=3.4.0
-    namespace=cadence
-    echo "Running checks against Managed Cassandra ..."
+    namespace=cadence_staging_dca1a
+    echo "Running checks against Managed Cassandra namespace " $namespace "...."
 else
     # Onebox.
     host=127.0.0.1

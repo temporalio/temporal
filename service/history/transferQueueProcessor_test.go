@@ -218,7 +218,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		NextEventID:          sourceInfo.NextEventID,
 		LastProcessedEvent:   sourceInfo.LastProcessedEvent,
 		LastUpdatedTimestamp: sourceInfo.LastUpdatedTimestamp,
-		DecisionPending:      sourceInfo.DecisionPending,
 		CreateRequestID:      sourceInfo.CreateRequestID,
 	}
 }
