@@ -54,6 +54,7 @@ const (
 	tagValueStoreOperationCreateTask     = "create-task"
 	tagValueStoreOperationCompleteTask   = "complete-task"
 	tagValueStoreOperationUpdateTaskList = "update-task-list"
+	tagValueStoreOperationStopTaskList   = "stop-task-list"
 
 	tagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"

@@ -229,18 +229,7 @@ pollLoop:
 				tCtx.completeTask(nil)
 				continue pollLoop
 			}
-			// This essentially looses task when it was loaded from persistence.
 			tCtx.completeTask(err)
-			// TODO: Implement task retries on intermittent history service failures
-			// TODO: Stop loosing tasks if history service is not available
-			e.logger.Errorf("Lost decision task (workflowID=%v, runID=%v, scheduleID=%v, taskList=%v, taskID=%v) "+
-				"due to error from historyService.RecordDecisionTaskStarted: %v",
-				tCtx.workflowExecution.GetWorkflowId(),
-				tCtx.workflowExecution.GetRunId(),
-				tCtx.info.RunID,
-				tCtx.info.ScheduleID,
-				taskListName,
-				err)
 			continue pollLoop
 		}
 		tCtx.completeTask(nil)
@@ -287,18 +276,7 @@ pollLoop:
 				tCtx.completeTask(nil)
 				continue pollLoop // Duplicated or cancelled task
 			}
-			// This essentially looses task when it was loaded from persistence.
 			tCtx.completeTask(err)
-			// TODO: Implement task retries on intermittent history service failures
-			// TODO: Stop loosing tasks if history service is not available
-			e.logger.Errorf("Lost activity task (workflowID=%v, runID=%v, scheduleID=%v, taskList=%v, taskID=%v) "+
-				"due to error from historyService.RecordActivityTaskStarted: %v",
-				tCtx.workflowExecution.WorkflowId,
-				tCtx.workflowExecution.RunId,
-				tCtx.info.RunID,
-				tCtx.info.ScheduleID,
-				taskListName,
-				err)
 			continue pollLoop
 		}
 		tCtx.completeTask(nil)

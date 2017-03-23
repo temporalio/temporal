@@ -458,15 +458,12 @@ func (s *cassandraPersistenceSuite) TestLeaseTaskList() {
 	tli := response.TaskListInfo
 	s.EqualValues(1, tli.RangeID)
 	s.EqualValues(0, tli.AckLevel)
-	err = s.TaskMgr.CompleteTask(
-		&CompleteTaskRequest{TaskID: 110, TaskList: &TaskListInfo{Name: taskList, TaskType: TaskListTypeActivity, AckLevel: 100, RangeID: tli.RangeID}})
-	s.NoError(err)
 
 	response, err = s.TaskMgr.LeaseTaskList(&LeaseTaskListRequest{TaskList: taskList, TaskType: TaskListTypeActivity})
 	s.NoError(err)
 	tli = response.TaskListInfo
 	s.EqualValues(2, tli.RangeID)
-	s.EqualValues(100, tli.AckLevel)
+	s.EqualValues(0, tli.AckLevel)
 }
 
 func (s *cassandraPersistenceSuite) TestTimerTasks() {
@@ -606,10 +603,10 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableStateInfo() {
 
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {
 	return &WorkflowExecutionInfo{
-		WorkflowID:                  sourceInfo.WorkflowID,
-		RunID:                       sourceInfo.RunID,
-		TaskList:                    sourceInfo.TaskList,
-		History:                     sourceInfo.History,
+		WorkflowID:           sourceInfo.WorkflowID,
+		RunID:                sourceInfo.RunID,
+		TaskList:             sourceInfo.TaskList,
+		History:              sourceInfo.History,
 		ExecutionContext:     sourceInfo.ExecutionContext,
 		State:                sourceInfo.State,
 		NextEventID:          sourceInfo.NextEventID,

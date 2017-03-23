@@ -1010,44 +1010,20 @@ PopulateTasks:
 
 // From TaskManager interface
 func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error {
-	batch := d.session.NewBatch(gocql.LoggedBatch)
 	tli := request.TaskList
-	batch.Query(templateCompleteTaskQuery,
+	query := d.session.Query(templateCompleteTaskQuery,
 		tli.Name,
 		tli.TaskType,
 		rowTypeTask,
 		request.TaskID)
-	batch.Query(templateUpdateTaskListQuery,
-		tli.RangeID,
-		tli.Name,
-		tli.TaskType,
-		tli.AckLevel,
-		tli.Name,
-		tli.TaskType,
-		rowTypeTaskList,
-		taskListTaskID,
-		tli.RangeID,
-	)
 
-	previous := make(map[string]interface{})
-	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
+	err := query.Exec()
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTask operation failed. Error: %v", err),
 		}
 	}
 
-	if !applied {
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-
-		return &ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to complete task. columns: (%v)",
-				strings.Join(columns, ",")),
-		}
-	}
 	return nil
 }
 

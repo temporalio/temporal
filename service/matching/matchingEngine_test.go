@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -985,6 +986,44 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 
 }
 
+func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
+	runID := "run1"
+	workflowID := "workflow1"
+	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+
+	tl := "makeToast"
+	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+
+	scheduleID := int64(0)
+	addRequest := matching.AddActivityTaskRequest{
+		Execution:  &workflowExecution,
+		ScheduleId: &scheduleID,
+		TaskList:   taskList}
+
+	err := s.matchingEngine.AddActivityTask(&addRequest)
+	s.NoError(err)
+	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
+
+	ctx, err := s.matchingEngine.getTask(common.BackgroundThriftContext(), tlID)
+	s.NoError(err)
+
+	ctx.completeTask(errors.New("test error"))
+	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
+	ctx2, err := s.matchingEngine.getTask(common.BackgroundThriftContext(), tlID)
+	s.NoError(err)
+
+	s.NotEqual(ctx.info.TaskID, ctx2.info.TaskID)
+	s.Equal(ctx.info.WorkflowID, ctx2.info.WorkflowID)
+	s.Equal(ctx.info.RunID, ctx2.info.RunID)
+	s.Equal(ctx.info.ScheduleID, ctx2.info.ScheduleID)
+
+	ctx2.completeTask(nil)
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+}
+
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
 	scheduleAttributes *workflow.ScheduleActivityTaskDecisionAttributes) *workflow.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, workflow.EventType_ActivityTaskScheduled)
@@ -1117,12 +1156,6 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	tlm.Lock()
 	defer tlm.Unlock()
 
-	if tlm.rangeID != tli.RangeID {
-		return &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to complete task. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
-				request.TaskList.Name, request.TaskList.TaskType, tli.RangeID, tlm.rangeID),
-		}
-	}
 	tlm.tasks.Remove(request.TaskID)
 	return nil
 }
