@@ -19,6 +19,7 @@ const (
 	// ringpop instance. The data for this key is the service name
 	RoleKey                = "serviceName"
 	defaultRefreshInterval = time.Second * 10
+	replicaPoints          = 100
 )
 
 type ringpopServiceResolver struct {
@@ -44,7 +45,7 @@ func newRingpopServiceResolver(service string, rp *ringpop.Ringpop, logger bark.
 		service:    service,
 		rp:         rp,
 		logger:     logger.WithFields(bark.Fields{"component": "ServiceResolver", RoleKey: service}),
-		ring:       hashring.New(farm.Fingerprint32, 100),
+		ring:       hashring.New(farm.Fingerprint32, replicaPoints),
 		listeners:  make(map[string]chan<- *ChangedEvent),
 		shutdownCh: make(chan struct{}),
 	}
@@ -77,7 +78,7 @@ func (r *ringpopServiceResolver) Start() error {
 	return nil
 }
 
-// Stop stops the oracle
+// Stop stops the resolver
 func (r *ringpopServiceResolver) Stop() error {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
@@ -90,7 +91,7 @@ func (r *ringpopServiceResolver) Stop() error {
 
 	if r.isStarted {
 		r.rp.RemoveListener(r)
-		r.ring = hashring.New(farm.Fingerprint32, 1)
+		r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
 		r.listeners = make(map[string]chan<- *ChangedEvent)
 		close(r.shutdownCh)
 	}
@@ -152,7 +153,7 @@ func (r *ringpopServiceResolver) refresh() {
 	r.ringLock.Lock()
 	defer r.ringLock.Unlock()
 
-	r.ring = hashring.New(farm.Fingerprint32, 1)
+	r.ring = hashring.New(farm.Fingerprint32, replicaPoints)
 
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
 	if err != nil {
@@ -165,7 +166,7 @@ func (r *ringpopServiceResolver) refresh() {
 		r.ring.AddMembers(host)
 	}
 
-	r.logger.Infof("Current reachable members: %v", addrs)
+	r.logger.Debugf("Current reachable members: %v", addrs)
 }
 
 func (r *ringpopServiceResolver) emitEvent(rpEvent events.RingChangedEvent) {
