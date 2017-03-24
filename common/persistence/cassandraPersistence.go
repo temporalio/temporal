@@ -919,22 +919,23 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
+func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
+	batch := d.session.NewBatch(gocql.LoggedBatch)
 	taskList := request.TaskList
-	scheduleID := request.Data.ScheduleID
 	taskListType := request.TaskListType
 
-	// Batch is used to include conditional update on range_id
-	batch := d.session.NewBatch(gocql.LoggedBatch)
+	for _, task := range request.Tasks {
+		scheduleID := task.Data.ScheduleID
 
-	batch.Query(templateCreateTaskQuery,
-		taskList,
-		taskListType,
-		rowTypeTask,
-		request.TaskID,
-		request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(),
-		scheduleID)
+		batch.Query(templateCreateTaskQuery,
+			taskList,
+			taskListType,
+			rowTypeTask,
+			task.TaskID,
+			task.Execution.GetWorkflowId(),
+			task.Execution.GetRunId(),
+			scheduleID)
+	}
 
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(templateUpdateTaskListRangeOnlyQuery,
@@ -957,7 +958,8 @@ func (d *cassandraPersistence) CreateTask(request *CreateTaskRequest) (*CreateTa
 				taskList, taskListType, request.RangeID, rangeID),
 		}
 	}
-	return &CreateTaskResponse{}, nil
+
+	return &CreateTasksResponse{}, nil
 }
 
 // From TaskManager interface

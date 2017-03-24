@@ -68,21 +68,21 @@ func (_m *TaskManager) CompleteTask(request *persistence.CompleteTaskRequest) er
 	return r0
 }
 
-// CreateTask provides a mock function with given fields: request
-func (_m *TaskManager) CreateTask(request *persistence.CreateTaskRequest) (*persistence.CreateTaskResponse, error) {
+// CreateTasks provides a mock function with given fields: request
+func (_m *TaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *persistence.CreateTaskResponse
-	if rf, ok := ret.Get(0).(func(*persistence.CreateTaskRequest) *persistence.CreateTaskResponse); ok {
+	var r0 *persistence.CreateTasksResponse
+	if rf, ok := ret.Get(0).(func(*persistence.CreateTasksRequest) *persistence.CreateTasksResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.CreateTaskResponse)
+			r0 = ret.Get(0).(*persistence.CreateTasksResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.CreateTaskRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*persistence.CreateTasksRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

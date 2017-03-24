@@ -251,11 +251,11 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	}
 }
 
-func (p *taskPersistenceClient) CreateTask(request *CreateTaskRequest) (*CreateTaskResponse, error) {
+func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	p.m3Client.IncCounter(metrics.CreateTaskScope, metrics.PersistenceRequests)
 
 	sw := p.m3Client.StartTimer(metrics.CreateTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateTask(request)
+	response, err := p.persistence.CreateTasks(request)
 	sw.Stop()
 
 	if err != nil {

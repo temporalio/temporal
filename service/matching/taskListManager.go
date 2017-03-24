@@ -84,7 +84,7 @@ type getTaskResult struct {
 
 // syncMatchResponse result of sync match delivered to a createTask caller
 type syncMatchResponse struct {
-	response *persistence.CreateTaskResponse
+	response *persistence.CreateTasksResponse
 	err      error
 }
 
@@ -173,15 +173,17 @@ func (c *taskListManagerImpl) persistAckLevel() error {
 }
 
 // initiateTaskAppend returns taskID to use to persist the task
-func (c *taskListManagerImpl) newTaskID() (taskID int64, err error) {
+func (c *taskListManagerImpl) newTaskIDs(count int) (taskID []int64, err error) {
 	c.Lock()
 	defer c.Unlock()
-	err = c.updateRangeIfNeededLocked(c.engine)
-	if err != nil {
-		return -1, err
+	for i := 0; i < count; i++ {
+		err = c.updateRangeIfNeededLocked(c.engine)
+		if err != nil {
+			return nil, err
+		}
+		taskID = append(taskID, c.taskSequenceNumber)
+		c.taskSequenceNumber++
 	}
-	taskID = c.taskSequenceNumber
-	c.taskSequenceNumber++
 	return
 }
 
@@ -302,7 +304,7 @@ func (c *taskListManagerImpl) String() string {
 // When this method returns non nil response without error it is guaranteed that the task is started
 // and sent to a poller. So it not necessary to persist it.
 // Returns (nil, nil) if there is no waiting poller which indicates that task has to be persisted.
-func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persistence.CreateTaskResponse, error) {
+func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
 	// Request from the point of view of Add(Activity|Decision)Task operation.
 	// But it is getTask result from the point of view of a poll operation.
 	request := &getTaskResult{task: task, C: make(chan *syncMatchResponse, 1)}
@@ -449,7 +451,7 @@ func (c *taskContext) completeTask(err error) {
 	if c.syncResponseCh != nil {
 		// It is OK to succeed task creation as it was already completed
 		c.syncResponseCh <- &syncMatchResponse{
-			response: &persistence.CreateTaskResponse{}, err: err}
+			response: &persistence.CreateTasksResponse{}, err: err}
 		return
 	}
 

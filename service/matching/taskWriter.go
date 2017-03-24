@@ -10,12 +10,13 @@ import (
 
 const (
 	outstandingTaskAppendsThreshold = 250
+	maxTaskBatchSize                = 100
 )
 
 type (
 	writeTaskResponse struct {
 		err                 error
-		persistenceResponse *persistence.CreateTaskResponse
+		persistenceResponse *persistence.CreateTasksResponse
 	}
 
 	writeTaskRequest struct {
@@ -52,7 +53,7 @@ func (w *taskWriter) Start() {
 }
 
 func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
-	taskInfo *persistence.TaskInfo, rangeID int64) (*persistence.CreateTaskResponse, error) {
+	taskInfo *persistence.TaskInfo, rangeID int64) (*persistence.CreateTasksResponse, error) {
 	ch := make(chan *writeTaskResponse)
 	req := &writeTaskRequest{
 		execution:  execution,
@@ -76,34 +77,48 @@ func (w *taskWriter) taskWriterLoop() {
 writerLoop:
 	for {
 		select {
-		case req := <-w.appendCh:
+		case request := <-w.appendCh:
 			{
-				// TODO: write a batch of tasks if more than one is available in the channel,
-				// instead of one by one.
-				taskID, err := w.tlMgr.newTaskID()
+				// read a batch of requests from the channel
+				reqs := []*writeTaskRequest{request}
+				reqs = w.getWriteBatch(reqs)
+				batchSize := len(reqs)
+
+				taskIDs, err := w.tlMgr.newTaskIDs(batchSize)
 				if err != nil {
-					w.sendWriteResponse(req, err, nil)
+					w.sendWriteResponse(reqs, err, nil)
 					continue writerLoop
 				}
 
-				r, err := w.taskManager.CreateTask(&persistence.CreateTaskRequest{
-					Execution:    *req.execution,
+				tasks := []*persistence.CreateTaskInfo{}
+				rangeID := int64(0)
+				for i, req := range reqs {
+					tasks = append(tasks, &persistence.CreateTaskInfo{
+						TaskID:    taskIDs[i],
+						Execution: *req.execution,
+						Data:      req.taskInfo,
+					})
+					if req.rangeID > rangeID {
+						rangeID = req.rangeID // use the maximum rangeID provided for the write operation
+					}
+				}
+
+				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
 					TaskList:     w.taskListID.taskListName,
 					TaskListType: w.taskListID.taskType,
-					Data:         req.taskInfo,
-					TaskID:       taskID,
+					Tasks:        tasks,
 					// Note that newTaskID could increment range, so rangeID parameter
 					// might be out of sync. This is OK as caller can just retry.
-					RangeID: req.rangeID,
+					RangeID: rangeID,
 				})
 
 				if err != nil {
 					logPersistantStoreErrorEvent(w.logger, tagValueStoreOperationCreateTask, err,
-						fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
-							taskID, w.taskListID.taskType, w.taskListID.taskListName))
+						fmt.Sprintf("{taskID: [%v, %v], taskType: %v, taskList: %v}",
+							taskIDs[0], taskIDs[batchSize-1], w.taskListID.taskType, w.taskListID.taskListName))
 				}
 
-				w.sendWriteResponse(req, err, r)
+				w.sendWriteResponse(reqs, err, r)
 			}
 		case <-w.shutdownCh:
 			break writerLoop
@@ -111,12 +126,27 @@ writerLoop:
 	}
 }
 
-func (w *taskWriter) sendWriteResponse(req *writeTaskRequest,
-	err error, persistenceResponse *persistence.CreateTaskResponse) {
-	resp := &writeTaskResponse{
-		err:                 err,
-		persistenceResponse: persistenceResponse,
+func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
+readLoop:
+	for i := 0; i < maxTaskBatchSize; i++ {
+		select {
+		case req := <-w.appendCh:
+			reqs = append(reqs, req)
+		default: // channel is empty, don't block
+			break readLoop
+		}
 	}
+	return reqs
+}
 
-	req.responseCh <- resp
+func (w *taskWriter) sendWriteResponse(reqs []*writeTaskRequest,
+	err error, persistenceResponse *persistence.CreateTasksResponse) {
+	for _, req := range reqs {
+		resp := &writeTaskResponse{
+			err:                 err,
+			persistenceResponse: persistenceResponse,
+		}
+
+		req.responseCh <- resp
+	}
 }

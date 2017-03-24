@@ -428,18 +428,24 @@ func (s *TestBase) CreateDecisionTask(workflowExecution workflow.WorkflowExecuti
 	}
 
 	taskID := s.GetNextSequenceNumber()
-	_, err = s.TaskMgr.CreateTask(&CreateTaskRequest{
-		TaskID:       taskID,
-		Execution:    workflowExecution,
+	tasks := []*CreateTaskInfo{
+		&CreateTaskInfo{
+			TaskID:    taskID,
+			Execution: workflowExecution,
+			Data: &TaskInfo{
+				WorkflowID: workflowExecution.GetWorkflowId(),
+				RunID:      workflowExecution.GetRunId(),
+				TaskID:     taskID,
+				ScheduleID: decisionScheduleID,
+			},
+		},
+	}
+
+	_, err = s.TaskMgr.CreateTasks(&CreateTasksRequest{
 		TaskList:     taskList,
 		TaskListType: TaskListTypeDecision,
-		Data: &TaskInfo{
-			WorkflowID: workflowExecution.GetWorkflowId(),
-			RunID:      workflowExecution.GetRunId(),
-			TaskID:     taskID,
-			ScheduleID: decisionScheduleID,
-		},
-		RangeID: leaseResponse.TaskListInfo.RangeID,
+		Tasks:        tasks,
+		RangeID:      leaseResponse.TaskListInfo.RangeID,
 	})
 
 	if err != nil {
@@ -464,19 +470,23 @@ func (s *TestBase) CreateActivityTasks(workflowExecution workflow.WorkflowExecut
 			return []int64{}, err
 		}
 		taskID := s.GetNextSequenceNumber()
-
-		_, err := s.TaskMgr.CreateTask(&CreateTaskRequest{
-			TaskID:       taskID,
-			Execution:    workflowExecution,
+		tasks := []*CreateTaskInfo{
+			&CreateTaskInfo{
+				TaskID:    taskID,
+				Execution: workflowExecution,
+				Data: &TaskInfo{
+					WorkflowID: workflowExecution.GetWorkflowId(),
+					RunID:      workflowExecution.GetRunId(),
+					TaskID:     taskID,
+					ScheduleID: activityScheduleID,
+				},
+			},
+		}
+		_, err := s.TaskMgr.CreateTasks(&CreateTasksRequest{
 			TaskList:     taskList,
 			TaskListType: TaskListTypeActivity,
-			Data: &TaskInfo{
-				WorkflowID: workflowExecution.GetWorkflowId(),
-				RunID:      workflowExecution.GetRunId(),
-				TaskID:     s.GetNextSequenceNumber(),
-				ScheduleID: activityScheduleID,
-			},
-			RangeID: leaseResponse.TaskListInfo.RangeID,
+			Tasks:        tasks,
+			RangeID:      leaseResponse.TaskListInfo.RangeID,
 		})
 
 		if err != nil {
