@@ -116,8 +116,8 @@ func (s *integrationSuite) SetupTest() {
 
 	s.setupShards()
 
-	s.host = NewCadence(s.ShardMgr, s.ExecutionMgrFactory, s.TaskMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts,
-		s.logger)
+	s.host = NewCadence(s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr, testNumberOfHistoryShards,
+		testNumberOfHistoryHosts, s.logger)
 	s.host.Start()
 	s.engine, _ = frontend.NewClient(s.ch, s.host.FrontendAddress())
 }
@@ -284,6 +284,17 @@ retry:
 			p.logger.Info("Empty Decision task: Polling again.")
 			continue retry
 		}
+
+		history := response.GetHistory()
+		if history == nil {
+			p.logger.Fatal("History is nil")
+		}
+
+		events := history.GetEvents()
+		if events == nil || len(events) == 0 {
+			p.logger.Fatalf("History Events are empty: %v", events)
+		}
+
 
 		if dropTask {
 			p.logger.Info("Dropping Decision task: ")

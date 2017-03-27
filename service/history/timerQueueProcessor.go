@@ -1,6 +1,7 @@
 package history
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 
-	"errors"
 	"github.com/uber-common/bark"
 )
 
@@ -23,6 +23,8 @@ const (
 
 var (
 	errTimerTaskNotFound = errors.New("Timer task not found")
+	errFailedToAddTimeoutEvent = errors.New("Failed to add timeout event")
+	errFailedToAddTimerFiredEvent = errors.New("Failed to add timer fired event")
 )
 
 type (
@@ -421,25 +423,9 @@ func (t *timerQueueProcessorImpl) processExpiredUserTimer(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowMutableState()
+		msBuilder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
-		}
-
-		// Load the workflow execution information.
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if msBuilder.GetNextEventID() != builder.nextEventID {
-			t.logger.Debugf("processExpiredUserTimer: NextEventID mismatch. MS NextEventID: %v, builder NextEventID: %v",
-				msBuilder.GetNextEventID(), builder.nextEventID)
-			// Reload workflow execution history
-			context.clear()
-			continue Update_History_Loop
 		}
 
 		referenceExpiryTime, _ := DeconstructTimerKey(SequenceID(task.TaskID))
@@ -458,14 +444,11 @@ Update_History_Loop:
 
 			if isExpired := context.tBuilder.IsTimerExpired(td, referenceExpiryTime); isExpired {
 				// Add TimerFired event to history.
-				builder.AddTimerFiredEvent(ti.StartedID, ti.TimerID)
-
-				// Remove timer from mutable state.
-				err := msBuilder.DeleteUserTimer(ti.TimerID)
-				if err != nil {
-					return err
+				if msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID) == nil {
+					return errFailedToAddTimerFiredEvent
 				}
-				scheduleNewDecision = !builder.hasPendingDecisionTask()
+
+				scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 			} else {
 				// See if we have next timer in list to be created.
 				if !td.TaskCreated {
@@ -475,6 +458,7 @@ Update_History_Loop:
 					// Update the task ID tracking the corresponding timer task.
 					ti.TaskID = nextTask.GetTaskID()
 					msBuilder.UpdateUserTimer(ti.TimerID, ti)
+					defer t.NotifyNewTimer(ti.TaskID)
 				}
 
 				// Done!
@@ -486,7 +470,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		err := t.updateWorkflowExecution(context, builder, msBuilder, scheduleNewDecision, timerTasks, clearTimerTask)
+		err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, timerTasks, clearTimerTask)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -501,7 +485,7 @@ func (t *timerQueueProcessorImpl) processActivityTimeout(
 	context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowMutableState()
+		msBuilder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
 		}
@@ -517,28 +501,12 @@ Update_History_Loop:
 			continue Update_History_Loop
 		}
 
-		// Load the workflow execution information.
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if msBuilder.GetNextEventID() != builder.nextEventID {
-			t.logger.Debugf("processActivityTimeout: NextEventID mismatch. MS NextEventID: %v, builder NextEventID: %v",
-				msBuilder.GetNextEventID(), builder.nextEventID)
-			// Reload workflow execution history
-			context.clear()
-			continue Update_History_Loop
-		}
-
 		clearTimerTask := &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
 
 		scheduleNewDecision := false
 		updateHistory := false
 
-		if isRunning, ai := msBuilder.GetActivity(scheduleID); isRunning {
+		if ai, isRunning := msBuilder.GetActivityInfo(scheduleID); isRunning {
 			timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
 			t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
 				timeoutType, scheduleID, ai.StartedID)
@@ -546,56 +514,47 @@ Update_History_Loop:
 			switch timeoutType {
 			case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
 				{
-					builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
-					err := msBuilder.DeleteActivity(scheduleID)
-					if err != nil {
-						return err
+					if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+						return errFailedToAddTimeoutEvent
 					}
+
 					updateHistory = true
-					scheduleNewDecision = !builder.hasPendingDecisionTask()
+					scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 				}
 
 			case workflow.TimeoutType_START_TO_CLOSE:
 				{
 					if ai.StartedID != emptyEventID {
-						builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
-						err := msBuilder.DeleteActivity(scheduleID)
-						if err != nil {
-							return err
+						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+							return errFailedToAddTimeoutEvent
 						}
+
 						updateHistory = true
-						scheduleNewDecision = !builder.hasPendingDecisionTask()
+						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 					}
 				}
 
 			case workflow.TimeoutType_HEARTBEAT:
 				{
 					if ai.StartedID != emptyEventID {
-						isTimerRunning, ai := msBuilder.GetActivity(scheduleID)
-						if isTimerRunning {
-							t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
-							// The current heart beat expired.
-							builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, ai.Details)
-							err := msBuilder.DeleteActivity(scheduleID)
-							if err != nil {
-								return err
-							}
-							updateHistory = true
-							scheduleNewDecision = !builder.hasPendingDecisionTask()
+						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+							return errFailedToAddTimeoutEvent
 						}
+
+						updateHistory = true
+						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 					}
 				}
 
 			case workflow.TimeoutType_SCHEDULE_TO_START:
 				{
 					if ai.StartedID == emptyEventID {
-						builder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil)
-						err := msBuilder.DeleteActivity(scheduleID)
-						if err != nil {
-							return err
+						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+							return errFailedToAddTimeoutEvent
 						}
+
 						updateHistory = true
-						scheduleNewDecision = !builder.hasPendingDecisionTask()
+						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 					}
 				}
 			}
@@ -604,7 +563,7 @@ Update_History_Loop:
 		if updateHistory {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err := t.updateWorkflowExecution(context, builder, msBuilder, scheduleNewDecision, nil, clearTimerTask)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, nil, clearTimerTask)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -626,7 +585,7 @@ func (t *timerQueueProcessorImpl) processDecisionTimeout(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowMutableState()
+		msBuilder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
 		}
@@ -641,36 +600,25 @@ Update_History_Loop:
 			continue Update_History_Loop
 		}
 
-		// Load the workflow execution information.
-		builder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if msBuilder.GetNextEventID() != builder.nextEventID {
-			// Reload workflow execution history
-			context.clear()
-			continue Update_History_Loop
-		}
-
 		scheduleNewDecision := false
 		clearTimerTask := &persistence.DecisionTimeoutTask{TaskID: task.TaskID}
 
-		isRunning, di := msBuilder.GetDecision(scheduleID)
+		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
 		if isRunning {
 			// Add a decision task timeout event.
-			if err := t.historyService.timeoutDecisionTask(builder, msBuilder, scheduleID, di.StartedID); err != nil {
-				return err
+			timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
+			if timeoutEvent == nil {
+				// Unable to add DecisionTaskTimedout event to history
+				return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskTimedout event to history."}
 			}
+
 			scheduleNewDecision = true
 		}
 
 		if scheduleNewDecision {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err := t.updateWorkflowExecution(context, builder, msBuilder, scheduleNewDecision, nil, clearTimerTask)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, nil, clearTimerTask)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -689,7 +637,7 @@ Update_History_Loop:
 }
 
 func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecutionContext,
-	builder *historyBuilder, msBuilder *mutableStateBuilder, scheduleNewDecision bool, timerTasks []persistence.Task,
+	msBuilder *mutableStateBuilder, scheduleNewDecision bool, timerTasks []persistence.Task,
 	clearTimerTask persistence.Task) error {
 	var transferTasks []persistence.Task
 	if scheduleNewDecision {
@@ -703,7 +651,7 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 			return err
 		}
 		defer t.historyService.tracker.completeTask(id)
-		newDecisionEvent := t.historyService.scheduleDecisionTask(builder, msBuilder)
+		newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
 			TaskID:     id,
 			TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
@@ -711,5 +659,12 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 		}}
 	}
 
-	return context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask)
+	// Generate a transaction ID for appending events to history
+	transactionID, err1 := t.historyService.tracker.getNextTaskID()
+	if err1 != nil {
+		return err1
+	}
+	defer t.historyService.tracker.completeTask(transactionID)
+
+	return context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
 }

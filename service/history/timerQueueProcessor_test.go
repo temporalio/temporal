@@ -1,7 +1,6 @@
 package history
 
 import (
-	"errors"
 	"os"
 	"testing"
 	"time"
@@ -12,7 +11,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -30,6 +28,7 @@ type (
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
 		mockExecutionMgr   *mocks.ExecutionManager
+		mockHistoryMgr     *mocks.HistoryManager
 	}
 )
 
@@ -61,6 +60,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		transferSequenceNumber:    1,
 		executionManager:          s.WorkflowMgr,
 		shardManager:              s.mockShardManager,
+		historyMgr:                s.HistoryMgr,
 		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
@@ -72,12 +72,14 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
+		historyMgr:       s.HistoryMgr,
 		executionManager: s.WorkflowMgr,
 		txProcessor:      txProcessor,
 		cache:            cache,
 		logger:           s.logger,
 		tracker:          tracker,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		hSerializer:      newJSONHistorySerializer(),
 	}
 }
 
@@ -86,6 +88,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardManager = &mocks.ShardManager{}
+	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.shardClosedCh = make(chan int, 100)
 
 	mockShard := &shardContextImpl{
@@ -93,6 +96,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
+		historyMgr:                s.mockHistoryMgr,
 		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
@@ -104,12 +108,14 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	h := &historyEngineImpl{
 		shard:            mockShard,
+		historyMgr:       s.mockHistoryMgr,
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      txProcessor,
 		tracker:          tracker,
 		cache:            cache,
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		hSerializer:      newJSONHistorySerializer(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
@@ -123,43 +129,64 @@ func (s *timerQueueProcessorSuite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
+	s.mockHistoryMgr.AssertExpectations(s.T())
 }
 
-func (s *timerQueueProcessorSuite) getHistoryAndTimers(timeOuts []int32) ([]byte, []persistence.Task) {
+func (s *timerQueueProcessorSuite) createExecutionWithTimers(we workflow.WorkflowExecution, tl, identity string,
+	timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
+
 	// Generate first decision task event.
 	logger := bark.NewLoggerFromLogrus(log.New())
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, logger)
-	builder := newHistoryBuilder(logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{})
+	builder := newMutableStateBuilder(logger)
+	addWorkflowExecutionStartedEvent(builder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	scheduleEvent, _ := addDecisionTaskScheduledEvent(builder)
 
+	createState := createMutableState(builder)
+	info := createState.ExecutionInfo
+	task0, err0 := s.CreateWorkflowExecution(we, tl, info.WorkflowTypeName, info.DecisionTimeoutValue,
+		info.ExecutionContext, info.NextEventID, info.LastProcessedEvent, info.DecisionScheduleID, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err2 := s.GetWorkflowExecutionInfo(we)
+	s.Nil(err2, "No error expected.")
+
+	builder = newMutableStateBuilder(logger)
+	builder.Load(state0)
+	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
+	addDecisionTaskCompletedEvent(builder, scheduleEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 	timerTasks := []persistence.Task{}
-	builder.AddDecisionTaskScheduledEvent("taskList", 1)
-
-	counter := int64(3)
+	timerInfos := []*persistence.TimerInfo{}
+	decisionCompletedID := int64(4)
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, logger)
 	for _, timeOut := range timeOuts {
-		timerTasks = append(timerTasks, tBuilder.createUserTimerTask(int64(timeOut), counter))
-		builder.AddTimerStartedEvent(counter,
+		_, ti := builder.AddTimerStartedEvent(decisionCompletedID,
 			&workflow.StartTimerDecisionAttributes{
 				TimerId:                   common.StringPtr(uuid.New()),
-				StartToFireTimeoutSeconds: common.Int64Ptr(int64(timeOut))})
-		counter++
+				StartToFireTimeoutSeconds: common.Int64Ptr(int64(timeOut)),
+			})
+
+		timerInfos = append(timerInfos, ti)
+		if t := tBuilder.AddUserTimer(ti, builder); t != nil {
+			timerTasks = append(timerTasks, t)
+		}
 	}
 
-	// Serialize the history
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-	return h, timerTasks
+	updatedState := createMutableState(builder)
+	err3 := s.UpdateWorkflowExecution(updatedState.ExecutionInfo, nil, nil, int64(3), timerTasks, nil, nil, nil, timerInfos, nil)
+	s.Nil(err3)
+
+	return createMutableState(builder), timerTasks
 }
 
 func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
-	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-timer-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
-
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("single-timer-test"),
+		RunId:      common.StringPtr("6cc028d3-b4be-4038-80c9-bbcf99f7f109"),
+	}
 	taskList := "single-timer-queue"
-	h, tt := s.getHistoryAndTimers([]int32{1})
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, tt)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	identity := "testIdentity"
+	s.createExecutionWithTimers(workflowExecution, taskList, identity, []int32{1})
 
 	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
@@ -189,22 +216,20 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "multiple-timer-queue"
-	h, tt := s.getHistoryAndTimers([]int32{1, 2, 3})
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 6, 0, 2, tt)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	identity := "testIdentity"
+	s.createExecutionWithTimers(workflowExecution, taskList, identity, []int32{1, 2, 3})
 
 	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(timerInfo, "Expected non empty timers list")
-	s.Equal(3, len(timerInfo))
+	s.Equal(1, len(timerInfo))
 
 	processor := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
 	for {
 		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
-		// fmt.Printf("TestManyTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
+		s.logger.Infof("TestManyTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
 			processor.Stop()
@@ -220,11 +245,15 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	s.Equal(uint64(3), processor.timerFiredCount)
 }
 
+/*
 func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("After-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "After-timer-queue"
+	identity := "testIdentity"
+
+	s.createExecutionWithTimers()
 
 	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
 	builder := newHistoryBuilder(s.logger)
@@ -304,7 +333,7 @@ func (s *timerQueueProcessorSuite) checkTimedOutEventFor(workflowExecution workf
 	s.Nil(err1)
 	msBuilder := newMutableStateBuilder(s.logger)
 	msBuilder.Load(minfo.ActivitInfos, minfo.TimerInfos, minfo.ExecutionInfo)
-	isRunningFromMutableState, _ := msBuilder.GetActivity(scheduleID)
+	_, isRunningFromMutableState := msBuilder.GetActivityInfo(scheduleID)
 
 	return isRunning, isRunningFromMutableState, builder
 }
@@ -540,7 +569,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 	history, err := builder.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil /* since activity is completed */, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, nil)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
@@ -699,7 +728,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 	history, err := builder.Serialize()
 	s.Nil(err)
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil /* since it is completed */, nil)
+	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, nil)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
@@ -928,3 +957,4 @@ func (s *timerQueueProcessorSuite) TestTimerUpdateTimesOut() {
 	<-waitCh
 	processor.Stop()
 }
+*/

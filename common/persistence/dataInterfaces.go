@@ -70,7 +70,8 @@ type (
 		WorkflowID           string
 		RunID                string
 		TaskList             string
-		History              []byte
+		WorkflowTypeName     string
+		DecisionTimeoutValue int32
 		ExecutionContext     []byte
 		State                int
 		NextEventID          int64
@@ -173,7 +174,9 @@ type (
 	// ActivityInfo details.
 	ActivityInfo struct {
 		ScheduleID             int64
+		ScheduledEvent         []byte
 		StartedID              int64
+		StartedEvent           []byte
 		ActivityID             string
 		RequestID              string
 		Details                []byte
@@ -219,7 +222,8 @@ type (
 		RequestID                   string
 		Execution                   workflow.WorkflowExecution
 		TaskList                    string
-		History                     []byte
+		WorkflowTypeName            string
+		DecisionTimeoutValue        int32
 		ExecutionContext            []byte
 		NextEventID                 int64
 		LastProcessedEvent          int64
@@ -243,7 +247,7 @@ type (
 
 	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
-		ExecutionInfo *WorkflowExecutionInfo
+		State *WorkflowMutableState
 	}
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
@@ -362,16 +366,39 @@ type (
 		Timers []*TimerTaskInfo
 	}
 
-	// GetWorkflowMutableStateRequest is used to retrieve the info of a workflow execution
-	GetWorkflowMutableStateRequest struct {
-		WorkflowID     string
-		RunID          string
-		IncludeDetails bool
+	// AppendHistoryEventsRequest is used to append new events to workflow execution history
+	AppendHistoryEventsRequest struct {
+		Execution     workflow.WorkflowExecution
+		FirstEventID  int64
+		RangeID       int64
+		TransactionID int64
+		Events        []byte
+		Overwrite     bool
 	}
 
-	// GetWorkflowMutableStateResponse is the response to GetWorkflowMutableStateRequest
-	GetWorkflowMutableStateResponse struct {
-		State *WorkflowMutableState
+	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
+	GetWorkflowExecutionHistoryRequest struct {
+		Execution     workflow.WorkflowExecution
+		// Get the history events upto NextEventID.  Not Inclusive.
+		NextEventID   int64
+		// Maximum number of history append transactions per page
+		PageSize      int
+		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
+		NextPageToken []byte
+	}
+
+	// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest
+	GetWorkflowExecutionHistoryResponse struct {
+		// Slice of history append transactioin payload
+		Events        [][]byte
+		// Token to read next page if there are more events beyond page size.
+		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
+		NextPageToken []byte
+	}
+
+	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history
+	DeleteWorkflowExecutionHistoryRequest struct {
+		Execution workflow.WorkflowExecution
 	}
 
 	// ShardManager is used to manage all shards
@@ -393,9 +420,6 @@ type (
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-
-		// Workflow mutable state operations.
-		GetWorkflowMutableState(request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error)
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
@@ -410,6 +434,15 @@ type (
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
+	}
+
+	// HistoryManager is used to manage Workflow Execution History
+	HistoryManager interface {
+		AppendHistoryEvents(request *AppendHistoryEventsRequest) error
+		// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
+		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse,
+			error)
+		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
 	}
 )
 

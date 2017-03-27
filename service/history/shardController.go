@@ -27,6 +27,7 @@ type (
 		membershipUpdateCh  chan *membership.ChangedEvent
 		acquireInterval     time.Duration
 		shardMgr            persistence.ShardManager
+		historyMgr          persistence.HistoryManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		engineFactory       EngineFactory
 		shardClosedCh       chan int
@@ -45,6 +46,7 @@ type (
 	historyShardsItem struct {
 		shardID             int
 		shardMgr            persistence.ShardManager
+		historyMgr          persistence.HistoryManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		engineFactory       EngineFactory
 		host                *membership.HostInfo
@@ -58,8 +60,9 @@ type (
 )
 
 func newShardController(numberOfShards int, host *membership.HostInfo, resolver membership.ServiceResolver,
-	shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	factory EngineFactory, logger bark.Logger, reporter metrics.Client) *shardController {
+	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, logger bark.Logger,
+	reporter metrics.Client) *shardController {
 	return &shardController{
 		numberOfShards:      numberOfShards,
 		host:                host,
@@ -67,6 +70,7 @@ func newShardController(numberOfShards int, host *membership.HostInfo, resolver 
 		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
 		acquireInterval:     defaultAcquireInterval,
 		shardMgr:            shardMgr,
+		historyMgr:          historyMgr,
 		executionMgrFactory: executionMgrFactory,
 		engineFactory:       factory,
 		historyShards:       make(map[int]*historyShardsItem),
@@ -79,11 +83,13 @@ func newShardController(numberOfShards int, host *membership.HostInfo, resolver 
 	}
 }
 
-func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	factory EngineFactory, host *membership.HostInfo, logger bark.Logger, reporter metrics.Client) *historyShardsItem {
+func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
+	logger bark.Logger, reporter metrics.Client) *historyShardsItem {
 	return &historyShardsItem{
 		shardID:             shardID,
 		shardMgr:            shardMgr,
+		historyMgr:          historyMgr,
 		executionMgrFactory: executionMgrFactory,
 		engineFactory:       factory,
 		host:                host,
@@ -177,8 +183,8 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	}
 
 	if info.Identity() == c.host.Identity() {
-		shardItem := newHistoryShardsItem(shardID, c.shardMgr, c.executionMgrFactory, c.engineFactory, c.host, c.logger,
-			c.metricsClient)
+		shardItem := newHistoryShardsItem(shardID, c.shardMgr, c.historyMgr, c.executionMgrFactory, c.engineFactory, c.host,
+			c.logger, c.metricsClient)
 		c.historyShards[shardID] = shardItem
 		logShardItemCreatedEvent(shardItem.logger, info.Identity(), shardID)
 		return shardItem, nil
@@ -283,8 +289,8 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 		return nil, err
 	}
 
-	context, err := acquireShard(i.shardID, i.shardMgr, executionMgr, i.host.Identity(), shardClosedCh, i.logger,
-		i.metricsClient)
+	context, err := acquireShard(i.shardID, i.shardMgr, i.historyMgr, executionMgr, i.host.Identity(), shardClosedCh,
+		i.logger, i.metricsClient)
 	if err != nil {
 		return nil, err
 	}

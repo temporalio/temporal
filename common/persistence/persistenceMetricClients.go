@@ -218,21 +218,6 @@ func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *Complete
 	return err
 }
 
-func (p *workflowExecutionPersistenceClient) GetWorkflowMutableState(
-	request *GetWorkflowMutableStateRequest) (*GetWorkflowMutableStateResponse, error) {
-	p.m3Client.IncCounter(metrics.GetWorkflowMutableStateScope, metrics.PersistenceRequests)
-
-	sw := p.m3Client.StartTimer(metrics.GetWorkflowMutableStateScope, metrics.PersistenceLatency)
-	resonse, err := p.persistence.GetWorkflowMutableState(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.GetWorkflowMutableStateScope, err)
-	}
-
-	return resonse, err
-}
-
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *workflow.WorkflowExecutionAlreadyStartedError:
@@ -241,8 +226,6 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 		p.m3Client.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
 	case *ConditionFailedError:
 		p.m3Client.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *workflow.EntityNotExistsError:
-		p.m3Client.IncCounter(metrics.GetWorkflowMutableStateScope, metrics.CadenceErrEntityNotExistsCounter)
 	case *TimeoutError:
 		p.m3Client.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
@@ -325,8 +308,6 @@ func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *ConditionFailedError:
 		p.m3Client.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *workflow.EntityNotExistsError:
-		p.m3Client.IncCounter(metrics.GetWorkflowMutableStateScope, metrics.CadenceErrEntityNotExistsCounter)
 	case *TimeoutError:
 		p.m3Client.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)

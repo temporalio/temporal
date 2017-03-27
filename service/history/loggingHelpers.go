@@ -97,7 +97,6 @@ const (
 	tagValueStoreOperationCompleteTask            = "complete-task"
 	tagValueStoreOperationCreateWorkflowExecution = "create-wf-execution"
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
-	tagValueStoreOperationGetWorkflowMutableState = "get-wf-mutable-state"
 	tagValueStoreOperationUpdateWorkflowExecution = "update-wf-execution"
 	tagValueStoreOperationDeleteWorkflowExecution = "delete-wf-execution"
 )

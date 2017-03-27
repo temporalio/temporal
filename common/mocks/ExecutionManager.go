@@ -142,29 +142,6 @@ func (_m *ExecutionManager) GetWorkflowExecution(request *persistence.GetWorkflo
 	return r0, r1
 }
 
-// GetWorkflowMutableState provides a mock function with given fields: request
-func (_m *ExecutionManager) GetWorkflowMutableState(request *persistence.GetWorkflowMutableStateRequest) (*persistence.GetWorkflowMutableStateResponse, error) {
-	ret := _m.Called(request)
-
-	var r0 *persistence.GetWorkflowMutableStateResponse
-	if rf, ok := ret.Get(0).(func(*persistence.GetWorkflowMutableStateRequest) *persistence.GetWorkflowMutableStateResponse); ok {
-		r0 = rf(request)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.GetWorkflowMutableStateResponse)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.GetWorkflowMutableStateRequest) error); ok {
-		r1 = rf(request)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // UpdateWorkflowExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	ret := _m.Called(request)

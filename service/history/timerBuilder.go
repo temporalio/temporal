@@ -133,64 +133,24 @@ func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
 	return timeOutTask
 }
 
-func (tb *timerBuilder) AddScheduleToStartActivityTimeout(scheduleID int64, scheduleEvent *w.HistoryEvent,
-	msBuilder *mutableStateBuilder) *persistence.ActivityTimeoutTask {
-	scheduleToStartTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetScheduleToStartTimeoutSeconds()
-	if scheduleToStartTimeout <= 0 {
-		scheduleToStartTimeout = DefaultScheduleToStartActivityTimeoutInSecs
-	}
-	scheduleToCloseTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetScheduleToCloseTimeoutSeconds()
-	if scheduleToCloseTimeout <= 0 {
-		scheduleToCloseTimeout = DefaultScheduleToCloseActivityTimeoutInSecs
-	}
-	startToCloseTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds()
-	if startToCloseTimeout <= 0 {
-		startToCloseTimeout = DefaultStartToCloseActivityTimeoutInSecs
-	}
-	heartbeatTimeout := scheduleEvent.GetActivityTaskScheduledEventAttributes().GetHeartbeatTimeoutSeconds()
-
-	t := tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_START, scheduleToStartTimeout)
-
-	msBuilder.UpdateActivity(scheduleID, &persistence.ActivityInfo{
-		ScheduleID:             scheduleID,
-		StartedID:              emptyEventID,
-		ActivityID:             scheduleEvent.GetActivityTaskScheduledEventAttributes().GetActivityId(),
-		ScheduleToStartTimeout: scheduleToStartTimeout,
-		ScheduleToCloseTimeout: scheduleToCloseTimeout,
-		StartToCloseTimeout:    startToCloseTimeout,
-		HeartbeatTimeout:       heartbeatTimeout,
-		CancelRequested:        false,
-		CancelRequestID:        emptyEventID,
-	})
-
-	return t
+func (tb *timerBuilder) AddScheduleToStartActivityTimeout(
+	ai *persistence.ActivityInfo) *persistence.ActivityTimeoutTask {
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_START, ai.ScheduleToStartTimeout)
 }
 
-func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(scheduleID int64,
-	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.GetActivity(scheduleID)
-	if !ok {
-		return nil, fmt.Errorf("ScheduleToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
-	}
-	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout), nil
+func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(
+	ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask, error) {
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout), nil
 }
 
-func (tb *timerBuilder) AddStartToCloseActivityTimeout(scheduleID int64,
-	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.GetActivity(scheduleID)
-	if !ok {
-		return nil, fmt.Errorf("StartToClose: Unable to find activity Info in mutable state for event id: %d", scheduleID)
-	}
-	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout), nil
+func (tb *timerBuilder) AddStartToCloseActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
+	error) {
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout), nil
 }
 
-func (tb *timerBuilder) AddHeartBeatActivityTimeout(scheduleID int64,
-	msBuilder *mutableStateBuilder) (*persistence.ActivityTimeoutTask, error) {
-	ok, ai := msBuilder.GetActivity(scheduleID)
-	if !ok {
-		return nil, fmt.Errorf("HeartBeat: Unable to find activity Info in mutable state for event id: %d", scheduleID)
-	}
-	return tb.AddActivityTimeoutTask(scheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout), nil
+func (tb *timerBuilder) AddHeartBeatActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
+	error) {
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout), nil
 }
 
 // AddActivityTimeoutTask - Adds an activity timeout task.
@@ -207,37 +167,21 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 }
 
 // AddUserTimer - Adds an user timeout request.
-func (tb *timerBuilder) AddUserTimer(timerID string, fireTimeout int64, startedID int64,
-	msBuilder *mutableStateBuilder) (persistence.Task, error) {
-	if fireTimeout < 0 {
-		return nil, fmt.Errorf("Invalid user timerout specified")
-	}
+func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder *mutableStateBuilder) persistence.Task {
+	tb.logger.Debugf("Adding User Timer: %s", ti.TimerID)
 
-	if isRunning, ti := msBuilder.GetUserTimer(timerID); isRunning {
-		return nil, fmt.Errorf("The timer ID already exist in activity timers list: %s, old timer: %+v", timerID, *ti)
-	}
-
-	tb.logger.Debugf("Adding User Timer: %s", timerID)
-
-	// TODO: Time skew need to be taken in to account.
-	expiryTime := time.Now().Add(time.Duration(fireTimeout) * time.Second)
-	msBuilder.UpdateUserTimer(timerID, &persistence.TimerInfo{
-		TimerID:    timerID,
-		ExpiryTime: expiryTime,
-		StartedID:  startedID,
-		TaskID:     emptyTimerID,
-	})
+	// TODO: This is broken.  We need to comeup with a better way to implement this
 	tb.LoadUserTimers(msBuilder)
-
 	timerTask := tb.firstTimer()
 	if timerTask != nil {
 		// Update the task ID tracking the corresponding timer task.
 		ti := tb.pendingUserTimers[tb.timers[0].SequenceID]
 		ti.TaskID = timerTask.GetTaskID()
+		// TODO: We append updates to timer tasks twice.  Why?
 		msBuilder.UpdateUserTimer(ti.TimerID, ti)
 	}
 
-	return timerTask, nil
+	return timerTask
 }
 
 // LoadUserTimers - Load all user timers from mutable state.

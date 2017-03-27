@@ -41,6 +41,7 @@ type (
 		ExecutionMgrFactory ExecutionManagerFactory
 		WorkflowMgr         ExecutionManager
 		TaskMgr             TaskManager
+		HistoryMgr          HistoryManager
 		ShardInfo           *ShardInfo
 		ShardContext        *testShardContext
 		readLevel           int64
@@ -58,6 +59,7 @@ type (
 		shardInfo              *ShardInfo
 		transferSequenceNumber int64
 		timerSequeceNumber     int64
+		historyMgr             HistoryManager
 		executionMgr           ExecutionManager
 		logger                 bark.Logger
 		metricsClient          metrics.Client
@@ -70,11 +72,12 @@ type (
 	}
 )
 
-func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, executionMgr ExecutionManager,
-	logger bark.Logger) *testShardContext {
+func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, historyMgr HistoryManager,
+	executionMgr ExecutionManager, logger bark.Logger) *testShardContext {
 	return &testShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
+		historyMgr:             historyMgr,
 		executionMgr:           executionMgr,
 		logger:                 logger,
 		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
@@ -83,6 +86,10 @@ func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, exe
 
 func (s *testShardContext) GetExecutionManager() ExecutionManager {
 	return s.executionMgr
+}
+
+func (s *testShardContext) GetHistoryManager() HistoryManager {
+	return s.historyMgr
 }
 
 func (s *testShardContext) GetNextTransferTaskID() (int64, error) {
@@ -113,6 +120,10 @@ func (s *testShardContext) CreateWorkflowExecution(request *CreateWorkflowExecut
 
 func (s *testShardContext) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
 	return s.executionMgr.UpdateWorkflowExecution(request)
+}
+
+func (s *testShardContext) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
+	return s.historyMgr.AppendHistoryEvents(request)
 }
 
 func (s *testShardContext) GetLogger() bark.Logger {
@@ -166,6 +177,11 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Create a shard for test
 	s.readLevel = 0
 	s.ShardInfo = &ShardInfo{
@@ -173,7 +189,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		RangeID:          0,
 		TransferAckLevel: 0,
 	}
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.WorkflowMgr, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, log)
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
 		ShardInfo: s.ShardInfo,
 	})
@@ -217,19 +233,19 @@ func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) er
 }
 
 // CreateWorkflowExecution is a utility method to create workflow executions
-func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList string,
-	history []byte, executionContext []byte, nextEventID int64, lastProcessedEventID int64, decisionScheduleID int64,
-	timerTasks []Task) (
-	string, error) {
+func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowExecution, taskList, wType string,
+	decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	decisionScheduleID int64, timerTasks []Task) (string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
-		RequestID:          uuid.New(),
-		Execution:          workflowExecution,
-		TaskList:           taskList,
-		History:            history,
-		ExecutionContext:   executionContext,
-		NextEventID:        nextEventID,
-		LastProcessedEvent: lastProcessedEventID,
-		RangeID:            s.ShardContext.GetRangeID(),
+		RequestID:            uuid.New(),
+		Execution:            workflowExecution,
+		TaskList:             taskList,
+		WorkflowTypeName:     wType,
+		DecisionTimeoutValue: decisionTimeout,
+		ExecutionContext:     executionContext,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardContext.GetRangeID(),
 		TransferTasks: []Task{
 			&DecisionTask{TaskID: s.GetNextSequenceNumber(), TaskList: taskList, ScheduleID: decisionScheduleID},
 		},
@@ -248,7 +264,7 @@ func (s *TestBase) CreateWorkflowExecution(workflowExecution workflow.WorkflowEx
 
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.WorkflowExecution,
-	taskList string, history string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	taskList string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleIDs []int64, activityScheduleIDs []int64) (string, error) {
 
 	transferTasks := []Task{}
@@ -266,7 +282,6 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 		RequestID:                   uuid.New(),
 		Execution:                   workflowExecution,
 		TaskList:                    taskList,
-		History:                     []byte(history),
 		ExecutionContext:            executionContext,
 		NextEventID:                 nextEventID,
 		LastProcessedEvent:          lastProcessedEventID,
@@ -285,24 +300,10 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(workflowExecution workflow.W
 }
 
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
-func (s *TestBase) GetWorkflowExecutionInfo(workflowExecution workflow.WorkflowExecution) (*WorkflowExecutionInfo,
+func (s *TestBase) GetWorkflowExecutionInfo(workflowExecution workflow.WorkflowExecution) (*WorkflowMutableState,
 	error) {
 	response, err := s.WorkflowMgr.GetWorkflowExecution(&GetWorkflowExecutionRequest{
 		Execution: workflowExecution,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return response.ExecutionInfo, nil
-}
-
-// GetWorkflowMutableState is a utility method to retrieve execution info
-func (s *TestBase) GetWorkflowMutableState(workflowExecution workflow.WorkflowExecution) (*WorkflowMutableState,
-	error) {
-	response, err := s.WorkflowMgr.GetWorkflowMutableState(&GetWorkflowMutableStateRequest{
-		WorkflowID: workflowExecution.GetWorkflowId(),
-		RunID:      workflowExecution.GetRunId(),
 	})
 	if err != nil {
 		return nil, err

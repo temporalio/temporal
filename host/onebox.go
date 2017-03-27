@@ -41,6 +41,7 @@ type (
 		numberOfHistoryHosts  int
 		logger                bark.Logger
 		shardMgr              persistence.ShardManager
+		historyMgr            persistence.HistoryManager
 		taskMgr               persistence.TaskManager
 		executionMgrFactory   persistence.ExecutionManagerFactory
 		shutdownCh            chan struct{}
@@ -54,13 +55,15 @@ type (
 )
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(shardMgr persistence.ShardManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	taskMgr persistence.TaskManager, numberOfHistoryShards, numberOfHistoryHosts int, logger bark.Logger) Cadence {
+func NewCadence(shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager, numberOfHistoryShards,
+	numberOfHistoryHosts int, logger bark.Logger) Cadence {
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
 		numberOfHistoryHosts:  numberOfHistoryHosts,
 		logger:                logger,
 		shardMgr:              shardMgr,
+		historyMgr:            historyMgr,
 		taskMgr:               taskMgr,
 		executionMgrFactory:   executionMgrFactory,
 		shutdownCh:            make(chan struct{}),
@@ -75,7 +78,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(c.logger, c.shardMgr, c.executionMgrFactory, rpHosts, &startWG)
+	go c.startHistory(c.logger, c.shardMgr, c.historyMgr, c.executionMgrFactory, rpHosts, &startWG)
 	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
 	startWG.Wait()
 
@@ -135,7 +138,8 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 }
 
 func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
-	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
+	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string,
+	startWG *sync.WaitGroup) {
 	for _, hostport := range c.HistoryServiceAddress() {
 		tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
 			return c.createTChannel(sName, hostport, thriftServices)
@@ -145,7 +149,8 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		service := service.New(common.HistoryServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
 		var thriftServices []thrift.TChanServer
 		var handler *history.Handler
-		handler, thriftServices = history.NewHandler(service, shardMgr, executionMgrFactory, c.numberOfHistoryShards)
+		handler, thriftServices = history.NewHandler(service, shardMgr, historyMgr, executionMgrFactory,
+			c.numberOfHistoryShards)
 		handler.Start(thriftServices)
 		c.historyHandlers = append(c.historyHandlers, handler)
 	}

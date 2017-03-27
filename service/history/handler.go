@@ -20,6 +20,7 @@ import (
 type Handler struct {
 	numberOfShards        int
 	shardManager          persistence.ShardManager
+	historyMgr            persistence.HistoryManager
 	executionMgrFactory   persistence.ExecutionManagerFactory
 	matchingServiceClient matching.Client
 	hServiceResolver      membership.ServiceResolver
@@ -34,11 +35,12 @@ var _ hist.TChanHistoryService = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice service.Service, shardManager persistence.ShardManager,
+func NewHandler(sVice service.Service, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, numberOfShards int) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:             sVice,
 		shardManager:        shardManager,
+		historyMgr:          historyMgr,
 		executionMgrFactory: executionMgrFactory,
 		numberOfShards:      numberOfShards,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
@@ -62,7 +64,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
 	}
 	h.hServiceResolver = hServiceResolver
-	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager,
+	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
 		h.executionMgrFactory, h, h.GetLogger(), h.GetMetricsClient())
 	h.controller.Start()
 	h.metricsClient = h.GetMetricsClient()

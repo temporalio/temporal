@@ -20,7 +20,8 @@ CREATE TYPE workflow_execution (
   workflow_id                       text,
   run_id                            uuid,
   task_list                         text,
-  history                           blob,
+  workflow_type_name                text,
+  decision_task_timeout             int,
   execution_context                 blob,
   state                             int,  -- enum WorkflowState {Created, Running, Completed}
   next_event_id                     bigint,
@@ -55,7 +56,9 @@ CREATE TYPE timer_task (
 -- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
   schedule_id               bigint,
+  scheduled_event           blob,
   started_id                bigint,
+  started_event             blob,
   activity_id               text,    -- Client generated unique ID for the activity.
   request_id                text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
   details                   blob,
@@ -65,14 +68,6 @@ CREATE TYPE activity_info (
   heart_beat_timeout        int,
   cancel_requested          boolean, -- If a cancel request is made to cancel the activity in progress.
   cancel_request_id         bigint,  -- Event ID that identifies the cancel request.
-);
-
--- Workflow decision in progress in mutable state
-CREATE TYPE decision_info (
-  schedule_id               bigint,
-  started_id                bigint,
-  request_id                text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
-  start_to_close_timeout    int,
 );
 
 -- User timer details
@@ -99,6 +94,18 @@ CREATE TABLE executions (
   activity_map       map<bigint, frozen<activity_info>>,
   timer_map          map<text, frozen<timer_info>>,
   PRIMARY KEY  (shard_id, type, workflow_id, run_id, task_id)
+);
+
+CREATE TABLE events (
+  workflow_id    text,
+  run_id         uuid,
+  -- We insert a batch of events with each append transaction.
+  -- This field stores the event id of first event in the batch.
+  first_event_id bigint,
+  range_id       bigint,
+  tx_id          bigint,
+  data           blob, -- Batch of workflow execution history events as a blob
+  PRIMARY KEY ((workflow_id, run_id), first_event_id)
 );
 
 -- Activity or workflow task in a task list

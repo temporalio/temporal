@@ -18,6 +18,7 @@ type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
 		GetExecutionManager() persistence.ExecutionManager
+		GetHistoryManager() persistence.HistoryManager
 		GetNextTransferTaskID() (int64, error)
 		GetTransferSequenceNumber() int64
 		GetTransferAckLevel() int64
@@ -26,20 +27,23 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
+		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
 	}
 
 	shardContextImpl struct {
-		shardID            int
-		shardManager       persistence.ShardManager
-		executionManager   persistence.ExecutionManager
-		timerSequeceNumber int64
-		rangeSize          uint
-		closeCh            chan<- int
-		isClosed           int32
-		logger             bark.Logger
-		metricsClient      metrics.Client
+		shardID             int
+		rangeID             int64
+		shardManager        persistence.ShardManager
+		historyMgr          persistence.HistoryManager
+		executionManager    persistence.ExecutionManager
+		timerSequenceNumber int64
+		rangeSize           uint
+		closeCh             chan<- int
+		isClosed            int32
+		logger              bark.Logger
+		metricsClient       metrics.Client
 
 		sync.RWMutex
 		shardInfo                 *persistence.ShardInfo
@@ -52,6 +56,10 @@ var _ ShardContext = (*shardContextImpl)(nil)
 
 func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
+}
+
+func (s *shardContextImpl) GetHistoryManager() persistence.HistoryManager {
+	return s.historyMgr
 }
 
 func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
@@ -97,7 +105,7 @@ func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
-			s.close()
+			s.closeShard()
 		}
 	}
 
@@ -105,7 +113,7 @@ func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 }
 
 func (s *shardContextImpl) GetTimerSequenceNumber() int64 {
-	return atomic.AddInt64(&s.timerSequeceNumber, 1)
+	return atomic.AddInt64(&s.timerSequenceNumber, 1)
 }
 
 func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
@@ -127,7 +135,7 @@ Create_Loop:
 						continue Create_Loop
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
-						s.close()
+						s.closeShard()
 					}
 				}
 			}
@@ -155,7 +163,7 @@ Update_Loop:
 					continue Update_Loop
 				} else {
 					// Shard is stolen, trigger shutdown of history engine
-					s.close()
+					s.closeShard()
 				}
 			}
 		}
@@ -164,6 +172,22 @@ Update_Loop:
 	}
 
 	return ErrMaxAttemptsExceeded
+}
+
+func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error {
+	// No need to lock context here, as we can write concurrently to append history events
+	currentRangeID := atomic.LoadInt64(&s.rangeID)
+	request.RangeID = currentRangeID
+	err0 := s.historyMgr.AppendHistoryEvents(request)
+	if err0 != nil {
+		if _, ok := err0.(*persistence.ConditionFailedError); ok {
+			// Inserting a new event failed, lets try to overwrite the tail
+			request.Overwrite = true
+			return s.historyMgr.AppendHistoryEvents(request)
+		}
+	}
+
+	return nil
 }
 
 func (s *shardContextImpl) GetLogger() bark.Logger {
@@ -178,7 +202,7 @@ func (s *shardContextImpl) getRangeID() int64 {
 	return s.shardInfo.RangeID
 }
 
-func (s *shardContextImpl) close() {
+func (s *shardContextImpl) closeShard() {
 	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
 		return
 	}
@@ -211,7 +235,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	if err != nil {
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
-			s.close()
+			s.closeShard()
 		}
 		return err
 	}
@@ -219,6 +243,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	// Range is successfully updated in cassandra now update shard context to reflect new range
 	s.transferSequenceNumber = updatedShardInfo.RangeID << s.rangeSize
 	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.rangeSize
+	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
 	s.shardInfo = updatedShardInfo
 
 	logShardRangeUpdatedEvent(s.logger, s.shardInfo.ShardID, s.shardInfo.RangeID, s.transferSequenceNumber,
@@ -227,8 +252,10 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	return nil
 }
 
-func acquireShard(shardID int, shardManager persistence.ShardManager, executionMgr persistence.ExecutionManager,
-	owner string, closeCh chan<- int, logger bark.Logger, reporter metrics.Client) (ShardContext, error) {
+// TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
+func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
+	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, logger bark.Logger,
+	reporter metrics.Client) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -240,6 +267,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, executionM
 	context := &shardContextImpl{
 		shardID:          shardID,
 		shardManager:     shardManager,
+		historyMgr:       historyMgr,
 		executionManager: executionMgr,
 		shardInfo:        updatedShardInfo,
 		rangeSize:        defaultRangeSize,
