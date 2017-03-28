@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"log"
+	"sync"
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/cadence"
@@ -20,6 +21,7 @@ type WorkflowHandler struct {
 	history         history.Client
 	matching        matching.Client
 	tokenSerializer common.TaskTokenSerializer
+	startWG         sync.WaitGroup
 	service.Service
 }
 
@@ -29,6 +31,8 @@ func NewWorkflowHandler(sVice service.Service) (*WorkflowHandler, []thrift.TChan
 		Service:         sVice,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 	}
+	// prevent us from trying to serve requests before handler's Start() is complete
+	handler.startWG.Add(1)
 	return handler, []thrift.TChanServer{cadence.NewTChanWorkflowServiceServer(handler)}
 }
 
@@ -44,6 +48,7 @@ func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) error {
 	if err != nil {
 		return err
 	}
+	wh.startWG.Done()
 	return nil
 }
 
@@ -62,6 +67,8 @@ func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 func (wh *WorkflowHandler) PollForActivityTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
+	wh.startWG.Wait()
+
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
 	resp, err := wh.matching.PollForActivityTask(ctx, pollRequest)
 	if err != nil {
@@ -75,6 +82,8 @@ func (wh *WorkflowHandler) PollForActivityTask(
 func (wh *WorkflowHandler) PollForDecisionTask(
 	ctx thrift.Context,
 	pollRequest *gen.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
+	wh.startWG.Wait()
+
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
 	resp, err := wh.matching.PollForDecisionTask(ctx, pollRequest)
 	if err != nil {
@@ -88,15 +97,19 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	ctx thrift.Context,
 	heartbeatRequest *gen.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
+	wh.startWG.Wait()
+
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
 	resp, err := wh.history.RecordActivityTaskHeartbeat(ctx, heartbeatRequest)
 	return resp, wrapError(err)
 }
 
-// RespondActivityTaskCompleted - Record Activity Task Heart beat
+// RespondActivityTaskCompleted - response to an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
+	wh.startWG.Wait()
+
 	err := wh.history.RespondActivityTaskCompleted(ctx, completeRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
@@ -105,10 +118,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	return wrapError(err)
 }
 
-// RespondActivityTaskFailed - Record Activity Task Heart beat
+// RespondActivityTaskFailed - response to an activity task failure
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx thrift.Context,
 	failRequest *gen.RespondActivityTaskFailedRequest) error {
+	wh.startWG.Wait()
+
 	err := wh.history.RespondActivityTaskFailed(ctx, failRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(failRequest.GetTaskToken())
@@ -118,10 +133,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 }
 
-// RespondActivityTaskCanceled - Record Activity Task Heart beat
+// RespondActivityTaskCanceled - called to cancel an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	ctx thrift.Context,
 	cancelRequest *gen.RespondActivityTaskCanceledRequest) error {
+	wh.startWG.Wait()
+
 	err := wh.history.RespondActivityTaskCanceled(ctx, cancelRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(cancelRequest.GetTaskToken())
@@ -131,10 +148,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 
 }
 
-// RespondDecisionTaskCompleted - Record Activity Task Heart beat
+// RespondDecisionTaskCompleted - response to a decision task
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx thrift.Context,
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
+	wh.startWG.Wait()
+
 	err := wh.history.RespondDecisionTaskCompleted(ctx, completeRequest)
 	if err != nil {
 		logger := wh.getLoggerForTask(completeRequest.GetTaskToken())
@@ -143,10 +162,12 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	return wrapError(err)
 }
 
-// StartWorkflowExecution - Record Activity Task Heart beat
+// StartWorkflowExecution - Creates a new workflow execution
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx thrift.Context,
 	startRequest *gen.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
+	wh.startWG.Wait()
+
 	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
 	resp, err := wh.history.StartWorkflowExecution(ctx, startRequest)
 	if err != nil {
@@ -159,6 +180,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx thrift.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+	wh.startWG.Wait()
+
 	return wh.history.GetWorkflowExecutionHistory(ctx, getRequest)
 }
 
