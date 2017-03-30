@@ -48,10 +48,9 @@ type (
 		logger       bark.Logger
 
 		sync.RWMutex
-		outstandingTasks    map[int64]bool
-		readLevel           int64
-		ackLevel            int64
-		maxAllowedReadLevel int64
+		outstandingTasks map[int64]bool
+		readLevel        int64
+		ackLevel         int64
 	}
 )
 
@@ -78,14 +77,13 @@ func newAckManager(processor transferQueueProcessor, shard ShardContext, executi
 	logger bark.Logger) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
-		processor:           processor,
-		shard:               shard,
-		executionMgr:        executionMgr,
-		outstandingTasks:    make(map[int64]bool),
-		readLevel:           ackLevel,
-		ackLevel:            ackLevel,
-		maxAllowedReadLevel: shard.GetTransferSequenceNumber() - 1,
-		logger:              logger,
+		processor:        processor,
+		shard:            shard,
+		executionMgr:     executionMgr,
+		outstandingTasks: make(map[int64]bool),
+		readLevel:        ackLevel,
+		ackLevel:         ackLevel,
+		logger:           logger,
 	}
 }
 
@@ -116,10 +114,6 @@ func (t *transferQueueProcessorImpl) Stop() {
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		logTransferQueueProcesorShutdownTimedoutEvent(t.logger)
 	}
-}
-
-func (t *transferQueueProcessorImpl) UpdateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
-	t.ackMgr.updateMaxAllowedReadLevel(maxAllowedReadLevel)
 }
 
 func (t *transferQueueProcessorImpl) processorPump() {
@@ -260,12 +254,10 @@ ProcessRetryLoop:
 func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error) {
 	a.RLock()
 	rLevel := a.readLevel
-	mLevel := a.maxAllowedReadLevel
 	a.RUnlock()
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel:    rLevel,
-		MaxReadLevel: mLevel,
-		BatchSize:    transferTaskBatchSize,
+		ReadLevel: rLevel,
+		BatchSize: transferTaskBatchSize,
 	})
 
 	if err != nil {
@@ -329,15 +321,6 @@ MoveAckLevelLoop:
 		logOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 	}
 
-}
-
-func (a *ackManager) updateMaxAllowedReadLevel(maxAllowedReadLevel int64) {
-	a.Lock()
-	a.logger.Debugf("Updating max allowed read level for transfer tasks: %v", maxAllowedReadLevel)
-	if maxAllowedReadLevel > a.maxAllowedReadLevel {
-		a.maxAllowedReadLevel = maxAllowedReadLevel
-	}
-	a.Unlock()
 }
 
 func minDuration(x, y time.Duration) time.Duration {

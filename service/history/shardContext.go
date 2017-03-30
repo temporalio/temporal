@@ -66,14 +66,7 @@ func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if err := s.updateRangeIfNeededLocked(); err != nil {
-		return -1, err
-	}
-
-	taskID := s.transferSequenceNumber
-	s.transferSequenceNumber++
-
-	return taskID, nil
+	return s.getNextTransferTaskIDLocked()
 }
 
 func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
@@ -120,6 +113,18 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 	*persistence.CreateWorkflowExecutionResponse, error) {
 	s.Lock()
 	defer s.Unlock()
+
+	// assign IDs for the transfer tasks
+	// Must be done under the shard lock to ensure transfer tasks are written to persistence in increasing
+	// ID order
+	for _, task := range request.TransferTasks {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return nil, err
+		}
+		task.SetTaskID(id)
+	}
+
 Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
@@ -150,6 +155,18 @@ Create_Loop:
 func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	s.Lock()
 	defer s.Unlock()
+
+	// assign IDs for the transfer tasks
+	// Must be done under the shard lock to ensure transfer tasks are written to persistence in increasing
+	// ID order
+	for _, task := range request.TransferTasks {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return err
+		}
+		task.SetTaskID(id)
+	}
+
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
@@ -212,6 +229,17 @@ func (s *shardContextImpl) closeShard() {
 		// It will trigger the HistoryEngine unload and removal of engine from shard controller
 		s.closeCh <- s.shardID
 	}
+}
+
+func (s *shardContextImpl) getNextTransferTaskIDLocked() (int64, error) {
+	if err := s.updateRangeIfNeededLocked(); err != nil {
+		return -1, err
+	}
+
+	taskID := s.transferSequenceNumber
+	s.transferSequenceNumber++
+
+	return taskID, nil
 }
 
 func (s *shardContextImpl) updateRangeIfNeededLocked() error {

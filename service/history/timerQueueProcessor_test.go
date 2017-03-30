@@ -69,7 +69,6 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	cache := newHistoryCache(shard, s.logger)
 	cache.disabled = true
 	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{}, cache)
-	tracker := newPendingTaskTracker(shard, txProcessor, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       s.HistoryMgr,
@@ -77,7 +76,6 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		txProcessor:      txProcessor,
 		cache:            cache,
 		logger:           s.logger,
-		tracker:          tracker,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		hSerializer:      newJSONHistorySerializer(),
 	}
@@ -105,13 +103,11 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 
 	cache := newHistoryCache(mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, cache)
-	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		historyMgr:       s.mockHistoryMgr,
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      txProcessor,
-		tracker:          tracker,
 		cache:            cache,
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),

@@ -79,13 +79,11 @@ func (s *engineSuite) SetupTest() {
 
 	cache := newHistoryCache(mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, cache)
-	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
 		historyMgr:       s.mockHistoryMgr,
 		txProcessor:      txProcessor,
-		tracker:          tracker,
 		cache:            cache,
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
@@ -293,10 +291,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	decisions := []*workflow.Decision{{
 		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:                    common.StringPtr(activity3ID),
-			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
-			TaskList:                      &workflow.TaskList{Name: &tl},
-			Input:                         activity3Input,
+			ActivityId:   common.StringPtr(activity3ID),
+			ActivityType: &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
+			TaskList:     &workflow.TaskList{Name: &tl},
+			Input:        activity3Input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -1062,7 +1060,6 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
-
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: "wId",
@@ -1260,7 +1257,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.GetEventId(), tl, identity)
 
 	ms1 := createMutableState(msBuilder)
-	gwmsResponse1:= &persistence.GetWorkflowExecutionResponse{State: ms1}
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.GetEventId(),
 		activity2StartedEvent.GetEventId(), activity2Result, identity)
@@ -2022,10 +2019,10 @@ func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExec
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
 	e := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &workflow.StartWorkflowExecutionRequest{
-		WorkflowId:                          common.StringPtr(workflowExecution.GetWorkflowId()),
-		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                               input,
+		WorkflowId:   common.StringPtr(workflowExecution.GetWorkflowId()),
+		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:        input,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
@@ -2039,7 +2036,7 @@ func addDecisionTaskScheduledEvent(builder *mutableStateBuilder) (*workflow.Hist
 }
 
 func addDecisionTaskStartedEvent(builder *mutableStateBuilder, scheduleID int64, taskList,
-identity string) *workflow.HistoryEvent {
+	identity string) *workflow.HistoryEvent {
 	return addDecisionTaskStartedEventWithRequestID(builder, scheduleID, uuid.New(), taskList, identity)
 }
 
@@ -2064,13 +2061,13 @@ func addDecisionTaskCompletedEvent(builder *mutableStateBuilder, scheduleID, sta
 }
 
 func addActivityTaskScheduledEvent(builder *mutableStateBuilder, decisionCompletedID int64, activityID, activityType,
-taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	return builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
-		ActivityId:                    common.StringPtr(activityID),
-		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
-		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                         input,
+		ActivityId:   common.StringPtr(activityID),
+		ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityType)},
+		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:        input,
 		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
 		HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),
@@ -2108,7 +2105,7 @@ func addActivityTaskFailedEvent(builder *mutableStateBuilder, scheduleID, starte
 }
 
 func addTimerStartedEvent(builder *mutableStateBuilder, decisionCompletedEventID int64, timerID string,
-	timeOut int64) (*workflow.HistoryEvent,*persistence.TimerInfo) {
+	timeOut int64) (*workflow.HistoryEvent, *persistence.TimerInfo) {
 	return builder.AddTimerStartedEvent(decisionCompletedEventID,
 		&workflow.StartTimerDecisionAttributes{
 			TimerId:                   common.StringPtr(timerID),

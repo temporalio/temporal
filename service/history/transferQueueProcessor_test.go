@@ -1,7 +1,6 @@
 package history
 
 import (
-	"math"
 	"os"
 	"testing"
 	"time"
@@ -10,12 +9,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/uber-common/bark"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber-common/bark"
 )
 
 type (
@@ -55,7 +54,6 @@ func (s *transferQueueProcessorSuite) TearDownSuite() {
 func (s *transferQueueProcessorSuite) SetupTest() {
 	// First cleanup transfer tasks from other tests and reset shard context
 	s.ClearTransferQueue()
-	s.processor.UpdateMaxAllowedReadLevel(math.MaxInt64)
 }
 
 func (s *transferQueueProcessorSuite) TestNoTransferTask() {
@@ -66,7 +64,7 @@ func (s *transferQueueProcessorSuite) TestNoTransferTask() {
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
-		RunId:                                                    common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
 	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
@@ -91,7 +89,7 @@ workerPump:
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("many-transfertasks-test"),
-		RunId:                                                    common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
+		RunId: common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
 	taskList := "many-transfertasks-queue"
 	activityTaskScheduleIds := []int64{2, 3, 4, 5, 6}
 	task0, err0 := s.CreateWorkflowExecutionManyTasks(workflowExecution, taskList, nil, 7, 0, nil,
@@ -142,7 +140,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
-	_, err2 := s.CreateWorkflowExecution(newExecution, taskList, "wType", 10,nil, 3, 0, 2, nil)
+	_, err2 := s.CreateWorkflowExecution(newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.NotNil(err2, "Entity exist error expected.")
 	s.logger.Infof("Error creating new execution: %v", err2)
 
@@ -171,7 +169,7 @@ workerPump:
 func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	var res interface{}
 	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId:                                            common.StringPtr(task.RunID)}
+		RunId: common.StringPtr(task.RunID)}
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}

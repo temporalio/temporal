@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	errTimerTaskNotFound = errors.New("Timer task not found")
-	errFailedToAddTimeoutEvent = errors.New("Failed to add timeout event")
+	errTimerTaskNotFound          = errors.New("Timer task not found")
+	errFailedToAddTimeoutEvent    = errors.New("Failed to add timeout event")
 	errFailedToAddTimerFiredEvent = errors.New("Failed to add timer fired event")
 )
 
@@ -642,29 +642,25 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 	var transferTasks []persistence.Task
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		id, err := t.historyService.tracker.getNextTaskID()
-		if err != nil {
-			if isShardOwnershiptLostError(err) {
-				// Shard is stolen.  Stop timer processing to reduce duplicates
-				t.Stop()
-			}
-			return err
-		}
-		defer t.historyService.tracker.completeTask(id)
 		newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
-			TaskID:     id,
 			TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 			ScheduleID: newDecisionEvent.GetEventId(),
 		}}
 	}
 
 	// Generate a transaction ID for appending events to history
-	transactionID, err1 := t.historyService.tracker.getNextTaskID()
+	transactionID, err1 := t.historyService.shard.GetNextTransferTaskID()
 	if err1 != nil {
 		return err1
 	}
-	defer t.historyService.tracker.completeTask(transactionID)
 
-	return context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
+	err := context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
+	if err != nil {
+		if isShardOwnershiptLostError(err) {
+			// Shard is stolen.  Stop timer processing to reduce duplicates
+			t.Stop()
+		}
+	}
+	return err
 }

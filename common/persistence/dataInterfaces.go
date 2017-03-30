@@ -124,6 +124,7 @@ type (
 	Task interface {
 		GetType() int
 		GetTaskID() int64
+		SetTaskID(id int64)
 	}
 
 	// ActivityTask identifies a transfer task for activity
@@ -273,9 +274,8 @@ type (
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
-		ReadLevel    int64
-		MaxReadLevel int64
-		BatchSize    int
+		ReadLevel int64
+		BatchSize int
 	}
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
@@ -378,11 +378,11 @@ type (
 
 	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
 	GetWorkflowExecutionHistoryRequest struct {
-		Execution     workflow.WorkflowExecution
+		Execution workflow.WorkflowExecution
 		// Get the history events upto NextEventID.  Not Inclusive.
-		NextEventID   int64
+		NextEventID int64
 		// Maximum number of history append transactions per page
-		PageSize      int
+		PageSize int
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
 	}
@@ -390,7 +390,7 @@ type (
 	// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest
 	GetWorkflowExecutionHistoryResponse struct {
 		// Slice of history append transactioin payload
-		Events        [][]byte
+		Events [][]byte
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
 		NextPageToken []byte
@@ -472,6 +472,11 @@ func (a *ActivityTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
+// SetTaskID sets the sequence ID of the activity task
+func (a *ActivityTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
 // GetType returns the type of the decision task
 func (d *DecisionTask) GetType() int {
 	return TransferTaskTypeDecisionTask
@@ -480,6 +485,11 @@ func (d *DecisionTask) GetType() int {
 // GetTaskID returns the sequence ID of the decision task.
 func (d *DecisionTask) GetTaskID() int64 {
 	return d.TaskID
+}
+
+// SetTaskID sets the sequence ID of the decision task
+func (d *DecisionTask) SetTaskID(id int64) {
+	d.TaskID = id
 }
 
 // GetType returns the type of the delete execution task
@@ -492,6 +502,11 @@ func (a *DeleteExecutionTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
+// SetTaskID sets the sequence ID of the delete execution task
+func (a *DeleteExecutionTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
 // GetType returns the type of the timer task
 func (d *DecisionTimeoutTask) GetType() int {
 	return TaskTypeDecisionTimeout
@@ -500,6 +515,11 @@ func (d *DecisionTimeoutTask) GetType() int {
 // GetTaskID returns the sequence ID.
 func (d *DecisionTimeoutTask) GetTaskID() int64 {
 	return d.TaskID
+}
+
+// SetTaskID sets the sequence ID.
+func (d *DecisionTimeoutTask) SetTaskID(id int64) {
+	d.TaskID = id
 }
 
 // GetType returns the type of the timer task
@@ -512,12 +532,22 @@ func (a *ActivityTimeoutTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
+// SetTaskID sets the sequence ID.
+func (a *ActivityTimeoutTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
 // GetType returns the type of the timer task
 func (u *UserTimerTask) GetType() int {
 	return TaskTypeUserTimer
 }
 
-// GetTaskID returns the sequence ID of the decision task.
+// GetTaskID returns the sequence ID of the timer task.
 func (u *UserTimerTask) GetTaskID() int64 {
 	return u.TaskID
+}
+
+// SetTaskID sets the sequence ID of the timer task.
+func (u *UserTimerTask) SetTaskID(id int64) {
+	u.TaskID = id
 }

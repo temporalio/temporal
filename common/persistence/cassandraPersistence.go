@@ -30,7 +30,7 @@ const (
 
 const (
 	// Row types for table executions
-	rowTypeShard        = iota
+	rowTypeShard = iota
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
@@ -38,7 +38,7 @@ const (
 
 const (
 	// Row types for table tasks
-	rowTypeTask     = iota
+	rowTypeTask = iota
 	rowTypeTaskList
 )
 
@@ -240,8 +240,7 @@ const (
 		`and type = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ? LIMIT ?`
+		`and task_id > ? LIMIT ?`
 
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -766,7 +765,6 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		request.ReadLevel,
-		request.MaxReadLevel,
 		request.BatchSize)
 
 	iter := query.Iter()

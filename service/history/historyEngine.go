@@ -3,7 +3,6 @@ package history
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -31,20 +30,9 @@ type (
 		timerProcessor   timerQueueProcessor
 		tokenSerializer  common.TaskTokenSerializer
 		hSerializer      historySerializer
-		tracker          *pendingTaskTracker
 		metricsReporter  metrics.Client
 		cache            *historyCache
 		logger           bark.Logger
-	}
-
-	pendingTaskTracker struct {
-		shard        ShardContext
-		txProcessor  transferQueueProcessor
-		logger       bark.Logger
-		lk           sync.RWMutex
-		pendingTasks map[int64]bool
-		minID        int64
-		maxID        int64
 	}
 )
 
@@ -59,18 +47,6 @@ var (
 	ErrMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
 )
 
-func newPendingTaskTracker(shard ShardContext, txProcessor transferQueueProcessor,
-	logger bark.Logger) *pendingTaskTracker {
-	return &pendingTaskTracker{
-		shard:        shard,
-		txProcessor:  txProcessor,
-		pendingTasks: make(map[int64]bool),
-		minID:        shard.GetTransferSequenceNumber(),
-		maxID:        shard.GetTransferSequenceNumber(),
-		logger:       logger,
-	}
-}
-
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, matching matching.Client) Engine {
 	logger := shard.GetLogger()
@@ -78,7 +54,6 @@ func NewEngineWithShardContext(shard ShardContext, matching matching.Client) Eng
 	historyManager := shard.GetHistoryManager()
 	cache := newHistoryCache(shard, logger)
 	txProcessor := newTransferQueueProcessor(shard, matching, cache)
-	tracker := newPendingTaskTracker(shard, txProcessor, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       historyManager,
@@ -86,7 +61,6 @@ func NewEngineWithShardContext(shard ShardContext, matching matching.Client) Eng
 		txProcessor:      txProcessor,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		hSerializer:      newJSONHistorySerializer(),
-		tracker:          tracker,
 		cache:            cache,
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueHistoryEngineComponent,
@@ -149,15 +123,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		return nil, serializedError
 	}
 
-	transactionID, err0 := e.tracker.getNextTaskID()
-	if err0 != nil {
-		return nil, err0
-	}
-	defer e.tracker.completeTask(transactionID)
-
 	err1 := e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-		Execution:     workflowExecution,
-		TransactionID: transactionID,
+		Execution: workflowExecution,
+		// It is ok to use 0 for TransactionID because RunID is unique so there are
+		// no potential duplicates to override.
+		TransactionID: 0,
 		FirstEventID:  startedEvent.GetEventId(),
 		Events:        events,
 	})
@@ -165,11 +135,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		return nil, err1
 	}
 
-	id, err2 := e.tracker.getNextTaskID()
-	if err2 != nil {
-		return nil, err2
-	}
-	defer e.tracker.completeTask(id)
 	_, err := e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 		RequestID:            request.GetRequestId(),
 		Execution:            workflowExecution,
@@ -180,7 +145,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(request *workflow.StartWorkfl
 		NextEventID:          msBuilder.GetNextEventID(),
 		LastProcessedEvent:   emptyEventID,
 		TransferTasks: []persistence.Task{&persistence.DecisionTask{
-			TaskID:   id,
 			TaskList: taskList, ScheduleID: di.ScheduleID,
 		}},
 		DecisionScheduleID:          di.ScheduleID,
@@ -321,11 +285,10 @@ Update_History_Loop:
 		defer e.timerProcessor.NotifyNewTimer(timeOutTask.GetTaskID())
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.tracker.getNextTaskID()
+		transactionID, err2 := e.shard.GetNextTransferTaskID()
 		if err2 != nil {
 			return nil, err2
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -433,11 +396,10 @@ Update_History_Loop:
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.tracker.getNextTaskID()
+		transactionID, err2 := e.shard.GetNextTransferTaskID()
 		if err2 != nil {
 			return nil, err2
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operationi again.
@@ -531,13 +493,7 @@ Update_History_Loop:
 				}
 
 				scheduleEvent, ai := msBuilder.AddActivityTaskScheduledEvent(completedID, attributes)
-				id, err2 := e.tracker.getNextTaskID()
-				if err2 != nil {
-					return err2
-				}
-				defer e.tracker.completeTask(id)
 				transferTasks = append(transferTasks, &persistence.ActivityTask{
-					TaskID:     id,
 					TaskList:   attributes.GetTaskList().GetName(),
 					ScheduleID: scheduleEvent.GetEventId(),
 				})
@@ -611,13 +567,7 @@ Update_History_Loop:
 		// Schedule another decision task if new events came in during this decision
 		if (completedID - startedID) > 1 {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
-			id, err2 := e.tracker.getNextTaskID()
-			if err2 != nil {
-				return err2
-			}
-			defer e.tracker.completeTask(id)
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
-				TaskID:     id,
 				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			})
@@ -625,22 +575,14 @@ Update_History_Loop:
 
 		if isComplete {
 			// Generate a transfer task to delete workflow execution
-			id, err2 := e.tracker.getNextTaskID()
-			if err2 != nil {
-				return err2
-			}
-			defer e.tracker.completeTask(id)
-			transferTasks = append(transferTasks, &persistence.DeleteExecutionTask{
-				TaskID: id,
-			})
+			transferTasks = append(transferTasks, &persistence.DeleteExecutionTask{})
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err3 := e.tracker.getNextTaskID()
+		transactionID, err3 := e.shard.GetNextTransferTaskID()
 		if err3 != nil {
 			return err3
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
@@ -710,24 +652,17 @@ Update_History_Loop:
 		var transferTasks []persistence.Task
 		if !msBuilder.HasPendingDecisionTask() {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
-			id, err2 := e.tracker.getNextTaskID()
-			if err2 != nil {
-				return err2
-			}
-			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskID:     id,
 				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.tracker.getNextTaskID()
+		transactionID, err2 := e.shard.GetNextTransferTaskID()
 		if err2 != nil {
 			return err2
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -796,24 +731,17 @@ Update_History_Loop:
 		var transferTasks []persistence.Task
 		if !msBuilder.HasPendingDecisionTask() {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
-			id, err2 := e.tracker.getNextTaskID()
-			if err2 != nil {
-				return err2
-			}
-			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskID:     id,
 				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err3 := e.tracker.getNextTaskID()
+		transactionID, err3 := e.shard.GetNextTransferTaskID()
 		if err3 != nil {
 			return err3
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -883,25 +811,17 @@ Update_History_Loop:
 		var transferTasks []persistence.Task
 		if !msBuilder.HasPendingDecisionTask() {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
-			id, err2 := e.tracker.getNextTaskID()
-			if err2 != nil {
-				return err2
-			}
-
-			defer e.tracker.completeTask(id)
 			transferTasks = []persistence.Task{&persistence.DecisionTask{
-				TaskID:     id,
 				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			}}
 		}
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err3 := e.tracker.getNextTaskID()
+		transactionID, err3 := e.shard.GetNextTransferTaskID()
 		if err3 != nil {
 			return err3
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -985,11 +905,10 @@ Update_History_Loop:
 		msBuilder.updateActivityProgress(ai, request.GetDetails())
 
 		// Generate a transaction ID for appending events to history
-		transactionID, err2 := e.tracker.getNextTaskID()
+		transactionID, err2 := e.shard.GetNextTransferTaskID()
 		if err2 != nil {
 			return nil, err2
 		}
-		defer e.tracker.completeTask(transactionID)
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
@@ -1056,51 +975,4 @@ Pagination_Loop:
 	executionHistory := workflow.NewHistory()
 	executionHistory.Events = historyEvents
 	return executionHistory, nil
-}
-
-func (t *pendingTaskTracker) getNextTaskID() (int64, error) {
-	t.lk.Lock()
-	defer t.lk.Unlock()
-
-	nextID, err := t.shard.GetNextTransferTaskID()
-	if err != nil {
-		t.logger.Debugf("Error generating next taskID: %v", err)
-		return -1, err
-	}
-
-	if nextID != t.maxID+1 {
-		t.logger.Fatalf("No holes allowed for nextID.  nextID: %v, MaxID: %v", nextID, t.maxID)
-	}
-	t.pendingTasks[nextID] = false
-	t.maxID = nextID
-
-	t.logger.Debugf("Generated new transfer task ID: %v", nextID)
-	return nextID, nil
-}
-
-func (t *pendingTaskTracker) completeTask(taskID int64) {
-	t.lk.Lock()
-	updatedMin := int64(-1)
-	if _, ok := t.pendingTasks[taskID]; ok {
-		t.logger.Debugf("Completing transfer task ID: %v, minID: %v, maxID: %v", taskID, t.minID, t.maxID)
-		t.pendingTasks[taskID] = true
-
-	UpdateMinLoop:
-		for newMin := t.minID + 1; newMin <= t.maxID; newMin++ {
-			t.logger.Debugf("minID: %v, maxID: %v", newMin, t.maxID)
-			if done, ok := t.pendingTasks[newMin]; ok && done {
-				t.minID = newMin
-				updatedMin = newMin
-				delete(t.pendingTasks, newMin)
-			} else {
-				break UpdateMinLoop
-			}
-		}
-	}
-
-	t.lk.Unlock()
-
-	if updatedMin != -1 {
-		t.txProcessor.UpdateMaxAllowedReadLevel(updatedMin)
-	}
 }

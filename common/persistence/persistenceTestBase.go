@@ -384,9 +384,8 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 // GetTransferTasks is a utility method to get tasks from transfer task queue
 func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		ReadLevel:    s.GetReadLevel(),
-		MaxReadLevel: s.GetMaxAllowedReadLevel(),
-		BatchSize:    batchSize,
+		ReadLevel: s.GetReadLevel(),
+		BatchSize: batchSize,
 	})
 
 	if err != nil {
@@ -585,11 +584,6 @@ func (s *TestBase) GetNextSequenceNumber() int64 {
 // GetReadLevel returns the current read level for shard
 func (s *TestBase) GetReadLevel() int64 {
 	return atomic.LoadInt64(&s.readLevel)
-}
-
-// GetMaxAllowedReadLevel returns the maximum allowed read level for the shard
-func (s *TestBase) GetMaxAllowedReadLevel() int64 {
-	return s.ShardContext.GetTransferSequenceNumber()
 }
 
 func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool, schemaDir string) {

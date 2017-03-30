@@ -77,13 +77,11 @@ func (s *engine2Suite) SetupTest() {
 
 	cache := newHistoryCache(mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, cache)
-	tracker := newPendingTaskTracker(mockShard, txProcessor, s.logger)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
 		historyMgr:       s.mockHistoryMgr,
 		txProcessor:      txProcessor,
-		tracker:          tracker,
 		cache:            cache,
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
