@@ -20,8 +20,8 @@ var _ = shared.GoUnusedProtection__
 type TChanMatchingService interface {
 	AddActivityTask(ctx thrift.Context, addRequest *AddActivityTaskRequest) error
 	AddDecisionTask(ctx thrift.Context, addRequest *AddDecisionTaskRequest) error
-	PollForActivityTask(ctx thrift.Context, pollRequest *shared.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error)
-	PollForDecisionTask(ctx thrift.Context, pollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error)
+	PollForActivityTask(ctx thrift.Context, pollRequest *PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error)
+	PollForDecisionTask(ctx thrift.Context, pollRequest *PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error)
 }
 
 // Implementation of a client and service handler.
@@ -87,7 +87,7 @@ func (c *tchanMatchingServiceClient) AddDecisionTask(ctx thrift.Context, addRequ
 	return err
 }
 
-func (c *tchanMatchingServiceClient) PollForActivityTask(ctx thrift.Context, pollRequest *shared.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error) {
+func (c *tchanMatchingServiceClient) PollForActivityTask(ctx thrift.Context, pollRequest *PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error) {
 	var resp MatchingServicePollForActivityTaskResult
 	args := MatchingServicePollForActivityTaskArgs{
 		PollRequest: pollRequest,
@@ -107,7 +107,7 @@ func (c *tchanMatchingServiceClient) PollForActivityTask(ctx thrift.Context, pol
 	return resp.GetSuccess(), err
 }
 
-func (c *tchanMatchingServiceClient) PollForDecisionTask(ctx thrift.Context, pollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error) {
+func (c *tchanMatchingServiceClient) PollForDecisionTask(ctx thrift.Context, pollRequest *PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error) {
 	var resp MatchingServicePollForDecisionTaskResult
 	args := MatchingServicePollForDecisionTaskArgs{
 		PollRequest: pollRequest,

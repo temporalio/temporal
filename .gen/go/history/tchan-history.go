@@ -18,15 +18,15 @@ var _ = shared.GoUnusedProtection__
 
 // TChanHistoryService is the interface that defines the server handler and client interface.
 type TChanHistoryService interface {
-	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
-	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
+	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
+	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
 	RecordActivityTaskStarted(ctx thrift.Context, addRequest *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	RecordDecisionTaskStarted(ctx thrift.Context, addRequest *RecordDecisionTaskStartedRequest) (*RecordDecisionTaskStartedResponse, error)
-	RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *shared.RespondActivityTaskCanceledRequest) error
-	RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondActivityTaskCompletedRequest) error
-	RespondActivityTaskFailed(ctx thrift.Context, failRequest *shared.RespondActivityTaskFailedRequest) error
-	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondDecisionTaskCompletedRequest) error
-	StartWorkflowExecution(ctx thrift.Context, startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
+	RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *RespondActivityTaskCanceledRequest) error
+	RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *RespondActivityTaskCompletedRequest) error
+	RespondActivityTaskFailed(ctx thrift.Context, failRequest *RespondActivityTaskFailedRequest) error
+	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *RespondDecisionTaskCompletedRequest) error
+	StartWorkflowExecution(ctx thrift.Context, startRequest *StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
 }
 
 // Implementation of a client and service handler.
@@ -48,7 +48,7 @@ func NewTChanHistoryServiceClient(client thrift.TChanClient) TChanHistoryService
 	return NewTChanHistoryServiceInheritedClient("HistoryService", client)
 }
 
-func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
+func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
 	var resp HistoryServiceGetWorkflowExecutionHistoryResult
 	args := HistoryServiceGetWorkflowExecutionHistoryArgs{
 		GetRequest: getRequest,
@@ -72,7 +72,7 @@ func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Conte
 	return resp.GetSuccess(), err
 }
 
-func (c *tchanHistoryServiceClient) RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
+func (c *tchanHistoryServiceClient) RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	var resp HistoryServiceRecordActivityTaskHeartbeatResult
 	args := HistoryServiceRecordActivityTaskHeartbeatArgs{
 		HeartbeatRequest: heartbeatRequest,
@@ -148,7 +148,7 @@ func (c *tchanHistoryServiceClient) RecordDecisionTaskStarted(ctx thrift.Context
 	return resp.GetSuccess(), err
 }
 
-func (c *tchanHistoryServiceClient) RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *shared.RespondActivityTaskCanceledRequest) error {
+func (c *tchanHistoryServiceClient) RespondActivityTaskCanceled(ctx thrift.Context, canceledRequest *RespondActivityTaskCanceledRequest) error {
 	var resp HistoryServiceRespondActivityTaskCanceledResult
 	args := HistoryServiceRespondActivityTaskCanceledArgs{
 		CanceledRequest: canceledRequest,
@@ -172,7 +172,7 @@ func (c *tchanHistoryServiceClient) RespondActivityTaskCanceled(ctx thrift.Conte
 	return err
 }
 
-func (c *tchanHistoryServiceClient) RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondActivityTaskCompletedRequest) error {
+func (c *tchanHistoryServiceClient) RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *RespondActivityTaskCompletedRequest) error {
 	var resp HistoryServiceRespondActivityTaskCompletedResult
 	args := HistoryServiceRespondActivityTaskCompletedArgs{
 		CompleteRequest: completeRequest,
@@ -194,7 +194,7 @@ func (c *tchanHistoryServiceClient) RespondActivityTaskCompleted(ctx thrift.Cont
 	return err
 }
 
-func (c *tchanHistoryServiceClient) RespondActivityTaskFailed(ctx thrift.Context, failRequest *shared.RespondActivityTaskFailedRequest) error {
+func (c *tchanHistoryServiceClient) RespondActivityTaskFailed(ctx thrift.Context, failRequest *RespondActivityTaskFailedRequest) error {
 	var resp HistoryServiceRespondActivityTaskFailedResult
 	args := HistoryServiceRespondActivityTaskFailedArgs{
 		FailRequest: failRequest,
@@ -218,7 +218,7 @@ func (c *tchanHistoryServiceClient) RespondActivityTaskFailed(ctx thrift.Context
 	return err
 }
 
-func (c *tchanHistoryServiceClient) RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondDecisionTaskCompletedRequest) error {
+func (c *tchanHistoryServiceClient) RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *RespondDecisionTaskCompletedRequest) error {
 	var resp HistoryServiceRespondDecisionTaskCompletedResult
 	args := HistoryServiceRespondDecisionTaskCompletedArgs{
 		CompleteRequest: completeRequest,
@@ -242,7 +242,7 @@ func (c *tchanHistoryServiceClient) RespondDecisionTaskCompleted(ctx thrift.Cont
 	return err
 }
 
-func (c *tchanHistoryServiceClient) StartWorkflowExecution(ctx thrift.Context, startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
+func (c *tchanHistoryServiceClient) StartWorkflowExecution(ctx thrift.Context, startRequest *StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
 	var resp HistoryServiceStartWorkflowExecutionResult
 	args := HistoryServiceStartWorkflowExecutionArgs{
 		StartRequest: startRequest,

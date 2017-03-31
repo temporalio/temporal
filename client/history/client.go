@@ -44,8 +44,8 @@ func NewClient(ch *tchannel.Channel, monitor membership.Monitor, numberOfShards 
 }
 
 func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
-	request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
-	client, err := c.getHostForRequest(request.GetWorkflowId())
+	request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
+	client, err := c.getHostForRequest(request.GetStartRequest().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +65,8 @@ func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(context thrift.Context,
-	request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
-	client, err := c.getHostForRequest(request.Execution.GetWorkflowId())
+	request *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
+	client, err := c.getHostForRequest(request.GetGetRequest().GetExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +128,8 @@ func (c *clientImpl) RecordActivityTaskStarted(context thrift.Context,
 }
 
 func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
-	request *workflow.RespondDecisionTaskCompletedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	request *h.RespondDecisionTaskCompletedRequest) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().TaskToken)
 	if err != nil {
 		return err
 	}
@@ -147,8 +147,8 @@ func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
 }
 
 func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
-	request *workflow.RespondActivityTaskCompletedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	request *h.RespondActivityTaskCompletedRequest) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
 	if err != nil {
 		return err
 	}
@@ -166,8 +166,8 @@ func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
 }
 
 func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
-	request *workflow.RespondActivityTaskFailedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	request *h.RespondActivityTaskFailedRequest) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.GetFailedRequest().GetTaskToken())
 	if err != nil {
 		return err
 	}
@@ -185,8 +185,8 @@ func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
 }
 
 func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
-	request *workflow.RespondActivityTaskCanceledRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	request *h.RespondActivityTaskCanceledRequest) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.GetCancelRequest().GetTaskToken())
 	if err != nil {
 		return err
 	}
@@ -204,8 +204,8 @@ func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
 }
 
 func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
-	request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
-	taskToken, err := c.tokenSerializer.Deserialize(request.TaskToken)
+	request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
+	taskToken, err := c.tokenSerializer.Deserialize(request.GetHeartbeatRequest().GetTaskToken())
 	if err != nil {
 		return nil, err
 	}

@@ -40,11 +40,13 @@ func (_m *MatchingClient) AddDecisionTask(ctx thrift.Context, addRequest *matchi
 }
 
 // PollForActivityTask provides a mock function with given fields: ctx, pollRequest
-func (_m *MatchingClient) PollForActivityTask(ctx thrift.Context, pollRequest *shared.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error) {
+func (_m *MatchingClient) PollForActivityTask(ctx thrift.Context,
+	pollRequest *matching.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error) {
 	ret := _m.Called(ctx, pollRequest)
 
 	var r0 *shared.PollForActivityTaskResponse
-	if rf, ok := ret.Get(0).(func(thrift.Context, *shared.PollForActivityTaskRequest) *shared.PollForActivityTaskResponse); ok {
+	if rf, ok := ret.Get(0).(func(thrift.Context,
+		*matching.PollForActivityTaskRequest) *shared.PollForActivityTaskResponse); ok {
 		r0 = rf(ctx, pollRequest)
 	} else {
 		if ret.Get(0) != nil {
@@ -53,7 +55,7 @@ func (_m *MatchingClient) PollForActivityTask(ctx thrift.Context, pollRequest *s
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(thrift.Context, *shared.PollForActivityTaskRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(thrift.Context, *matching.PollForActivityTaskRequest) error); ok {
 		r1 = rf(ctx, pollRequest)
 	} else {
 		r1 = ret.Error(1)
@@ -63,11 +65,12 @@ func (_m *MatchingClient) PollForActivityTask(ctx thrift.Context, pollRequest *s
 }
 
 // PollForDecisionTask provides a mock function with given fields: ctx, pollRequest
-func (_m *MatchingClient) PollForDecisionTask(ctx thrift.Context, pollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error) {
+func (_m *MatchingClient) PollForDecisionTask(ctx thrift.Context,
+	pollRequest *matching.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error) {
 	ret := _m.Called(ctx, pollRequest)
 
 	var r0 *shared.PollForDecisionTaskResponse
-	if rf, ok := ret.Get(0).(func(thrift.Context, *shared.PollForDecisionTaskRequest) *shared.PollForDecisionTaskResponse); ok {
+	if rf, ok := ret.Get(0).(func(thrift.Context, *matching.PollForDecisionTaskRequest) *shared.PollForDecisionTaskResponse); ok {
 		r0 = rf(ctx, pollRequest)
 	} else {
 		if ret.Get(0) != nil {
@@ -76,7 +79,7 @@ func (_m *MatchingClient) PollForDecisionTask(ctx thrift.Context, pollRequest *s
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(thrift.Context, *shared.PollForDecisionTaskRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(thrift.Context, *matching.PollForDecisionTaskRequest) error); ok {
 		r1 = rf(ctx, pollRequest)
 	} else {
 		r1 = ret.Error(1)

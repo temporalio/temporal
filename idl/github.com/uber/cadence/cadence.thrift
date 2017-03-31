@@ -12,6 +12,51 @@ namespace java com.uber.cadence
 **/
 service WorkflowService {
   /**
+  * RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
+  * entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Domain
+  * acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
+  * domain.
+  **/
+  void RegisterDomain(1: shared.RegisterDomainRequest registerRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.DomainAlreadyExistsError domainExistsError,
+    )
+
+  /**
+  * DescribeDomain returns the information and configuration for a registered domain.
+  **/
+  shared.DescribeDomainResponse DescribeDomain(1: shared.DescribeDomainRequest describeRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * UpdateDomain is used to update the information and configuration for a registered domain.
+  **/
+  shared.UpdateDomainResponse UpdateDomain(1: shared.UpdateDomainRequest updateRequest)
+      throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+      )
+
+  /**
+  * DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
+  * it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
+  * deprecated domains.
+  **/
+  void DeprecateDomain(1: shared.DeprecateDomainRequest deprecateRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
   * 'WorkflowExecutionStarted' event in history and also schedule the first DecisionTask for the worker to make the
   * first decision for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already

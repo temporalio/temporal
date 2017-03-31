@@ -1,17 +1,29 @@
 include "shared.thrift"
 
-namespace java com.uber.cadence
+namespace java com.uber.cadence.matching
+
+struct PollForDecisionTaskRequest {
+  10: optional string domainUUID
+  20: optional shared.PollForDecisionTaskRequest pollRequest
+}
+
+struct PollForActivityTaskRequest {
+  10: optional string domainUUID
+  20: optional shared.PollForActivityTaskRequest pollRequest
+}
 
 struct AddDecisionTaskRequest {
-  10: optional shared.WorkflowExecution execution
-  20: optional shared.TaskList taskList
-  30: optional i64 (js.type = "Long") scheduleId
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional shared.TaskList taskList
+  40: optional i64 (js.type = "Long") scheduleId
 }
 
 struct AddActivityTaskRequest {
-  10: optional shared.WorkflowExecution execution
-  20: optional shared.TaskList taskList
-  30: optional i64 (js.type = "Long") scheduleId
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional shared.TaskList taskList
+  40: optional i64 (js.type = "Long") scheduleId
 }
 
 /**
@@ -26,7 +38,7 @@ service MatchingService {
   * PollForDecisionTask is called by frontend to process DecisionTask from a specific taskList.  A
   * DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
   **/
-  shared.PollForDecisionTaskResponse PollForDecisionTask(1: shared.PollForDecisionTaskRequest pollRequest)
+  shared.PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
@@ -36,7 +48,7 @@ service MatchingService {
   * PollForActivityTask is called by frontend to process ActivityTask from a specific taskList.  ActivityTask
   * is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
   **/
-  shared.PollForActivityTaskResponse PollForActivityTask(1: shared.PollForActivityTaskRequest pollRequest)
+  shared.PollForActivityTaskResponse PollForActivityTask(1: PollForActivityTaskRequest pollRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

@@ -8,6 +8,10 @@ exception InternalServiceError {
   1: required string message
 }
 
+exception DomainAlreadyExistsError {
+  1: required string message
+}
+
 exception WorkflowExecutionAlreadyStartedError {
   10: optional string message
   20: optional string startRequestId
@@ -20,6 +24,12 @@ exception EntityNotExistsError {
 
 exception ServiceBusyError {
   1: required string message
+}
+
+enum DomainStatus {
+  REGISTERED,
+  DEPRECATED,
+  DELETED,
 }
 
 enum TimeoutType {
@@ -294,15 +304,64 @@ struct History {
   10: optional list<HistoryEvent> events
 }
 
+struct DomainInfo {
+  10: optional string name
+  20: optional DomainStatus status
+  30: optional string description
+  40: optional string ownerEmail
+}
+
+struct DomainConfiguration {
+  10: optional i32 workflowExecutionRetentionPeriodInDays
+  20: optional bool emitMetric
+}
+
+struct UpdateDomainInfo {
+  10: optional string description
+  20: optional string ownerEmail
+}
+
+struct RegisterDomainRequest {
+  10: optional string name
+  20: optional string description
+  30: optional i32 workflowExecutionRetentionPeriodInDays
+  40: optional bool emitMetric
+}
+
+struct DescribeDomainRequest {
+ 10: optional string name
+}
+
+struct DescribeDomainResponse {
+  10: optional DomainInfo domainInfo
+  20: optional DomainConfiguration configuration
+}
+
+struct UpdateDomainRequest {
+ 10: optional string name
+ 20: optional UpdateDomainInfo updatedInfo
+ 30: optional DomainConfiguration configuration
+}
+
+struct UpdateDomainResponse {
+  10: optional DomainInfo domainInfo
+  20: optional DomainConfiguration configuration
+}
+
+struct DeprecateDomainRequest {
+ 10: optional string name
+}
+
 struct StartWorkflowExecutionRequest {
-  10: optional string workflowId
-  20: optional WorkflowType workflowType
-  30: optional TaskList taskList
-  40: optional binary input
-  50: optional i32 executionStartToCloseTimeoutSeconds
-  60: optional i32 taskStartToCloseTimeoutSeconds
-  70: optional string identity
-  80: optional string requestId
+  10: optional string domain
+  20: optional string workflowId
+  30: optional WorkflowType workflowType
+  40: optional TaskList taskList
+  50: optional binary input
+  60: optional i32 executionStartToCloseTimeoutSeconds
+  70: optional i32 taskStartToCloseTimeoutSeconds
+  80: optional string identity
+  90: optional string requestId
 }
 
 struct StartWorkflowExecutionResponse {
@@ -310,8 +369,9 @@ struct StartWorkflowExecutionResponse {
 }
 
 struct PollForDecisionTaskRequest {
-  10: optional TaskList taskList
-  20: optional string identity
+  10: optional string domain
+  20: optional TaskList taskList
+  30: optional string identity
 }
 
 struct PollForDecisionTaskResponse {
@@ -331,8 +391,9 @@ struct RespondDecisionTaskCompletedRequest {
 }
 
 struct PollForActivityTaskRequest {
-  10: optional TaskList taskList
-  20: optional string identity
+  10: optional string domain
+  20: optional TaskList taskList
+  30: optional string identity
 }
 
 struct PollForActivityTaskResponse {
@@ -374,7 +435,8 @@ struct RespondActivityTaskCanceledRequest {
 }
 
 struct GetWorkflowExecutionHistoryRequest {
-  10: optional WorkflowExecution execution
+  10: optional string domain
+  20: optional WorkflowExecution execution
 }
 
 struct GetWorkflowExecutionHistoryResponse {
