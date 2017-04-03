@@ -559,6 +559,9 @@ Update_History_Loop:
 					msBuilder.AddCancelTimerFailedEvent(completedID, attributes, request.GetIdentity())
 				}
 
+			case workflow.DecisionType_RecordMarker:
+				msBuilder.AddRecordMarkerEvent(completedID, d.GetRecordMarkerDecisionAttributes())
+
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
 			}

@@ -227,6 +227,13 @@ func (b *historyBuilder) AddCancelTimerFailedEvent(timerID string, decisionTaskC
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddMarkerRecordedEvent(decisionCompletedEventID int64,
+	attributes *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
+	event := b.newMarkerRecordedEventAttributes(decisionCompletedEventID, attributes)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	b.history = append(b.history, event)
 	return event
@@ -395,6 +402,17 @@ func (b *historyBuilder) newCompleteWorkflowExecutionFailedEvent(decisionTaskCom
 	attributes.Cause = workflow.WorkflowCompleteFailedCausePtr(cause)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.CompleteWorkflowExecutionFailedEventAttributes = attributes
+
+	return historyEvent
+}
+
+func (b *historyBuilder) newMarkerRecordedEventAttributes(decisionTaskCompletedEventID int64,
+	request *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_MarkerRecorded)
+	attributes := workflow.NewMarkerRecordedEventAttributes()
+	attributes.MarkerName = common.StringPtr(request.GetMarkerName())
+	attributes.Details = request.GetDetails()
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 
 	return historyEvent
 }

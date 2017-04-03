@@ -630,3 +630,9 @@ func (e *mutableStateBuilder) AddCancelTimerFailedEvent(decisionCompletedEventID
 	return e.hBuilder.AddCancelTimerFailedEvent(timerID, decisionCompletedEventID,
 		timerCancelationMsgTimerIDUnknown, identity)
 }
+
+func (e *mutableStateBuilder) AddRecordMarkerEvent(decisionCompletedEventID int64,
+	attributes *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
+
+	return e.hBuilder.AddMarkerRecordedEvent(decisionCompletedEventID, attributes)
+}

@@ -139,6 +139,7 @@ const (
   DecisionType_CompleteWorkflowExecution DecisionType = 3
   DecisionType_FailWorkflowExecution DecisionType = 4
   DecisionType_CancelTimer DecisionType = 5
+  DecisionType_RecordMarker DecisionType = 6
 )
 
 func (p DecisionType) String() string {
@@ -149,6 +150,7 @@ func (p DecisionType) String() string {
   case DecisionType_CompleteWorkflowExecution: return "CompleteWorkflowExecution"
   case DecisionType_FailWorkflowExecution: return "FailWorkflowExecution"
   case DecisionType_CancelTimer: return "CancelTimer"
+  case DecisionType_RecordMarker: return "RecordMarker"
   }
   return "<UNSET>"
 }
@@ -161,6 +163,7 @@ func DecisionTypeFromString(s string) (DecisionType, error) {
   case "CompleteWorkflowExecution": return DecisionType_CompleteWorkflowExecution, nil 
   case "FailWorkflowExecution": return DecisionType_FailWorkflowExecution, nil 
   case "CancelTimer": return DecisionType_CancelTimer, nil 
+  case "RecordMarker": return DecisionType_RecordMarker, nil 
   }
   return DecisionType(0), fmt.Errorf("not a valid DecisionType string")
 }
@@ -219,6 +222,7 @@ const (
   EventType_CompleteWorkflowExecutionFailed EventType = 18
   EventType_CancelTimerFailed EventType = 19
   EventType_TimerCanceled EventType = 20
+  EventType_MarkerRecorded EventType = 21
 )
 
 func (p EventType) String() string {
@@ -244,6 +248,7 @@ func (p EventType) String() string {
   case EventType_CompleteWorkflowExecutionFailed: return "CompleteWorkflowExecutionFailed"
   case EventType_CancelTimerFailed: return "CancelTimerFailed"
   case EventType_TimerCanceled: return "TimerCanceled"
+  case EventType_MarkerRecorded: return "MarkerRecorded"
   }
   return "<UNSET>"
 }
@@ -271,6 +276,7 @@ func EventTypeFromString(s string) (EventType, error) {
   case "CompleteWorkflowExecutionFailed": return EventType_CompleteWorkflowExecutionFailed, nil 
   case "CancelTimerFailed": return EventType_CancelTimerFailed, nil 
   case "TimerCanceled": return EventType_TimerCanceled, nil 
+  case "MarkerRecorded": return EventType_MarkerRecorded, nil 
   }
   return EventType(0), fmt.Errorf("not a valid EventType string")
 }
@@ -2350,6 +2356,139 @@ func (p *CancelTimerDecisionAttributes) String() string {
 }
 
 // Attributes:
+//  - MarkerName
+//  - Details
+type RecordMarkerDecisionAttributes struct {
+  // unused fields # 1 to 9
+  MarkerName *string `thrift:"markerName,10" db:"markerName" json:"markerName,omitempty"`
+  // unused fields # 11 to 19
+  Details []byte `thrift:"details,20" db:"details" json:"details,omitempty"`
+}
+
+func NewRecordMarkerDecisionAttributes() *RecordMarkerDecisionAttributes {
+  return &RecordMarkerDecisionAttributes{}
+}
+
+var RecordMarkerDecisionAttributes_MarkerName_DEFAULT string
+func (p *RecordMarkerDecisionAttributes) GetMarkerName() string {
+  if !p.IsSetMarkerName() {
+    return RecordMarkerDecisionAttributes_MarkerName_DEFAULT
+  }
+return *p.MarkerName
+}
+var RecordMarkerDecisionAttributes_Details_DEFAULT []byte
+
+func (p *RecordMarkerDecisionAttributes) GetDetails() []byte {
+  return p.Details
+}
+func (p *RecordMarkerDecisionAttributes) IsSetMarkerName() bool {
+  return p.MarkerName != nil
+}
+
+func (p *RecordMarkerDecisionAttributes) IsSetDetails() bool {
+  return p.Details != nil
+}
+
+func (p *RecordMarkerDecisionAttributes) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *RecordMarkerDecisionAttributes)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.MarkerName = &v
+}
+  return nil
+}
+
+func (p *RecordMarkerDecisionAttributes)  ReadField20(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 20: ", err)
+} else {
+  p.Details = v
+}
+  return nil
+}
+
+func (p *RecordMarkerDecisionAttributes) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("RecordMarkerDecisionAttributes"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *RecordMarkerDecisionAttributes) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetMarkerName() {
+    if err := oprot.WriteFieldBegin("markerName", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:markerName: ", p), err) }
+    if err := oprot.WriteString(string(*p.MarkerName)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.markerName (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:markerName: ", p), err) }
+  }
+  return err
+}
+
+func (p *RecordMarkerDecisionAttributes) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDetails() {
+    if err := oprot.WriteFieldBegin("details", thrift.STRING, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:details: ", p), err) }
+    if err := oprot.WriteBinary(p.Details); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.details (20) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:details: ", p), err) }
+  }
+  return err
+}
+
+func (p *RecordMarkerDecisionAttributes) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("RecordMarkerDecisionAttributes(%+v)", *p)
+}
+
+// Attributes:
 //  - DecisionType
 //  - ScheduleActivityTaskDecisionAttributes
 //  - StartTimerDecisionAttributes
@@ -2357,6 +2496,7 @@ func (p *CancelTimerDecisionAttributes) String() string {
 //  - FailWorkflowExecutionDecisionAttributes
 //  - RequestCancelActivityTaskDecisionAttributes
 //  - CancelTimerDecisionAttributes
+//  - RecordMarkerDecisionAttributes
 type Decision struct {
   // unused fields # 1 to 9
   DecisionType *DecisionType `thrift:"decisionType,10" db:"decisionType" json:"decisionType,omitempty"`
@@ -2372,6 +2512,8 @@ type Decision struct {
   RequestCancelActivityTaskDecisionAttributes *RequestCancelActivityTaskDecisionAttributes `thrift:"requestCancelActivityTaskDecisionAttributes,40" db:"requestCancelActivityTaskDecisionAttributes" json:"requestCancelActivityTaskDecisionAttributes,omitempty"`
   // unused fields # 41 to 49
   CancelTimerDecisionAttributes *CancelTimerDecisionAttributes `thrift:"cancelTimerDecisionAttributes,50" db:"cancelTimerDecisionAttributes" json:"cancelTimerDecisionAttributes,omitempty"`
+  // unused fields # 51 to 59
+  RecordMarkerDecisionAttributes *RecordMarkerDecisionAttributes `thrift:"recordMarkerDecisionAttributes,60" db:"recordMarkerDecisionAttributes" json:"recordMarkerDecisionAttributes,omitempty"`
 }
 
 func NewDecision() *Decision {
@@ -2427,6 +2569,13 @@ func (p *Decision) GetCancelTimerDecisionAttributes() *CancelTimerDecisionAttrib
   }
 return p.CancelTimerDecisionAttributes
 }
+var Decision_RecordMarkerDecisionAttributes_DEFAULT *RecordMarkerDecisionAttributes
+func (p *Decision) GetRecordMarkerDecisionAttributes() *RecordMarkerDecisionAttributes {
+  if !p.IsSetRecordMarkerDecisionAttributes() {
+    return Decision_RecordMarkerDecisionAttributes_DEFAULT
+  }
+return p.RecordMarkerDecisionAttributes
+}
 func (p *Decision) IsSetDecisionType() bool {
   return p.DecisionType != nil
 }
@@ -2453,6 +2602,10 @@ func (p *Decision) IsSetRequestCancelActivityTaskDecisionAttributes() bool {
 
 func (p *Decision) IsSetCancelTimerDecisionAttributes() bool {
   return p.CancelTimerDecisionAttributes != nil
+}
+
+func (p *Decision) IsSetRecordMarkerDecisionAttributes() bool {
+  return p.RecordMarkerDecisionAttributes != nil
 }
 
 func (p *Decision) Read(iprot thrift.TProtocol) error {
@@ -2494,6 +2647,10 @@ func (p *Decision) Read(iprot thrift.TProtocol) error {
       }
     case 50:
       if err := p.ReadField50(iprot); err != nil {
+        return err
+      }
+    case 60:
+      if err := p.ReadField60(iprot); err != nil {
         return err
       }
     default:
@@ -2569,6 +2726,14 @@ func (p *Decision)  ReadField50(iprot thrift.TProtocol) error {
   return nil
 }
 
+func (p *Decision)  ReadField60(iprot thrift.TProtocol) error {
+  p.RecordMarkerDecisionAttributes = &RecordMarkerDecisionAttributes{}
+  if err := p.RecordMarkerDecisionAttributes.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.RecordMarkerDecisionAttributes), err)
+  }
+  return nil
+}
+
 func (p *Decision) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("Decision"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -2580,6 +2745,7 @@ func (p *Decision) Write(oprot thrift.TProtocol) error {
     if err := p.writeField35(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField50(oprot); err != nil { return err }
+    if err := p.writeField60(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2674,6 +2840,19 @@ func (p *Decision) writeField50(oprot thrift.TProtocol) (err error) {
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 50:cancelTimerDecisionAttributes: ", p), err) }
+  }
+  return err
+}
+
+func (p *Decision) writeField60(oprot thrift.TProtocol) (err error) {
+  if p.IsSetRecordMarkerDecisionAttributes() {
+    if err := oprot.WriteFieldBegin("recordMarkerDecisionAttributes", thrift.STRUCT, 60); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 60:recordMarkerDecisionAttributes: ", p), err) }
+    if err := p.RecordMarkerDecisionAttributes.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.RecordMarkerDecisionAttributes), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 60:recordMarkerDecisionAttributes: ", p), err) }
   }
   return err
 }
@@ -6787,6 +6966,179 @@ func (p *CancelTimerFailedEventAttributes) String() string {
 }
 
 // Attributes:
+//  - MarkerName
+//  - Details
+//  - DecisionTaskCompletedEventId
+type MarkerRecordedEventAttributes struct {
+  // unused fields # 1 to 9
+  MarkerName *string `thrift:"markerName,10" db:"markerName" json:"markerName,omitempty"`
+  // unused fields # 11 to 19
+  Details []byte `thrift:"details,20" db:"details" json:"details,omitempty"`
+  // unused fields # 21 to 29
+  DecisionTaskCompletedEventId *int64 `thrift:"decisionTaskCompletedEventId,30" db:"decisionTaskCompletedEventId" json:"decisionTaskCompletedEventId,omitempty"`
+}
+
+func NewMarkerRecordedEventAttributes() *MarkerRecordedEventAttributes {
+  return &MarkerRecordedEventAttributes{}
+}
+
+var MarkerRecordedEventAttributes_MarkerName_DEFAULT string
+func (p *MarkerRecordedEventAttributes) GetMarkerName() string {
+  if !p.IsSetMarkerName() {
+    return MarkerRecordedEventAttributes_MarkerName_DEFAULT
+  }
+return *p.MarkerName
+}
+var MarkerRecordedEventAttributes_Details_DEFAULT []byte
+
+func (p *MarkerRecordedEventAttributes) GetDetails() []byte {
+  return p.Details
+}
+var MarkerRecordedEventAttributes_DecisionTaskCompletedEventId_DEFAULT int64
+func (p *MarkerRecordedEventAttributes) GetDecisionTaskCompletedEventId() int64 {
+  if !p.IsSetDecisionTaskCompletedEventId() {
+    return MarkerRecordedEventAttributes_DecisionTaskCompletedEventId_DEFAULT
+  }
+return *p.DecisionTaskCompletedEventId
+}
+func (p *MarkerRecordedEventAttributes) IsSetMarkerName() bool {
+  return p.MarkerName != nil
+}
+
+func (p *MarkerRecordedEventAttributes) IsSetDetails() bool {
+  return p.Details != nil
+}
+
+func (p *MarkerRecordedEventAttributes) IsSetDecisionTaskCompletedEventId() bool {
+  return p.DecisionTaskCompletedEventId != nil
+}
+
+func (p *MarkerRecordedEventAttributes) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    case 30:
+      if err := p.ReadField30(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *MarkerRecordedEventAttributes)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.MarkerName = &v
+}
+  return nil
+}
+
+func (p *MarkerRecordedEventAttributes)  ReadField20(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 20: ", err)
+} else {
+  p.Details = v
+}
+  return nil
+}
+
+func (p *MarkerRecordedEventAttributes)  ReadField30(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI64(); err != nil {
+  return thrift.PrependError("error reading field 30: ", err)
+} else {
+  p.DecisionTaskCompletedEventId = &v
+}
+  return nil
+}
+
+func (p *MarkerRecordedEventAttributes) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("MarkerRecordedEventAttributes"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+    if err := p.writeField30(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *MarkerRecordedEventAttributes) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetMarkerName() {
+    if err := oprot.WriteFieldBegin("markerName", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:markerName: ", p), err) }
+    if err := oprot.WriteString(string(*p.MarkerName)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.markerName (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:markerName: ", p), err) }
+  }
+  return err
+}
+
+func (p *MarkerRecordedEventAttributes) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDetails() {
+    if err := oprot.WriteFieldBegin("details", thrift.STRING, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:details: ", p), err) }
+    if err := oprot.WriteBinary(p.Details); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.details (20) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:details: ", p), err) }
+  }
+  return err
+}
+
+func (p *MarkerRecordedEventAttributes) writeField30(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDecisionTaskCompletedEventId() {
+    if err := oprot.WriteFieldBegin("decisionTaskCompletedEventId", thrift.I64, 30); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:decisionTaskCompletedEventId: ", p), err) }
+    if err := oprot.WriteI64(int64(*p.DecisionTaskCompletedEventId)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.decisionTaskCompletedEventId (30) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 30:decisionTaskCompletedEventId: ", p), err) }
+  }
+  return err
+}
+
+func (p *MarkerRecordedEventAttributes) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("MarkerRecordedEventAttributes(%+v)", *p)
+}
+
+// Attributes:
 //  - EventId
 //  - Timestamp
 //  - EventType
@@ -6811,6 +7163,7 @@ func (p *CancelTimerFailedEventAttributes) String() string {
 //  - ActivityTaskCanceledEventAttributes
 //  - TimerCanceledEventAttributes
 //  - CancelTimerFailedEventAttributes
+//  - MarkerRecordedEventAttributes
 type HistoryEvent struct {
   // unused fields # 1 to 9
   EventId *int64 `thrift:"eventId,10" db:"eventId" json:"eventId,omitempty"`
@@ -6860,6 +7213,8 @@ type HistoryEvent struct {
   TimerCanceledEventAttributes *TimerCanceledEventAttributes `thrift:"timerCanceledEventAttributes,140" db:"timerCanceledEventAttributes" json:"timerCanceledEventAttributes,omitempty"`
   // unused fields # 141 to 149
   CancelTimerFailedEventAttributes *CancelTimerFailedEventAttributes `thrift:"cancelTimerFailedEventAttributes,150" db:"cancelTimerFailedEventAttributes" json:"cancelTimerFailedEventAttributes,omitempty"`
+  // unused fields # 151 to 159
+  MarkerRecordedEventAttributes *MarkerRecordedEventAttributes `thrift:"markerRecordedEventAttributes,160" db:"markerRecordedEventAttributes" json:"markerRecordedEventAttributes,omitempty"`
 }
 
 func NewHistoryEvent() *HistoryEvent {
@@ -7034,6 +7389,13 @@ func (p *HistoryEvent) GetCancelTimerFailedEventAttributes() *CancelTimerFailedE
   }
 return p.CancelTimerFailedEventAttributes
 }
+var HistoryEvent_MarkerRecordedEventAttributes_DEFAULT *MarkerRecordedEventAttributes
+func (p *HistoryEvent) GetMarkerRecordedEventAttributes() *MarkerRecordedEventAttributes {
+  if !p.IsSetMarkerRecordedEventAttributes() {
+    return HistoryEvent_MarkerRecordedEventAttributes_DEFAULT
+  }
+return p.MarkerRecordedEventAttributes
+}
 func (p *HistoryEvent) IsSetEventId() bool {
   return p.EventId != nil
 }
@@ -7128,6 +7490,10 @@ func (p *HistoryEvent) IsSetTimerCanceledEventAttributes() bool {
 
 func (p *HistoryEvent) IsSetCancelTimerFailedEventAttributes() bool {
   return p.CancelTimerFailedEventAttributes != nil
+}
+
+func (p *HistoryEvent) IsSetMarkerRecordedEventAttributes() bool {
+  return p.MarkerRecordedEventAttributes != nil
 }
 
 func (p *HistoryEvent) Read(iprot thrift.TProtocol) error {
@@ -7237,6 +7603,10 @@ func (p *HistoryEvent) Read(iprot thrift.TProtocol) error {
       }
     case 150:
       if err := p.ReadField150(iprot); err != nil {
+        return err
+      }
+    case 160:
+      if err := p.ReadField160(iprot); err != nil {
         return err
       }
     default:
@@ -7450,6 +7820,14 @@ func (p *HistoryEvent)  ReadField150(iprot thrift.TProtocol) error {
   return nil
 }
 
+func (p *HistoryEvent)  ReadField160(iprot thrift.TProtocol) error {
+  p.MarkerRecordedEventAttributes = &MarkerRecordedEventAttributes{}
+  if err := p.MarkerRecordedEventAttributes.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.MarkerRecordedEventAttributes), err)
+  }
+  return nil
+}
+
 func (p *HistoryEvent) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("HistoryEvent"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -7478,6 +7856,7 @@ func (p *HistoryEvent) Write(oprot thrift.TProtocol) error {
     if err := p.writeField130(oprot); err != nil { return err }
     if err := p.writeField140(oprot); err != nil { return err }
     if err := p.writeField150(oprot); err != nil { return err }
+    if err := p.writeField160(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -7791,6 +8170,19 @@ func (p *HistoryEvent) writeField150(oprot thrift.TProtocol) (err error) {
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 150:cancelTimerFailedEventAttributes: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryEvent) writeField160(oprot thrift.TProtocol) (err error) {
+  if p.IsSetMarkerRecordedEventAttributes() {
+    if err := oprot.WriteFieldBegin("markerRecordedEventAttributes", thrift.STRUCT, 160); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 160:markerRecordedEventAttributes: ", p), err) }
+    if err := p.MarkerRecordedEventAttributes.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.MarkerRecordedEventAttributes), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 160:markerRecordedEventAttributes: ", p), err) }
   }
   return err
 }

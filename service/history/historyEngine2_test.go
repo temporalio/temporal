@@ -1,6 +1,7 @@
 package history
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
@@ -524,4 +525,62 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	}
 
 	return msBuilder
+}
+
+func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		RunID:      "rId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	markerDetails := []byte("marker details")
+	markerName := "marker name"
+
+	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RecordMarker),
+		RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
+			MarkerName: common.StringPtr(markerName),
+			Details:    markerDetails,
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.historyEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
+		TaskToken:        taskToken,
+		Decisions:        decisions,
+		ExecutionContext: nil,
+		Identity:         &identity,
+	})
+	s.Nil(err)
+	executionBuilder := s.getBuilder(we)
+	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+	s.False(executionBuilder.HasPendingDecisionTask())
+}
+
+func (s *engine2Suite) getBuilder(we workflow.WorkflowExecution) *mutableStateBuilder {
+	context, err := s.historyEngine.cache.getOrCreateWorkflowExecution(we)
+	if err != nil {
+		return nil
+	}
+
+	return context.msBuilder
 }
