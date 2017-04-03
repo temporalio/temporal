@@ -6,6 +6,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
+// Domain status
 const (
 	DomainStatusRegistered = iota
 	DomainStatusDeprecated
@@ -14,7 +15,7 @@ const (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated   = iota
+	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -27,7 +28,7 @@ const (
 
 // Transfer task types
 const (
-	TransferTaskTypeDecisionTask    = iota
+	TransferTaskTypeDecisionTask = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
 )

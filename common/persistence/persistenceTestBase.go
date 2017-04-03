@@ -43,6 +43,7 @@ type (
 		TaskMgr             TaskManager
 		HistoryMgr          HistoryManager
 		MetadataManager     MetadataManager
+		VisibilityMgr       VisibilityManager
 		ShardInfo           *ShardInfo
 		ShardContext        *testShardContext
 		readLevel           int64
@@ -193,6 +194,12 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	s.VisibilityMgr, err = NewCassandraVisibilityPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Create a shard for test
 	s.readLevel = 0
 	s.ShardInfo = &ShardInfo{
@@ -604,6 +611,7 @@ func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bo
 	s.createCluster(testWorkflowClusterHosts, testDatacenter, gocql.Consistency(1), keySpace)
 	s.createKeyspace(1, dropKeySpace)
 	s.loadSchema("workflow_test.cql", schemaDir)
+	s.loadSchema("visibility_test.cql", schemaDir)
 }
 
 func (s *CassandraTestCluster) tearDownTestCluster() {
