@@ -78,6 +78,32 @@ CREATE TYPE timer_info (
   task_id       bigint,    -- The task ID if we have one created for this timer
 );
 
+-- Activity or workflow task in a task list
+CREATE TYPE task (
+  workflow_id      text,
+  run_id           uuid,
+  schedule_id      bigint,
+);
+
+CREATE TYPE task_list (
+  name             text,
+  type             int, -- enum TaskRowType {ActivityTask, DecisionTask}
+  ack_level        bigint, -- task_id of the last acknowledged message
+);
+
+CREATE TYPE domain (
+  id          uuid,
+  name        text,
+  status      int, -- enum DomainStatus {Registered, Deprecated, Deleted}
+  description text,
+  owner_email text,
+);
+
+CREATE TYPE domain_config (
+  retention int,
+  emit_metric boolean
+);
+
 CREATE TABLE executions (
   shard_id           int,
   type               int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
@@ -108,19 +134,6 @@ CREATE TABLE events (
   PRIMARY KEY ((workflow_id, run_id), first_event_id)
 );
 
--- Activity or workflow task in a task list
-CREATE TYPE task (
-  workflow_id      text,
-  run_id           uuid,
-  schedule_id      bigint,
-);
-
-CREATE TYPE task_list (
-  name             text,
-  type             int, -- enum TaskRowType {ActivityTask, DecisionTask}
-  ack_level        bigint, -- task_id of the last acknowledged message
-);
-
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
   task_list_name   text,
@@ -131,4 +144,18 @@ CREATE TABLE tasks (
   task             frozen<task>,
   task_list        frozen<task_list>,
   PRIMARY KEY ((task_list_name, task_list_type), type, task_id)
+);
+
+CREATE TABLE domains (
+  id     uuid,
+  domain frozen<domain>,
+  config frozen<domain_config>,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE domains_by_name (
+  name   text,
+  domain frozen<domain>,
+  config frozen<domain_config>,
+  PRIMARY KEY (name)
 );

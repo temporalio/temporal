@@ -33,7 +33,6 @@ const (
 type (
 	cassandraHistoryPersistence struct {
 		session      *gocql.Session
-		lowConslevel gocql.Consistency
 		logger       bark.Logger
 	}
 )
@@ -53,7 +52,7 @@ func NewCassandraHistoryPersistence(hosts string, dc string, keyspace string, lo
 		return nil, err
 	}
 
-	return &cassandraHistoryPersistence{session: session, lowConslevel: gocql.One, logger: logger}, nil
+	return &cassandraHistoryPersistence{session: session, logger: logger}, nil
 }
 
 func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {

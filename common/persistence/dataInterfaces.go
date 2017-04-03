@@ -6,9 +6,15 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
 
+const (
+	DomainStatusRegistered = iota
+	DomainStatusDeprecated
+	DomainStatusDeleted
+)
+
 // Workflow execution states
 const (
-	WorkflowStateCreated = iota
+	WorkflowStateCreated   = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -21,7 +27,7 @@ const (
 
 // Transfer task types
 const (
-	TransferTaskTypeDecisionTask = iota
+	TransferTaskTypeDecisionTask    = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
 )
@@ -401,6 +407,64 @@ type (
 		Execution workflow.WorkflowExecution
 	}
 
+	// DomainInfo describes the domain entity
+	DomainInfo struct {
+		ID          string
+		Name        string
+		Status      int
+		Description string
+		OwnerEmail  string
+	}
+
+	// DomainConfig describes the domain configuration
+	DomainConfig struct {
+		Retention  int
+		EmitMetric bool
+	}
+
+	// CreateDomainRequest is used to create the domain
+	CreateDomainRequest struct {
+		Name        string
+		Status      int
+		Description string
+		OwnerEmail  string
+		Retention   int
+		EmitMetric  bool
+	}
+
+	// CreateDomainResponse is the response for CreateDomain
+	CreateDomainResponse struct {
+		ID string
+	}
+
+	// GetDomainRequest is used to read domain
+	GetDomainRequest struct {
+		ID   string
+		Name string
+	}
+
+	// GetDomainResponse is the response for GetDomain
+	GetDomainResponse struct {
+		Info   *DomainInfo
+		Config *DomainConfig
+	}
+
+	// UpdateDomainRequest is used to update domain
+	UpdateDomainRequest struct {
+		Info   *DomainInfo
+		Config *DomainConfig
+	}
+
+	// DeleteDomainRequest is used to delete domain entry from domains table
+	DeleteDomainRequest struct {
+		ID string
+	}
+
+	// DeleteDomainByNameRequest is used to delete domain entry from domains_by_name table
+	DeleteDomainByNameRequest struct {
+		Name string
+	}
+
 	// ShardManager is used to manage all shards
 	ShardManager interface {
 		CreateShard(request *CreateShardRequest) error
@@ -443,6 +507,15 @@ type (
 		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse,
 			error)
 		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
+	}
+
+	// MetadataManager is used to manage metadata CRUD for various entities
+	MetadataManager interface {
+		CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error)
+		GetDomain(request *GetDomainRequest) (*GetDomainResponse, error)
+		UpdateDomain(request *UpdateDomainRequest) error
+		DeleteDomain(request *DeleteDomainRequest) error
+		DeleteDomainByName(request *DeleteDomainByNameRequest) error
 	}
 )
 

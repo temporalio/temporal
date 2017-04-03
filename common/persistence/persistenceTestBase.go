@@ -42,6 +42,7 @@ type (
 		WorkflowMgr         ExecutionManager
 		TaskMgr             TaskManager
 		HistoryMgr          HistoryManager
+		MetadataManager     MetadataManager
 		ShardInfo           *ShardInfo
 		ShardContext        *testShardContext
 		readLevel           int64
@@ -153,7 +154,8 @@ func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTest
 }
 
 func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
-	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.Datacenter, f.cassandra.keyspace, shardID, f.logger)
+	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.Datacenter, f.cassandra.keyspace,
+		shardID, f.logger)
 }
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
@@ -163,7 +165,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	shardID := 0
 	var err error
-	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.Datacenter,
+		s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -173,12 +176,20 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace,
+		log)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.Datacenter,
+		s.CassandraTestCluster.keyspace, log)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s.MetadataManager, err = NewCassandraMetadataPersistence(options.ClusterHost, options.Datacenter,
+		s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
