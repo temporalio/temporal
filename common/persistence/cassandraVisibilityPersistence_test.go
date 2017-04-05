@@ -64,8 +64,10 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 	s.Nil(err0)
 
 	resp, err1 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID: testDomainUUID,
-		PageSize:   1,
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
 	})
 	s.Nil(err1)
 	s.Equal(1, len(resp.Executions))
@@ -81,15 +83,19 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 	s.Nil(err2)
 
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID: testDomainUUID,
-		PageSize:   1,
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
 	})
 	s.Nil(err3)
 	s.Equal(0, len(resp.Executions))
 
 	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID: testDomainUUID,
-		PageSize:   1,
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
@@ -97,7 +103,9 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 
 func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	testDomainUUID := uuid.New()
+
 	// Create 2 executions
+	startTime1 := time.Now()
 	workflowExecution1 := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("visibility-pagination-test1"),
 		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
@@ -106,47 +114,208 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        time.Now(),
+		StartTime:        startTime1,
 	})
 	s.Nil(err0)
 
+	startTime2 := startTime1.Add(time.Second)
 	workflowExecution2 := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("visibility-pagination-test2"),
-		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
+		RunId:      common.StringPtr("843f6fc7-102a-4c63-a2d4-7c653b01bf52"),
 	}
 	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        time.Now(),
+		StartTime:        startTime2,
 	})
 	s.Nil(err1)
 
 	// Get the first one
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID: testDomainUUID,
-		PageSize:   1,
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime1,
+		LatestStartTime:   startTime2,
+	})
+	s.Nil(err2)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+
+	// Use token to get the second one
+	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime1,
+		LatestStartTime:   startTime2,
+		NextPageToken:     resp.NextPageToken,
+	})
+	s.Nil(err3)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+
+	// Now should get empty result by using token
+	resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
+		DomainUUID:        testDomainUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime1,
+		LatestStartTime:   startTime2,
+		NextPageToken:     resp.NextPageToken,
+	})
+	s.Nil(err4)
+	s.Equal(0, len(resp.Executions))
+}
+
+func (s *visibilityPersistenceSuite) TestFilteringByType() {
+	testDomainUUID := uuid.New()
+	startTime := time.Now()
+
+	// Create 2 executions
+	workflowExecution1 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test1"),
+		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
+	}
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow-1",
+		StartTime:        startTime,
+	})
+	s.Nil(err0)
+
+	workflowExecution2 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test2"),
+		RunId:      common.StringPtr("843f6fc7-102a-4c63-a2d4-7c653b01bf52"),
+	}
+	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow-2",
+		StartTime:        startTime,
+	})
+	s.Nil(err1)
+
+	// List open with filtering
+	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByType(&ListWorkflowExecutionsByTypeRequest{
+		ListWorkflowExecutionsRequest: ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          2,
+			EarliestStartTime: startTime,
+			LatestStartTime:   startTime,
+		},
+		WorkflowTypeName: "visibility-workflow-1",
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
 	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
 
-	// Use token to get the second one
-	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID:    testDomainUUID,
-		PageSize:      1,
-		NextPageToken: resp.NextPageToken,
+	// Close both executions
+	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow-1",
+		StartTime:        startTime,
+		CloseTime:        time.Now(),
 	})
 	s.Nil(err3)
-	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
 
-	// Now should get empty result by using token
-	resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
-		DomainUUID:    testDomainUUID,
-		PageSize:      1,
-		NextPageToken: resp.NextPageToken,
+	err4 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow-2",
+		StartTime:        startTime,
+		CloseTime:        time.Now(),
 	})
 	s.Nil(err4)
-	s.Equal(0, len(resp.Executions))
+
+	// List closed with filtering
+	resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutionsByType(&ListWorkflowExecutionsByTypeRequest{
+		ListWorkflowExecutionsRequest: ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          2,
+			EarliestStartTime: startTime,
+			LatestStartTime:   startTime,
+		},
+		WorkflowTypeName: "visibility-workflow-2",
+	})
+	s.Nil(err5)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+}
+
+func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
+	testDomainUUID := uuid.New()
+	startTime := time.Now()
+
+	// Create 2 executions
+	workflowExecution1 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test1"),
+		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
+	}
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow",
+		StartTime:        startTime,
+	})
+	s.Nil(err0)
+
+	workflowExecution2 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test2"),
+		RunId:      common.StringPtr("843f6fc7-102a-4c63-a2d4-7c653b01bf52"),
+	}
+	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow",
+		StartTime:        startTime,
+	})
+	s.Nil(err1)
+
+	// List open with filtering
+	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByWorkflowID(&ListWorkflowExecutionsByWorkflowIDRequest{
+		ListWorkflowExecutionsRequest: ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          2,
+			EarliestStartTime: startTime,
+			LatestStartTime:   startTime,
+		},
+		WorkflowID: "visibility-filtering-test1",
+	})
+	s.Nil(err2)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+
+	// Close both executions
+	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow",
+		StartTime:        startTime,
+		CloseTime:        time.Now(),
+	})
+	s.Nil(err3)
+
+	err4 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow",
+		StartTime:        startTime,
+		CloseTime:        time.Now(),
+	})
+	s.Nil(err4)
+
+	// List closed with filtering
+	resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutionsByWorkflowID(&ListWorkflowExecutionsByWorkflowIDRequest{
+		ListWorkflowExecutionsRequest: ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          2,
+			EarliestStartTime: startTime,
+			LatestStartTime:   startTime,
+		},
+		WorkflowID: "visibility-filtering-test2",
+	})
+	s.Nil(err5)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
 }

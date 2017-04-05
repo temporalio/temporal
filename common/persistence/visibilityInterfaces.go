@@ -42,7 +42,9 @@ type (
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
 	ListWorkflowExecutionsRequest struct {
-		DomainUUID string
+		DomainUUID        string
+		EarliestStartTime time.Time
+		LatestStartTime   time.Time
 		// Maximum number of workflow executions per page
 		PageSize int
 		// Token to continue reading next page of workflow executions.
@@ -58,11 +60,29 @@ type (
 		NextPageToken []byte
 	}
 
+	// ListWorkflowExecutionsByTypeRequest is used to list executions of
+	// a specific type in a domain
+	ListWorkflowExecutionsByTypeRequest struct {
+		ListWorkflowExecutionsRequest
+		WorkflowTypeName string
+	}
+
+	// ListWorkflowExecutionsByWorkflowIDRequest is used to list executions that
+	// have specific WorkflowID in a domain
+	ListWorkflowExecutionsByWorkflowIDRequest struct {
+		ListWorkflowExecutionsRequest
+		WorkflowID string
+	}
+
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 	}
 )
