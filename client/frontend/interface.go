@@ -6,6 +6,10 @@ import (
 
 // Client is the interface exposed by frontend service client
 type Client interface {
+	RegisterDomain(registerRequest *shared.RegisterDomainRequest) error
+	DescribeDomain(describeRequest *shared.DescribeDomainRequest) (*shared.DescribeDomainResponse, error)
+	UpdateDomain(updateRequest *shared.UpdateDomainRequest) (*shared.UpdateDomainResponse, error)
+	DeprecateDomain(deprecateRequest *shared.DeprecateDomainRequest) error
 	GetWorkflowExecutionHistory(getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
 	PollForActivityTask(pollRequest *shared.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error)
 	PollForDecisionTask(pollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error)
