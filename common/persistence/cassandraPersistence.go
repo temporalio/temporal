@@ -18,10 +18,13 @@ const (
 	defaultSessionTimeout     = 10 * time.Second
 	rowTypeExecutionTaskID    = int64(77)
 	permanentRunID            = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
+	rowTypeShardDomainID      = "85aa26d5-0361-f1d2-f7c0-55f32c164de8"
 	rowTypeShardWorkflowID    = "3fe89dad-8326-fac5-fd40-fe08cfa25dec"
 	rowTypeShardRunID         = "228ce20b-af54-fe2f-ff17-be728a00f785"
+	rowTypeTransferDomainID   = "b4b58501-dbd8-fc00-f57f-dd9939a28930"
 	rowTypeTransferWorkflowID = "5739f107-1a97-f929-fd00-b6fef701457d"
 	rowTypeTransferRunID      = "49756028-f1fa-fa16-f67b-4553d9859b8c"
+	rowTypeTimerDomainID      = "2b2dc6d8-e465-fb94-f66c-a5f2f38e16f5"
 	rowTypeTimerWorkflowID    = "cd1f9688-d7ac-fc6b-f69e-8b44a3460a3d"
 	rowTypeTimerRunID         = "c82b7881-892f-fd9e-feb3-a6d9f7b32f7f"
 	rowTypeShardTaskID        = int64(23)
@@ -58,6 +61,7 @@ const (
 		`}`
 
 	templateWorkflowExecutionType = `{` +
+		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
 		`task_list: ?, ` +
@@ -76,15 +80,18 @@ const (
 		`}`
 
 	templateTransferTaskType = `{` +
+		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
 		`task_id: ?, ` +
+		`target_domain_id: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
 		`schedule_id: ?` +
 		`}`
 
 	templateTimerTaskType = `{` +
+		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
 		`task_id: ?, ` +
@@ -117,25 +124,28 @@ const (
 		`}`
 
 	templateTaskListType = `{` +
+		`domain_id: ?, ` +
 		`name: ?, ` +
 		`type: ?, ` +
 		`ack_level: ? ` +
 		`}`
 
 	templateTaskType = `{` +
+		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
 		`schedule_id: ?` +
 		`}`
 
 	templateCreateShardQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, task_id, shard, range_id)` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateShardType + `, ?) IF NOT EXISTS`
+		`shard_id, type, domain_id, workflow_id, run_id, task_id, shard, range_id)` +
+		`VALUES(?, ?, ?, ?, ?, ?, ` + templateShardType + `, ?) IF NOT EXISTS`
 
 	templateGetShardQuery = `SELECT shard ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ?`
@@ -144,26 +154,27 @@ const (
 		`SET shard = ` + templateShardType + `, range_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, task_id, current_run_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+		`shard_id, type, domain_id, workflow_id, run_id, task_id, current_run_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
-		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
-		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
+		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) IF NOT EXISTS`
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, transfer, task_id) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTransferTaskType + `, ?)`
+		`shard_id, type, domain_id, workflow_id, run_id, transfer, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateTransferTaskType + `, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
-		`shard_id, type, workflow_id, run_id, timer, task_id) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTimerTaskType + `, ?)`
+		`shard_id, type, domain_id, workflow_id, run_id, timer, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateTimerTaskType + `, ?)`
 
 	templateUpdateLeaseQuery = `UPDATE executions ` +
 		`SET range_id = ? ` +
@@ -174,6 +185,7 @@ const (
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ?`
@@ -182,6 +194,7 @@ const (
 		`SET execution = ` + templateWorkflowExecutionType + `, next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
@@ -191,6 +204,7 @@ const (
 		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
@@ -200,6 +214,7 @@ const (
 		`SET timer_map[ ? ] =` + templateTimerInfoType + ` ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
@@ -209,6 +224,7 @@ const (
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
@@ -218,6 +234,7 @@ const (
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? ` +
@@ -226,18 +243,20 @@ const (
 	templateDeleteWorkflowExecutionQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ? `
 
 	templateDeleteWorkflowExecutionTTLQuery = `INSERT INTO executions (` +
-		`shard_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
-		`VALUES(?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) USING TTL ?`
+		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) USING TTL ?`
 
 	templateGetTransferTasksQuery = `SELECT transfer ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id > ? LIMIT ?`
@@ -245,6 +264,7 @@ const (
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and task_id = ?`
@@ -253,6 +273,7 @@ const (
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
+		`and domain_id = ? ` +
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and task_id >= ?` +
@@ -261,24 +282,27 @@ const (
 	templateCompleteTimerTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
+		`and domain_id = ? ` +
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and task_id = ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`task_list_name, task_list_type, type, task_id, task) ` +
-		`VALUES(?, ?, ?, ?, ` + templateTaskType + `)`
+		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `)`
 
 	templateGetTasksQuery = `SELECT task_id, task ` +
 		`FROM tasks ` +
-		`WHERE task_list_name = ? ` +
+		`WHERE domain_id = ? ` +
+		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id > ? ` +
 		`and task_id <= ? LIMIT ?`
 
 	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE task_list_name = ? ` +
+		`WHERE domain_id = ? ` +
+		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
@@ -287,25 +311,27 @@ const (
 		`range_id, ` +
 		`task_list ` +
 		`FROM tasks ` +
-		`WHERE ` +
-		`task_list_name = ? ` +
+		`WHERE domain_id = ? ` +
+		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ?`
 
 	templateInsertTaskListQuery = `INSERT INTO tasks (` +
+		`domain_id, ` +
 		`task_list_name, ` +
 		`task_list_type, ` +
 		`type, ` +
 		`task_id, ` +
 		`range_id, ` +
 		`task_list ` +
-		`) VALUES (?, ?, ?, ?, ?, ` + templateTaskListType + `) IF NOT EXISTS`
+		`) VALUES (?, ?, ?, ?, ?, ?, ` + templateTaskListType + `) IF NOT EXISTS`
 
 	templateUpdateTaskListQuery = `UPDATE tasks SET ` +
 		`range_id = ?, ` +
 		`task_list = ` + templateTaskListType + " " +
-		`WHERE  task_list_name = ? ` +
+		`WHERE domain_id = ? ` +
+		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ? ` +
@@ -313,7 +339,8 @@ const (
 
 	templateUpdateTaskListRangeOnlyQuery = `UPDATE tasks SET ` +
 		`range_id = ? ` +
-		`WHERE  task_list_name = ? ` +
+		`WHERE domain_id = ? ` +
+		`and task_list_name = ? ` +
 		`and task_list_type = ? ` +
 		`IF range_id = ?`
 )
@@ -383,6 +410,7 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
 		rowTypeShard,
+		rowTypeShardDomainID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		rowTypeShardTaskID,
@@ -418,6 +446,7 @@ func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResp
 	query := d.session.Query(templateGetShardQuery,
 		shardID,
 		rowTypeShard,
+		rowTypeShardDomainID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		rowTypeShardTaskID).Consistency(d.lowConslevel)
@@ -454,6 +483,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		shardInfo.RangeID,
 		shardInfo.ShardID,
 		rowTypeShard,
+		rowTypeShardDomainID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		rowTypeShardTaskID,
@@ -492,6 +522,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	batch.Query(templateCreateWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
+		request.DomainID,
 		request.Execution.GetWorkflowId(),
 		permanentRunID,
 		rowTypeExecutionTaskID,
@@ -499,9 +530,11 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 	batch.Query(templateCreateWorkflowExecutionQuery2,
 		d.shardID,
+		request.DomainID,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
 		rowTypeExecution,
+		request.DomainID,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
 		request.TaskList,
@@ -520,9 +553,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		request.NextEventID,
 		rowTypeExecutionTaskID)
 
-	d.createTransferTasks(batch, request.TransferTasks, request.Execution.GetWorkflowId(), request.Execution.GetRunId(),
-		cqlNowTimestamp)
-	d.createTimerTasks(batch, request.TimerTasks, nil, request.Execution.GetWorkflowId(), request.Execution.GetRunId(), cqlNowTimestamp)
+	d.createTransferTasks(batch, request.TransferTasks, request.DomainID, request.Execution.GetWorkflowId(),
+		request.Execution.GetRunId(), cqlNowTimestamp)
+	d.createTimerTasks(batch, request.TimerTasks, nil, request.DomainID, request.Execution.GetWorkflowId(),
+		request.Execution.GetRunId(), cqlNowTimestamp)
 
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
@@ -584,6 +618,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 	query := d.session.Query(templateGetWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
+		request.DomainID,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
 		rowTypeExecutionTaskID)
@@ -631,6 +666,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateWorkflowExecutionQuery,
+		executionInfo.DomainID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
 		executionInfo.TaskList,
@@ -649,21 +685,23 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
+		executionInfo.DomainID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
 		rowTypeExecutionTaskID,
 		request.Condition,
 		request.RangeID)
 
-	d.createTransferTasks(batch, request.TransferTasks, executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
+	d.createTransferTasks(batch, request.TransferTasks, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, cqlNowTimestamp)
 
-	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask,
+	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask, request.ExecutionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
-	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfo,
+	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfo, executionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
-	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos,
+	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos, executionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	previous := make(map[string]interface{})
@@ -718,15 +756,18 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 	batch.Query(templateDeleteWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
+		info.DomainID,
 		info.WorkflowID,
 		permanentRunID,
 		rowTypeExecutionTaskID)
 
 	batch.Query(templateDeleteWorkflowExecutionTTLQuery,
 		d.shardID,
+		info.DomainID,
 		info.WorkflowID,
 		info.RunID,
 		rowTypeExecution,
+		info.DomainID,
 		info.WorkflowID,
 		info.RunID,
 		info.TaskList,
@@ -762,6 +803,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 	query := d.session.Query(templateGetTransferTasksQuery,
 		d.shardID,
 		rowTypeTransferTask,
+		rowTypeTransferDomainID,
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		request.ReadLevel,
@@ -797,6 +839,7 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
+		rowTypeTransferDomainID,
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		request.TaskID)
@@ -815,6 +858,7 @@ func (d *cassandraPersistence) CompleteTimerTask(request *CompleteTimerTaskReque
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
+		rowTypeTimerDomainID,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		request.TaskID)
@@ -837,6 +881,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 		}
 	}
 	query := d.session.Query(templateGetTaskList,
+		request.DomainID,
 		request.TaskList,
 		request.TaskType,
 		rowTypeTaskList,
@@ -848,11 +893,13 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 	if err != nil {
 		if err == gocql.ErrNotFound { // First time task list is used
 			query = d.session.Query(templateInsertTaskListQuery,
+				request.DomainID,
 				request.TaskList,
 				request.TaskType,
 				rowTypeTaskList,
 				taskListTaskID,
 				initialRangeID,
+				request.DomainID,
 				request.TaskList,
 				request.TaskType,
 				0)
@@ -866,9 +913,11 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 		ackLevel = tlDB["ack_level"].(int64)
 		query = d.session.Query(templateUpdateTaskListQuery,
 			rangeID+1,
+			request.DomainID,
 			&request.TaskList,
 			request.TaskType,
 			ackLevel,
+			request.DomainID,
 			&request.TaskList,
 			request.TaskType,
 			rowTypeTaskList,
@@ -899,9 +948,11 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 
 	query := d.session.Query(templateUpdateTaskListQuery,
 		tli.RangeID,
+		tli.DomainID,
 		&tli.Name,
 		tli.TaskType,
 		tli.AckLevel,
+		tli.DomainID,
 		&tli.Name,
 		tli.TaskType,
 		rowTypeTaskList,
@@ -935,6 +986,7 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
+	domainID := request.DomainID
 	taskList := request.TaskList
 	taskListType := request.TaskListType
 
@@ -942,10 +994,12 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 		scheduleID := task.Data.ScheduleID
 
 		batch.Query(templateCreateTaskQuery,
+			domainID,
 			taskList,
 			taskListType,
 			rowTypeTask,
 			task.TaskID,
+			domainID,
 			task.Execution.GetWorkflowId(),
 			task.Execution.GetRunId(),
 			scheduleID)
@@ -954,6 +1008,7 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(templateUpdateTaskListRangeOnlyQuery,
 		request.RangeID,
+		domainID,
 		taskList,
 		taskListType,
 		request.RangeID,
@@ -984,6 +1039,7 @@ func (d *cassandraPersistence) GetTasks(request *GetTasksRequest) (*GetTasksResp
 
 	// Reading tasklist tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTasksQuery,
+		request.DomainID,
 		request.TaskList,
 		request.TaskType,
 		rowTypeTask,
@@ -1028,6 +1084,7 @@ PopulateTasks:
 func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error {
 	tli := request.TaskList
 	query := d.session.Query(templateCompleteTaskQuery,
+		tli.DomainID,
 		tli.Name,
 		tli.TaskType,
 		rowTypeTask,
@@ -1048,6 +1105,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,
+		rowTypeTimerDomainID,
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		request.MinKey,
@@ -1090,18 +1148,21 @@ PopulateTasks:
 	return response, nil
 }
 
-func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, workflowID string,
+func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, domainID, workflowID,
 	runID string, cqlNowTimestamp int64) {
+	targetDomainID := domainID
 	for _, task := range transferTasks {
 		var taskList string
 		var scheduleID int64
 
 		switch task.GetType() {
 		case TransferTaskTypeActivityTask:
+			targetDomainID = task.(*ActivityTask).DomainID
 			taskList = task.(*ActivityTask).TaskList
 			scheduleID = task.(*ActivityTask).ScheduleID
 
 		case TransferTaskTypeDecisionTask:
+			targetDomainID = task.(*DecisionTask).DomainID
 			taskList = task.(*DecisionTask).TaskList
 			scheduleID = task.(*DecisionTask).ScheduleID
 		}
@@ -1109,11 +1170,14 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		batch.Query(templateCreateTransferTaskQuery,
 			d.shardID,
 			rowTypeTransferTask,
+			rowTypeTransferDomainID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
+			domainID,
 			workflowID,
 			runID,
 			task.GetTaskID(),
+			targetDomainID,
 			taskList,
 			task.GetType(),
 			scheduleID,
@@ -1121,8 +1185,8 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 	}
 }
 
-func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks []Task, deleteTimerTask Task, workflowID string,
-	runID string, cqlNowTimestamp int64) {
+func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks []Task, deleteTimerTask Task,
+	domainID, workflowID, runID string, cqlNowTimestamp int64) {
 
 	for _, task := range timerTasks {
 		var eventID int64
@@ -1144,8 +1208,10 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		batch.Query(templateCreateTimerTaskQuery,
 			d.shardID,
 			rowTypeTimerTask,
+			rowTypeTimerDomainID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
+			domainID,
 			workflowID,
 			runID,
 			task.GetTaskID(),
@@ -1159,6 +1225,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		batch.Query(templateCompleteTimerTaskQuery,
 			d.shardID,
 			rowTypeTimerTask,
+			rowTypeTimerDomainID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
 			deleteTimerTask.GetTaskID())
@@ -1166,7 +1233,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 }
 
 func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, deleteInfo *int64,
-	workflowID string, runID string, condition int64, rangeID int64) {
+	domainID, workflowID, runID string, condition int64, rangeID int64) {
 
 	for _, a := range activityInfos {
 		batch.Query(templateUpdateActivityInfoQuery,
@@ -1186,6 +1253,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.CancelRequestID,
 			d.shardID,
 			rowTypeExecution,
+			domainID,
 			workflowID,
 			runID,
 			rowTypeExecutionTaskID,
@@ -1198,6 +1266,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			*deleteInfo,
 			d.shardID,
 			rowTypeExecution,
+			domainID,
 			workflowID,
 			runID,
 			rowTypeExecutionTaskID,
@@ -1207,7 +1276,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 }
 
 func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos []*TimerInfo, deleteInfos []string,
-	workflowID string, runID string, condition int64, rangeID int64) {
+	domainID, workflowID, runID string, condition int64, rangeID int64) {
 
 	for _, a := range timerInfos {
 		batch.Query(templateUpdateTimerInfoQuery,
@@ -1218,6 +1287,7 @@ func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos [
 			a.TaskID,
 			d.shardID,
 			rowTypeExecution,
+			domainID,
 			workflowID,
 			runID,
 			rowTypeExecutionTaskID,
@@ -1230,6 +1300,7 @@ func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos [
 			t,
 			d.shardID,
 			rowTypeExecution,
+			domainID,
 			workflowID,
 			runID,
 			rowTypeExecutionTaskID,
@@ -1264,6 +1335,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 	info := &WorkflowExecutionInfo{}
 	for k, v := range result {
 		switch k {
+		case "domain_id":
+			info.DomainID = v.(gocql.UUID).String()
 		case "workflow_id":
 			info.WorkflowID = v.(string)
 		case "run_id":
@@ -1304,12 +1377,16 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 	info := &TransferTaskInfo{}
 	for k, v := range result {
 		switch k {
+		case "domain_id":
+			info.DomainID = v.(gocql.UUID).String()
 		case "workflow_id":
 			info.WorkflowID = v.(string)
 		case "run_id":
 			info.RunID = v.(gocql.UUID).String()
 		case "task_id":
 			info.TaskID = v.(int64)
+		case "target_domain_id":
+			info.TargetDomainID = v.(gocql.UUID).String()
 		case "task_list":
 			info.TaskList = v.(string)
 		case "type":
@@ -1379,6 +1456,8 @@ func createTaskInfo(result map[string]interface{}) *TaskInfo {
 	info := &TaskInfo{}
 	for k, v := range result {
 		switch k {
+		case "domain_id":
+			info.DomainID = v.(gocql.UUID).String()
 		case "workflow_id":
 			info.WorkflowID = v.(string)
 		case "run_id":
@@ -1395,6 +1474,8 @@ func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
 	info := &TimerTaskInfo{}
 	for k, v := range result {
 		switch k {
+		case "domain_id":
+			info.DomainID = v.(gocql.UUID).String()
 		case "workflow_id":
 			info.WorkflowID = v.(string)
 		case "run_id":

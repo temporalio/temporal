@@ -158,25 +158,32 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	s.matchingEngine.rangeSize = 2 // to test that range is not updated without tasks
 	s.matchingEngine.longPollExpirationInterval = 10 * time.Millisecond
+	domainID := "domainId"
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
-	tlID := newTaskListID(tl, taskType)
+	tlID := newTaskListID(domainID, tl, taskType)
 	//const rangeID = 123
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == persistence.TaskListTypeActivity {
-			resp, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
-				TaskList: taskList,
-				Identity: &identity})
+			resp, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+				DomainUUID: common.StringPtr(domainID),
+				PollRequest: &workflow.PollForActivityTaskRequest{
+					TaskList: taskList,
+					Identity: &identity},
+			})
 			s.NoError(err)
 			s.Equal(emptyPollForActivityTaskResponse, resp)
 		} else {
-			resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
-				TaskList: taskList,
-				Identity: &identity})
+			resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matching.PollForDecisionTaskRequest{
+				DomainUUID: common.StringPtr(domainID),
+				PollRequest: &workflow.PollForDecisionTaskRequest{
+					TaskList: taskList,
+					Identity: &identity},
+			})
 			s.NoError(err)
 			s.Equal(emptyPollForDecisionTaskResponse, resp)
 		}
@@ -195,6 +202,7 @@ func (s *matchingEngineSuite) TestAddDecisionTasks() {
 func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 	s.matchingEngine.rangeSize = 300 // override to low number for the test
 
+	domainID := "domainId"
 	tl := "makeToast"
 
 	taskList := workflow.NewTaskList()
@@ -212,13 +220,16 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 		var err error
 		if taskType == persistence.TaskListTypeActivity {
 			addRequest := matching.AddActivityTaskRequest{
-				Execution:  &execution,
-				ScheduleId: &scheduleID,
-				TaskList:   taskList}
+				SourceDomainUUID: common.StringPtr(domainID),
+				DomainUUID:       common.StringPtr(domainID),
+				Execution:        &execution,
+				ScheduleId:       &scheduleID,
+				TaskList:         taskList}
 
 			err = s.matchingEngine.AddActivityTask(&addRequest)
 		} else {
 			addRequest := matching.AddDecisionTaskRequest{
+				DomainUUID: common.StringPtr(domainID),
 				Execution:  &execution,
 				ScheduleId: &scheduleID,
 				TaskList:   taskList}
@@ -227,7 +238,11 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 		}
 		s.NoError(err)
 	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(&taskListID{taskListName: tl, taskType: taskType}))
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(&taskListID{
+		domainID:     domainID,
+		taskListName: tl,
+		taskType:     taskType,
+	}))
 
 }
 
@@ -243,8 +258,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	// TODO: Understand why publish is low when rangeSize is 3
 	const rangeSize = 30
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -254,9 +270,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
 		addRequest := matching.AddActivityTaskRequest{
-			Execution:  &workflowExecution,
-			ScheduleId: &scheduleID,
-			TaskList:   taskList}
+			SourceDomainUUID: common.StringPtr(domainID),
+			DomainUUID:       common.StringPtr(domainID),
+			Execution:        &workflowExecution,
+			ScheduleId:       &scheduleID,
+			TaskList:         taskList}
 
 		err := s.matchingEngine.AddActivityTask(&addRequest)
 		s.NoError(err)
@@ -293,9 +311,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; {
 		scheduleID := i * 3
 
-		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
-			TaskList: taskList,
-			Identity: &identity})
+		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+			DomainUUID: common.StringPtr(domainID),
+			PollRequest: &workflow.PollForActivityTaskRequest{
+				TaskList: taskList,
+				Identity: &identity},
+		})
 
 		s.NoError(err)
 		s.NotNil(result)
@@ -309,6 +330,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
 		token := &common.TaskToken{
+			DomainID:   domainID,
 			WorkflowID: workflowID,
 			RunID:      runID,
 			ScheduleID: scheduleID,
@@ -339,8 +361,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// TODO: Understand why publish is low when rangeSize is 3
 	const rangeSize = 30
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -382,16 +405,21 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		var pollErr error
 		wg.Add(1)
 		go func() {
-			result, pollErr = s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
-				TaskList: taskList,
-				Identity: &identity})
+			result, pollErr = s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+				DomainUUID: common.StringPtr(domainID),
+				PollRequest: &workflow.PollForActivityTaskRequest{
+					TaskList: taskList,
+					Identity: &identity},
+			})
 			wg.Done()
 		}()
 		time.Sleep(50 * time.Millisecond)
 		addRequest := matching.AddActivityTaskRequest{
-			Execution:  &workflowExecution,
-			ScheduleId: &scheduleID,
-			TaskList:   taskList}
+			SourceDomainUUID: common.StringPtr(domainID),
+			DomainUUID:       common.StringPtr(domainID),
+			Execution:        &workflowExecution,
+			ScheduleId:       &scheduleID,
+			TaskList:         taskList}
 		err := s.matchingEngine.AddActivityTask(&addRequest)
 		s.NoError(err)
 
@@ -409,6 +437,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
 		token := &common.TaskToken{
+			DomainID:   domainID,
 			WorkflowID: workflowID,
 			RunID:      runID,
 			ScheduleID: scheduleID,
@@ -441,8 +470,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	const rangeSize = 3
 	var scheduleID int64 = 123
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -456,9 +486,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matching.AddActivityTaskRequest{
-					Execution:  &workflowExecution,
-					ScheduleId: &scheduleID,
-					TaskList:   taskList}
+					SourceDomainUUID: common.StringPtr(domainID),
+					DomainUUID:       common.StringPtr(domainID),
+					Execution:        &workflowExecution,
+					ScheduleId:       &scheduleID,
+					TaskList:         taskList}
 
 				err := s.matchingEngine.AddActivityTask(&addRequest)
 				if err != nil {
@@ -499,9 +531,12 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
-					TaskList: taskList,
-					Identity: &identity})
+				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
+					PollRequest: &workflow.PollForActivityTaskRequest{
+						TaskList: taskList,
+						Identity: &identity},
+				})
 				if err != nil {
 					panic(err)
 				}
@@ -516,6 +551,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 				s.EqualValues(startedID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
+					DomainID:   domainID,
 					WorkflowID: workflowID,
 					RunID:      runID,
 					ScheduleID: scheduleID,
@@ -558,8 +594,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	var scheduleID int64 = 123
 	var startedEventID int64 = 1412
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeDecision}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeDecision}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -573,6 +610,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matching.AddDecisionTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
 					Execution:  &workflowExecution,
 					ScheduleId: &scheduleID,
 					TaskList:   taskList}
@@ -620,9 +658,12 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
-					TaskList: taskList,
-					Identity: &identity})
+				result, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matching.PollForDecisionTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
+					PollRequest: &workflow.PollForDecisionTaskRequest{
+						TaskList: taskList,
+						Identity: &identity},
+				})
 				if err != nil {
 					panic(err)
 				}
@@ -638,6 +679,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				s.EqualValues(startedEventID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
+					DomainID:   domainID,
 					WorkflowID: workflowID,
 					RunID:      runID,
 					ScheduleID: scheduleID,
@@ -670,6 +712,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	identity := "nobody"
+	domainID := "domainId"
 	tl := "makeToast"
 
 	taskList := workflow.NewTaskList()
@@ -678,17 +721,23 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	// Try with cancelled context
 	ctx, cancel := thrift.NewContext(time.Second)
 	cancel()
-	_, err := s.matchingEngine.PollForActivityTask(ctx, &workflow.PollForActivityTaskRequest{
-		TaskList: taskList,
-		Identity: &identity})
+	_, err := s.matchingEngine.PollForActivityTask(ctx, &matching.PollForActivityTaskRequest{
+		DomainUUID: common.StringPtr(domainID),
+		PollRequest: &workflow.PollForActivityTaskRequest{
+			TaskList: taskList,
+			Identity: &identity},
+	})
 
 	s.Equal(err, ctx.Err())
 
 	// Try with expired context
 	ctx, cancel = thrift.NewContext(time.Second)
-	_, err = s.matchingEngine.PollForActivityTask(ctx, &workflow.PollForActivityTaskRequest{
-		TaskList: taskList,
-		Identity: &identity})
+	_, err = s.matchingEngine.PollForActivityTask(ctx, &matching.PollForActivityTaskRequest{
+		DomainUUID: common.StringPtr(domainID),
+		PollRequest: &workflow.PollForActivityTaskRequest{
+			TaskList: taskList,
+			Identity: &identity},
+	})
 	s.Equal(err, ctx.Err())
 }
 
@@ -704,8 +753,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	const rangeSize = 10
 	var scheduleID int64 = 123
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -725,9 +775,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matching.AddActivityTaskRequest{
-					Execution:  &workflowExecution,
-					ScheduleId: &scheduleID,
-					TaskList:   taskList}
+					SourceDomainUUID: common.StringPtr(domainID),
+					DomainUUID:       common.StringPtr(domainID),
+					Execution:        &workflowExecution,
+					ScheduleId:       &scheduleID,
+					TaskList:         taskList}
 
 				err := engine.AddActivityTask(&addRequest)
 				if err != nil {
@@ -784,9 +836,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForActivityTask(s.callContext, &workflow.PollForActivityTaskRequest{
-					TaskList: taskList,
-					Identity: &identity})
+				result, err := engine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
+					PollRequest: &workflow.PollForActivityTaskRequest{
+						TaskList: taskList,
+						Identity: &identity},
+				})
 				if err != nil {
 					panic(err)
 				}
@@ -801,6 +856,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(startedID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
+					DomainID:   domainID,
 					WorkflowID: workflowID,
 					RunID:      runID,
 					ScheduleID: scheduleID,
@@ -848,8 +904,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	const rangeSize = 10
 	var scheduleID int64 = 123
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeDecision}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeDecision}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
 
@@ -869,6 +926,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matching.AddDecisionTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
 					Execution:  &workflowExecution,
 					ScheduleId: &scheduleID,
 					TaskList:   taskList}
@@ -935,9 +993,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollForDecisionTask(s.callContext, &workflow.PollForDecisionTaskRequest{
-					TaskList: taskList,
-					Identity: &identity})
+				result, err := engine.PollForDecisionTask(s.callContext, &matching.PollForDecisionTaskRequest{
+					DomainUUID: common.StringPtr(domainID),
+					PollRequest: &workflow.PollForDecisionTaskRequest{
+						TaskList: taskList,
+						Identity: &identity},
+				})
 				if err != nil {
 					panic(err)
 				}
@@ -951,6 +1012,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				s.EqualValues(startedEventID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
+					DomainID:   domainID,
 					WorkflowID: workflowID,
 					RunID:      runID,
 					ScheduleID: scheduleID,
@@ -991,17 +1053,20 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	workflowID := "workflow1"
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
+	domainID := "domainId"
 	tl := "makeToast"
-	tlID := &taskListID{taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
 
 	scheduleID := int64(0)
 	addRequest := matching.AddActivityTaskRequest{
-		Execution:  &workflowExecution,
-		ScheduleId: &scheduleID,
-		TaskList:   taskList}
+		SourceDomainUUID: common.StringPtr(domainID),
+		DomainUUID:       common.StringPtr(domainID),
+		Execution:        &workflowExecution,
+		ScheduleId:       &scheduleID,
+		TaskList:         taskList}
 
 	err := s.matchingEngine.AddActivityTask(&addRequest)
 	s.NoError(err)
@@ -1114,14 +1179,20 @@ func newTestTaskListManager() *testTaskListManager {
 
 // LeaseTaskList provides a mock function with given fields: request
 func (m *testTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
-	tlm := m.getTaskListManager(newTaskListID(request.TaskList, request.TaskType))
+	tlm := m.getTaskListManager(newTaskListID(request.DomainID, request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.rangeID++
 	m.logger.Debugf("LeaseTaskList rangeID=%v", tlm.rangeID)
 
 	return &persistence.LeaseTaskListResponse{
-		TaskListInfo: &persistence.TaskListInfo{AckLevel: tlm.ackLevel, Name: request.TaskList, TaskType: request.TaskType, RangeID: tlm.rangeID},
+		TaskListInfo: &persistence.TaskListInfo{
+			AckLevel: tlm.ackLevel,
+			DomainID: request.DomainID,
+			Name:     request.TaskList,
+			TaskType: request.TaskType,
+			RangeID:  tlm.rangeID,
+		},
 	}, nil
 }
 
@@ -1130,7 +1201,7 @@ func (m *testTaskManager) UpdateTaskList(request *persistence.UpdateTaskListRequ
 	m.logger.Debugf("UpdateTaskList taskListInfo=%v, ackLevel=%v", request.TaskListInfo, request.TaskListInfo.AckLevel)
 
 	tli := request.TaskListInfo
-	tlm := m.getTaskListManager(newTaskListID(tli.Name, tli.TaskType))
+	tlm := m.getTaskListManager(newTaskListID(tli.DomainID, tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1151,7 +1222,7 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	}
 
 	tli := request.TaskList
-	tlm := m.getTaskListManager(newTaskListID(tli.Name, tli.TaskType))
+	tlm := m.getTaskListManager(newTaskListID(tli.DomainID, tli.Name, tli.TaskType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1162,10 +1233,11 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
+	domainID := request.DomainID
 	taskList := request.TaskList
 	taskType := request.TaskListType
 
-	tlm := m.getTaskListManager(newTaskListID(taskList, taskType))
+	tlm := m.getTaskListManager(newTaskListID(domainID, taskList, taskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 
@@ -1195,6 +1267,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 	for _, task := range request.Tasks {
 		scheduleID := task.Data.ScheduleID
 		tlm.tasks.Put(task.TaskID, &persistence.TaskInfo{
+			DomainID:   domainID,
 			RunID:      *task.Execution.RunId,
 			ScheduleID: scheduleID,
 			TaskID:     task.TaskID,
@@ -1210,7 +1283,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
 	m.logger.Debugf("testTaskManager.GetTasks readLevel=%v, maxReadLevel=%v", request.ReadLevel, request.MaxReadLevel)
 
-	tlm := m.getTaskListManager(newTaskListID(request.TaskList, request.TaskType))
+	tlm := m.getTaskListManager(newTaskListID(request.DomainID, request.TaskList, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	if tlm.rangeID != request.RangeID {

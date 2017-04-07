@@ -195,6 +195,8 @@ ProcessRetryLoop:
 			return
 		default:
 			var err error
+			domainID := task.DomainID
+			targetDomainID := task.TargetDomainID
 			execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
 				RunId: common.StringPtr(task.RunID)}
 			switch task.TaskType {
@@ -204,6 +206,8 @@ ProcessRetryLoop:
 						Name: &task.TaskList,
 					}
 					err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
+						DomainUUID: common.StringPtr(targetDomainID),
+						SourceDomainUUID: common.StringPtr(domainID),
 						Execution:  &execution,
 						TaskList:   taskList,
 						ScheduleId: &task.ScheduleID,
@@ -215,6 +219,7 @@ ProcessRetryLoop:
 						Name: &task.TaskList,
 					}
 					err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
+						DomainUUID: common.StringPtr(domainID),
 						Execution:  &execution,
 						TaskList:   taskList,
 						ScheduleId: &task.ScheduleID,
@@ -222,7 +227,7 @@ ProcessRetryLoop:
 				}
 			case persistence.TransferTaskTypeDeleteExecution:
 				{
-					context, _ := t.cache.getOrCreateWorkflowExecution(execution)
+					context, _ := t.cache.getOrCreateWorkflowExecution(domainID, execution)
 
 					// TODO: We need to keep completed executions for auditing purpose.  Need a design for keeping them around
 					// for visibility purpose.

@@ -47,11 +47,11 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 	}
 }
 
-func (c *historyCache) getOrCreateWorkflowExecution(execution workflow.WorkflowExecution) (*workflowExecutionContext,
-	error) {
+func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
+	execution workflow.WorkflowExecution) (*workflowExecutionContext, error) {
 	// Test hook for disabling the cache
 	if c.disabled {
-		return newWorkflowExecutionContext(execution, c.shard, c.executionManager, c.logger), nil
+		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), nil
 	}
 
 	key := execution.GetRunId()
@@ -61,7 +61,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(execution workflow.WorkflowE
 	}
 
 	// Let's create the workflow execution context
-	context = newWorkflowExecutionContext(execution, c.shard, c.executionManager, c.logger)
+	context = newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
 	context = c.PutIfNotExist(key, context).(*workflowExecutionContext)
 
 	return context, nil

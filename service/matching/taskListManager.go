@@ -161,6 +161,7 @@ func (c *taskListManagerImpl) persistAckLevel() error {
 	c.Lock()
 	updateTaskListRequest := &persistence.UpdateTaskListRequest{
 		TaskListInfo: &persistence.TaskListInfo{
+			DomainID: c.taskListID.domainID,
 			Name:     c.taskListID.taskListName,
 			TaskType: c.taskListID.taskType,
 			AckLevel: c.taskAckManager.getAckLevel(),
@@ -226,6 +227,7 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
 	response, err := c.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		c.Lock()
 		request := &persistence.GetTasksRequest{
+			DomainID:     c.taskListID.domainID,
 			TaskList:     c.taskListID.taskListName,
 			TaskType:     c.taskListID.taskType,
 			BatchSize:    getTasksBatchSize,
@@ -257,6 +259,7 @@ func (c *taskListManagerImpl) updateRangeIfNeededLocked(e *matchingEngineImpl) e
 	var resp *persistence.LeaseTaskListResponse
 	op := func() (err error) {
 		resp, err = e.taskManager.LeaseTaskList(&persistence.LeaseTaskListRequest{
+			DomainID: c.taskListID.domainID,
 			TaskList: c.taskListID.taskListName,
 			TaskType: c.taskListID.taskType,
 		})
@@ -486,6 +489,7 @@ func (c *taskContext) completeTask(err error) {
 	// tasks one by one.
 	err2 := tlMgr.engine.taskManager.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskList: &persistence.TaskListInfo{
+			DomainID: tlMgr.taskListID.domainID,
 			Name:     tlMgr.taskListID.taskListName,
 			TaskType: tlMgr.taskListID.taskType,
 		},

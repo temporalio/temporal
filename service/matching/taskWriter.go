@@ -104,6 +104,7 @@ writerLoop:
 				}
 
 				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
+					DomainID:     w.taskListID.domainID,
 					TaskList:     w.taskListID.taskListName,
 					TaskListType: w.taskListID.taskType,
 					Tasks:        tasks,

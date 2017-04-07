@@ -63,10 +63,11 @@ func (s *transferQueueProcessorSuite) TestNoTransferTask() {
 }
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
+	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId:                                                    common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -88,11 +89,12 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
+	domainID := "c867e7d6-0f0f-41df-a59c-1cd3eb1436f5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("many-transfertasks-test"),
-		RunId: common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
+		RunId:                                                    common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
 	taskList := "many-transfertasks-queue"
 	activityTaskScheduleIds := []int64{2, 3, 4, 5, 6}
-	task0, err0 := s.CreateWorkflowExecutionManyTasks(workflowExecution, taskList, nil, 7, 0, nil,
+	task0, err0 := s.CreateWorkflowExecutionManyTasks(domainID, workflowExecution, taskList, nil, 7, 0, nil,
 		activityTaskScheduleIds)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
@@ -115,6 +117,7 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
+	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
 	workflowID := "delete-execution-transfertasks-test"
 	runID := "79fc8984-f78f-41cf-8fa1-4d383edb2cfd"
 	workflowExecution := workflow.WorkflowExecution{
@@ -123,12 +126,12 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	}
 	taskList := "delete-execution-transfertasks-queue"
 	identity := "delete-execution-transfertasks-test"
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
 	builder := newMutableStateBuilder(s.logger)
-	info1, _ := s.GetWorkflowExecutionInfo(workflowExecution)
+	info1, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info1)
 	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
 	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, int64(2), startedEvent.GetEventId(), nil, identity)
@@ -139,8 +142,8 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	s.Nil(err1, "No error expected.")
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
-		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
-	_, err2 := s.CreateWorkflowExecution(newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+		RunId:                                               common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
+	_, err2 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.NotNil(err2, "Entity exist error expected.")
 	s.logger.Infof("Error creating new execution: %v", err2)
 
@@ -160,7 +163,7 @@ workerPump:
 		}
 	}
 
-	_, err3 := s.CreateWorkflowExecution(newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
 	s.mockMatching.AssertExpectations(s.T())
@@ -168,19 +171,23 @@ workerPump:
 
 func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	var res interface{}
+	domainID := task.DomainID
 	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId: common.StringPtr(task.RunID)}
+		RunId:                                            common.StringPtr(task.RunID)}
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
 	if task.TaskType == persistence.TransferTaskTypeActivityTask {
 		res = &m.AddActivityTaskRequest{
-			Execution:  &execution,
-			TaskList:   taskList,
-			ScheduleId: &task.ScheduleID,
+			DomainUUID:       common.StringPtr(domainID),
+			SourceDomainUUID: common.StringPtr(domainID),
+			Execution:        &execution,
+			TaskList:         taskList,
+			ScheduleId:       &task.ScheduleID,
 		}
 	} else if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 		res = &m.AddDecisionTaskRequest{
+			DomainUUID: common.StringPtr(domainID),
 			Execution:  &execution,
 			TaskList:   taskList,
 			ScheduleId: &task.ScheduleID,

@@ -14,6 +14,7 @@ import (
 
 type (
 	workflowExecutionContext struct {
+		domainID          string
 		workflowExecution workflow.WorkflowExecution
 		shard             ShardContext
 		executionManager  persistence.ExecutionManager
@@ -31,7 +32,7 @@ var (
 	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 )
 
-func newWorkflowExecutionContext(execution workflow.WorkflowExecution, shard ShardContext,
+func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExecution, shard ShardContext,
 	executionManager persistence.ExecutionManager, logger bark.Logger) *workflowExecutionContext {
 	lg := logger.WithFields(bark.Fields{
 		tagWorkflowExecutionID: execution.GetWorkflowId(),
@@ -40,6 +41,7 @@ func newWorkflowExecutionContext(execution workflow.WorkflowExecution, shard Sha
 	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: shard}, lg)
 
 	return &workflowExecutionContext{
+		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
 		executionManager:  executionManager,
@@ -54,7 +56,9 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 	}
 
 	response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
-		Execution: c.workflowExecution})
+		DomainID:  c.domainID,
+		Execution: c.workflowExecution,
+	})
 	if err != nil {
 		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetWorkflowExecution, err, "")
 		return nil, err

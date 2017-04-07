@@ -45,39 +45,41 @@ func (s *historyPersistenceSuite) TearDownSuite() {
 }
 
 func (s *historyPersistenceSuite) TestAppendHistoryEvents() {
+	domainID := "ff03c29f-fcf1-4aea-893d-1a7ec421e3ec"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("append-history-events-test"),
 		RunId:      common.StringPtr("986fc9cd-4a2d-4964-bf9f-5130116d5851"),
 	}
 
 	events1 := []byte("event1;event2")
-	err0 := s.AppendHistoryEvents(workflowExecution, 1, 1, 1, events1, false)
+	err0 := s.AppendHistoryEvents(domainID, workflowExecution, 1, 1, 1, events1, false)
 	s.Nil(err0)
 
 	events2 := []byte("event3;")
-	err1 := s.AppendHistoryEvents(workflowExecution, 3, 1, 1, events2, false)
+	err1 := s.AppendHistoryEvents(domainID, workflowExecution, 3, 1, 1, events2, false)
 	s.Nil(err1)
 
 	events2New := []byte("event3new;")
-	err2 := s.AppendHistoryEvents(workflowExecution, 3, 1, 1, events2New, false)
+	err2 := s.AppendHistoryEvents(domainID, workflowExecution, 3, 1, 1, events2New, false)
 	s.NotNil(err2)
 	s.IsType(&ConditionFailedError{}, err2)
 
-	err3 := s.AppendHistoryEvents(workflowExecution, 3, 1, 2, events2New, true)
+	err3 := s.AppendHistoryEvents(domainID, workflowExecution, 3, 1, 2, events2New, true)
 	s.Nil(err3)
 }
 
 func (s *historyPersistenceSuite) TestGetHistoryEvents() {
+	domainID := "0fdc53ef-b890-4870-a944-b9b028ac9742"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("get-history-events-test"),
 		RunId:      common.StringPtr("26fa29f6-af41-4b70-9a3b-8b1b35eed82a"),
 	}
 
 	events := []byte("event1;event2")
-	err0 := s.AppendHistoryEvents(workflowExecution, 1, 1, 1, events, false)
+	err0 := s.AppendHistoryEvents(domainID, workflowExecution, 1, 1, 1, events, false)
 	s.Nil(err0)
 
-	data, token, err1 := s.GetWorkflowExecutionHistory(workflowExecution, 2, 10, nil)
+	data, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 2, 10, nil)
 	s.Nil(err1)
 	s.Equal([]byte{}, token)
 	s.Equal(1, len(data))
@@ -85,6 +87,7 @@ func (s *historyPersistenceSuite) TestGetHistoryEvents() {
 }
 
 func (s *historyPersistenceSuite) TestDeleteHistoryEvents() {
+	domainID := "373de9d6-e41e-42d4-bee9-9e06968e4d0d"
 	workflowExecution := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr("delete-history-events-test"),
 		RunId:      common.StringPtr("2122fd8d-f583-459e-a2e2-d1fb273a43cb"),
@@ -103,29 +106,30 @@ func (s *historyPersistenceSuite) TestDeleteHistoryEvents() {
 		[]byte("event14"),
 	}
 	for i := 0; i < 10; i++ {
-		err0 := s.AppendHistoryEvents(workflowExecution, int64(i), 1, int64(i), events[i], false)
+		err0 := s.AppendHistoryEvents(domainID, workflowExecution, int64(i), 1, int64(i), events[i], false)
 		s.Nil(err0)
 	}
 
-	data, token, err1 := s.GetWorkflowExecutionHistory(workflowExecution, 10, 11, nil)
+	data, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 10, 11, nil)
 	s.Nil(err1)
 	s.Equal([]byte{}, token)
 	s.Equal(events, data)
 
-	err2 := s.DeleteWorkflowExecutionHistory(workflowExecution)
+	err2 := s.DeleteWorkflowExecutionHistory(domainID, workflowExecution)
 	s.Nil(err2)
 
-	data1, token1, err3 := s.GetWorkflowExecutionHistory(workflowExecution, 10, 11, nil)
+	data1, token1, err3 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 10, 11, nil)
 	s.NotNil(err3)
 	s.IsType(&gen.EntityNotExistsError{}, err3)
 	s.Nil(token1)
 	s.Nil(data1)
 }
 
-func (s *historyPersistenceSuite) AppendHistoryEvents(workflowExecution gen.WorkflowExecution, firstEventID, rangeID,
-txID int64, events []byte, overwrite bool) error {
+func (s *historyPersistenceSuite) AppendHistoryEvents(domainID string, workflowExecution gen.WorkflowExecution,
+	firstEventID, rangeID, txID int64, events []byte, overwrite bool) error {
 
 	return s.HistoryMgr.AppendHistoryEvents(&AppendHistoryEventsRequest{
+		DomainID:      domainID,
 		Execution:     workflowExecution,
 		FirstEventID:  firstEventID,
 		RangeID:       rangeID,
@@ -135,10 +139,11 @@ txID int64, events []byte, overwrite bool) error {
 	})
 }
 
-func (s *historyPersistenceSuite) GetWorkflowExecutionHistory(workflowExecution gen.WorkflowExecution,
+func (s *historyPersistenceSuite) GetWorkflowExecutionHistory(domainID string, workflowExecution gen.WorkflowExecution,
 	nextEventID int64, pageSize int, token []byte) ([][]byte, []byte, error) {
 
 	response, err := s.HistoryMgr.GetWorkflowExecutionHistory(&GetWorkflowExecutionHistoryRequest{
+		DomainID:      domainID,
 		Execution:     workflowExecution,
 		NextEventID:   nextEventID,
 		PageSize:      pageSize,
@@ -152,9 +157,11 @@ func (s *historyPersistenceSuite) GetWorkflowExecutionHistory(workflowExecution 
 	return response.Events, response.NextPageToken, nil
 }
 
-func (s *historyPersistenceSuite) DeleteWorkflowExecutionHistory(workflowExecution gen.WorkflowExecution) error {
+func (s *historyPersistenceSuite) DeleteWorkflowExecutionHistory(domainID string,
+	workflowExecution gen.WorkflowExecution) error {
 
 	return s.HistoryMgr.DeleteWorkflowExecutionHistory(&DeleteWorkflowExecutionHistoryRequest{
+		DomainID:  domainID,
 		Execution: workflowExecution,
 	})
 }

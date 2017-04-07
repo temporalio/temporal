@@ -22,8 +22,9 @@ struct AddDecisionTaskRequest {
 struct AddActivityTaskRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution execution
-  30: optional shared.TaskList taskList
-  40: optional i64 (js.type = "Long") scheduleId
+  30: optional string sourceDomainUUID
+  40: optional shared.TaskList taskList
+  50: optional i64 (js.type = "Long") scheduleId
 }
 
 /**

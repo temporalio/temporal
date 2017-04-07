@@ -1434,6 +1434,7 @@ func (p *WorkflowExecution) String() string {
 // Attributes:
 //  - ActivityId
 //  - ActivityType
+//  - Domain
 //  - TaskList
 //  - Input
 //  - ScheduleToCloseTimeoutSeconds
@@ -1445,7 +1446,9 @@ type ScheduleActivityTaskDecisionAttributes struct {
   ActivityId *string `thrift:"activityId,10" db:"activityId" json:"activityId,omitempty"`
   // unused fields # 11 to 19
   ActivityType *ActivityType `thrift:"activityType,20" db:"activityType" json:"activityType,omitempty"`
-  // unused fields # 21 to 29
+  // unused fields # 21 to 24
+  Domain *string `thrift:"domain,25" db:"domain" json:"domain,omitempty"`
+  // unused fields # 26 to 29
   TaskList *TaskList `thrift:"taskList,30" db:"taskList" json:"taskList,omitempty"`
   // unused fields # 31 to 39
   Input []byte `thrift:"input,40" db:"input" json:"input,omitempty"`
@@ -1476,6 +1479,13 @@ func (p *ScheduleActivityTaskDecisionAttributes) GetActivityType() *ActivityType
     return ScheduleActivityTaskDecisionAttributes_ActivityType_DEFAULT
   }
 return p.ActivityType
+}
+var ScheduleActivityTaskDecisionAttributes_Domain_DEFAULT string
+func (p *ScheduleActivityTaskDecisionAttributes) GetDomain() string {
+  if !p.IsSetDomain() {
+    return ScheduleActivityTaskDecisionAttributes_Domain_DEFAULT
+  }
+return *p.Domain
 }
 var ScheduleActivityTaskDecisionAttributes_TaskList_DEFAULT *TaskList
 func (p *ScheduleActivityTaskDecisionAttributes) GetTaskList() *TaskList {
@@ -1525,6 +1535,10 @@ func (p *ScheduleActivityTaskDecisionAttributes) IsSetActivityType() bool {
   return p.ActivityType != nil
 }
 
+func (p *ScheduleActivityTaskDecisionAttributes) IsSetDomain() bool {
+  return p.Domain != nil
+}
+
 func (p *ScheduleActivityTaskDecisionAttributes) IsSetTaskList() bool {
   return p.TaskList != nil
 }
@@ -1568,6 +1582,10 @@ func (p *ScheduleActivityTaskDecisionAttributes) Read(iprot thrift.TProtocol) er
       }
     case 20:
       if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    case 25:
+      if err := p.ReadField25(iprot); err != nil {
         return err
       }
     case 30:
@@ -1623,6 +1641,15 @@ func (p *ScheduleActivityTaskDecisionAttributes)  ReadField20(iprot thrift.TProt
   if err := p.ActivityType.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ActivityType), err)
   }
+  return nil
+}
+
+func (p *ScheduleActivityTaskDecisionAttributes)  ReadField25(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 25: ", err)
+} else {
+  p.Domain = &v
+}
   return nil
 }
 
@@ -1685,6 +1712,7 @@ func (p *ScheduleActivityTaskDecisionAttributes) Write(oprot thrift.TProtocol) e
   if p != nil {
     if err := p.writeField10(oprot); err != nil { return err }
     if err := p.writeField20(oprot); err != nil { return err }
+    if err := p.writeField25(oprot); err != nil { return err }
     if err := p.writeField30(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField45(oprot); err != nil { return err }
@@ -1720,6 +1748,18 @@ func (p *ScheduleActivityTaskDecisionAttributes) writeField20(oprot thrift.TProt
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 20:activityType: ", p), err) }
+  }
+  return err
+}
+
+func (p *ScheduleActivityTaskDecisionAttributes) writeField25(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDomain() {
+    if err := oprot.WriteFieldBegin("domain", thrift.STRING, 25); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 25:domain: ", p), err) }
+    if err := oprot.WriteString(string(*p.Domain)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.domain (25) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 25:domain: ", p), err) }
   }
   return err
 }
@@ -4397,6 +4437,7 @@ func (p *DecisionTaskTimedOutEventAttributes) String() string {
 // Attributes:
 //  - ActivityId
 //  - ActivityType
+//  - Domain
 //  - TaskList
 //  - Input
 //  - ScheduleToCloseTimeoutSeconds
@@ -4409,7 +4450,9 @@ type ActivityTaskScheduledEventAttributes struct {
   ActivityId *string `thrift:"activityId,10" db:"activityId" json:"activityId,omitempty"`
   // unused fields # 11 to 19
   ActivityType *ActivityType `thrift:"activityType,20" db:"activityType" json:"activityType,omitempty"`
-  // unused fields # 21 to 29
+  // unused fields # 21 to 24
+  Domain *string `thrift:"domain,25" db:"domain" json:"domain,omitempty"`
+  // unused fields # 26 to 29
   TaskList *TaskList `thrift:"taskList,30" db:"taskList" json:"taskList,omitempty"`
   // unused fields # 31 to 39
   Input []byte `thrift:"input,40" db:"input" json:"input,omitempty"`
@@ -4442,6 +4485,13 @@ func (p *ActivityTaskScheduledEventAttributes) GetActivityType() *ActivityType {
     return ActivityTaskScheduledEventAttributes_ActivityType_DEFAULT
   }
 return p.ActivityType
+}
+var ActivityTaskScheduledEventAttributes_Domain_DEFAULT string
+func (p *ActivityTaskScheduledEventAttributes) GetDomain() string {
+  if !p.IsSetDomain() {
+    return ActivityTaskScheduledEventAttributes_Domain_DEFAULT
+  }
+return *p.Domain
 }
 var ActivityTaskScheduledEventAttributes_TaskList_DEFAULT *TaskList
 func (p *ActivityTaskScheduledEventAttributes) GetTaskList() *TaskList {
@@ -4498,6 +4548,10 @@ func (p *ActivityTaskScheduledEventAttributes) IsSetActivityType() bool {
   return p.ActivityType != nil
 }
 
+func (p *ActivityTaskScheduledEventAttributes) IsSetDomain() bool {
+  return p.Domain != nil
+}
+
 func (p *ActivityTaskScheduledEventAttributes) IsSetTaskList() bool {
   return p.TaskList != nil
 }
@@ -4545,6 +4599,10 @@ func (p *ActivityTaskScheduledEventAttributes) Read(iprot thrift.TProtocol) erro
       }
     case 20:
       if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    case 25:
+      if err := p.ReadField25(iprot); err != nil {
         return err
       }
     case 30:
@@ -4604,6 +4662,15 @@ func (p *ActivityTaskScheduledEventAttributes)  ReadField20(iprot thrift.TProtoc
   if err := p.ActivityType.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ActivityType), err)
   }
+  return nil
+}
+
+func (p *ActivityTaskScheduledEventAttributes)  ReadField25(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 25: ", err)
+} else {
+  p.Domain = &v
+}
   return nil
 }
 
@@ -4675,6 +4742,7 @@ func (p *ActivityTaskScheduledEventAttributes) Write(oprot thrift.TProtocol) err
   if p != nil {
     if err := p.writeField10(oprot); err != nil { return err }
     if err := p.writeField20(oprot); err != nil { return err }
+    if err := p.writeField25(oprot); err != nil { return err }
     if err := p.writeField30(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField45(oprot); err != nil { return err }
@@ -4711,6 +4779,18 @@ func (p *ActivityTaskScheduledEventAttributes) writeField20(oprot thrift.TProtoc
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 20:activityType: ", p), err) }
+  }
+  return err
+}
+
+func (p *ActivityTaskScheduledEventAttributes) writeField25(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDomain() {
+    if err := oprot.WriteFieldBegin("domain", thrift.STRING, 25); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 25:domain: ", p), err) }
+    if err := oprot.WriteString(string(*p.Domain)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.domain (25) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 25:domain: ", p), err) }
   }
   return err
 }
@@ -8796,6 +8876,7 @@ func (p *UpdateDomainInfo) String() string {
 // Attributes:
 //  - Name
 //  - Description
+//  - OwnerEmail
 //  - WorkflowExecutionRetentionPeriodInDays
 //  - EmitMetric
 type RegisterDomainRequest struct {
@@ -8804,9 +8885,11 @@ type RegisterDomainRequest struct {
   // unused fields # 11 to 19
   Description *string `thrift:"description,20" db:"description" json:"description,omitempty"`
   // unused fields # 21 to 29
-  WorkflowExecutionRetentionPeriodInDays *int32 `thrift:"workflowExecutionRetentionPeriodInDays,30" db:"workflowExecutionRetentionPeriodInDays" json:"workflowExecutionRetentionPeriodInDays,omitempty"`
+  OwnerEmail *string `thrift:"ownerEmail,30" db:"ownerEmail" json:"ownerEmail,omitempty"`
   // unused fields # 31 to 39
-  EmitMetric *bool `thrift:"emitMetric,40" db:"emitMetric" json:"emitMetric,omitempty"`
+  WorkflowExecutionRetentionPeriodInDays *int32 `thrift:"workflowExecutionRetentionPeriodInDays,40" db:"workflowExecutionRetentionPeriodInDays" json:"workflowExecutionRetentionPeriodInDays,omitempty"`
+  // unused fields # 41 to 49
+  EmitMetric *bool `thrift:"emitMetric,50" db:"emitMetric" json:"emitMetric,omitempty"`
 }
 
 func NewRegisterDomainRequest() *RegisterDomainRequest {
@@ -8826,6 +8909,13 @@ func (p *RegisterDomainRequest) GetDescription() string {
     return RegisterDomainRequest_Description_DEFAULT
   }
 return *p.Description
+}
+var RegisterDomainRequest_OwnerEmail_DEFAULT string
+func (p *RegisterDomainRequest) GetOwnerEmail() string {
+  if !p.IsSetOwnerEmail() {
+    return RegisterDomainRequest_OwnerEmail_DEFAULT
+  }
+return *p.OwnerEmail
 }
 var RegisterDomainRequest_WorkflowExecutionRetentionPeriodInDays_DEFAULT int32
 func (p *RegisterDomainRequest) GetWorkflowExecutionRetentionPeriodInDays() int32 {
@@ -8847,6 +8937,10 @@ func (p *RegisterDomainRequest) IsSetName() bool {
 
 func (p *RegisterDomainRequest) IsSetDescription() bool {
   return p.Description != nil
+}
+
+func (p *RegisterDomainRequest) IsSetOwnerEmail() bool {
+  return p.OwnerEmail != nil
 }
 
 func (p *RegisterDomainRequest) IsSetWorkflowExecutionRetentionPeriodInDays() bool {
@@ -8886,6 +8980,10 @@ func (p *RegisterDomainRequest) Read(iprot thrift.TProtocol) error {
       if err := p.ReadField40(iprot); err != nil {
         return err
       }
+    case 50:
+      if err := p.ReadField50(iprot); err != nil {
+        return err
+      }
     default:
       if err := iprot.Skip(fieldTypeId); err != nil {
         return err
@@ -8920,17 +9018,26 @@ func (p *RegisterDomainRequest)  ReadField20(iprot thrift.TProtocol) error {
 }
 
 func (p *RegisterDomainRequest)  ReadField30(iprot thrift.TProtocol) error {
-  if v, err := iprot.ReadI32(); err != nil {
+  if v, err := iprot.ReadString(); err != nil {
   return thrift.PrependError("error reading field 30: ", err)
+} else {
+  p.OwnerEmail = &v
+}
+  return nil
+}
+
+func (p *RegisterDomainRequest)  ReadField40(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI32(); err != nil {
+  return thrift.PrependError("error reading field 40: ", err)
 } else {
   p.WorkflowExecutionRetentionPeriodInDays = &v
 }
   return nil
 }
 
-func (p *RegisterDomainRequest)  ReadField40(iprot thrift.TProtocol) error {
+func (p *RegisterDomainRequest)  ReadField50(iprot thrift.TProtocol) error {
   if v, err := iprot.ReadBool(); err != nil {
-  return thrift.PrependError("error reading field 40: ", err)
+  return thrift.PrependError("error reading field 50: ", err)
 } else {
   p.EmitMetric = &v
 }
@@ -8945,6 +9052,7 @@ func (p *RegisterDomainRequest) Write(oprot thrift.TProtocol) error {
     if err := p.writeField20(oprot); err != nil { return err }
     if err := p.writeField30(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
+    if err := p.writeField50(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -8978,25 +9086,37 @@ func (p *RegisterDomainRequest) writeField20(oprot thrift.TProtocol) (err error)
 }
 
 func (p *RegisterDomainRequest) writeField30(oprot thrift.TProtocol) (err error) {
-  if p.IsSetWorkflowExecutionRetentionPeriodInDays() {
-    if err := oprot.WriteFieldBegin("workflowExecutionRetentionPeriodInDays", thrift.I32, 30); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:workflowExecutionRetentionPeriodInDays: ", p), err) }
-    if err := oprot.WriteI32(int32(*p.WorkflowExecutionRetentionPeriodInDays)); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T.workflowExecutionRetentionPeriodInDays (30) field write error: ", p), err) }
+  if p.IsSetOwnerEmail() {
+    if err := oprot.WriteFieldBegin("ownerEmail", thrift.STRING, 30); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:ownerEmail: ", p), err) }
+    if err := oprot.WriteString(string(*p.OwnerEmail)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.ownerEmail (30) field write error: ", p), err) }
     if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 30:workflowExecutionRetentionPeriodInDays: ", p), err) }
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 30:ownerEmail: ", p), err) }
   }
   return err
 }
 
 func (p *RegisterDomainRequest) writeField40(oprot thrift.TProtocol) (err error) {
-  if p.IsSetEmitMetric() {
-    if err := oprot.WriteFieldBegin("emitMetric", thrift.BOOL, 40); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 40:emitMetric: ", p), err) }
-    if err := oprot.WriteBool(bool(*p.EmitMetric)); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T.emitMetric (40) field write error: ", p), err) }
+  if p.IsSetWorkflowExecutionRetentionPeriodInDays() {
+    if err := oprot.WriteFieldBegin("workflowExecutionRetentionPeriodInDays", thrift.I32, 40); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 40:workflowExecutionRetentionPeriodInDays: ", p), err) }
+    if err := oprot.WriteI32(int32(*p.WorkflowExecutionRetentionPeriodInDays)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.workflowExecutionRetentionPeriodInDays (40) field write error: ", p), err) }
     if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 40:emitMetric: ", p), err) }
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 40:workflowExecutionRetentionPeriodInDays: ", p), err) }
+  }
+  return err
+}
+
+func (p *RegisterDomainRequest) writeField50(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEmitMetric() {
+    if err := oprot.WriteFieldBegin("emitMetric", thrift.BOOL, 50); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 50:emitMetric: ", p), err) }
+    if err := oprot.WriteBool(bool(*p.EmitMetric)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.emitMetric (50) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 50:emitMetric: ", p), err) }
   }
   return err
 }

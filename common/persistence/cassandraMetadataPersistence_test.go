@@ -49,7 +49,7 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 	status := DomainStatusRegistered
 	description := "create-domain-test-description"
 	owner := "create-domain-test-owner"
-	retention := 10
+	retention := int32(10)
 	emitMetric := true
 
 	resp0, err0 := m.CreateDomain(
@@ -90,7 +90,7 @@ func (m *metadataPersistenceSuite) TestGetDomain() {
 	status := DomainStatusRegistered
 	description := "get-domain-test-description"
 	owner := "get-domain-test-owner"
-	retention := 10
+	retention := int32(10)
 	emitMetric := true
 
 	resp0, err0 := m.GetDomain("", "does-not-exist")
@@ -148,7 +148,7 @@ func (m *metadataPersistenceSuite) TestUpdateDomain() {
 	status := DomainStatusRegistered
 	description := "update-domain-test-description"
 	owner := "update-domain-test-owner"
-	retention := 10
+	retention := int32(10)
 	emitMetric := true
 
 	resp1, err1 := m.CreateDomain(
@@ -172,7 +172,7 @@ func (m *metadataPersistenceSuite) TestUpdateDomain() {
 	updatedStatus := DomainStatusDeprecated
 	updatedDescription := "description-updated"
 	updatedOwner := "owner-updated"
-	updatedRetention := 20
+	updatedRetention := int32(20)
 	updatedEmitMetric := false
 
 	err3 := m.UpdateDomain(
@@ -229,7 +229,7 @@ func (m *metadataPersistenceSuite) TestDeleteDomain() {
 			OwnerEmail:  owner,
 		},
 		&DomainConfig{
-			Retention:  retention,
+			Retention:  int32(retention),
 			EmitMetric: emitMetric,
 		})
 	m.Nil(err1)

@@ -20,6 +20,7 @@ import (
 type Handler struct {
 	numberOfShards        int
 	shardManager          persistence.ShardManager
+	metadataMgr           persistence.MetadataManager
 	historyMgr            persistence.HistoryManager
 	executionMgrFactory   persistence.ExecutionManagerFactory
 	matchingServiceClient matching.Client
@@ -35,11 +36,13 @@ var _ hist.TChanHistoryService = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice service.Service, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgrFactory persistence.ExecutionManagerFactory, numberOfShards int) (*Handler, []thrift.TChanServer) {
+func NewHandler(sVice service.Service, shardManager persistence.ShardManager, metadataMgr persistence.MetadataManager,
+	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory,
+	numberOfShards int) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:             sVice,
 		shardManager:        shardManager,
+		metadataMgr:         metadataMgr,
 		historyMgr:          historyMgr,
 		executionMgrFactory: executionMgrFactory,
 		numberOfShards:      numberOfShards,
@@ -80,7 +83,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.matchingServiceClient)
+	return NewEngineWithShardContext(context, h.metadataMgr, h.matchingServiceClient)
 }
 
 // IsHealthy - Health endpoint.
@@ -112,7 +115,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx thrift.Context,
 		return nil, err1
 	}
 
-	response, err2 := engine.RecordActivityTaskHeartbeat(heartbeatRequest)
+	response, err2 := engine.RecordActivityTaskHeartbeat(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRecordActivityTaskHeartbeatScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -150,10 +153,9 @@ func (h *Handler) RecordActivityTaskStarted(ctx thrift.Context,
 func (h *Handler) RecordDecisionTaskStarted(ctx thrift.Context,
 	recordRequest *hist.RecordDecisionTaskStartedRequest) (*hist.RecordDecisionTaskStartedResponse, error) {
 	h.startWG.Wait()
-	h.Service.GetLogger().Debugf("RecordDecisionTaskStarted. WorkflowID: %v, RunID: %v, ScheduleID: %v",
-		recordRequest.GetWorkflowExecution().GetWorkflowId(),
-		recordRequest.GetWorkflowExecution().GetRunId(),
-		recordRequest.GetScheduleId())
+	h.Service.GetLogger().Debugf("RecordDecisionTaskStarted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
+		recordRequest.GetDomainUUID(), recordRequest.GetWorkflowExecution().GetWorkflowId(),
+		recordRequest.GetWorkflowExecution().GetRunId(), recordRequest.GetScheduleId())
 
 	h.metricsClient.IncCounter(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceRequests)
 	sw := h.metricsClient.StartTimer(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceLatency)
@@ -203,7 +205,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx thrift.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskCompleted(completeRequest)
+	err2 := engine.RespondActivityTaskCompleted(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -235,7 +237,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx thrift.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskFailed(failRequest)
+	err2 := engine.RespondActivityTaskFailed(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskFailedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -267,7 +269,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx thrift.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskCanceled(cancelRequest)
+	err2 := engine.RespondActivityTaskCanceled(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCanceledScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -293,7 +295,8 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 		return err0
 	}
 
-	h.Service.GetLogger().Debugf("RespondDecisionTaskCompleted. WorkflowID: %v, RunID: %v, ScheduleID: %v",
+	h.Service.GetLogger().Debugf("RespondDecisionTaskCompleted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
+		token.DomainID,
 		token.WorkflowID,
 		token.RunID,
 		token.ScheduleID)
@@ -304,7 +307,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx thrift.Context,
 		return err1
 	}
 
-	err2 := engine.RespondDecisionTaskCompleted(completeRequest)
+	err2 := engine.RespondDecisionTaskCompleted(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -329,7 +332,7 @@ func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 		return nil, err1
 	}
 
-	response, err2 := engine.StartWorkflowExecution(startRequest)
+	response, err2 := engine.StartWorkflowExecution(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryStartWorkflowExecutionScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -355,7 +358,7 @@ func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 		return nil, err1
 	}
 
-	resp, err2 := engine.GetWorkflowExecutionHistory(getRequest)
+	resp, err2 := engine.GetWorkflowExecutionHistory(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionHistoryScope, h.convertError(err2))
 		return nil, h.convertError(err2)

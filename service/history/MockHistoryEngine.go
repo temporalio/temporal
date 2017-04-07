@@ -20,11 +20,11 @@ func (_m *MockHistoryEngine) Stop() {
 }
 
 // StartWorkflowExecution is mock implementation for StartWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) StartWorkflowExecution(request *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
+func (_m *MockHistoryEngine) StartWorkflowExecution(request *gohistory.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *shared.StartWorkflowExecutionResponse
-	if rf, ok := ret.Get(0).(func(*shared.StartWorkflowExecutionRequest) *shared.StartWorkflowExecutionResponse); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.StartWorkflowExecutionRequest) *shared.StartWorkflowExecutionResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
@@ -33,7 +33,7 @@ func (_m *MockHistoryEngine) StartWorkflowExecution(request *shared.StartWorkflo
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*shared.StartWorkflowExecutionRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*gohistory.StartWorkflowExecutionRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)
@@ -43,11 +43,11 @@ func (_m *MockHistoryEngine) StartWorkflowExecution(request *shared.StartWorkflo
 }
 
 // GetWorkflowExecutionHistory is mock implementation for GetWorkflowExecutionHistory of HistoryEngine
-func (_m *MockHistoryEngine) GetWorkflowExecutionHistory(request *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
+func (_m *MockHistoryEngine) GetWorkflowExecutionHistory(request *gohistory.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *shared.GetWorkflowExecutionHistoryResponse
-	if rf, ok := ret.Get(0).(func(*shared.GetWorkflowExecutionHistoryRequest) *shared.GetWorkflowExecutionHistoryResponse); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.GetWorkflowExecutionHistoryRequest) *shared.GetWorkflowExecutionHistoryResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
@@ -56,7 +56,7 @@ func (_m *MockHistoryEngine) GetWorkflowExecutionHistory(request *shared.GetWork
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*shared.GetWorkflowExecutionHistoryRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*gohistory.GetWorkflowExecutionHistoryRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)
@@ -112,11 +112,11 @@ func (_m *MockHistoryEngine) RecordActivityTaskStarted(request *gohistory.Record
 }
 
 // RespondDecisionTaskCompleted is mock implementation for RespondDecisionTaskCompleted of HistoryEngine
-func (_m *MockHistoryEngine) RespondDecisionTaskCompleted(request *shared.RespondDecisionTaskCompletedRequest) error {
+func (_m *MockHistoryEngine) RespondDecisionTaskCompleted(request *gohistory.RespondDecisionTaskCompletedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*shared.RespondDecisionTaskCompletedRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.RespondDecisionTaskCompletedRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -126,11 +126,11 @@ func (_m *MockHistoryEngine) RespondDecisionTaskCompleted(request *shared.Respon
 }
 
 // RespondActivityTaskCompleted is mock implementation for RespondActivityTaskCompleted of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *shared.RespondActivityTaskCompletedRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *gohistory.RespondActivityTaskCompletedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*shared.RespondActivityTaskCompletedRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.RespondActivityTaskCompletedRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -140,11 +140,11 @@ func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *shared.Respon
 }
 
 // RespondActivityTaskFailed is mock implementation for RespondActivityTaskFailed of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskFailed(request *shared.RespondActivityTaskFailedRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskFailed(request *gohistory.RespondActivityTaskFailedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*shared.RespondActivityTaskFailedRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.RespondActivityTaskFailedRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -154,11 +154,11 @@ func (_m *MockHistoryEngine) RespondActivityTaskFailed(request *shared.RespondAc
 }
 
 // RespondActivityTaskCanceled is mock implementation for RespondActivityTaskCanceled of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskCanceled(request *shared.RespondActivityTaskCanceledRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskCanceled(request *gohistory.RespondActivityTaskCanceledRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*shared.RespondActivityTaskCanceledRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.RespondActivityTaskCanceledRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)
@@ -168,11 +168,11 @@ func (_m *MockHistoryEngine) RespondActivityTaskCanceled(request *shared.Respond
 }
 
 // RecordActivityTaskHeartbeat is mock implementation for RecordActivityTaskHeartbeat of HistoryEngine
-func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
+func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *gohistory.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *shared.RecordActivityTaskHeartbeatResponse
-	if rf, ok := ret.Get(0).(func(*shared.RecordActivityTaskHeartbeatRequest) *shared.RecordActivityTaskHeartbeatResponse); ok {
+	if rf, ok := ret.Get(0).(func(*gohistory.RecordActivityTaskHeartbeatRequest) *shared.RecordActivityTaskHeartbeatResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
@@ -181,7 +181,7 @@ func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *shared.RecordA
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*shared.RecordActivityTaskHeartbeatRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*gohistory.RecordActivityTaskHeartbeatRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

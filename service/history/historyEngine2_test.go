@@ -17,6 +17,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/cache"
 )
 
 type (
@@ -27,6 +28,7 @@ type (
 		*require.Assertions
 		historyEngine      *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
+		mockMetadataMgr    *mocks.MetadataManager
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 		mockShardManager   *mocks.ShardManager
@@ -58,6 +60,7 @@ func (s *engine2Suite) SetupTest() {
 
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockShardManager = &mocks.ShardManager{}
@@ -76,14 +79,15 @@ func (s *engine2Suite) SetupTest() {
 		logger:                    s.logger,
 	}
 
-	cache := newHistoryCache(mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, cache)
+	historyCache := newHistoryCache(mockShard, s.logger)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
 		historyMgr:       s.mockHistoryMgr,
 		txProcessor:      txProcessor,
-		cache:            cache,
+		historyCache:     historyCache,
+		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		hSerializer:      newJSONHistorySerializer(),
@@ -528,6 +532,7 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 }
 
 func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
+	domainID := "domainId"
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr("rId"),
@@ -562,22 +567,25 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
-	err := s.historyEngine.RespondDecisionTaskCompleted(&workflow.RespondDecisionTaskCompletedRequest{
-		TaskToken:        taskToken,
-		Decisions:        decisions,
-		ExecutionContext: nil,
-		Identity:         &identity,
+	err := s.historyEngine.RespondDecisionTaskCompleted(&h.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: nil,
+			Identity:         &identity,
+		},
 	})
 	s.Nil(err)
-	executionBuilder := s.getBuilder(we)
+	executionBuilder := s.getBuilder(domainID, we)
 	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
 	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
-func (s *engine2Suite) getBuilder(we workflow.WorkflowExecution) *mutableStateBuilder {
-	context, err := s.historyEngine.cache.getOrCreateWorkflowExecution(we)
+func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
+	context, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
 		return nil
 	}

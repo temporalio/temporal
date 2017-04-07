@@ -4,7 +4,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/cadence"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
@@ -12,15 +11,20 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+
 	"github.com/uber/tchannel-go/thrift"
-	"errors"
+	"github.com/uber-common/bark"
 )
 
 var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
+	domainCache     cache.DomainCache
+	metadataMgr     persistence.MetadataManager
 	history         history.Client
 	matching        matching.Client
 	tokenSerializer common.TaskTokenSerializer
@@ -28,11 +32,19 @@ type WorkflowHandler struct {
 	service.Service
 }
 
+var (
+	errDomainNotSet    = &gen.BadRequestError{Message: "Domain not set on request."}
+	errTaskTokenNotSet = &gen.BadRequestError{Message: "Task token not set on request."}
+)
+
 // NewWorkflowHandler creates a thrift handler for the cadence service
-func NewWorkflowHandler(sVice service.Service) (*WorkflowHandler, []thrift.TChanServer) {
+func NewWorkflowHandler(sVice service.Service, metadataMgr persistence.MetadataManager) (*WorkflowHandler,
+	[]thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service:         sVice,
+		metadataMgr:     metadataMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -67,21 +79,123 @@ func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 }
 
 func (wh *WorkflowHandler) RegisterDomain(ctx thrift.Context, registerRequest *gen.RegisterDomainRequest) error {
-	return errors.New("Not Implemented.")
+	wh.startWG.Wait()
+
+	response, err := wh.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
+		Name:        registerRequest.GetName(),
+		Status:      persistence.DomainStatusRegistered,
+		OwnerEmail:  registerRequest.GetOwnerEmail(),
+		Description: registerRequest.GetDescription(),
+		Retention:   registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
+		EmitMetric:  registerRequest.GetEmitMetric(),
+	})
+
+	if err != nil {
+		return wrapError(err)
+	}
+
+	// TODO: Log through logging framework.  We need to have good auditing of domain CRUD
+	wh.GetLogger().Debugf("Register domain succeeded for name: %v, Id: %v", registerRequest.GetName(), response.ID)
+	return nil
 }
 
 func (wh *WorkflowHandler) DescribeDomain(ctx thrift.Context,
 	describeRequest *gen.DescribeDomainRequest) (*gen.DescribeDomainResponse, error) {
-	return nil, errors.New("Not Implemented.")
+	wh.startWG.Wait()
+
+	resp, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		Name: describeRequest.GetName(),
+	})
+
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	response := gen.NewDescribeDomainResponse()
+	response.DomainInfo, response.Configuration = createDomainResponse(resp.Info, resp.Config)
+
+	return response, nil
 }
 
 func (wh *WorkflowHandler) UpdateDomain(ctx thrift.Context,
 	updateRequest *gen.UpdateDomainRequest) (*gen.UpdateDomainResponse, error) {
-	return nil, errors.New("Not Implemented.")
+	wh.startWG.Wait()
+
+	if !updateRequest.IsSetName() {
+		return nil, errDomainNotSet
+	}
+
+	domainName := updateRequest.GetName()
+
+	getResponse, err0 := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		Name: domainName,
+	})
+
+	if err0 != nil {
+		return nil, wrapError(err0)
+	}
+
+	info := getResponse.Info
+	config := getResponse.Config
+
+	if updateRequest.IsSetUpdatedInfo() {
+		updatedInfo := updateRequest.GetUpdatedInfo()
+		if updatedInfo.IsSetDescription() {
+			info.Description = updatedInfo.GetDescription()
+		}
+		if updatedInfo.IsSetOwnerEmail() {
+			info.OwnerEmail = updatedInfo.GetOwnerEmail()
+		}
+	}
+
+	if updateRequest.IsSetConfiguration() {
+		updatedConfig := updateRequest.GetConfiguration()
+		if updatedConfig.IsSetEmitMetric() {
+			config.EmitMetric = updatedConfig.GetEmitMetric()
+		}
+		if updatedConfig.IsSetWorkflowExecutionRetentionPeriodInDays() {
+			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+		}
+	}
+
+	err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+		Info:   info,
+		Config: config,
+	})
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	response := gen.NewUpdateDomainResponse()
+	response.DomainInfo, response.Configuration = createDomainResponse(info, config)
+	return response, nil
 }
 
 func (wh *WorkflowHandler) DeprecateDomain(ctx thrift.Context, deprecateRequest *gen.DeprecateDomainRequest) error {
-	return errors.New("Not Implemented.")
+	wh.startWG.Wait()
+
+	if !deprecateRequest.IsSetName() {
+		return errDomainNotSet
+	}
+
+	domainName := deprecateRequest.GetName()
+
+	getResponse, err0 := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
+		Name: domainName,
+	})
+
+	if err0 != nil {
+		return wrapError(err0)
+	}
+
+	info := getResponse.Info
+	info.Status = persistence.DomainStatusDeprecated
+	config := getResponse.Config
+
+	return wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+		Info:   info,
+		Config: config,
+	})
 }
 
 // PollForActivityTask - Poll for an activity task.
@@ -91,7 +205,18 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	wh.startWG.Wait()
 
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
+	if !pollRequest.IsSetDomain() {
+		return nil, errDomainNotSet
+	}
+
+	domainName := pollRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
 	resp, err := wh.matching.PollForActivityTask(ctx, &m.PollForActivityTaskRequest{
+		DomainUUID:  common.StringPtr(info.ID),
 		PollRequest: pollRequest,
 	})
 	if err != nil {
@@ -108,7 +233,21 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	wh.startWG.Wait()
 
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
+	if !pollRequest.IsSetDomain() {
+		return nil, errDomainNotSet
+	}
+
+	domainName := pollRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	wh.Service.GetLogger().Infof("Poll for decision domain name: %v", domainName)
+	wh.Service.GetLogger().Infof("Poll for decision request domainID: %v", info.ID)
+
 	resp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
+		DomainUUID:  common.StringPtr(info.ID),
 		PollRequest: pollRequest,
 	})
 	if err != nil {
@@ -125,7 +264,19 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	wh.startWG.Wait()
 
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
+	if !heartbeatRequest.IsSetTaskToken() {
+		return nil, errTaskTokenNotSet
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(heartbeatRequest.GetTaskToken())
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	if taskToken.DomainID == "" {
+		return nil, errDomainNotSet
+	}
+
 	resp, err := wh.history.RecordActivityTaskHeartbeat(ctx, &h.RecordActivityTaskHeartbeatRequest{
+		DomainUUID:       common.StringPtr(taskToken.DomainID),
 		HeartbeatRequest: heartbeatRequest,
 	})
 	return resp, wrapError(err)
@@ -137,7 +288,19 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	completeRequest *gen.RespondActivityTaskCompletedRequest) error {
 	wh.startWG.Wait()
 
-	err := wh.history.RespondActivityTaskCompleted(ctx, &h.RespondActivityTaskCompletedRequest{
+	if !completeRequest.IsSetTaskToken() {
+		return errTaskTokenNotSet
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(completeRequest.GetTaskToken())
+	if err != nil {
+		return wrapError(err)
+	}
+	if taskToken.DomainID == "" {
+		return errDomainNotSet
+	}
+
+	err = wh.history.RespondActivityTaskCompleted(ctx, &h.RespondActivityTaskCompletedRequest{
+		DomainUUID:      common.StringPtr(taskToken.DomainID),
 		CompleteRequest: completeRequest,
 	})
 	if err != nil {
@@ -153,7 +316,19 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	failedRequest *gen.RespondActivityTaskFailedRequest) error {
 	wh.startWG.Wait()
 
-	err := wh.history.RespondActivityTaskFailed(ctx, &h.RespondActivityTaskFailedRequest{
+	if !failedRequest.IsSetTaskToken() {
+		return errTaskTokenNotSet
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(failedRequest.GetTaskToken())
+	if err != nil {
+		return wrapError(err)
+	}
+	if taskToken.DomainID == "" {
+		return errDomainNotSet
+	}
+
+	err = wh.history.RespondActivityTaskFailed(ctx, &h.RespondActivityTaskFailedRequest{
+		DomainUUID:    common.StringPtr(taskToken.DomainID),
 		FailedRequest: failedRequest,
 	})
 	if err != nil {
@@ -170,7 +345,19 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	cancelRequest *gen.RespondActivityTaskCanceledRequest) error {
 	wh.startWG.Wait()
 
-	err := wh.history.RespondActivityTaskCanceled(ctx, &h.RespondActivityTaskCanceledRequest{
+	if !cancelRequest.IsSetTaskToken() {
+		return errTaskTokenNotSet
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(cancelRequest.GetTaskToken())
+	if err != nil {
+		return wrapError(err)
+	}
+	if taskToken.DomainID == "" {
+		return errDomainNotSet
+	}
+
+	err = wh.history.RespondActivityTaskCanceled(ctx, &h.RespondActivityTaskCanceledRequest{
+		DomainUUID:    common.StringPtr(taskToken.DomainID),
 		CancelRequest: cancelRequest,
 	})
 	if err != nil {
@@ -187,7 +374,19 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
 	wh.startWG.Wait()
 
-	err := wh.history.RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
+	if !completeRequest.IsSetTaskToken() {
+		return errTaskTokenNotSet
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(completeRequest.GetTaskToken())
+	if err != nil {
+		return wrapError(err)
+	}
+	if taskToken.DomainID == "" {
+		return errDomainNotSet
+	}
+
+	err = wh.history.RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
+		DomainUUID:      common.StringPtr(taskToken.DomainID),
 		CompleteRequest: completeRequest,
 	})
 	if err != nil {
@@ -204,7 +403,22 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	wh.startWG.Wait()
 
 	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
+
+	if !startRequest.IsSetDomain() {
+		return nil, errTaskTokenNotSet
+	}
+
+	domainName := startRequest.GetDomain()
+	wh.Service.GetLogger().Infof("Start workflow execution request domain: %v", domainName)
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	wh.Service.GetLogger().Infof("Start workflow execution request domainID: %v", info.ID)
+
 	resp, err := wh.history.StartWorkflowExecution(ctx, &h.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(info.ID),
 		StartRequest: startRequest,
 	})
 	if err != nil {
@@ -219,7 +433,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
 	wh.startWG.Wait()
 
+	if !getRequest.IsSetDomain() {
+		return nil, errTaskTokenNotSet
+	}
+
+	domainName := getRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
 	return wh.history.GetWorkflowExecutionHistory(ctx, &h.GetWorkflowExecutionHistoryRequest{
+		DomainUUID: common.StringPtr(info.ID),
 		GetRequest: getRequest,
 	})
 }
@@ -254,7 +479,38 @@ func shouldWrapInInternalServiceError(err error) bool {
 		return false
 	case *gen.WorkflowExecutionAlreadyStartedError:
 		return false
+	case *gen.DomainAlreadyExistsError:
+		return false
 	}
 
 	return true
+}
+
+func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
+	switch info.Status {
+	case persistence.DomainStatusRegistered:
+		return gen.DomainStatusPtr(gen.DomainStatus_REGISTERED)
+	case persistence.DomainStatusDeprecated:
+		return gen.DomainStatusPtr(gen.DomainStatus_DEPRECATED)
+	case persistence.DomainStatusDeleted:
+		return gen.DomainStatusPtr(gen.DomainStatus_DELETED)
+	}
+
+	return nil
+}
+
+func createDomainResponse(info *persistence.DomainInfo, config *persistence.DomainConfig) (*gen.DomainInfo,
+	*gen.DomainConfiguration) {
+
+	i := gen.NewDomainInfo()
+	i.Name = common.StringPtr(info.Name)
+	i.Status = getDomainStatus(info)
+	i.Description = common.StringPtr(info.Description)
+	i.OwnerEmail = common.StringPtr(info.OwnerEmail)
+
+	c := gen.NewDomainConfiguration()
+	c.EmitMetric = common.BoolPtr(config.EmitMetric)
+	c.WorkflowExecutionRetentionPeriodInDays = common.Int32Ptr(config.Retention)
+
+	return i, c
 }

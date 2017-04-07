@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/cache"
 )
 
 type (
@@ -27,6 +28,7 @@ type (
 
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
+		mockMetadataMgr    *mocks.MetadataManager
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 	}
@@ -50,6 +52,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 
 	shardID := 0
 	s.mockShardManager = &mocks.ShardManager{}
+	s.mockMetadataMgr = &mocks.MetadataManager{}
 	resp, err := s.ShardMgr.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err != nil {
 		log.Fatal(err)
@@ -66,15 +69,16 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		closeCh:                   s.shardClosedCh,
 		logger:                    s.logger,
 	}
-	cache := newHistoryCache(shard, s.logger)
-	cache.disabled = true
-	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{}, cache)
+	historyCache := newHistoryCache(shard, s.logger)
+	historyCache.disabled = true
+	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{}, historyCache)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       s.HistoryMgr,
 		executionManager: s.WorkflowMgr,
 		txProcessor:      txProcessor,
-		cache:            cache,
+		historyCache:     historyCache,
+		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		hSerializer:      newJSONHistorySerializer(),
@@ -101,14 +105,14 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 		logger:                    s.logger,
 	}
 
-	cache := newHistoryCache(mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, cache)
+	historyCache := newHistoryCache(mockShard, s.logger)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		historyMgr:       s.mockHistoryMgr,
 		executionManager: s.mockExecutionMgr,
 		txProcessor:      txProcessor,
-		cache:            cache,
+		historyCache:     historyCache,
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
 		hSerializer:      newJSONHistorySerializer(),
@@ -128,8 +132,8 @@ func (s *timerQueueProcessorSuite) TearDownTest() {
 	s.mockHistoryMgr.AssertExpectations(s.T())
 }
 
-func (s *timerQueueProcessorSuite) createExecutionWithTimers(we workflow.WorkflowExecution, tl, identity string,
-	timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
+func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we workflow.WorkflowExecution, tl,
+identity string, timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
 
 	// Generate first decision task event.
 	logger := bark.NewLoggerFromLogrus(log.New())
@@ -139,12 +143,12 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(we workflow.Workflo
 
 	createState := createMutableState(builder)
 	info := createState.ExecutionInfo
-	task0, err0 := s.CreateWorkflowExecution(we, tl, info.WorkflowTypeName, info.DecisionTimeoutValue,
+	task0, err0 := s.CreateWorkflowExecution(domainID, we, tl, info.WorkflowTypeName, info.DecisionTimeoutValue,
 		info.ExecutionContext, info.NextEventID, info.LastProcessedEvent, info.DecisionScheduleID, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	state0, err2 := s.GetWorkflowExecutionInfo(we)
+	state0, err2 := s.GetWorkflowExecutionInfo(domainID, we)
 	s.Nil(err2, "No error expected.")
 
 	builder = newMutableStateBuilder(logger)
@@ -176,13 +180,14 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(we workflow.Workflo
 }
 
 func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
+	domainID := "7b3fe0f6-e98f-4960-bdb7-220d0fb3f521"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("single-timer-test"),
 		RunId:      common.StringPtr("6cc028d3-b4be-4038-80c9-bbcf99f7f109"),
 	}
 	taskList := "single-timer-queue"
 	identity := "testIdentity"
-	s.createExecutionWithTimers(workflowExecution, taskList, identity, []int32{1})
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{1})
 
 	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
@@ -208,12 +213,13 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 }
 
 func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("multiple-timer-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId:                                                    common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "multiple-timer-queue"
 	identity := "testIdentity"
-	s.createExecutionWithTimers(workflowExecution, taskList, identity, []int32{1, 2, 3})
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{1, 2, 3})
 
 	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")

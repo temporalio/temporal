@@ -11,18 +11,18 @@ type (
 	Engine interface {
 		common.Daemon
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
-		StartWorkflowExecution(request *workflow.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse,
+		StartWorkflowExecution(request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse,
 			error)
 		GetWorkflowExecutionHistory(
-			request *workflow.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
+			request *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
 		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
 		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
-		RespondDecisionTaskCompleted(request *workflow.RespondDecisionTaskCompletedRequest) error
-		RespondActivityTaskCompleted(request *workflow.RespondActivityTaskCompletedRequest) error
-		RespondActivityTaskFailed(request *workflow.RespondActivityTaskFailedRequest) error
-		RespondActivityTaskCanceled(request *workflow.RespondActivityTaskCanceledRequest) error
+		RespondDecisionTaskCompleted(request *h.RespondDecisionTaskCompletedRequest) error
+		RespondActivityTaskCompleted(request *h.RespondActivityTaskCompletedRequest) error
+		RespondActivityTaskFailed(request *h.RespondActivityTaskFailedRequest) error
+		RespondActivityTaskCanceled(request *h.RespondActivityTaskCanceledRequest) error
 		RecordActivityTaskHeartbeat(
-			request *workflow.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+			request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
 	}
 
 	// EngineFactory is used to create an instance of sharded history engine

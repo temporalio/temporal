@@ -121,7 +121,7 @@ func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager 
 	logger bark.Logger) timerQueueProcessor {
 	return &timerQueueProcessorImpl{
 		historyService:    historyService,
-		cache:             historyService.cache,
+		cache:             historyService.historyCache,
 		executionManager:  executionManager,
 		shutdownCh:        make(chan struct{}),
 		newTimerCh:        make(chan struct{}, 1),
@@ -389,12 +389,13 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		SequenceID(timerTask.TaskID), timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType,
 		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
 
+	domainID := timerTask.DomainID
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(timerTask.WorkflowID),
 		RunId:      common.StringPtr(timerTask.RunID),
 	}
 
-	context, err0 := t.cache.getOrCreateWorkflowExecution(workflowExecution)
+	context, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
@@ -644,6 +645,7 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 		// Schedule a new decision.
 		newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
+			DomainID:   msBuilder.executionInfo.DomainID,
 			TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 			ScheduleID: newDecisionEvent.GetEventId(),
 		}}

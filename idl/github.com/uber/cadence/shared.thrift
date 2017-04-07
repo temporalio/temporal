@@ -98,6 +98,7 @@ struct WorkflowExecution {
 struct ScheduleActivityTaskDecisionAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
+  25: optional string domain
   30: optional TaskList taskList
   40: optional binary input
   45: optional i32 scheduleToCloseTimeoutSeconds
@@ -200,6 +201,7 @@ struct DecisionTaskTimedOutEventAttributes {
 struct ActivityTaskScheduledEventAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
+  25: optional string domain
   30: optional TaskList taskList
   40: optional binary input
   45: optional i32 scheduleToCloseTimeoutSeconds
@@ -339,8 +341,9 @@ struct UpdateDomainInfo {
 struct RegisterDomainRequest {
   10: optional string name
   20: optional string description
-  30: optional i32 workflowExecutionRetentionPeriodInDays
-  40: optional bool emitMetric
+  30: optional string ownerEmail
+  40: optional i32 workflowExecutionRetentionPeriodInDays
+  50: optional bool emitMetric
 }
 
 struct DescribeDomainRequest {

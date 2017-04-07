@@ -11,7 +11,7 @@ type (
 	Engine interface {
 		AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error
 		AddActivityTask(addRequest *m.AddActivityTaskRequest) error
-		PollForDecisionTask(ctx thrift.Context, request *workflow.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error)
-		PollForActivityTask(ctx thrift.Context, request *workflow.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
+		PollForDecisionTask(ctx thrift.Context, request *m.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error)
+		PollForActivityTask(ctx thrift.Context, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
 	}
 )
