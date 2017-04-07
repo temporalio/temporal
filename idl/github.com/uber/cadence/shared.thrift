@@ -95,6 +95,14 @@ struct WorkflowExecution {
   20: optional string runId
 }
 
+struct WorkflowExecutionInfo {
+  10: optional WorkflowExecution execution
+  20: optional WorkflowType type
+  30: optional i64 (js.type = "Long") startTime
+  40: optional i64 (js.type = "Long") closeTime
+
+}
+
 struct ScheduleActivityTaskDecisionAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
@@ -321,6 +329,19 @@ struct History {
   10: optional list<HistoryEvent> events
 }
 
+struct WorkflowExecutionFilter {
+  10: optional string workflowId
+}
+
+struct WorkflowTypeFilter {
+  10: optional string name
+}
+
+struct StartTimeFilter {
+  10: optional i64 (js.type = "Long") earliestTime
+  20: optional i64 (js.type = "Long") latestTime
+}
+
 struct DomainInfo {
   10: optional string name
   20: optional DomainStatus status
@@ -459,4 +480,32 @@ struct GetWorkflowExecutionHistoryRequest {
 
 struct GetWorkflowExecutionHistoryResponse {
   10: optional History history
+}
+
+struct ListOpenWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional i32 maximumPageSize
+  30: optional binary nextPageToken
+  40: optional StartTimeFilter StartTimeFilter
+  50: optional WorkflowExecutionFilter executionFilter
+  60: optional WorkflowTypeFilter typeFilter
+}
+
+struct ListOpenWorkflowExecutionsResponse {
+  10: optional list<WorkflowExecutionInfo> executions
+  20: optional binary nextPageToken
+}
+
+struct ListClosedWorkflowExecutionsRequest {
+  10: optional string domain
+  20: optional i32 maximumPageSize
+  30: optional binary nextPageToken
+  40: optional StartTimeFilter StartTimeFilter
+  50: optional WorkflowExecutionFilter executionFilter
+  60: optional WorkflowTypeFilter typeFilter
+}
+
+struct ListClosedWorkflowExecutionsResponse {
+  10: optional list<WorkflowExecutionInfo> executions
+  20: optional binary nextPageToken
 }

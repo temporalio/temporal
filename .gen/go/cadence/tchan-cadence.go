@@ -21,6 +21,8 @@ type TChanWorkflowService interface {
 	DeprecateDomain(ctx thrift.Context, deprecateRequest *shared.DeprecateDomainRequest) error
 	DescribeDomain(ctx thrift.Context, describeRequest *shared.DescribeDomainRequest) (*shared.DescribeDomainResponse, error)
 	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *shared.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
+	ListClosedWorkflowExecutions(ctx thrift.Context, listRequest *shared.ListClosedWorkflowExecutionsRequest) (*shared.ListClosedWorkflowExecutionsResponse, error)
+	ListOpenWorkflowExecutions(ctx thrift.Context, listRequest *shared.ListOpenWorkflowExecutionsRequest) (*shared.ListOpenWorkflowExecutionsResponse, error)
 	PollForActivityTask(ctx thrift.Context, pollRequest *shared.PollForActivityTaskRequest) (*shared.PollForActivityTaskResponse, error)
 	PollForDecisionTask(ctx thrift.Context, pollRequest *shared.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error)
 	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *shared.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
@@ -112,6 +114,50 @@ func (c *tchanWorkflowServiceClient) GetWorkflowExecutionHistory(ctx thrift.Cont
 			err = resp.EntityNotExistError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for GetWorkflowExecutionHistory")
+		}
+	}
+
+	return resp.GetSuccess(), err
+}
+
+func (c *tchanWorkflowServiceClient) ListClosedWorkflowExecutions(ctx thrift.Context, listRequest *shared.ListClosedWorkflowExecutionsRequest) (*shared.ListClosedWorkflowExecutionsResponse, error) {
+	var resp WorkflowServiceListClosedWorkflowExecutionsResult
+	args := WorkflowServiceListClosedWorkflowExecutionsArgs{
+		ListRequest: listRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "ListClosedWorkflowExecutions", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for ListClosedWorkflowExecutions")
+		}
+	}
+
+	return resp.GetSuccess(), err
+}
+
+func (c *tchanWorkflowServiceClient) ListOpenWorkflowExecutions(ctx thrift.Context, listRequest *shared.ListOpenWorkflowExecutionsRequest) (*shared.ListOpenWorkflowExecutionsResponse, error) {
+	var resp WorkflowServiceListOpenWorkflowExecutionsResult
+	args := WorkflowServiceListOpenWorkflowExecutionsArgs{
+		ListRequest: listRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "ListOpenWorkflowExecutions", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for ListOpenWorkflowExecutions")
 		}
 	}
 
@@ -355,6 +401,8 @@ func (s *tchanWorkflowServiceServer) Methods() []string {
 		"DeprecateDomain",
 		"DescribeDomain",
 		"GetWorkflowExecutionHistory",
+		"ListClosedWorkflowExecutions",
+		"ListOpenWorkflowExecutions",
 		"PollForActivityTask",
 		"PollForDecisionTask",
 		"RecordActivityTaskHeartbeat",
@@ -376,6 +424,10 @@ func (s *tchanWorkflowServiceServer) Handle(ctx thrift.Context, methodName strin
 		return s.handleDescribeDomain(ctx, protocol)
 	case "GetWorkflowExecutionHistory":
 		return s.handleGetWorkflowExecutionHistory(ctx, protocol)
+	case "ListClosedWorkflowExecutions":
+		return s.handleListClosedWorkflowExecutions(ctx, protocol)
+	case "ListOpenWorkflowExecutions":
+		return s.handleListOpenWorkflowExecutions(ctx, protocol)
 	case "PollForActivityTask":
 		return s.handlePollForActivityTask(ctx, protocol)
 	case "PollForDecisionTask":
@@ -487,6 +539,82 @@ func (s *tchanWorkflowServiceServer) handleGetWorkflowExecutionHistory(ctx thrif
 
 	r, err :=
 		s.handler.GetWorkflowExecutionHistory(ctx, req.GetRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+		res.Success = r
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanWorkflowServiceServer) handleListClosedWorkflowExecutions(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req WorkflowServiceListClosedWorkflowExecutionsArgs
+	var res WorkflowServiceListClosedWorkflowExecutionsResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	r, err :=
+		s.handler.ListClosedWorkflowExecutions(ctx, req.ListRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+		res.Success = r
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanWorkflowServiceServer) handleListOpenWorkflowExecutions(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req WorkflowServiceListOpenWorkflowExecutionsArgs
+	var res WorkflowServiceListOpenWorkflowExecutionsResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	r, err :=
+		s.handler.ListOpenWorkflowExecutions(ctx, req.ListRequest)
 
 	if err != nil {
 		switch v := err.(type) {

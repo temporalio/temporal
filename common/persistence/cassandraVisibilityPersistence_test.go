@@ -54,12 +54,12 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
 	}
 
-	startTime := time.Now().Add(time.Second * -5)
+	startTime := time.Now().Add(time.Second * -5).UnixNano()
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
+		StartTimestamp:   startTime,
 	})
 	s.Nil(err0)
 
@@ -77,8 +77,8 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
-		CloseTime:        time.Now(),
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
 	})
 	s.Nil(err2)
 
@@ -114,7 +114,7 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime1,
+		StartTimestamp:   startTime1.UnixNano(),
 	})
 	s.Nil(err0)
 
@@ -127,7 +127,7 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime2,
+		StartTimestamp:   startTime2.UnixNano(),
 	})
 	s.Nil(err1)
 
@@ -135,8 +135,8 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
 		DomainUUID:        testDomainUUID,
 		PageSize:          1,
-		EarliestStartTime: startTime1,
-		LatestStartTime:   startTime2,
+		EarliestStartTime: startTime1.UnixNano(),
+		LatestStartTime:   startTime2.UnixNano(),
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
@@ -146,8 +146,8 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
 		DomainUUID:        testDomainUUID,
 		PageSize:          1,
-		EarliestStartTime: startTime1,
-		LatestStartTime:   startTime2,
+		EarliestStartTime: startTime1.UnixNano(),
+		LatestStartTime:   startTime2.UnixNano(),
 		NextPageToken:     resp.NextPageToken,
 	})
 	s.Nil(err3)
@@ -158,8 +158,8 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
 		DomainUUID:        testDomainUUID,
 		PageSize:          1,
-		EarliestStartTime: startTime1,
-		LatestStartTime:   startTime2,
+		EarliestStartTime: startTime1.UnixNano(),
+		LatestStartTime:   startTime2.UnixNano(),
 		NextPageToken:     resp.NextPageToken,
 	})
 	s.Nil(err4)
@@ -168,7 +168,7 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 
 func (s *visibilityPersistenceSuite) TestFilteringByType() {
 	testDomainUUID := uuid.New()
-	startTime := time.Now()
+	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
 	workflowExecution1 := gen.WorkflowExecution{
@@ -179,7 +179,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow-1",
-		StartTime:        startTime,
+		StartTimestamp:   startTime,
 	})
 	s.Nil(err0)
 
@@ -191,7 +191,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow-2",
-		StartTime:        startTime,
+		StartTimestamp:   startTime,
 	})
 	s.Nil(err1)
 
@@ -214,8 +214,8 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow-1",
-		StartTime:        startTime,
-		CloseTime:        time.Now(),
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
 	})
 	s.Nil(err3)
 
@@ -223,8 +223,8 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow-2",
-		StartTime:        startTime,
-		CloseTime:        time.Now(),
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
 	})
 	s.Nil(err4)
 
@@ -245,7 +245,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 
 func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	testDomainUUID := uuid.New()
-	startTime := time.Now()
+	startTime := time.Now().UnixNano()
 
 	// Create 2 executions
 	workflowExecution1 := gen.WorkflowExecution{
@@ -256,7 +256,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
+		StartTimestamp:   startTime,
 	})
 	s.Nil(err0)
 
@@ -268,7 +268,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
+		StartTimestamp:   startTime,
 	})
 	s.Nil(err1)
 
@@ -291,8 +291,8 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution1,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
-		CloseTime:        time.Now(),
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
 	})
 	s.Nil(err3)
 
@@ -300,8 +300,8 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		DomainUUID:       testDomainUUID,
 		Execution:        workflowExecution2,
 		WorkflowTypeName: "visibility-workflow",
-		StartTime:        startTime,
-		CloseTime:        time.Now(),
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
 	})
 	s.Nil(err4)
 

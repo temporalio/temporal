@@ -1,10 +1,6 @@
 package persistence
 
-import (
-	"time"
-
-	s "github.com/uber/cadence/.gen/go/shared"
-)
+import s "github.com/uber/cadence/.gen/go/shared"
 
 // Interfaces for the Visibility Store.
 // This is a secondary store that is eventually consistent with the main
@@ -13,21 +9,13 @@ import (
 
 type (
 
-	// WorkflowExecutionRecord contains info about workflow execution
-	WorkflowExecutionRecord struct {
-		Execution        s.WorkflowExecution
-		WorkflowTypeName string
-		StartTime        time.Time
-		CloseTime        time.Time
-	}
-
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly
 	// started execution
 	RecordWorkflowExecutionStartedRequest struct {
 		DomainUUID       string
 		Execution        s.WorkflowExecution
 		WorkflowTypeName string
-		StartTime        time.Time
+		StartTimestamp   int64
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly
@@ -36,15 +24,15 @@ type (
 		DomainUUID       string
 		Execution        s.WorkflowExecution
 		WorkflowTypeName string
-		StartTime        time.Time
-		CloseTime        time.Time
+		StartTimestamp   int64
+		CloseTimestamp   int64
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
 	ListWorkflowExecutionsRequest struct {
 		DomainUUID        string
-		EarliestStartTime time.Time
-		LatestStartTime   time.Time
+		EarliestStartTime int64
+		LatestStartTime   int64
 		// Maximum number of workflow executions per page
 		PageSize int
 		// Token to continue reading next page of workflow executions.
@@ -54,7 +42,7 @@ type (
 
 	// ListWorkflowExecutionsResponse is the response to ListWorkflowExecutionsRequest
 	ListWorkflowExecutionsResponse struct {
-		Executions []*WorkflowExecutionRecord
+		Executions []*s.WorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte

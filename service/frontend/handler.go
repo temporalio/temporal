@@ -15,8 +15,8 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 
-	"github.com/uber/tchannel-go/thrift"
 	"github.com/uber-common/bark"
+	"github.com/uber/tchannel-go/thrift"
 )
 
 var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
@@ -28,6 +28,7 @@ type WorkflowHandler struct {
 	history         history.Client
 	matching        matching.Client
 	tokenSerializer common.TaskTokenSerializer
+	visibitiltyMgr  persistence.VisibilityManager
 	startWG         sync.WaitGroup
 	service.Service
 }
@@ -38,13 +39,14 @@ var (
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
-func NewWorkflowHandler(sVice service.Service, metadataMgr persistence.MetadataManager) (*WorkflowHandler,
-	[]thrift.TChanServer) {
+func NewWorkflowHandler(
+	sVice service.Service, metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		metadataMgr:     metadataMgr,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
+		visibitiltyMgr:  visibilityMgr,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -405,7 +407,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
 
 	if !startRequest.IsSetDomain() {
-		return nil, errTaskTokenNotSet
+		return nil, errDomainNotSet
 	}
 
 	domainName := startRequest.GetDomain()
@@ -434,7 +436,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	wh.startWG.Wait()
 
 	if !getRequest.IsSetDomain() {
-		return nil, errTaskTokenNotSet
+		return nil, errDomainNotSet
 	}
 
 	domainName := getRequest.GetDomain()
@@ -447,6 +449,149 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		DomainUUID: common.StringPtr(info.ID),
 		GetRequest: getRequest,
 	})
+}
+
+// ListOpenWorkflowExecutions - retrieves info for open workflow executions in a domain
+func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx thrift.Context,
+	listRequest *gen.ListOpenWorkflowExecutionsRequest) (*gen.ListOpenWorkflowExecutionsResponse, error) {
+
+	if !listRequest.IsSetDomain() {
+		return nil, errDomainNotSet
+	}
+
+	if !listRequest.IsSetStartTimeFilter() {
+		return nil, &gen.BadRequestError{
+			Message: "StartTimeFilter is required",
+		}
+	}
+
+	if !listRequest.GetStartTimeFilter().IsSetEarliestTime() {
+		return nil, &gen.BadRequestError{
+			Message: "EarliestTime in StartTimeFilter is required",
+		}
+	}
+
+	if !listRequest.GetStartTimeFilter().IsSetLatestTime() {
+		return nil, &gen.BadRequestError{
+			Message: "LatestTime in StartTimeFilter is required",
+		}
+	}
+
+	if listRequest.IsSetExecutionFilter() && listRequest.IsSetTypeFilter() {
+		return nil, &gen.BadRequestError{
+			Message: "Only one of ExecutionFilter or TypeFilter is allowed",
+		}
+	}
+
+	domainName := listRequest.GetDomain()
+	domainInfo, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	baseReq := persistence.ListWorkflowExecutionsRequest{
+		DomainUUID:        domainInfo.ID,
+		PageSize:          int(listRequest.GetMaximumPageSize()),
+		NextPageToken:     listRequest.GetNextPageToken(),
+		EarliestStartTime: listRequest.GetStartTimeFilter().GetEarliestTime(),
+		LatestStartTime:   listRequest.GetStartTimeFilter().GetLatestTime(),
+	}
+
+	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	if listRequest.IsSetExecutionFilter() {
+		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByWorkflowID(
+			&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
+			})
+	} else if listRequest.IsSetTypeFilter() {
+		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			ListWorkflowExecutionsRequest: baseReq,
+			WorkflowTypeName:              listRequest.TypeFilter.GetName(),
+		})
+	} else {
+		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutions(&baseReq)
+	}
+
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	resp := gen.NewListOpenWorkflowExecutionsResponse()
+	resp.Executions = persistenceResp.Executions
+	resp.NextPageToken = persistenceResp.NextPageToken
+	return resp, nil
+}
+
+// ListClosedWorkflowExecutions - retrieves info for closed workflow executions in a domain
+func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
+	listRequest *gen.ListClosedWorkflowExecutionsRequest) (*gen.ListClosedWorkflowExecutionsResponse, error) {
+	if !listRequest.IsSetDomain() {
+		return nil, errDomainNotSet
+	}
+
+	if !listRequest.IsSetStartTimeFilter() {
+		return nil, &gen.BadRequestError{
+			Message: "StartTimeFilter is required",
+		}
+	}
+
+	if !listRequest.GetStartTimeFilter().IsSetEarliestTime() {
+		return nil, &gen.BadRequestError{
+			Message: "EarliestTime in StartTimeFilter is required",
+		}
+	}
+
+	if !listRequest.GetStartTimeFilter().IsSetLatestTime() {
+		return nil, &gen.BadRequestError{
+			Message: "LatestTime in StartTimeFilter is required",
+		}
+	}
+
+	if listRequest.IsSetExecutionFilter() && listRequest.IsSetTypeFilter() {
+		return nil, &gen.BadRequestError{
+			Message: "Only one of ExecutionFilter or TypeFilter is allowed",
+		}
+	}
+
+	domainName := listRequest.GetDomain()
+	domainInfo, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	baseReq := persistence.ListWorkflowExecutionsRequest{
+		DomainUUID:        domainInfo.ID,
+		PageSize:          int(listRequest.GetMaximumPageSize()),
+		NextPageToken:     listRequest.GetNextPageToken(),
+		EarliestStartTime: listRequest.GetStartTimeFilter().GetEarliestTime(),
+		LatestStartTime:   listRequest.GetStartTimeFilter().GetLatestTime(),
+	}
+
+	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	if listRequest.IsSetExecutionFilter() {
+		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByWorkflowID(
+			&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
+			})
+	} else if listRequest.IsSetTypeFilter() {
+		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			ListWorkflowExecutionsRequest: baseReq,
+			WorkflowTypeName:              listRequest.TypeFilter.GetName(),
+		})
+	} else {
+		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutions(&baseReq)
+	}
+
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	resp := gen.NewListClosedWorkflowExecutionsResponse()
+	resp.Executions = persistenceResp.Executions
+	resp.NextPageToken = persistenceResp.NextPageToken
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {

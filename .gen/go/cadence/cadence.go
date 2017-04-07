@@ -142,6 +142,18 @@ type WorkflowService interface {  //WorkflowService API is exposed to provide su
   // Parameters:
   //  - CanceledRequest
   RespondActivityTaskCanceled(canceledRequest *shared.RespondActivityTaskCanceledRequest) (err error)
+  // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific domain.
+  // 
+  // 
+  // Parameters:
+  //  - ListRequest
+  ListOpenWorkflowExecutions(listRequest *shared.ListOpenWorkflowExecutionsRequest) (r *shared.ListOpenWorkflowExecutionsResponse, err error)
+  // ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific domain.
+  // 
+  // 
+  // Parameters:
+  //  - ListRequest
+  ListClosedWorkflowExecutions(listRequest *shared.ListClosedWorkflowExecutionsRequest) (r *shared.ListClosedWorkflowExecutionsResponse, err error)
 }
 
 //WorkflowService API is exposed to provide support for long running applications.  Application is expected to call
@@ -1361,6 +1373,184 @@ func (p *WorkflowServiceClient) recvRespondActivityTaskCanceled() (err error) {
   return
 }
 
+// ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific domain.
+// 
+// 
+// Parameters:
+//  - ListRequest
+func (p *WorkflowServiceClient) ListOpenWorkflowExecutions(listRequest *shared.ListOpenWorkflowExecutionsRequest) (r *shared.ListOpenWorkflowExecutionsResponse, err error) {
+  if err = p.sendListOpenWorkflowExecutions(listRequest); err != nil { return }
+  return p.recvListOpenWorkflowExecutions()
+}
+
+func (p *WorkflowServiceClient) sendListOpenWorkflowExecutions(listRequest *shared.ListOpenWorkflowExecutionsRequest)(err error) {
+  oprot := p.OutputProtocol
+  if oprot == nil {
+    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.OutputProtocol = oprot
+  }
+  p.SeqId++
+  if err = oprot.WriteMessageBegin("ListOpenWorkflowExecutions", thrift.CALL, p.SeqId); err != nil {
+      return
+  }
+  args := WorkflowServiceListOpenWorkflowExecutionsArgs{
+  ListRequest : listRequest,
+  }
+  if err = args.Write(oprot); err != nil {
+      return
+  }
+  if err = oprot.WriteMessageEnd(); err != nil {
+      return
+  }
+  return oprot.Flush()
+}
+
+
+func (p *WorkflowServiceClient) recvListOpenWorkflowExecutions() (value *shared.ListOpenWorkflowExecutionsResponse, err error) {
+  iprot := p.InputProtocol
+  if iprot == nil {
+    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.InputProtocol = iprot
+  }
+  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
+  if err != nil {
+    return
+  }
+  if method != "ListOpenWorkflowExecutions" {
+    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "ListOpenWorkflowExecutions failed: wrong method name")
+    return
+  }
+  if p.SeqId != seqId {
+    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "ListOpenWorkflowExecutions failed: out of sequence response")
+    return
+  }
+  if mTypeId == thrift.EXCEPTION {
+    error26 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
+    var error27 error
+    error27, err = error26.Read(iprot)
+    if err != nil {
+      return
+    }
+    if err = iprot.ReadMessageEnd(); err != nil {
+      return
+    }
+    err = error27
+    return
+  }
+  if mTypeId != thrift.REPLY {
+    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "ListOpenWorkflowExecutions failed: invalid message type")
+    return
+  }
+  result := WorkflowServiceListOpenWorkflowExecutionsResult{}
+  if err = result.Read(iprot); err != nil {
+    return
+  }
+  if err = iprot.ReadMessageEnd(); err != nil {
+    return
+  }
+  if result.BadRequestError != nil {
+    err = result.BadRequestError
+    return 
+  } else   if result.InternalServiceError != nil {
+    err = result.InternalServiceError
+    return 
+  } else   if result.EntityNotExistError != nil {
+    err = result.EntityNotExistError
+    return 
+  }
+  value = result.GetSuccess()
+  return
+}
+
+// ListClosedWorkflowExecutions is a visibility API to list the closed executions in a specific domain.
+// 
+// 
+// Parameters:
+//  - ListRequest
+func (p *WorkflowServiceClient) ListClosedWorkflowExecutions(listRequest *shared.ListClosedWorkflowExecutionsRequest) (r *shared.ListClosedWorkflowExecutionsResponse, err error) {
+  if err = p.sendListClosedWorkflowExecutions(listRequest); err != nil { return }
+  return p.recvListClosedWorkflowExecutions()
+}
+
+func (p *WorkflowServiceClient) sendListClosedWorkflowExecutions(listRequest *shared.ListClosedWorkflowExecutionsRequest)(err error) {
+  oprot := p.OutputProtocol
+  if oprot == nil {
+    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.OutputProtocol = oprot
+  }
+  p.SeqId++
+  if err = oprot.WriteMessageBegin("ListClosedWorkflowExecutions", thrift.CALL, p.SeqId); err != nil {
+      return
+  }
+  args := WorkflowServiceListClosedWorkflowExecutionsArgs{
+  ListRequest : listRequest,
+  }
+  if err = args.Write(oprot); err != nil {
+      return
+  }
+  if err = oprot.WriteMessageEnd(); err != nil {
+      return
+  }
+  return oprot.Flush()
+}
+
+
+func (p *WorkflowServiceClient) recvListClosedWorkflowExecutions() (value *shared.ListClosedWorkflowExecutionsResponse, err error) {
+  iprot := p.InputProtocol
+  if iprot == nil {
+    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.InputProtocol = iprot
+  }
+  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
+  if err != nil {
+    return
+  }
+  if method != "ListClosedWorkflowExecutions" {
+    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "ListClosedWorkflowExecutions failed: wrong method name")
+    return
+  }
+  if p.SeqId != seqId {
+    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "ListClosedWorkflowExecutions failed: out of sequence response")
+    return
+  }
+  if mTypeId == thrift.EXCEPTION {
+    error28 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
+    var error29 error
+    error29, err = error28.Read(iprot)
+    if err != nil {
+      return
+    }
+    if err = iprot.ReadMessageEnd(); err != nil {
+      return
+    }
+    err = error29
+    return
+  }
+  if mTypeId != thrift.REPLY {
+    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "ListClosedWorkflowExecutions failed: invalid message type")
+    return
+  }
+  result := WorkflowServiceListClosedWorkflowExecutionsResult{}
+  if err = result.Read(iprot); err != nil {
+    return
+  }
+  if err = iprot.ReadMessageEnd(); err != nil {
+    return
+  }
+  if result.BadRequestError != nil {
+    err = result.BadRequestError
+    return 
+  } else   if result.InternalServiceError != nil {
+    err = result.InternalServiceError
+    return 
+  } else   if result.EntityNotExistError != nil {
+    err = result.EntityNotExistError
+    return 
+  }
+  value = result.GetSuccess()
+  return
+}
+
 
 type WorkflowServiceProcessor struct {
   processorMap map[string]thrift.TProcessorFunction
@@ -1382,21 +1572,23 @@ func (p *WorkflowServiceProcessor) ProcessorMap() map[string]thrift.TProcessorFu
 
 func NewWorkflowServiceProcessor(handler WorkflowService) *WorkflowServiceProcessor {
 
-  self26 := &WorkflowServiceProcessor{handler:handler, processorMap:make(map[string]thrift.TProcessorFunction)}
-  self26.processorMap["RegisterDomain"] = &workflowServiceProcessorRegisterDomain{handler:handler}
-  self26.processorMap["DescribeDomain"] = &workflowServiceProcessorDescribeDomain{handler:handler}
-  self26.processorMap["UpdateDomain"] = &workflowServiceProcessorUpdateDomain{handler:handler}
-  self26.processorMap["DeprecateDomain"] = &workflowServiceProcessorDeprecateDomain{handler:handler}
-  self26.processorMap["StartWorkflowExecution"] = &workflowServiceProcessorStartWorkflowExecution{handler:handler}
-  self26.processorMap["GetWorkflowExecutionHistory"] = &workflowServiceProcessorGetWorkflowExecutionHistory{handler:handler}
-  self26.processorMap["PollForDecisionTask"] = &workflowServiceProcessorPollForDecisionTask{handler:handler}
-  self26.processorMap["RespondDecisionTaskCompleted"] = &workflowServiceProcessorRespondDecisionTaskCompleted{handler:handler}
-  self26.processorMap["PollForActivityTask"] = &workflowServiceProcessorPollForActivityTask{handler:handler}
-  self26.processorMap["RecordActivityTaskHeartbeat"] = &workflowServiceProcessorRecordActivityTaskHeartbeat{handler:handler}
-  self26.processorMap["RespondActivityTaskCompleted"] = &workflowServiceProcessorRespondActivityTaskCompleted{handler:handler}
-  self26.processorMap["RespondActivityTaskFailed"] = &workflowServiceProcessorRespondActivityTaskFailed{handler:handler}
-  self26.processorMap["RespondActivityTaskCanceled"] = &workflowServiceProcessorRespondActivityTaskCanceled{handler:handler}
-return self26
+  self30 := &WorkflowServiceProcessor{handler:handler, processorMap:make(map[string]thrift.TProcessorFunction)}
+  self30.processorMap["RegisterDomain"] = &workflowServiceProcessorRegisterDomain{handler:handler}
+  self30.processorMap["DescribeDomain"] = &workflowServiceProcessorDescribeDomain{handler:handler}
+  self30.processorMap["UpdateDomain"] = &workflowServiceProcessorUpdateDomain{handler:handler}
+  self30.processorMap["DeprecateDomain"] = &workflowServiceProcessorDeprecateDomain{handler:handler}
+  self30.processorMap["StartWorkflowExecution"] = &workflowServiceProcessorStartWorkflowExecution{handler:handler}
+  self30.processorMap["GetWorkflowExecutionHistory"] = &workflowServiceProcessorGetWorkflowExecutionHistory{handler:handler}
+  self30.processorMap["PollForDecisionTask"] = &workflowServiceProcessorPollForDecisionTask{handler:handler}
+  self30.processorMap["RespondDecisionTaskCompleted"] = &workflowServiceProcessorRespondDecisionTaskCompleted{handler:handler}
+  self30.processorMap["PollForActivityTask"] = &workflowServiceProcessorPollForActivityTask{handler:handler}
+  self30.processorMap["RecordActivityTaskHeartbeat"] = &workflowServiceProcessorRecordActivityTaskHeartbeat{handler:handler}
+  self30.processorMap["RespondActivityTaskCompleted"] = &workflowServiceProcessorRespondActivityTaskCompleted{handler:handler}
+  self30.processorMap["RespondActivityTaskFailed"] = &workflowServiceProcessorRespondActivityTaskFailed{handler:handler}
+  self30.processorMap["RespondActivityTaskCanceled"] = &workflowServiceProcessorRespondActivityTaskCanceled{handler:handler}
+  self30.processorMap["ListOpenWorkflowExecutions"] = &workflowServiceProcessorListOpenWorkflowExecutions{handler:handler}
+  self30.processorMap["ListClosedWorkflowExecutions"] = &workflowServiceProcessorListClosedWorkflowExecutions{handler:handler}
+return self30
 }
 
 func (p *WorkflowServiceProcessor) Process(iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
@@ -1407,12 +1599,12 @@ func (p *WorkflowServiceProcessor) Process(iprot, oprot thrift.TProtocol) (succe
   }
   iprot.Skip(thrift.STRUCT)
   iprot.ReadMessageEnd()
-  x27 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function " + name)
+  x31 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function " + name)
   oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
-  x27.Write(oprot)
+  x31.Write(oprot)
   oprot.WriteMessageEnd()
   oprot.Flush()
-  return false, x27
+  return false, x31
 
 }
 
@@ -2118,6 +2310,120 @@ func (p *workflowServiceProcessorRespondActivityTaskCanceled) Process(seqId int3
   }
   }
   if err2 = oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.REPLY, seqId); err2 != nil {
+    err = err2
+  }
+  if err2 = result.Write(oprot); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.Flush(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err != nil {
+    return
+  }
+  return true, err
+}
+
+type workflowServiceProcessorListOpenWorkflowExecutions struct {
+  handler WorkflowService
+}
+
+func (p *workflowServiceProcessorListOpenWorkflowExecutions) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+  args := WorkflowServiceListOpenWorkflowExecutionsArgs{}
+  if err = args.Read(iprot); err != nil {
+    iprot.ReadMessageEnd()
+    x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+    oprot.WriteMessageBegin("ListOpenWorkflowExecutions", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return false, err
+  }
+
+  iprot.ReadMessageEnd()
+  result := WorkflowServiceListOpenWorkflowExecutionsResult{}
+var retval *shared.ListOpenWorkflowExecutionsResponse
+  var err2 error
+  if retval, err2 = p.handler.ListOpenWorkflowExecutions(args.ListRequest); err2 != nil {
+  switch v := err2.(type) {
+    case *shared.BadRequestError:
+  result.BadRequestError = v
+    case *shared.InternalServiceError:
+  result.InternalServiceError = v
+    case *shared.EntityNotExistsError:
+  result.EntityNotExistError = v
+    default:
+    x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ListOpenWorkflowExecutions: " + err2.Error())
+    oprot.WriteMessageBegin("ListOpenWorkflowExecutions", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return true, err2
+  }
+  } else {
+    result.Success = retval
+}
+  if err2 = oprot.WriteMessageBegin("ListOpenWorkflowExecutions", thrift.REPLY, seqId); err2 != nil {
+    err = err2
+  }
+  if err2 = result.Write(oprot); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.Flush(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err != nil {
+    return
+  }
+  return true, err
+}
+
+type workflowServiceProcessorListClosedWorkflowExecutions struct {
+  handler WorkflowService
+}
+
+func (p *workflowServiceProcessorListClosedWorkflowExecutions) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+  args := WorkflowServiceListClosedWorkflowExecutionsArgs{}
+  if err = args.Read(iprot); err != nil {
+    iprot.ReadMessageEnd()
+    x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+    oprot.WriteMessageBegin("ListClosedWorkflowExecutions", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return false, err
+  }
+
+  iprot.ReadMessageEnd()
+  result := WorkflowServiceListClosedWorkflowExecutionsResult{}
+var retval *shared.ListClosedWorkflowExecutionsResponse
+  var err2 error
+  if retval, err2 = p.handler.ListClosedWorkflowExecutions(args.ListRequest); err2 != nil {
+  switch v := err2.(type) {
+    case *shared.BadRequestError:
+  result.BadRequestError = v
+    case *shared.InternalServiceError:
+  result.InternalServiceError = v
+    case *shared.EntityNotExistsError:
+  result.EntityNotExistError = v
+    default:
+    x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ListClosedWorkflowExecutions: " + err2.Error())
+    oprot.WriteMessageBegin("ListClosedWorkflowExecutions", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return true, err2
+  }
+  } else {
+    result.Success = retval
+}
+  if err2 = oprot.WriteMessageBegin("ListClosedWorkflowExecutions", thrift.REPLY, seqId); err2 != nil {
     err = err2
   }
   if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -5763,6 +6069,612 @@ func (p *WorkflowServiceRespondActivityTaskCanceledResult) String() string {
     return "<nil>"
   }
   return fmt.Sprintf("WorkflowServiceRespondActivityTaskCanceledResult(%+v)", *p)
+}
+
+// Attributes:
+//  - ListRequest
+type WorkflowServiceListOpenWorkflowExecutionsArgs struct {
+  ListRequest *shared.ListOpenWorkflowExecutionsRequest `thrift:"listRequest,1" db:"listRequest" json:"listRequest"`
+}
+
+func NewWorkflowServiceListOpenWorkflowExecutionsArgs() *WorkflowServiceListOpenWorkflowExecutionsArgs {
+  return &WorkflowServiceListOpenWorkflowExecutionsArgs{}
+}
+
+var WorkflowServiceListOpenWorkflowExecutionsArgs_ListRequest_DEFAULT *shared.ListOpenWorkflowExecutionsRequest
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) GetListRequest() *shared.ListOpenWorkflowExecutionsRequest {
+  if !p.IsSetListRequest() {
+    return WorkflowServiceListOpenWorkflowExecutionsArgs_ListRequest_DEFAULT
+  }
+return p.ListRequest
+}
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) IsSetListRequest() bool {
+  return p.ListRequest != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs)  ReadField1(iprot thrift.TProtocol) error {
+  p.ListRequest = &shared.ListOpenWorkflowExecutionsRequest{}
+  if err := p.ListRequest.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ListRequest), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("ListOpenWorkflowExecutions_args"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField1(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) writeField1(oprot thrift.TProtocol) (err error) {
+  if err := oprot.WriteFieldBegin("listRequest", thrift.STRUCT, 1); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:listRequest: ", p), err) }
+  if err := p.ListRequest.Write(oprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ListRequest), err)
+  }
+  if err := oprot.WriteFieldEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field end error 1:listRequest: ", p), err) }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("WorkflowServiceListOpenWorkflowExecutionsArgs(%+v)", *p)
+}
+
+// Attributes:
+//  - Success
+//  - BadRequestError
+//  - InternalServiceError
+//  - EntityNotExistError
+type WorkflowServiceListOpenWorkflowExecutionsResult struct {
+  Success *shared.ListOpenWorkflowExecutionsResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
+  BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
+  InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+}
+
+func NewWorkflowServiceListOpenWorkflowExecutionsResult() *WorkflowServiceListOpenWorkflowExecutionsResult {
+  return &WorkflowServiceListOpenWorkflowExecutionsResult{}
+}
+
+var WorkflowServiceListOpenWorkflowExecutionsResult_Success_DEFAULT *shared.ListOpenWorkflowExecutionsResponse
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetSuccess() *shared.ListOpenWorkflowExecutionsResponse {
+  if !p.IsSetSuccess() {
+    return WorkflowServiceListOpenWorkflowExecutionsResult_Success_DEFAULT
+  }
+return p.Success
+}
+var WorkflowServiceListOpenWorkflowExecutionsResult_BadRequestError_DEFAULT *shared.BadRequestError
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetBadRequestError() *shared.BadRequestError {
+  if !p.IsSetBadRequestError() {
+    return WorkflowServiceListOpenWorkflowExecutionsResult_BadRequestError_DEFAULT
+  }
+return p.BadRequestError
+}
+var WorkflowServiceListOpenWorkflowExecutionsResult_InternalServiceError_DEFAULT *shared.InternalServiceError
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetInternalServiceError() *shared.InternalServiceError {
+  if !p.IsSetInternalServiceError() {
+    return WorkflowServiceListOpenWorkflowExecutionsResult_InternalServiceError_DEFAULT
+  }
+return p.InternalServiceError
+}
+var WorkflowServiceListOpenWorkflowExecutionsResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+  if !p.IsSetEntityNotExistError() {
+    return WorkflowServiceListOpenWorkflowExecutionsResult_EntityNotExistError_DEFAULT
+  }
+return p.EntityNotExistError
+}
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetSuccess() bool {
+  return p.Success != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetBadRequestError() bool {
+  return p.BadRequestError != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetInternalServiceError() bool {
+  return p.InternalServiceError != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetEntityNotExistError() bool {
+  return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 0:
+      if err := p.ReadField0(iprot); err != nil {
+        return err
+      }
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    case 2:
+      if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField0(iprot thrift.TProtocol) error {
+  p.Success = &shared.ListOpenWorkflowExecutionsResponse{}
+  if err := p.Success.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Success), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField1(iprot thrift.TProtocol) error {
+  p.BadRequestError = &shared.BadRequestError{}
+  if err := p.BadRequestError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.BadRequestError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField2(iprot thrift.TProtocol) error {
+  p.InternalServiceError = &shared.InternalServiceError{}
+  if err := p.InternalServiceError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.InternalServiceError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.EntityNotExistError = &shared.EntityNotExistsError{}
+  if err := p.EntityNotExistError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("ListOpenWorkflowExecutions_result"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField0(oprot); err != nil { return err }
+    if err := p.writeField1(oprot); err != nil { return err }
+    if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField0(oprot thrift.TProtocol) (err error) {
+  if p.IsSetSuccess() {
+    if err := oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 0:success: ", p), err) }
+    if err := p.Success.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Success), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 0:success: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField1(oprot thrift.TProtocol) (err error) {
+  if p.IsSetBadRequestError() {
+    if err := oprot.WriteFieldBegin("badRequestError", thrift.STRUCT, 1); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:badRequestError: ", p), err) }
+    if err := p.BadRequestError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.BadRequestError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 1:badRequestError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField2(oprot thrift.TProtocol) (err error) {
+  if p.IsSetInternalServiceError() {
+    if err := oprot.WriteFieldBegin("internalServiceError", thrift.STRUCT, 2); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 2:internalServiceError: ", p), err) }
+    if err := p.InternalServiceError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.InternalServiceError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEntityNotExistError() {
+    if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err) }
+    if err := p.EntityNotExistError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("WorkflowServiceListOpenWorkflowExecutionsResult(%+v)", *p)
+}
+
+// Attributes:
+//  - ListRequest
+type WorkflowServiceListClosedWorkflowExecutionsArgs struct {
+  ListRequest *shared.ListClosedWorkflowExecutionsRequest `thrift:"listRequest,1" db:"listRequest" json:"listRequest"`
+}
+
+func NewWorkflowServiceListClosedWorkflowExecutionsArgs() *WorkflowServiceListClosedWorkflowExecutionsArgs {
+  return &WorkflowServiceListClosedWorkflowExecutionsArgs{}
+}
+
+var WorkflowServiceListClosedWorkflowExecutionsArgs_ListRequest_DEFAULT *shared.ListClosedWorkflowExecutionsRequest
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) GetListRequest() *shared.ListClosedWorkflowExecutionsRequest {
+  if !p.IsSetListRequest() {
+    return WorkflowServiceListClosedWorkflowExecutionsArgs_ListRequest_DEFAULT
+  }
+return p.ListRequest
+}
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) IsSetListRequest() bool {
+  return p.ListRequest != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs)  ReadField1(iprot thrift.TProtocol) error {
+  p.ListRequest = &shared.ListClosedWorkflowExecutionsRequest{}
+  if err := p.ListRequest.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ListRequest), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("ListClosedWorkflowExecutions_args"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField1(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) writeField1(oprot thrift.TProtocol) (err error) {
+  if err := oprot.WriteFieldBegin("listRequest", thrift.STRUCT, 1); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:listRequest: ", p), err) }
+  if err := p.ListRequest.Write(oprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ListRequest), err)
+  }
+  if err := oprot.WriteFieldEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field end error 1:listRequest: ", p), err) }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("WorkflowServiceListClosedWorkflowExecutionsArgs(%+v)", *p)
+}
+
+// Attributes:
+//  - Success
+//  - BadRequestError
+//  - InternalServiceError
+//  - EntityNotExistError
+type WorkflowServiceListClosedWorkflowExecutionsResult struct {
+  Success *shared.ListClosedWorkflowExecutionsResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
+  BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
+  InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+}
+
+func NewWorkflowServiceListClosedWorkflowExecutionsResult() *WorkflowServiceListClosedWorkflowExecutionsResult {
+  return &WorkflowServiceListClosedWorkflowExecutionsResult{}
+}
+
+var WorkflowServiceListClosedWorkflowExecutionsResult_Success_DEFAULT *shared.ListClosedWorkflowExecutionsResponse
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetSuccess() *shared.ListClosedWorkflowExecutionsResponse {
+  if !p.IsSetSuccess() {
+    return WorkflowServiceListClosedWorkflowExecutionsResult_Success_DEFAULT
+  }
+return p.Success
+}
+var WorkflowServiceListClosedWorkflowExecutionsResult_BadRequestError_DEFAULT *shared.BadRequestError
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetBadRequestError() *shared.BadRequestError {
+  if !p.IsSetBadRequestError() {
+    return WorkflowServiceListClosedWorkflowExecutionsResult_BadRequestError_DEFAULT
+  }
+return p.BadRequestError
+}
+var WorkflowServiceListClosedWorkflowExecutionsResult_InternalServiceError_DEFAULT *shared.InternalServiceError
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetInternalServiceError() *shared.InternalServiceError {
+  if !p.IsSetInternalServiceError() {
+    return WorkflowServiceListClosedWorkflowExecutionsResult_InternalServiceError_DEFAULT
+  }
+return p.InternalServiceError
+}
+var WorkflowServiceListClosedWorkflowExecutionsResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+  if !p.IsSetEntityNotExistError() {
+    return WorkflowServiceListClosedWorkflowExecutionsResult_EntityNotExistError_DEFAULT
+  }
+return p.EntityNotExistError
+}
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetSuccess() bool {
+  return p.Success != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetBadRequestError() bool {
+  return p.BadRequestError != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetInternalServiceError() bool {
+  return p.InternalServiceError != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetEntityNotExistError() bool {
+  return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 0:
+      if err := p.ReadField0(iprot); err != nil {
+        return err
+      }
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    case 2:
+      if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField0(iprot thrift.TProtocol) error {
+  p.Success = &shared.ListClosedWorkflowExecutionsResponse{}
+  if err := p.Success.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Success), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField1(iprot thrift.TProtocol) error {
+  p.BadRequestError = &shared.BadRequestError{}
+  if err := p.BadRequestError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.BadRequestError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField2(iprot thrift.TProtocol) error {
+  p.InternalServiceError = &shared.InternalServiceError{}
+  if err := p.InternalServiceError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.InternalServiceError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.EntityNotExistError = &shared.EntityNotExistsError{}
+  if err := p.EntityNotExistError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+  }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("ListClosedWorkflowExecutions_result"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField0(oprot); err != nil { return err }
+    if err := p.writeField1(oprot); err != nil { return err }
+    if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField0(oprot thrift.TProtocol) (err error) {
+  if p.IsSetSuccess() {
+    if err := oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 0:success: ", p), err) }
+    if err := p.Success.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Success), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 0:success: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField1(oprot thrift.TProtocol) (err error) {
+  if p.IsSetBadRequestError() {
+    if err := oprot.WriteFieldBegin("badRequestError", thrift.STRUCT, 1); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:badRequestError: ", p), err) }
+    if err := p.BadRequestError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.BadRequestError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 1:badRequestError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField2(oprot thrift.TProtocol) (err error) {
+  if p.IsSetInternalServiceError() {
+    if err := oprot.WriteFieldBegin("internalServiceError", thrift.STRUCT, 2); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 2:internalServiceError: ", p), err) }
+    if err := p.InternalServiceError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.InternalServiceError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEntityNotExistError() {
+    if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err) }
+    if err := p.EntityNotExistError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("WorkflowServiceListClosedWorkflowExecutionsResult(%+v)", *p)
 }
 
 

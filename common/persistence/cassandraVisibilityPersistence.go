@@ -111,7 +111,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		domainPartition,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
-		request.StartTime,
+		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
 		request.WorkflowTypeName,
 	)
 	err := query.Exec()
@@ -132,7 +132,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 	batch.Query(templateDeleteWorkflowExecutionStarted,
 		request.DomainUUID,
 		domainPartition,
-		request.StartTime,
+		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
 		request.Execution.GetRunId(),
 	)
 
@@ -142,8 +142,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		domainPartition,
 		request.Execution.GetWorkflowId(),
 		request.Execution.GetRunId(),
-		request.StartTime,
-		request.CloseTime,
+		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
+		common.UnixNanoToCQLTimestamp(request.CloseTimestamp),
 		request.WorkflowTypeName,
 		defaultDeleteTTLSeconds,
 	)
@@ -161,8 +161,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	query := v.session.Query(templateGetOpenWorkflowExecutions,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime)
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime))
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		// TODO: should return a bad request error if the token is invalid
@@ -172,7 +172,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -196,8 +196,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	query := v.session.Query(templateGetClosedWorkflowExecutions,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime)
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime))
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		// TODO: should return a bad request error if the token is invalid
@@ -207,7 +207,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -231,8 +231,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByType,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime,
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
@@ -243,7 +243,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -267,8 +267,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime,
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
@@ -279,7 +279,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -303,8 +303,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByID,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime,
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime),
 		request.WorkflowID)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
@@ -315,7 +315,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -339,8 +339,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByID,
 		request.DomainUUID,
 		domainPartition,
-		request.EarliestStartTime,
-		request.LatestStartTime,
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime),
 		request.WorkflowID)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
@@ -351,7 +351,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	}
 
 	response := &ListWorkflowExecutionsResponse{}
-	response.Executions = make([]*WorkflowExecutionRecord, 0)
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -370,35 +370,47 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	return response, nil
 }
 
-func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*WorkflowExecutionRecord, bool) {
+func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID gocql.UUID
 	var typeName string
 	var startTime time.Time
 	if iter.Scan(&workflowID, &runID, &startTime, &typeName) {
-		record := &WorkflowExecutionRecord{}
-		record.Execution.WorkflowId = common.StringPtr(workflowID)
-		record.Execution.RunId = common.StringPtr(runID.String())
-		record.StartTime = startTime
-		record.WorkflowTypeName = typeName
+		execution := workflow.NewWorkflowExecution()
+		execution.WorkflowId = common.StringPtr(workflowID)
+		execution.RunId = common.StringPtr(runID.String())
+
+		wfType := workflow.NewWorkflowType()
+		wfType.Name = common.StringPtr(typeName)
+
+		record := workflow.NewWorkflowExecutionInfo()
+		record.Execution = execution
+		record.StartTime = common.Int64Ptr(startTime.UnixNano())
+		record.Type = wfType
 		return record, true
 	}
 	return nil, false
 }
 
-func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*WorkflowExecutionRecord, bool) {
+func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID gocql.UUID
 	var typeName string
 	var startTime time.Time
 	var closeTime time.Time
 	if iter.Scan(&workflowID, &runID, &startTime, &closeTime, &typeName) {
-		record := &WorkflowExecutionRecord{}
-		record.Execution.WorkflowId = common.StringPtr(workflowID)
-		record.Execution.RunId = common.StringPtr(runID.String())
-		record.StartTime = startTime
-		record.CloseTime = closeTime
-		record.WorkflowTypeName = typeName
+		execution := workflow.NewWorkflowExecution()
+		execution.WorkflowId = common.StringPtr(workflowID)
+		execution.RunId = common.StringPtr(runID.String())
+
+		wfType := workflow.NewWorkflowType()
+		wfType.Name = common.StringPtr(typeName)
+
+		record := workflow.NewWorkflowExecutionInfo()
+		record.Execution = execution
+		record.StartTime = common.Int64Ptr(startTime.UnixNano())
+		record.CloseTime = common.Int64Ptr(closeTime.UnixNano())
+		record.Type = wfType
 		return record, true
 	}
 	return nil, false
