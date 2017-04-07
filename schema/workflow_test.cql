@@ -27,6 +27,7 @@ CREATE TYPE workflow_execution (
   state                  int,  -- enum WorkflowState {Created, Running, Completed}
   next_event_id          bigint,
   last_processed_event   bigint,
+  start_time             timestamp,
   last_updated_time      timestamp,
   create_request_id      uuid,
   decision_schedule_id   bigint,
