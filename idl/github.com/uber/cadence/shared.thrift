@@ -72,6 +72,7 @@ enum EventType {
   CancelTimerFailed,
   TimerCanceled,
   MarkerRecorded,
+  WorkflowExecutionTerminated,
 }
 
 enum WorkflowCompleteFailedCause {
@@ -297,6 +298,12 @@ struct MarkerRecordedEventAttributes {
   30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
 }
 
+struct WorkflowExecutionTerminatedEventAttributes {
+  10: optional string reason
+  20: optional binary details
+  30: optional string identity
+}
+
 struct HistoryEvent {
   10:  optional i64 (js.type = "Long") eventId
   20:  optional i64 (js.type = "Long") timestamp
@@ -323,6 +330,7 @@ struct HistoryEvent {
   140: optional TimerCanceledEventAttributes timerCanceledEventAttributes
   150: optional CancelTimerFailedEventAttributes cancelTimerFailedEventAttributes
   160: optional MarkerRecordedEventAttributes markerRecordedEventAttributes
+  170: optional WorkflowExecutionTerminatedEventAttributes workflowExecutionTerminatedEventAttributes
 }
 
 struct History {
@@ -482,6 +490,14 @@ struct GetWorkflowExecutionHistoryResponse {
   10: optional History history
 }
 
+struct TerminateWorkflowExecutionRequest {
+  10: optional string domain
+  20: optional WorkflowExecution workflowExecution
+  30: optional string reason
+  40: optional binary details
+  50: optional string identity
+}
+
 struct ListOpenWorkflowExecutionsRequest {
   10: optional string domain
   20: optional i32 maximumPageSize
@@ -509,3 +525,4 @@ struct ListClosedWorkflowExecutionsResponse {
   10: optional list<WorkflowExecutionInfo> executions
   20: optional binary nextPageToken
 }
+

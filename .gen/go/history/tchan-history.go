@@ -27,6 +27,7 @@ type TChanHistoryService interface {
 	RespondActivityTaskFailed(ctx thrift.Context, failRequest *RespondActivityTaskFailedRequest) error
 	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *RespondDecisionTaskCompletedRequest) error
 	StartWorkflowExecution(ctx thrift.Context, startRequest *StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
+	TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *TerminateWorkflowExecutionRequest) error
 }
 
 // Implementation of a client and service handler.
@@ -186,6 +187,8 @@ func (c *tchanHistoryServiceClient) RespondActivityTaskCompleted(ctx thrift.Cont
 			err = resp.InternalServiceError
 		case resp.EntityNotExistError != nil:
 			err = resp.EntityNotExistError
+		case resp.ShardOwnershipLostError != nil:
+			err = resp.ShardOwnershipLostError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for RespondActivityTaskCompleted")
 		}
@@ -266,6 +269,30 @@ func (c *tchanHistoryServiceClient) StartWorkflowExecution(ctx thrift.Context, s
 	return resp.GetSuccess(), err
 }
 
+func (c *tchanHistoryServiceClient) TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *TerminateWorkflowExecutionRequest) error {
+	var resp HistoryServiceTerminateWorkflowExecutionResult
+	args := HistoryServiceTerminateWorkflowExecutionArgs{
+		TerminateRequest: terminateRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "TerminateWorkflowExecution", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		case resp.ShardOwnershipLostError != nil:
+			err = resp.ShardOwnershipLostError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for TerminateWorkflowExecution")
+		}
+	}
+
+	return err
+}
+
 type tchanHistoryServiceServer struct {
 	handler TChanHistoryService
 }
@@ -293,6 +320,7 @@ func (s *tchanHistoryServiceServer) Methods() []string {
 		"RespondActivityTaskFailed",
 		"RespondDecisionTaskCompleted",
 		"StartWorkflowExecution",
+		"TerminateWorkflowExecution",
 	}
 }
 
@@ -316,6 +344,8 @@ func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string
 		return s.handleRespondDecisionTaskCompleted(ctx, protocol)
 	case "StartWorkflowExecution":
 		return s.handleStartWorkflowExecution(ctx, protocol)
+	case "TerminateWorkflowExecution":
+		return s.handleTerminateWorkflowExecution(ctx, protocol)
 
 	default:
 		return false, nil, fmt.Errorf("method %v not found in service %v", methodName, s.Service())
@@ -574,6 +604,11 @@ func (s *tchanHistoryServiceServer) handleRespondActivityTaskCompleted(ctx thrif
 				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
 			}
 			res.EntityNotExistError = v
+		case *ShardOwnershipLostError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for shardOwnershipLostError returned non-nil error type *ShardOwnershipLostError but nil value")
+			}
+			res.ShardOwnershipLostError = v
 		default:
 			return false, nil, err
 		}
@@ -705,6 +740,48 @@ func (s *tchanHistoryServiceServer) handleStartWorkflowExecution(ctx thrift.Cont
 		}
 	} else {
 		res.Success = r
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanHistoryServiceServer) handleTerminateWorkflowExecution(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req HistoryServiceTerminateWorkflowExecutionArgs
+	var res HistoryServiceTerminateWorkflowExecutionResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	err :=
+		s.handler.TerminateWorkflowExecution(ctx, req.TerminateRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		case *ShardOwnershipLostError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for shardOwnershipLostError returned non-nil error type *ShardOwnershipLostError but nil value")
+			}
+			res.ShardOwnershipLostError = v
+		default:
+			return false, nil, err
+		}
+	} else {
 	}
 
 	return err == nil, &res, nil

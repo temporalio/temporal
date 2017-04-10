@@ -190,4 +190,18 @@ func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *gohistory.Reco
 	return r0, r1
 }
 
+// TerminateWorkflowExecution is mock implementation for TerminateWorkflowExecution of HistoryEngine
+func (_m *MockHistoryEngine) TerminateWorkflowExecution(request *gohistory.TerminateWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.TerminateWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 var _ Engine = (*MockHistoryEngine)(nil)

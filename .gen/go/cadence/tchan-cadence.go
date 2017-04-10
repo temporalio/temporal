@@ -32,6 +32,7 @@ type TChanWorkflowService interface {
 	RespondActivityTaskFailed(ctx thrift.Context, failRequest *shared.RespondActivityTaskFailedRequest) error
 	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondDecisionTaskCompletedRequest) error
 	StartWorkflowExecution(ctx thrift.Context, startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
+	TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *shared.TerminateWorkflowExecutionRequest) error
 	UpdateDomain(ctx thrift.Context, updateRequest *shared.UpdateDomainRequest) (*shared.UpdateDomainResponse, error)
 }
 
@@ -358,6 +359,28 @@ func (c *tchanWorkflowServiceClient) StartWorkflowExecution(ctx thrift.Context, 
 	return resp.GetSuccess(), err
 }
 
+func (c *tchanWorkflowServiceClient) TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *shared.TerminateWorkflowExecutionRequest) error {
+	var resp WorkflowServiceTerminateWorkflowExecutionResult
+	args := WorkflowServiceTerminateWorkflowExecutionArgs{
+		TerminateRequest: terminateRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "TerminateWorkflowExecution", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for TerminateWorkflowExecution")
+		}
+	}
+
+	return err
+}
+
 func (c *tchanWorkflowServiceClient) UpdateDomain(ctx thrift.Context, updateRequest *shared.UpdateDomainRequest) (*shared.UpdateDomainResponse, error) {
 	var resp WorkflowServiceUpdateDomainResult
 	args := WorkflowServiceUpdateDomainArgs{
@@ -412,6 +435,7 @@ func (s *tchanWorkflowServiceServer) Methods() []string {
 		"RespondActivityTaskFailed",
 		"RespondDecisionTaskCompleted",
 		"StartWorkflowExecution",
+		"TerminateWorkflowExecution",
 		"UpdateDomain",
 	}
 }
@@ -446,6 +470,8 @@ func (s *tchanWorkflowServiceServer) Handle(ctx thrift.Context, methodName strin
 		return s.handleRespondDecisionTaskCompleted(ctx, protocol)
 	case "StartWorkflowExecution":
 		return s.handleStartWorkflowExecution(ctx, protocol)
+	case "TerminateWorkflowExecution":
+		return s.handleTerminateWorkflowExecution(ctx, protocol)
 	case "UpdateDomain":
 		return s.handleUpdateDomain(ctx, protocol)
 
@@ -965,6 +991,43 @@ func (s *tchanWorkflowServiceServer) handleStartWorkflowExecution(ctx thrift.Con
 		}
 	} else {
 		res.Success = r
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanWorkflowServiceServer) handleTerminateWorkflowExecution(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req WorkflowServiceTerminateWorkflowExecutionArgs
+	var res WorkflowServiceTerminateWorkflowExecutionResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	err :=
+		s.handler.TerminateWorkflowExecution(ctx, req.TerminateRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
 	}
 
 	return err == nil, &res, nil

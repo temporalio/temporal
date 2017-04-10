@@ -91,6 +91,7 @@ const (
 	tagValueActionTimerStarted                    = "add-timer-started-event"
 	tagValueActionTimerFired                      = "add-timer-fired-event"
 	tagValueActionTimerCanceled                   = "add-timer-Canceled-event"
+	tagValueActionWorkflowTerminated              = "add-workflowexecution-terminated-event"
 
 	// tagStoreOperation values
 	tagValueStoreOperationGetTasks                = "get-tasks"

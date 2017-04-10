@@ -445,10 +445,37 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wrapError(err)
 	}
 
-	return wh.history.GetWorkflowExecutionHistory(ctx, &h.GetWorkflowExecutionHistoryRequest{
+	response, err := wh.history.GetWorkflowExecutionHistory(ctx, &h.GetWorkflowExecutionHistoryRequest{
 		DomainUUID: common.StringPtr(info.ID),
 		GetRequest: getRequest,
 	})
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	return response, nil
+}
+
+func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
+	terminateRequest *gen.TerminateWorkflowExecutionRequest) error {
+	wh.startWG.Wait()
+
+	if !terminateRequest.IsSetDomain() {
+		return errDomainNotSet
+	}
+
+	domainName := terminateRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return wrapError(err)
+	}
+
+	err = wh.history.TerminateWorkflowExecution(ctx, &h.TerminateWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(info.ID),
+		TerminateRequest: terminateRequest,
+	})
+
+	return wrapError(err)
 }
 
 // ListOpenWorkflowExecutions - retrieves info for open workflow executions in a domain

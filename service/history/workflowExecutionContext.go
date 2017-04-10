@@ -124,6 +124,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 				fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 			return err0
 		}
+
 	}
 
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{

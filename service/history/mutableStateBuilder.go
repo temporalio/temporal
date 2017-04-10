@@ -265,6 +265,10 @@ func (e *mutableStateBuilder) GetNextEventID() int64 {
 	return e.executionInfo.NextEventID
 }
 
+func (e *mutableStateBuilder) isWorkflowExecutionRunning() bool {
+	return e.executionInfo.State != persistence.WorkflowStateCompleted
+}
+
 func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(execution workflow.WorkflowExecution,
 	request *workflow.StartWorkflowExecutionRequest) *workflow.HistoryEvent {
 	eventID := e.GetNextEventID()
@@ -635,4 +639,16 @@ func (e *mutableStateBuilder) AddRecordMarkerEvent(decisionCompletedEventID int6
 	attributes *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
 
 	return e.hBuilder.AddMarkerRecordedEvent(decisionCompletedEventID, attributes)
+}
+
+func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
+	request *workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted {
+		logInvalidHistoryActionEvent(e.logger, tagValueActionWorkflowTerminated, e.GetNextEventID(), fmt.Sprintf(
+			"{State: %v}", e.executionInfo.State))
+		return nil
+	}
+
+	e.executionInfo.State = persistence.WorkflowStateCompleted
+	return e.hBuilder.AddWorkflowExecutionTerminatedEvent(request)
 }

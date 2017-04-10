@@ -122,6 +122,12 @@ func (c *clientImpl) RespondActivityTaskCanceled(request *workflow.RespondActivi
 	return c.client.RespondActivityTaskCanceled(ctx, request)
 }
 
+func (c *clientImpl) TerminateWorkflowExecution(request *workflow.TerminateWorkflowExecutionRequest) error {
+	ctx, cancel := c.createContext()
+	defer cancel()
+	return c.client.TerminateWorkflowExecution(ctx, request)
+}
+
 func (c *clientImpl) ListOpenWorkflowExecutions(
 	listRequest *workflow.ListOpenWorkflowExecutionsRequest) (*workflow.ListOpenWorkflowExecutionsResponse, error) {
 	ctx, cancel := c.createContext()

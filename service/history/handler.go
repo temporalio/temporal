@@ -366,6 +366,31 @@ func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 	return resp, nil
 }
 
+func (h *Handler) TerminateWorkflowExecution(ctx thrift.Context,
+	wrappedRequest *hist.TerminateWorkflowExecutionRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryTerminateWorkflowExecutionScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryTerminateWorkflowExecutionScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	terminateRequest := wrappedRequest.GetTerminateRequest()
+	workflowExecution := terminateRequest.GetWorkflowExecution()
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, err1)
+		return err1
+	}
+
+	err2 := engine.TerminateWorkflowExecution(wrappedRequest)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

@@ -264,7 +264,7 @@ Update_History_Loop:
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
 
-		if !isRunning {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning {
 			// Looks like DecisionTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
 			logDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeDecisionTask, request.GetTaskId(), requestID,
@@ -351,7 +351,7 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-		if !isRunning {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning {
 			// Looks like ActivityTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
 			logDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeActivityTask, request.GetTaskId(), requestID,
@@ -474,7 +474,7 @@ Update_History_Loop:
 		}
 
 		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
-		if !isRunning || di.StartedID == emptyEventID {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || di.StartedID == emptyEventID {
 			return &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
@@ -672,7 +672,7 @@ Update_History_Loop:
 		}
 
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-		if !isRunning || ai.StartedID == emptyEventID {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || ai.StartedID == emptyEventID {
 			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
@@ -754,7 +754,7 @@ Update_History_Loop:
 		}
 
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-		if !isRunning || ai.StartedID == emptyEventID {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || ai.StartedID == emptyEventID {
 			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
@@ -837,7 +837,7 @@ Update_History_Loop:
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-		if !isRunning || ai.StartedID == emptyEventID {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || ai.StartedID == emptyEventID {
 			return &workflow.EntityNotExistsError{Message: "Activity task not found."}
 		}
 
@@ -922,7 +922,7 @@ Update_History_Loop:
 		}
 
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
-		if !isRunning || ai.StartedID == emptyEventID {
+		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || ai.StartedID == emptyEventID {
 			e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v",
 				scheduleID, ai, isRunning)
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
@@ -966,6 +966,62 @@ Update_History_Loop:
 	}
 
 	return &workflow.RecordActivityTaskHeartbeatResponse{}, ErrMaxAttemptsExceeded
+}
+
+func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.TerminateWorkflowExecutionRequest) error {
+	domainID := terminateRequest.GetDomainUUID()
+	request := terminateRequest.GetTerminateRequest()
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(request.GetWorkflowExecution().GetWorkflowId()),
+		RunId:      common.StringPtr(request.GetWorkflowExecution().GetRunId()),
+	}
+
+	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	if err0 != nil {
+		return err0
+	}
+
+	context.Lock()
+	defer context.Unlock()
+
+Update_History_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		msBuilder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			return err1
+		}
+
+		if !msBuilder.isWorkflowExecutionRunning() {
+			return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+		}
+
+		if msBuilder.AddWorkflowExecutionTerminatedEvent(request) == nil {
+			return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+		}
+
+		// Create a transfer task to delete workflow execution
+		transferTasks := []persistence.Task{&persistence.DeleteExecutionTask{}}
+
+		// Generate a transaction ID for appending events to history
+		transactionID, err2 := e.shard.GetNextTransferTaskID()
+		if err2 != nil {
+			return err2
+		}
+
+		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
+		// the history and try the operation again.
+		if err := context.updateWorkflowExecution(transferTasks, nil, transactionID); err != nil {
+			if err == ErrConflict {
+				continue Update_History_Loop
+			}
+
+			return err
+		}
+
+		return nil
+	}
+
+	return ErrMaxAttemptsExceeded
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder *mutableStateBuilder,

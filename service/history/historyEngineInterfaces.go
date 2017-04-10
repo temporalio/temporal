@@ -23,6 +23,7 @@ type (
 		RespondActivityTaskCanceled(request *h.RespondActivityTaskCanceledRequest) error
 		RecordActivityTaskHeartbeat(
 			request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		TerminateWorkflowExecution(request *h.TerminateWorkflowExecutionRequest) error
 	}
 
 	// EngineFactory is used to create an instance of sharded history engine

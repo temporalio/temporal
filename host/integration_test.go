@@ -173,6 +173,166 @@ func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 	s.Nil(we1)
 }
 
+func (s *integrationSuite) TestTerminateWorkflow() {
+	id := "interation-terminate-workflow-test"
+	wt := "interation-terminate-workflow-test-type"
+	tl := "interation-terminate-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:                      &workflow.TaskList{Name: &tl},
+					Input:                         buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result_: []byte("Done."),
+			},
+		}}
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	terminateReason := "terminate reason."
+	terminateDetails := []byte("terminate details.")
+	err = s.engine.TerminateWorkflowExecution(&workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+		Reason:  common.StringPtr(terminateReason),
+		Details: terminateDetails,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	executionTerminated := false
+GetHistoryLoop:
+	for i := 0; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_WorkflowExecutionTerminated {
+			s.logger.Warnf("Execution not terminated yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
+		s.Equal(terminateReason, terminateEventAttributes.GetReason())
+		s.Equal(terminateDetails, terminateEventAttributes.GetDetails())
+		s.Equal(identity, terminateEventAttributes.GetIdentity())
+		executionTerminated = true
+		break GetHistoryLoop
+	}
+
+	s.True(executionTerminated)
+
+	newExecutionStarted := false
+StartNewExecutionLoop:
+	for i := 0; i < 10; i++ {
+		request := &workflow.StartWorkflowExecutionRequest{
+			RequestId:                           common.StringPtr(uuid.New()),
+			Domain:                              common.StringPtr(s.domainName),
+			WorkflowId:                          common.StringPtr(id),
+			WorkflowType:                        workflowType,
+			TaskList:                            taskList,
+			Input:                               nil,
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			Identity:                            common.StringPtr(identity),
+		}
+
+		newExecution, err := s.engine.StartWorkflowExecution(request)
+		if err != nil {
+			s.logger.Warnf("Start New Execution failed. Error: %v", err)
+			time.Sleep(100 * time.Millisecond)
+			continue StartNewExecutionLoop
+		}
+
+		s.logger.Infof("New Execution Started with the same ID.  WorkflowID: %v, RunID: %v", id,
+			newExecution.GetRunId())
+		newExecutionStarted = true
+		break StartNewExecutionLoop
+	}
+
+	s.True(newExecutionStarted)
+}
+
 func (s *integrationSuite) TestSequentialWorkflow() {
 	id := "interation-sequential-workflow-test"
 	wt := "interation-sequential-workflow-test-type"
