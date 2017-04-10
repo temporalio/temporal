@@ -21,6 +21,7 @@ type Handler struct {
 	numberOfShards        int
 	shardManager          persistence.ShardManager
 	metadataMgr           persistence.MetadataManager
+	visibilityMgr         persistence.VisibilityManager
 	historyMgr            persistence.HistoryManager
 	executionMgrFactory   persistence.ExecutionManagerFactory
 	matchingServiceClient matching.Client
@@ -37,13 +38,14 @@ var _ EngineFactory = (*Handler)(nil)
 
 // NewHandler creates a thrift handler for the history service
 func NewHandler(sVice service.Service, shardManager persistence.ShardManager, metadataMgr persistence.MetadataManager,
-	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	numberOfShards int) (*Handler, []thrift.TChanServer) {
+	visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
+	executionMgrFactory persistence.ExecutionManagerFactory, numberOfShards int) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:             sVice,
 		shardManager:        shardManager,
 		metadataMgr:         metadataMgr,
 		historyMgr:          historyMgr,
+		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
 		numberOfShards:      numberOfShards,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
@@ -83,7 +85,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.metadataMgr, h.matchingServiceClient)
+	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr, h.matchingServiceClient)
 }
 
 // IsHealthy - Health endpoint.

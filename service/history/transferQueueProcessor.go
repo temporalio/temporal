@@ -25,16 +25,17 @@ const (
 
 type (
 	transferQueueProcessorImpl struct {
-		ackMgr           *ackManager
-		executionManager persistence.ExecutionManager
-		matchingClient   matching.Client
-		cache            *historyCache
-		isStarted        int32
-		isStopped        int32
-		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
-		logger           bark.Logger
-		metricsClient    metrics.Client
+		ackMgr            *ackManager
+		executionManager  persistence.ExecutionManager
+		visibilityManager persistence.VisibilityManager
+		matchingClient    matching.Client
+		cache             *historyCache
+		isStarted         int32
+		isStopped         int32
+		shutdownWG        sync.WaitGroup
+		shutdownCh        chan struct{}
+		logger            bark.Logger
+		metricsClient     metrics.Client
 	}
 
 	// ackManager is created by transferQueueProcessor to keep track of the transfer queue ackLevel for the shard.
@@ -54,15 +55,16 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(shard ShardContext, matching matching.Client,
-	cache *historyCache) transferQueueProcessor {
+func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.VisibilityManager,
+	matching matching.Client, cache *historyCache) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
 	processor := &transferQueueProcessorImpl{
-		executionManager: executionManager,
-		matchingClient:   matching,
-		cache:            cache,
-		shutdownCh:       make(chan struct{}),
+		executionManager:  executionManager,
+		matchingClient:    matching,
+		visibilityManager: visibilityMgr,
+		cache:             cache,
+		shutdownCh:        make(chan struct{}),
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueTransferQueueComponent,
 		}),
@@ -206,24 +208,30 @@ ProcessRetryLoop:
 						Name: &task.TaskList,
 					}
 					err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
-						DomainUUID: common.StringPtr(targetDomainID),
+						DomainUUID:       common.StringPtr(targetDomainID),
 						SourceDomainUUID: common.StringPtr(domainID),
-						Execution:  &execution,
-						TaskList:   taskList,
-						ScheduleId: &task.ScheduleID,
+						Execution:        &execution,
+						TaskList:         taskList,
+						ScheduleId:       &task.ScheduleID,
 					})
 				}
 			case persistence.TransferTaskTypeDecisionTask:
 				{
-					taskList := &workflow.TaskList{
-						Name: &task.TaskList,
+					if task.ScheduleID == firstEventID+1 {
+						err = t.recordWorkflowExecutionStarted(execution, task)
 					}
-					err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
-						DomainUUID: common.StringPtr(domainID),
-						Execution:  &execution,
-						TaskList:   taskList,
-						ScheduleId: &task.ScheduleID,
-					})
+
+					if err == nil {
+						taskList := &workflow.TaskList{
+							Name: &task.TaskList,
+						}
+						err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
+							DomainUUID: common.StringPtr(domainID),
+							Execution:  &execution,
+							TaskList:   taskList,
+							ScheduleId: &task.ScheduleID,
+						})
+					}
 				}
 			case persistence.TransferTaskTypeDeleteExecution:
 				{
@@ -231,10 +239,20 @@ ProcessRetryLoop:
 
 					// TODO: We need to keep completed executions for auditing purpose.  Need a design for keeping them around
 					// for visibility purpose.
+					var mb *mutableStateBuilder
 					context.Lock()
-					_, err = context.loadWorkflowExecution()
+					mb, err = context.loadWorkflowExecution()
 					if err == nil {
-						err = context.deleteWorkflowExecution()
+						err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
+							DomainUUID:       task.DomainID,
+							Execution:        execution,
+							WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
+							StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
+							CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
+						})
+						if err == nil {
+							err = context.deleteWorkflowExecution()
+						}
 					}
 					context.Unlock()
 				}
@@ -254,6 +272,30 @@ ProcessRetryLoop:
 
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
 	t.logger.Fatalf("Retry count exceeded for transfer taskID: %v", task.TaskID)
+}
+
+func (t *transferQueueProcessorImpl) recordWorkflowExecutionStarted(
+	execution workflow.WorkflowExecution, task *persistence.TransferTaskInfo) error {
+	context, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	if err != nil {
+		return err
+	}
+
+	context.Lock()
+	defer context.Unlock()
+	mb, err := context.loadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+
+	err = t.visibilityManager.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       task.DomainID,
+		Execution:        execution,
+		WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
+		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
+	})
+
+	return err
 }
 
 func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error) {

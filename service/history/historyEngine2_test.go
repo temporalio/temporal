@@ -15,9 +15,9 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/cache"
 )
 
 type (
@@ -29,6 +29,7 @@ type (
 		historyEngine      *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
 		mockMetadataMgr    *mocks.MetadataManager
+		mockVisibilityMgr  *mocks.VisibilityManager
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 		mockShardManager   *mocks.ShardManager
@@ -61,6 +62,7 @@ func (s *engine2Suite) SetupTest() {
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockShardManager = &mocks.ShardManager{}
@@ -80,7 +82,7 @@ func (s *engine2Suite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, historyCache)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
@@ -101,6 +103,7 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {

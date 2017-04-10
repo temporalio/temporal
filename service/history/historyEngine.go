@@ -52,12 +52,12 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.MetadataManager,
-	matching matching.Client) Engine {
+	visibilityMgr persistence.VisibilityManager, matching matching.Client) Engine {
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard, logger)
-	txProcessor := newTransferQueueProcessor(shard, matching, historyCache)
+	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyCache)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		metadataMgr:      metadataMgr,

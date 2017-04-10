@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/.gen/go/history"
 )
 
 type (
@@ -30,6 +30,7 @@ type (
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
 		mockMetadataMgr    *mocks.MetadataManager
+		mockVisibilityMgr  *mocks.VisibilityManager
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 		mockShardManager   *mocks.ShardManager
@@ -63,6 +64,7 @@ func (s *engineSuite) SetupTest() {
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockShardManager = &mocks.ShardManager{}
@@ -82,7 +84,7 @@ func (s *engineSuite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, historyCache)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		executionManager: s.mockExecutionMgr,
@@ -103,6 +105,7 @@ func (s *engineSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
@@ -321,10 +324,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	decisions := []*workflow.Decision{{
 		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:                    common.StringPtr(activity3ID),
-			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
-			TaskList:                      &workflow.TaskList{Name: &tl},
-			Input:                         activity3Input,
+			ActivityId:   common.StringPtr(activity3ID),
+			ActivityType: &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
+			TaskList:     &workflow.TaskList{Name: &tl},
+			Input:        activity3Input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -405,10 +408,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	decisions := []*workflow.Decision{{
 		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:                    common.StringPtr("activity1"),
-			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
-			TaskList:                      &workflow.TaskList{Name: &tl},
-			Input:                         input,
+			ActivityId:   common.StringPtr("activity1"),
+			ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+			TaskList:     &workflow.TaskList{Name: &tl},
+			Input:        input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -611,10 +614,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	decisions := []*workflow.Decision{{
 		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:                    common.StringPtr("activity1"),
-			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
-			TaskList:                      &workflow.TaskList{Name: &tl},
-			Input:                         input,
+			ActivityId:   common.StringPtr("activity1"),
+			ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+			TaskList:     &workflow.TaskList{Name: &tl},
+			Input:        input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -2200,10 +2203,10 @@ func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExec
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
 	e := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &workflow.StartWorkflowExecutionRequest{
-		WorkflowId:                          common.StringPtr(workflowExecution.GetWorkflowId()),
-		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                               input,
+		WorkflowId:   common.StringPtr(workflowExecution.GetWorkflowId()),
+		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:        input,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
@@ -2217,7 +2220,7 @@ func addDecisionTaskScheduledEvent(builder *mutableStateBuilder) (*workflow.Hist
 }
 
 func addDecisionTaskStartedEvent(builder *mutableStateBuilder, scheduleID int64, taskList,
-identity string) *workflow.HistoryEvent {
+	identity string) *workflow.HistoryEvent {
 	return addDecisionTaskStartedEventWithRequestID(builder, scheduleID, uuid.New(), taskList, identity)
 }
 
@@ -2242,13 +2245,13 @@ func addDecisionTaskCompletedEvent(builder *mutableStateBuilder, scheduleID, sta
 }
 
 func addActivityTaskScheduledEvent(builder *mutableStateBuilder, decisionCompletedID int64, activityID, activityType,
-taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	return builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
-		ActivityId:                    common.StringPtr(activityID),
-		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
-		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                         input,
+		ActivityId:   common.StringPtr(activityID),
+		ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityType)},
+		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:        input,
 		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
 		HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),

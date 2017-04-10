@@ -29,6 +29,7 @@ type (
 		mockHistoryEngine  *historyEngineImpl
 		mockMatchingClient *mocks.MatchingClient
 		mockMetadataMgr    *mocks.MetadataManager
+		mockVisibilityMgr  *mocks.VisibilityManager
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 	}
@@ -71,7 +72,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 	historyCache := newHistoryCache(shard, s.logger)
 	historyCache.disabled = true
-	txProcessor := newTransferQueueProcessor(shard, &mocks.MatchingClient{}, historyCache)
+	txProcessor := newTransferQueueProcessor(shard, s.mockVisibilityMgr, &mocks.MatchingClient{}, historyCache)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       s.HistoryMgr,
@@ -91,6 +92,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockShardManager = &mocks.ShardManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.shardClosedCh = make(chan int, 100)
 
 	mockShard := &shardContextImpl{
@@ -106,7 +108,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockMatchingClient, historyCache)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		historyMgr:       s.mockHistoryMgr,
@@ -130,10 +132,11 @@ func (s *timerQueueProcessorSuite) TearDownTest() {
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we workflow.WorkflowExecution, tl,
-identity string, timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
+	identity string, timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
 
 	// Generate first decision task event.
 	logger := bark.NewLoggerFromLogrus(log.New())
@@ -215,7 +218,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("multiple-timer-test"),
-		RunId:                                                    common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "multiple-timer-queue"
 	identity := "testIdentity"

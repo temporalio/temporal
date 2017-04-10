@@ -1065,6 +1065,109 @@ func (s *integrationSuite) TestActivityCancelation() {
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", we.GetRunId())
 }
 
+func (s *integrationSuite) TestVisibility() {
+	startTime := time.Now().UnixNano()
+
+	// Start 2 workflow executions
+	id1 := "integration-visibility-test1"
+	id2 := "integration-visibility-test2"
+	wt := "integration-visibility-test-type"
+	tl := "integration-visibility-test-tasklist"
+	identity := "worker1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id1),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	_, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	request = &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id2),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	_, err1 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err1)
+
+	// Now complete one of the executions
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		return []byte{}, []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result_: []byte("Done."),
+			},
+		}}
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: nil,
+		logger:          s.logger,
+	}
+
+	err2 := poller.pollAndProcessDecisionTask(false, false)
+	s.Nil(err2)
+
+	startFilter := workflow.NewStartTimeFilter()
+	startFilter.EarliestTime = common.Int64Ptr(startTime)
+	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
+
+	closedCount := 0
+
+ListClosedLoop:
+	for i := 0; i < 10; i++ {
+		resp, err3 := s.engine.ListClosedWorkflowExecutions(&workflow.ListClosedWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: startFilter,
+		})
+		s.Nil(err3)
+		closedCount = len(resp.Executions)
+		if closedCount == 0 {
+			s.logger.Info("Closed WorkflowExecution is not yet visibile")
+			time.Sleep(100 * time.Millisecond)
+			continue ListClosedLoop
+		}
+		break ListClosedLoop
+	}
+	s.Equal(1, closedCount)
+
+	resp, err4 := s.engine.ListOpenWorkflowExecutions(&workflow.ListOpenWorkflowExecutionsRequest{
+		Domain:          common.StringPtr(s.domainName),
+		MaximumPageSize: common.Int32Ptr(100),
+		StartTimeFilter: startFilter,
+	})
+	s.Nil(err4)
+	s.Equal(1, len(resp.Executions))
+}
+
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {

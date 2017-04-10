@@ -66,6 +66,7 @@ func NewCadence(metadataMgr persistence.MetadataManager, shardMgr persistence.Sh
 		numberOfHistoryHosts:  numberOfHistoryHosts,
 		logger:                logger,
 		metadataMgr:           metadataMgr,
+		visibilityMgr:         visibilityMgr,
 		shardMgr:              shardMgr,
 		historyMgr:            historyMgr,
 		taskMgr:               taskMgr,
@@ -82,7 +83,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(c.logger, c.shardMgr, c.metadataMgr, c.historyMgr, c.executionMgrFactory, rpHosts, &startWG)
+	go c.startHistory(c.logger, c.shardMgr, c.metadataMgr, c.visibilityMgr, c.historyMgr, c.executionMgrFactory, rpHosts, &startWG)
 	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
 	startWG.Wait()
 
@@ -142,7 +143,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 }
 
 func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
-	metadataMgr persistence.MetadataManager, historyMgr persistence.HistoryManager,
+	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
 	for _, hostport := range c.HistoryServiceAddress() {
 		tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
@@ -153,7 +154,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		service := service.New(common.HistoryServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
 		var thriftServices []thrift.TChanServer
 		var handler *history.Handler
-		handler, thriftServices = history.NewHandler(service, shardMgr, metadataMgr, historyMgr, executionMgrFactory,
+		handler, thriftServices = history.NewHandler(service, shardMgr, metadataMgr, visibilityMgr, historyMgr, executionMgrFactory,
 			c.numberOfHistoryShards)
 		handler.Start(thriftServices)
 		c.historyHandlers = append(c.historyHandlers, handler)
