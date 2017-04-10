@@ -235,7 +235,7 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 		}
 	}
 
-	return nil
+	return err0
 }
 
 func (s *shardContextImpl) GetLogger() bark.Logger {

@@ -106,6 +106,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		}
 
 		if err0 := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+			DomainID:      c.domainID,
 			Execution:     c.workflowExecution,
 			TransactionID: transactionID,
 			FirstEventID:  firstEvent.GetEventId(),
