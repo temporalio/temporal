@@ -652,3 +652,14 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	e.executionInfo.State = persistence.WorkflowStateCompleted
 	return e.hBuilder.AddWorkflowExecutionTerminatedEvent(request)
 }
+
+func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
+	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted {
+		logInvalidHistoryActionEvent(e.logger, tagValueActionWorkflowSignaled, e.GetNextEventID(), fmt.Sprintf(
+			"{State: %v}", e.executionInfo.State))
+		return nil
+	}
+
+	return e.hBuilder.AddWorkflowExecutionSignaledEvent(request)
+}

@@ -33,7 +33,7 @@ const (
 
 const (
 	// Row types for table executions
-	rowTypeShard = iota
+	rowTypeShard        = iota
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
@@ -41,7 +41,7 @@ const (
 
 const (
 	// Row types for table tasks
-	rowTypeTask = iota
+	rowTypeTask     = iota
 	rowTypeTaskList
 )
 
@@ -183,6 +183,15 @@ const (
 		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, activity_map, timer_map ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ?`
+
+	templateGetCurrentExecutionQuery = `SELECT current_run_id ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -801,6 +810,33 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 	return nil
 }
 
+func (d *cassandraPersistence) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse,
+	error) {
+	query := d.session.Query(templateGetCurrentExecutionQuery,
+		d.shardID,
+		rowTypeExecution,
+		request.DomainID,
+		request.WorkflowID,
+		permanentRunID,
+		rowTypeExecutionTaskID)
+
+	var currentRunID string
+	if err := query.Scan(&currentRunID); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, &workflow.EntityNotExistsError{
+				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v",
+					request.WorkflowID),
+			}
+		}
+
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err),
+		}
+	}
+
+	return &GetCurrentExecutionResponse{RunID: currentRunID}, nil
+}
+
 func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could loose task
@@ -1153,7 +1189,7 @@ PopulateTasks:
 }
 
 func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, domainID, workflowID,
-	runID string, cqlNowTimestamp int64) {
+runID string, cqlNowTimestamp int64) {
 	targetDomainID := domainID
 	for _, task := range transferTasks {
 		var taskList string

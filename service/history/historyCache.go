@@ -4,10 +4,12 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common"
 )
 
 const (
@@ -19,10 +21,10 @@ const (
 type (
 	historyCache struct {
 		cache.Cache
-		shard                 ShardContext
-		executionManager      persistence.ExecutionManager
-		disabled              bool
-		logger                bark.Logger
+		shard            ShardContext
+		executionManager persistence.ExecutionManager
+		disabled         bool
+		logger           bark.Logger
 	}
 )
 
@@ -38,9 +40,9 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 	opts.TTL = historyCacheTTL
 
 	return &historyCache{
-		Cache:                 cache.New(historyCacheMaxSize, opts),
-		shard:                 shard,
-		executionManager:      shard.GetExecutionManager(),
+		Cache:            cache.New(historyCacheMaxSize, opts),
+		shard:            shard,
+		executionManager: shard.GetExecutionManager(),
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueHistoryCacheComponent,
 		}),
@@ -49,6 +51,24 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 
 func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	execution workflow.WorkflowExecution) (*workflowExecutionContext, error) {
+	if execution.GetWorkflowId() == "" {
+		return nil, &workflow.InternalServiceError{Message: "Can't load workflow execution.  WorkflowId not set."}
+	}
+
+	// RunID is not provided, lets try to retrieve the RunID for current active execution
+	if execution.GetRunId() == "" {
+		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
+			DomainID:   domainID,
+			WorkflowID: execution.GetWorkflowId(),
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		execution.RunId = common.StringPtr(response.RunID)
+	}
+
 	// Test hook for disabling the cache
 	if c.disabled {
 		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), nil
@@ -65,4 +85,22 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	context = c.PutIfNotExist(key, context).(*workflowExecutionContext)
 
 	return context, nil
+}
+
+func (c *historyCache) getCurrentExecutionWithRetry(
+	request *persistence.GetCurrentExecutionRequest) (*persistence.GetCurrentExecutionResponse, error) {
+	var response *persistence.GetCurrentExecutionResponse
+	op := func() error {
+		var err error
+		response, err = c.executionManager.GetCurrentExecution(request)
+
+		return err
+	}
+
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }

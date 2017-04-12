@@ -158,6 +158,20 @@ func (_m *HistoryClient) RespondDecisionTaskCompleted(ctx thrift.Context, comple
 	return r0
 }
 
+// SignalWorkflowExecution provides a mock function with given fields: ctx, signalRequest
+func (_m *HistoryClient) SignalWorkflowExecution(ctx thrift.Context, signalRequest *history.SignalWorkflowExecutionRequest) error {
+	ret := _m.Called(ctx, signalRequest)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(thrift.Context, *history.SignalWorkflowExecutionRequest) error); ok {
+		r0 = rf(ctx, signalRequest)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // StartWorkflowExecution provides a mock function with given fields: ctx, startRequest
 func (_m *HistoryClient) StartWorkflowExecution(ctx thrift.Context, startRequest *history.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
 	ret := _m.Called(ctx, startRequest)

@@ -26,6 +26,7 @@ type TChanHistoryService interface {
 	RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *RespondActivityTaskCompletedRequest) error
 	RespondActivityTaskFailed(ctx thrift.Context, failRequest *RespondActivityTaskFailedRequest) error
 	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *RespondDecisionTaskCompletedRequest) error
+	SignalWorkflowExecution(ctx thrift.Context, signalRequest *SignalWorkflowExecutionRequest) error
 	StartWorkflowExecution(ctx thrift.Context, startRequest *StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
 	TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *TerminateWorkflowExecutionRequest) error
 }
@@ -245,6 +246,30 @@ func (c *tchanHistoryServiceClient) RespondDecisionTaskCompleted(ctx thrift.Cont
 	return err
 }
 
+func (c *tchanHistoryServiceClient) SignalWorkflowExecution(ctx thrift.Context, signalRequest *SignalWorkflowExecutionRequest) error {
+	var resp HistoryServiceSignalWorkflowExecutionResult
+	args := HistoryServiceSignalWorkflowExecutionArgs{
+		SignalRequest: signalRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "SignalWorkflowExecution", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		case resp.ShardOwnershipLostError != nil:
+			err = resp.ShardOwnershipLostError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for SignalWorkflowExecution")
+		}
+	}
+
+	return err
+}
+
 func (c *tchanHistoryServiceClient) StartWorkflowExecution(ctx thrift.Context, startRequest *StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
 	var resp HistoryServiceStartWorkflowExecutionResult
 	args := HistoryServiceStartWorkflowExecutionArgs{
@@ -319,6 +344,7 @@ func (s *tchanHistoryServiceServer) Methods() []string {
 		"RespondActivityTaskCompleted",
 		"RespondActivityTaskFailed",
 		"RespondDecisionTaskCompleted",
+		"SignalWorkflowExecution",
 		"StartWorkflowExecution",
 		"TerminateWorkflowExecution",
 	}
@@ -342,6 +368,8 @@ func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string
 		return s.handleRespondActivityTaskFailed(ctx, protocol)
 	case "RespondDecisionTaskCompleted":
 		return s.handleRespondDecisionTaskCompleted(ctx, protocol)
+	case "SignalWorkflowExecution":
+		return s.handleSignalWorkflowExecution(ctx, protocol)
 	case "StartWorkflowExecution":
 		return s.handleStartWorkflowExecution(ctx, protocol)
 	case "TerminateWorkflowExecution":
@@ -670,6 +698,48 @@ func (s *tchanHistoryServiceServer) handleRespondDecisionTaskCompleted(ctx thrif
 
 	err :=
 		s.handler.RespondDecisionTaskCompleted(ctx, req.CompleteRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		case *ShardOwnershipLostError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for shardOwnershipLostError returned non-nil error type *ShardOwnershipLostError but nil value")
+			}
+			res.ShardOwnershipLostError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanHistoryServiceServer) handleSignalWorkflowExecution(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req HistoryServiceSignalWorkflowExecutionArgs
+	var res HistoryServiceSignalWorkflowExecutionResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	err :=
+		s.handler.SignalWorkflowExecution(ctx, req.SignalRequest)
 
 	if err != nil {
 		switch v := err.(type) {

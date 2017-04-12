@@ -968,6 +968,28 @@ Update_History_Loop:
 	return &workflow.RecordActivityTaskHeartbeatResponse{}, ErrMaxAttemptsExceeded
 }
 
+func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkflowExecutionRequest) error {
+	domainID := signalRequest.GetDomainUUID()
+	request := signalRequest.GetSignalRequest()
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(request.GetWorkflowExecution().GetWorkflowId()),
+		RunId:      common.StringPtr(request.GetWorkflowExecution().GetRunId()),
+	}
+
+	return e.updateWorkflowExecution(domainID, execution, false, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			if msBuilder.AddWorkflowExecutionSignaled(request) == nil {
+				return &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+			}
+
+			return nil
+		})
+}
+
 func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.TerminateWorkflowExecutionRequest) error {
 	domainID := terminateRequest.GetDomainUUID()
 	request := terminateRequest.GetTerminateRequest()
@@ -975,6 +997,24 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.Termi
 		WorkflowId: common.StringPtr(request.GetWorkflowExecution().GetWorkflowId()),
 		RunId:      common.StringPtr(request.GetWorkflowExecution().GetRunId()),
 	}
+
+	return e.updateWorkflowExecution(domainID, execution, true, false,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			if msBuilder.AddWorkflowExecutionTerminatedEvent(request) == nil {
+				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+			}
+
+			return nil
+		})
+}
+
+func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution workflow.WorkflowExecution,
+	createDeletionTask, createDecisionTask bool,
+	action func(builder *mutableStateBuilder) error) error {
 
 	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
@@ -991,16 +1031,27 @@ Update_History_Loop:
 			return err1
 		}
 
-		if !msBuilder.isWorkflowExecutionRunning() {
-			return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+		var transferTasks []persistence.Task
+		if err := action(msBuilder); err != nil {
+			return err
 		}
 
-		if msBuilder.AddWorkflowExecutionTerminatedEvent(request) == nil {
-			return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+		if createDeletionTask {
+			// Create a transfer task to delete workflow execution
+			transferTasks = append(transferTasks, &persistence.DeleteExecutionTask{})
 		}
 
-		// Create a transfer task to delete workflow execution
-		transferTasks := []persistence.Task{&persistence.DeleteExecutionTask{}}
+		if createDecisionTask {
+			// Create a transfer task to schedule a decision task
+			if !msBuilder.HasPendingDecisionTask() {
+				newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
+				transferTasks = append(transferTasks, &persistence.DecisionTask{
+					DomainID:   domainID,
+					TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
+					ScheduleID: newDecisionEvent.GetEventId(),
+				})
+			}
+		}
 
 		// Generate a transaction ID for appending events to history
 		transactionID, err2 := e.shard.GetNextTransferTaskID()

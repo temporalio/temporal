@@ -162,6 +162,20 @@ func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *De
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
+	p.m3Client.IncCounter(metrics.GetCurrentExecutionScope, metrics.PersistenceRequests)
+
+	sw := p.m3Client.StartTimer(metrics.GetCurrentExecutionScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetCurrentExecution(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.GetCurrentExecutionScope, err)
+	}
+
+	return response, err
+}
+
 func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	p.m3Client.IncCounter(metrics.GetTransferTasksScope, metrics.PersistenceRequests)
 

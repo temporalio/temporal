@@ -76,6 +76,11 @@ struct RecordDecisionTaskStartedResponse {
   40: optional shared.History history
 }
 
+struct SignalWorkflowExecutionRequest {
+  10: optional string domainUUID
+  20: optional shared.SignalWorkflowExecutionRequest signalRequest
+}
+
 struct TerminateWorkflowExecutionRequest {
   10: optional string domainUUID
   20: optional shared.TerminateWorkflowExecutionRequest terminateRequest
@@ -208,6 +213,18 @@ service HistoryService {
   * anymore due to activity timeout.
   **/
   void RespondActivityTaskCanceled(1: RespondActivityTaskCanceledRequest canceledRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+  **/
+  void SignalWorkflowExecution(1: SignalWorkflowExecutionRequest signalRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

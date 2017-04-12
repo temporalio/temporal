@@ -304,6 +304,43 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	s.Nil(err5, "No error expected.")
 }
 
+func (s *cassandraPersistenceSuite) TestGetCurrentWorkflow() {
+	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-current-workflow-test"),
+		RunId:      common.StringPtr("6cae4054-6ba7-46d3-8755-e3c2db6f74ea"),
+	}
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	runID0, err1 := s.GetCurrentWorkflow(domainID, workflowExecution.GetWorkflowId())
+	s.Nil(err1, "No error expected.")
+	s.Equal(workflowExecution.GetRunId(), runID0)
+
+	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2)
+
+	err3 := s.DeleteWorkflowExecution(info0.ExecutionInfo)
+	s.Nil(err3)
+
+	_, err4 := s.GetCurrentWorkflow(domainID, workflowExecution.GetWorkflowId())
+	s.NotNil(err4, "No error expected.")
+	s.IsType(&gen.EntityNotExistsError{}, err4)
+
+	workflowExecution2 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-current-workflow-test"),
+		RunId:      common.StringPtr("c3ff4bc6-de18-4643-83b2-037a33f45322"),
+	}
+	task1, err5 := s.CreateWorkflowExecution(domainID, workflowExecution2, "queue1", "wType", 13, nil, 3, 0, 2, nil)
+	s.Nil(err5, "No error expected.")
+	s.NotEmpty(task1, "Expected non empty task identifier.")
+
+	runID1, err6 := s.GetCurrentWorkflow(domainID, workflowExecution2.GetWorkflowId())
+	s.Nil(err6, "No error expected.")
+	s.Equal(workflowExecution2.GetRunId(), runID1)
+}
+
 func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	domainID := "1eda632b-dde5-4cb2-94fd-5a6f04e6dfcd"
 	workflowExecution := gen.WorkflowExecution{

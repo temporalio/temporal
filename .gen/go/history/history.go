@@ -2137,6 +2137,141 @@ func (p *RecordDecisionTaskStartedResponse) String() string {
 
 // Attributes:
 //  - DomainUUID
+//  - SignalRequest
+type SignalWorkflowExecutionRequest struct {
+  // unused fields # 1 to 9
+  DomainUUID *string `thrift:"domainUUID,10" db:"domainUUID" json:"domainUUID,omitempty"`
+  // unused fields # 11 to 19
+  SignalRequest *shared.SignalWorkflowExecutionRequest `thrift:"signalRequest,20" db:"signalRequest" json:"signalRequest,omitempty"`
+}
+
+func NewSignalWorkflowExecutionRequest() *SignalWorkflowExecutionRequest {
+  return &SignalWorkflowExecutionRequest{}
+}
+
+var SignalWorkflowExecutionRequest_DomainUUID_DEFAULT string
+func (p *SignalWorkflowExecutionRequest) GetDomainUUID() string {
+  if !p.IsSetDomainUUID() {
+    return SignalWorkflowExecutionRequest_DomainUUID_DEFAULT
+  }
+return *p.DomainUUID
+}
+var SignalWorkflowExecutionRequest_SignalRequest_DEFAULT *shared.SignalWorkflowExecutionRequest
+func (p *SignalWorkflowExecutionRequest) GetSignalRequest() *shared.SignalWorkflowExecutionRequest {
+  if !p.IsSetSignalRequest() {
+    return SignalWorkflowExecutionRequest_SignalRequest_DEFAULT
+  }
+return p.SignalRequest
+}
+func (p *SignalWorkflowExecutionRequest) IsSetDomainUUID() bool {
+  return p.DomainUUID != nil
+}
+
+func (p *SignalWorkflowExecutionRequest) IsSetSignalRequest() bool {
+  return p.SignalRequest != nil
+}
+
+func (p *SignalWorkflowExecutionRequest) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *SignalWorkflowExecutionRequest)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.DomainUUID = &v
+}
+  return nil
+}
+
+func (p *SignalWorkflowExecutionRequest)  ReadField20(iprot thrift.TProtocol) error {
+  p.SignalRequest = &shared.SignalWorkflowExecutionRequest{}
+  if err := p.SignalRequest.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.SignalRequest), err)
+  }
+  return nil
+}
+
+func (p *SignalWorkflowExecutionRequest) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("SignalWorkflowExecutionRequest"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *SignalWorkflowExecutionRequest) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDomainUUID() {
+    if err := oprot.WriteFieldBegin("domainUUID", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:domainUUID: ", p), err) }
+    if err := oprot.WriteString(string(*p.DomainUUID)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.domainUUID (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:domainUUID: ", p), err) }
+  }
+  return err
+}
+
+func (p *SignalWorkflowExecutionRequest) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetSignalRequest() {
+    if err := oprot.WriteFieldBegin("signalRequest", thrift.STRUCT, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:signalRequest: ", p), err) }
+    if err := p.SignalRequest.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.SignalRequest), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:signalRequest: ", p), err) }
+  }
+  return err
+}
+
+func (p *SignalWorkflowExecutionRequest) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("SignalWorkflowExecutionRequest(%+v)", *p)
+}
+
+// Attributes:
+//  - DomainUUID
 //  - TerminateRequest
 type TerminateWorkflowExecutionRequest struct {
   // unused fields # 1 to 9
@@ -2356,6 +2491,13 @@ type HistoryService interface {  //HistoryService provides API to start a new lo
   // Parameters:
   //  - CanceledRequest
   RespondActivityTaskCanceled(canceledRequest *RespondActivityTaskCanceledRequest) (err error)
+  // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+  // WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+  // 
+  // 
+  // Parameters:
+  //  - SignalRequest
+  SignalWorkflowExecution(signalRequest *SignalWorkflowExecutionRequest) (err error)
   // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
   // in the history and immediately terminating the execution instance.
   // 
@@ -3252,6 +3394,98 @@ func (p *HistoryServiceClient) recvRespondActivityTaskCanceled() (err error) {
   return
 }
 
+// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+// 
+// 
+// Parameters:
+//  - SignalRequest
+func (p *HistoryServiceClient) SignalWorkflowExecution(signalRequest *SignalWorkflowExecutionRequest) (err error) {
+  if err = p.sendSignalWorkflowExecution(signalRequest); err != nil { return }
+  return p.recvSignalWorkflowExecution()
+}
+
+func (p *HistoryServiceClient) sendSignalWorkflowExecution(signalRequest *SignalWorkflowExecutionRequest)(err error) {
+  oprot := p.OutputProtocol
+  if oprot == nil {
+    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.OutputProtocol = oprot
+  }
+  p.SeqId++
+  if err = oprot.WriteMessageBegin("SignalWorkflowExecution", thrift.CALL, p.SeqId); err != nil {
+      return
+  }
+  args := HistoryServiceSignalWorkflowExecutionArgs{
+  SignalRequest : signalRequest,
+  }
+  if err = args.Write(oprot); err != nil {
+      return
+  }
+  if err = oprot.WriteMessageEnd(); err != nil {
+      return
+  }
+  return oprot.Flush()
+}
+
+
+func (p *HistoryServiceClient) recvSignalWorkflowExecution() (err error) {
+  iprot := p.InputProtocol
+  if iprot == nil {
+    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
+    p.InputProtocol = iprot
+  }
+  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
+  if err != nil {
+    return
+  }
+  if method != "SignalWorkflowExecution" {
+    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "SignalWorkflowExecution failed: wrong method name")
+    return
+  }
+  if p.SeqId != seqId {
+    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "SignalWorkflowExecution failed: out of sequence response")
+    return
+  }
+  if mTypeId == thrift.EXCEPTION {
+    error18 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
+    var error19 error
+    error19, err = error18.Read(iprot)
+    if err != nil {
+      return
+    }
+    if err = iprot.ReadMessageEnd(); err != nil {
+      return
+    }
+    err = error19
+    return
+  }
+  if mTypeId != thrift.REPLY {
+    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "SignalWorkflowExecution failed: invalid message type")
+    return
+  }
+  result := HistoryServiceSignalWorkflowExecutionResult{}
+  if err = result.Read(iprot); err != nil {
+    return
+  }
+  if err = iprot.ReadMessageEnd(); err != nil {
+    return
+  }
+  if result.BadRequestError != nil {
+    err = result.BadRequestError
+    return 
+  } else   if result.InternalServiceError != nil {
+    err = result.InternalServiceError
+    return 
+  } else   if result.EntityNotExistError != nil {
+    err = result.EntityNotExistError
+    return 
+  } else   if result.ShardOwnershipLostError != nil {
+    err = result.ShardOwnershipLostError
+    return 
+  }
+  return
+}
+
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
 // 
@@ -3305,16 +3539,16 @@ func (p *HistoryServiceClient) recvTerminateWorkflowExecution() (err error) {
     return
   }
   if mTypeId == thrift.EXCEPTION {
-    error18 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error19 error
-    error19, err = error18.Read(iprot)
+    error20 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
+    var error21 error
+    error21, err = error20.Read(iprot)
     if err != nil {
       return
     }
     if err = iprot.ReadMessageEnd(); err != nil {
       return
     }
-    err = error19
+    err = error21
     return
   }
   if mTypeId != thrift.REPLY {
@@ -3365,18 +3599,19 @@ func (p *HistoryServiceProcessor) ProcessorMap() map[string]thrift.TProcessorFun
 
 func NewHistoryServiceProcessor(handler HistoryService) *HistoryServiceProcessor {
 
-  self20 := &HistoryServiceProcessor{handler:handler, processorMap:make(map[string]thrift.TProcessorFunction)}
-  self20.processorMap["StartWorkflowExecution"] = &historyServiceProcessorStartWorkflowExecution{handler:handler}
-  self20.processorMap["GetWorkflowExecutionHistory"] = &historyServiceProcessorGetWorkflowExecutionHistory{handler:handler}
-  self20.processorMap["RecordDecisionTaskStarted"] = &historyServiceProcessorRecordDecisionTaskStarted{handler:handler}
-  self20.processorMap["RecordActivityTaskStarted"] = &historyServiceProcessorRecordActivityTaskStarted{handler:handler}
-  self20.processorMap["RespondDecisionTaskCompleted"] = &historyServiceProcessorRespondDecisionTaskCompleted{handler:handler}
-  self20.processorMap["RecordActivityTaskHeartbeat"] = &historyServiceProcessorRecordActivityTaskHeartbeat{handler:handler}
-  self20.processorMap["RespondActivityTaskCompleted"] = &historyServiceProcessorRespondActivityTaskCompleted{handler:handler}
-  self20.processorMap["RespondActivityTaskFailed"] = &historyServiceProcessorRespondActivityTaskFailed{handler:handler}
-  self20.processorMap["RespondActivityTaskCanceled"] = &historyServiceProcessorRespondActivityTaskCanceled{handler:handler}
-  self20.processorMap["TerminateWorkflowExecution"] = &historyServiceProcessorTerminateWorkflowExecution{handler:handler}
-return self20
+  self22 := &HistoryServiceProcessor{handler:handler, processorMap:make(map[string]thrift.TProcessorFunction)}
+  self22.processorMap["StartWorkflowExecution"] = &historyServiceProcessorStartWorkflowExecution{handler:handler}
+  self22.processorMap["GetWorkflowExecutionHistory"] = &historyServiceProcessorGetWorkflowExecutionHistory{handler:handler}
+  self22.processorMap["RecordDecisionTaskStarted"] = &historyServiceProcessorRecordDecisionTaskStarted{handler:handler}
+  self22.processorMap["RecordActivityTaskStarted"] = &historyServiceProcessorRecordActivityTaskStarted{handler:handler}
+  self22.processorMap["RespondDecisionTaskCompleted"] = &historyServiceProcessorRespondDecisionTaskCompleted{handler:handler}
+  self22.processorMap["RecordActivityTaskHeartbeat"] = &historyServiceProcessorRecordActivityTaskHeartbeat{handler:handler}
+  self22.processorMap["RespondActivityTaskCompleted"] = &historyServiceProcessorRespondActivityTaskCompleted{handler:handler}
+  self22.processorMap["RespondActivityTaskFailed"] = &historyServiceProcessorRespondActivityTaskFailed{handler:handler}
+  self22.processorMap["RespondActivityTaskCanceled"] = &historyServiceProcessorRespondActivityTaskCanceled{handler:handler}
+  self22.processorMap["SignalWorkflowExecution"] = &historyServiceProcessorSignalWorkflowExecution{handler:handler}
+  self22.processorMap["TerminateWorkflowExecution"] = &historyServiceProcessorTerminateWorkflowExecution{handler:handler}
+return self22
 }
 
 func (p *HistoryServiceProcessor) Process(iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
@@ -3387,12 +3622,12 @@ func (p *HistoryServiceProcessor) Process(iprot, oprot thrift.TProtocol) (succes
   }
   iprot.Skip(thrift.STRUCT)
   iprot.ReadMessageEnd()
-  x21 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function " + name)
+  x23 := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function " + name)
   oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
-  x21.Write(oprot)
+  x23.Write(oprot)
   oprot.WriteMessageEnd()
   oprot.Flush()
-  return false, x21
+  return false, x23
 
 }
 
@@ -3902,6 +4137,62 @@ func (p *historyServiceProcessorRespondActivityTaskCanceled) Process(seqId int32
   }
   }
   if err2 = oprot.WriteMessageBegin("RespondActivityTaskCanceled", thrift.REPLY, seqId); err2 != nil {
+    err = err2
+  }
+  if err2 = result.Write(oprot); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err2 = oprot.Flush(); err == nil && err2 != nil {
+    err = err2
+  }
+  if err != nil {
+    return
+  }
+  return true, err
+}
+
+type historyServiceProcessorSignalWorkflowExecution struct {
+  handler HistoryService
+}
+
+func (p *historyServiceProcessorSignalWorkflowExecution) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+  args := HistoryServiceSignalWorkflowExecutionArgs{}
+  if err = args.Read(iprot); err != nil {
+    iprot.ReadMessageEnd()
+    x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+    oprot.WriteMessageBegin("SignalWorkflowExecution", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return false, err
+  }
+
+  iprot.ReadMessageEnd()
+  result := HistoryServiceSignalWorkflowExecutionResult{}
+  var err2 error
+  if err2 = p.handler.SignalWorkflowExecution(args.SignalRequest); err2 != nil {
+  switch v := err2.(type) {
+    case *shared.BadRequestError:
+  result.BadRequestError = v
+    case *shared.InternalServiceError:
+  result.InternalServiceError = v
+    case *shared.EntityNotExistsError:
+  result.EntityNotExistError = v
+    case *ShardOwnershipLostError:
+  result.ShardOwnershipLostError = v
+    default:
+    x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing SignalWorkflowExecution: " + err2.Error())
+    oprot.WriteMessageBegin("SignalWorkflowExecution", thrift.EXCEPTION, seqId)
+    x.Write(oprot)
+    oprot.WriteMessageEnd()
+    oprot.Flush()
+    return true, err2
+  }
+  }
+  if err2 = oprot.WriteMessageBegin("SignalWorkflowExecution", thrift.REPLY, seqId); err2 != nil {
     err = err2
   }
   if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -6976,6 +7267,309 @@ func (p *HistoryServiceRespondActivityTaskCanceledResult) String() string {
     return "<nil>"
   }
   return fmt.Sprintf("HistoryServiceRespondActivityTaskCanceledResult(%+v)", *p)
+}
+
+// Attributes:
+//  - SignalRequest
+type HistoryServiceSignalWorkflowExecutionArgs struct {
+  SignalRequest *SignalWorkflowExecutionRequest `thrift:"signalRequest,1" db:"signalRequest" json:"signalRequest"`
+}
+
+func NewHistoryServiceSignalWorkflowExecutionArgs() *HistoryServiceSignalWorkflowExecutionArgs {
+  return &HistoryServiceSignalWorkflowExecutionArgs{}
+}
+
+var HistoryServiceSignalWorkflowExecutionArgs_SignalRequest_DEFAULT *SignalWorkflowExecutionRequest
+func (p *HistoryServiceSignalWorkflowExecutionArgs) GetSignalRequest() *SignalWorkflowExecutionRequest {
+  if !p.IsSetSignalRequest() {
+    return HistoryServiceSignalWorkflowExecutionArgs_SignalRequest_DEFAULT
+  }
+return p.SignalRequest
+}
+func (p *HistoryServiceSignalWorkflowExecutionArgs) IsSetSignalRequest() bool {
+  return p.SignalRequest != nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionArgs) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionArgs)  ReadField1(iprot thrift.TProtocol) error {
+  p.SignalRequest = &SignalWorkflowExecutionRequest{}
+  if err := p.SignalRequest.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.SignalRequest), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionArgs) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("SignalWorkflowExecution_args"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField1(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionArgs) writeField1(oprot thrift.TProtocol) (err error) {
+  if err := oprot.WriteFieldBegin("signalRequest", thrift.STRUCT, 1); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:signalRequest: ", p), err) }
+  if err := p.SignalRequest.Write(oprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.SignalRequest), err)
+  }
+  if err := oprot.WriteFieldEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write field end error 1:signalRequest: ", p), err) }
+  return err
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionArgs) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("HistoryServiceSignalWorkflowExecutionArgs(%+v)", *p)
+}
+
+// Attributes:
+//  - BadRequestError
+//  - InternalServiceError
+//  - EntityNotExistError
+//  - ShardOwnershipLostError
+type HistoryServiceSignalWorkflowExecutionResult struct {
+  BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
+  InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
+}
+
+func NewHistoryServiceSignalWorkflowExecutionResult() *HistoryServiceSignalWorkflowExecutionResult {
+  return &HistoryServiceSignalWorkflowExecutionResult{}
+}
+
+var HistoryServiceSignalWorkflowExecutionResult_BadRequestError_DEFAULT *shared.BadRequestError
+func (p *HistoryServiceSignalWorkflowExecutionResult) GetBadRequestError() *shared.BadRequestError {
+  if !p.IsSetBadRequestError() {
+    return HistoryServiceSignalWorkflowExecutionResult_BadRequestError_DEFAULT
+  }
+return p.BadRequestError
+}
+var HistoryServiceSignalWorkflowExecutionResult_InternalServiceError_DEFAULT *shared.InternalServiceError
+func (p *HistoryServiceSignalWorkflowExecutionResult) GetInternalServiceError() *shared.InternalServiceError {
+  if !p.IsSetInternalServiceError() {
+    return HistoryServiceSignalWorkflowExecutionResult_InternalServiceError_DEFAULT
+  }
+return p.InternalServiceError
+}
+var HistoryServiceSignalWorkflowExecutionResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+func (p *HistoryServiceSignalWorkflowExecutionResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+  if !p.IsSetEntityNotExistError() {
+    return HistoryServiceSignalWorkflowExecutionResult_EntityNotExistError_DEFAULT
+  }
+return p.EntityNotExistError
+}
+var HistoryServiceSignalWorkflowExecutionResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceSignalWorkflowExecutionResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+  if !p.IsSetShardOwnershipLostError() {
+    return HistoryServiceSignalWorkflowExecutionResult_ShardOwnershipLostError_DEFAULT
+  }
+return p.ShardOwnershipLostError
+}
+func (p *HistoryServiceSignalWorkflowExecutionResult) IsSetBadRequestError() bool {
+  return p.BadRequestError != nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) IsSetInternalServiceError() bool {
+  return p.InternalServiceError != nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) IsSetEntityNotExistError() bool {
+  return p.EntityNotExistError != nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) IsSetShardOwnershipLostError() bool {
+  return p.ShardOwnershipLostError != nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 1:
+      if err := p.ReadField1(iprot); err != nil {
+        return err
+      }
+    case 2:
+      if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult)  ReadField1(iprot thrift.TProtocol) error {
+  p.BadRequestError = &shared.BadRequestError{}
+  if err := p.BadRequestError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.BadRequestError), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult)  ReadField2(iprot thrift.TProtocol) error {
+  p.InternalServiceError = &shared.InternalServiceError{}
+  if err := p.InternalServiceError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.InternalServiceError), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.EntityNotExistError = &shared.EntityNotExistsError{}
+  if err := p.EntityNotExistError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ShardOwnershipLostError = &ShardOwnershipLostError{}
+  if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
+  }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("SignalWorkflowExecution_result"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField1(oprot); err != nil { return err }
+    if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) writeField1(oprot thrift.TProtocol) (err error) {
+  if p.IsSetBadRequestError() {
+    if err := oprot.WriteFieldBegin("badRequestError", thrift.STRUCT, 1); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:badRequestError: ", p), err) }
+    if err := p.BadRequestError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.BadRequestError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 1:badRequestError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) writeField2(oprot thrift.TProtocol) (err error) {
+  if p.IsSetInternalServiceError() {
+    if err := oprot.WriteFieldBegin("internalServiceError", thrift.STRUCT, 2); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 2:internalServiceError: ", p), err) }
+    if err := p.InternalServiceError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.InternalServiceError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEntityNotExistError() {
+    if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err) }
+    if err := p.EntityNotExistError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.EntityNotExistError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetShardOwnershipLostError() {
+    if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
+    if err := p.ShardOwnershipLostError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ShardOwnershipLostError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceSignalWorkflowExecutionResult) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("HistoryServiceSignalWorkflowExecutionResult(%+v)", *p)
 }
 
 // Attributes:

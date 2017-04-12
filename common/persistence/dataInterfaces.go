@@ -269,6 +269,17 @@ type (
 		State *WorkflowMutableState
 	}
 
+	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
+	GetCurrentExecutionRequest struct {
+		DomainID  string
+		WorkflowID string
+	}
+
+	// GetCurrentExecutionResponse is the response to GetCurrentExecution
+	GetCurrentExecutionResponse struct {
+		RunID string
+	}
+
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
 		ExecutionInfo   *WorkflowExecutionInfo
@@ -496,6 +507,7 @@ type (
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
+		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 

@@ -179,6 +179,17 @@ service WorkflowService {
     )
 
   /**
+  * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+  * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
+  **/
+  void SignalWorkflowExecution(1: shared.SignalWorkflowExecutionRequest signalRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
   * in the history and immediately terminating the execution instance.
   **/

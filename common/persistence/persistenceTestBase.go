@@ -267,9 +267,9 @@ wType string, decisionTimeout int32, executionContext []byte, nextEventID int64,
 		RangeID:              s.ShardContext.GetRangeID(),
 		TransferTasks: []Task{
 			&DecisionTask{
-				TaskID: s.GetNextSequenceNumber(),
-				DomainID: domainID,
-				TaskList: taskList,
+				TaskID:     s.GetNextSequenceNumber(),
+				DomainID:   domainID,
+				TaskList:   taskList,
 				ScheduleID: decisionScheduleID,
 			},
 		},
@@ -295,9 +295,9 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks,
 			&DecisionTask{
-				TaskID: s.GetNextSequenceNumber(),
-				DomainID: domainID,
-				TaskList: taskList,
+				TaskID:     s.GetNextSequenceNumber(),
+				DomainID:   domainID,
+				TaskList:   taskList,
 				ScheduleID: int64(decisionScheduleID),
 			})
 	}
@@ -305,9 +305,9 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks,
 			&ActivityTask{
-				TaskID: s.GetNextSequenceNumber(),
-				DomainID: domainID,
-				TaskList: taskList,
+				TaskID:     s.GetNextSequenceNumber(),
+				DomainID:   domainID,
+				TaskList:   taskList,
 				ScheduleID: int64(activityScheduleID),
 			})
 	}
@@ -346,6 +346,19 @@ func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution w
 	}
 
 	return response.State, nil
+}
+
+func (s *TestBase) GetCurrentWorkflow(domainID, workflowID string) (string, error) {
+	response, err := s.WorkflowMgr.GetCurrentExecution(&GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return response.RunID, nil
 }
 
 // UpdateWorkflowExecution is a utility method to update workflow execution

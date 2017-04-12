@@ -31,6 +31,7 @@ type TChanWorkflowService interface {
 	RespondActivityTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondActivityTaskCompletedRequest) error
 	RespondActivityTaskFailed(ctx thrift.Context, failRequest *shared.RespondActivityTaskFailedRequest) error
 	RespondDecisionTaskCompleted(ctx thrift.Context, completeRequest *shared.RespondDecisionTaskCompletedRequest) error
+	SignalWorkflowExecution(ctx thrift.Context, signalRequest *shared.SignalWorkflowExecutionRequest) error
 	StartWorkflowExecution(ctx thrift.Context, startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error)
 	TerminateWorkflowExecution(ctx thrift.Context, terminateRequest *shared.TerminateWorkflowExecutionRequest) error
 	UpdateDomain(ctx thrift.Context, updateRequest *shared.UpdateDomainRequest) (*shared.UpdateDomainResponse, error)
@@ -337,6 +338,28 @@ func (c *tchanWorkflowServiceClient) RespondDecisionTaskCompleted(ctx thrift.Con
 	return err
 }
 
+func (c *tchanWorkflowServiceClient) SignalWorkflowExecution(ctx thrift.Context, signalRequest *shared.SignalWorkflowExecutionRequest) error {
+	var resp WorkflowServiceSignalWorkflowExecutionResult
+	args := WorkflowServiceSignalWorkflowExecutionArgs{
+		SignalRequest: signalRequest,
+	}
+	success, err := c.client.Call(ctx, c.thriftService, "SignalWorkflowExecution", &args, &resp)
+	if err == nil && !success {
+		switch {
+		case resp.BadRequestError != nil:
+			err = resp.BadRequestError
+		case resp.InternalServiceError != nil:
+			err = resp.InternalServiceError
+		case resp.EntityNotExistError != nil:
+			err = resp.EntityNotExistError
+		default:
+			err = fmt.Errorf("received no result or unknown exception for SignalWorkflowExecution")
+		}
+	}
+
+	return err
+}
+
 func (c *tchanWorkflowServiceClient) StartWorkflowExecution(ctx thrift.Context, startRequest *shared.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
 	var resp WorkflowServiceStartWorkflowExecutionResult
 	args := WorkflowServiceStartWorkflowExecutionArgs{
@@ -434,6 +457,7 @@ func (s *tchanWorkflowServiceServer) Methods() []string {
 		"RespondActivityTaskCompleted",
 		"RespondActivityTaskFailed",
 		"RespondDecisionTaskCompleted",
+		"SignalWorkflowExecution",
 		"StartWorkflowExecution",
 		"TerminateWorkflowExecution",
 		"UpdateDomain",
@@ -468,6 +492,8 @@ func (s *tchanWorkflowServiceServer) Handle(ctx thrift.Context, methodName strin
 		return s.handleRespondActivityTaskFailed(ctx, protocol)
 	case "RespondDecisionTaskCompleted":
 		return s.handleRespondDecisionTaskCompleted(ctx, protocol)
+	case "SignalWorkflowExecution":
+		return s.handleSignalWorkflowExecution(ctx, protocol)
 	case "StartWorkflowExecution":
 		return s.handleStartWorkflowExecution(ctx, protocol)
 	case "TerminateWorkflowExecution":
@@ -931,6 +957,43 @@ func (s *tchanWorkflowServiceServer) handleRespondDecisionTaskCompleted(ctx thri
 
 	err :=
 		s.handler.RespondDecisionTaskCompleted(ctx, req.CompleteRequest)
+
+	if err != nil {
+		switch v := err.(type) {
+		case *shared.BadRequestError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for badRequestError returned non-nil error type *shared.BadRequestError but nil value")
+			}
+			res.BadRequestError = v
+		case *shared.InternalServiceError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for internalServiceError returned non-nil error type *shared.InternalServiceError but nil value")
+			}
+			res.InternalServiceError = v
+		case *shared.EntityNotExistsError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
+			}
+			res.EntityNotExistError = v
+		default:
+			return false, nil, err
+		}
+	} else {
+	}
+
+	return err == nil, &res, nil
+}
+
+func (s *tchanWorkflowServiceServer) handleSignalWorkflowExecution(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req WorkflowServiceSignalWorkflowExecutionArgs
+	var res WorkflowServiceSignalWorkflowExecutionResult
+
+	if err := req.Read(protocol); err != nil {
+		return false, nil, err
+	}
+
+	err :=
+		s.handler.SignalWorkflowExecution(ctx, req.SignalRequest)
 
 	if err != nil {
 		switch v := err.(type) {

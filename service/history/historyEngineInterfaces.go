@@ -23,6 +23,7 @@ type (
 		RespondActivityTaskCanceled(request *h.RespondActivityTaskCanceledRequest) error
 		RecordActivityTaskHeartbeat(
 			request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		SignalWorkflowExecution(request *h.SignalWorkflowExecutionRequest) error
 		TerminateWorkflowExecution(request *h.TerminateWorkflowExecutionRequest) error
 	}
 

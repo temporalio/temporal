@@ -456,6 +456,28 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	return response, nil
 }
 
+func (wh *WorkflowHandler) SignalWorkflowExecution(ctx thrift.Context,
+	signalRequest *gen.SignalWorkflowExecutionRequest) error {
+	wh.startWG.Wait()
+
+	if !signalRequest.IsSetDomain() {
+		return errDomainNotSet
+	}
+
+	domainName := signalRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return wrapError(err)
+	}
+
+	err = wh.history.SignalWorkflowExecution(ctx, &h.SignalWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(info.ID),
+		SignalRequest: signalRequest,
+	})
+
+	return wrapError(err)
+}
+
 func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
 	terminateRequest *gen.TerminateWorkflowExecutionRequest) error {
 	wh.startWG.Wait()

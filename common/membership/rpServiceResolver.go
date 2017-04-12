@@ -158,7 +158,7 @@ func (r *ringpopServiceResolver) refresh() {
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
 	if err != nil {
 		// This should never happen!
-		r.logger.Panic(err)
+		r.logger.Fatalf("Error during ringpop refresh.  Error: %v", err)
 	}
 
 	for _, addr := range addrs {

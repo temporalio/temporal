@@ -241,6 +241,13 @@ func (b *historyBuilder) AddMarkerRecordedEvent(decisionCompletedEventID int64,
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddWorkflowExecutionSignaledEvent(
+	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionSignaledEvent(request)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	b.history = append(b.history, event)
 	return event
@@ -409,6 +416,18 @@ func (b *historyBuilder) newCompleteWorkflowExecutionFailedEvent(decisionTaskCom
 	attributes.Cause = workflow.WorkflowCompleteFailedCausePtr(cause)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.CompleteWorkflowExecutionFailedEventAttributes = attributes
+
+	return historyEvent
+}
+
+func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
+	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionSignaled)
+	attributes := workflow.NewWorkflowExecutionSignaledEventAttributes()
+	attributes.SignalName = common.StringPtr(request.GetSignalName())
+	attributes.Input = request.GetInput()
+	attributes.Identity = common.StringPtr(request.GetIdentity())
+	historyEvent.WorkflowExecutionSignaledEventAttributes = attributes
 
 	return historyEvent
 }

@@ -368,6 +368,31 @@ func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 	return resp, nil
 }
 
+func (h *Handler) SignalWorkflowExecution(ctx thrift.Context,
+	wrappedRequest *hist.SignalWorkflowExecutionRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistorySignalWorkflowExecutionScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistorySignalWorkflowExecutionScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	signalRequest := wrappedRequest.GetSignalRequest()
+	workflowExecution := signalRequest.GetWorkflowExecution()
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistorySignalWorkflowExecutionScope, err1)
+		return err1
+	}
+
+	err2 := engine.SignalWorkflowExecution(wrappedRequest)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistorySignalWorkflowExecutionScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
 func (h *Handler) TerminateWorkflowExecution(ctx thrift.Context,
 	wrappedRequest *hist.TerminateWorkflowExecutionRequest) error {
 	h.startWG.Wait()
