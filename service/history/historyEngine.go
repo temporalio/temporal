@@ -209,13 +209,12 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 		RunId:      common.StringPtr(request.GetExecution().GetRunId()),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
 		return nil, err0
 	}
+	defer release()
 
-	context.Lock()
-	defer context.Unlock()
 	msBuilder, err1 := context.loadWorkflowExecution()
 	if err1 != nil {
 		return nil, err1
@@ -235,13 +234,12 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
 	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	domainID := request.GetDomainUUID()
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, *request.WorkflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, *request.WorkflowExecution)
 	if err0 != nil {
 		return nil, err0
 	}
+	defer release()
 
-	context.Lock()
-	defer context.Unlock()
 	scheduleID := request.GetScheduleId()
 	requestID := request.GetRequestId()
 
@@ -323,13 +321,12 @@ Update_History_Loop:
 func (e *historyEngineImpl) RecordActivityTaskStarted(
 	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
 	domainID := request.GetDomainUUID()
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, *request.WorkflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, *request.WorkflowExecution)
 	if err0 != nil {
 		return nil, err0
 	}
+	defer release()
 
-	context.Lock()
-	defer context.Unlock()
 	scheduleID := request.GetScheduleId()
 	requestID := request.GetRequestId()
 
@@ -449,13 +446,11 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(req *h.RespondDecisionT
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -646,13 +641,11 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(req *h.RespondActivityT
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -728,13 +721,11 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(req *h.RespondActivityTask
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -810,13 +801,11 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(req *h.RespondActivityTa
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -897,13 +886,11 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return nil, err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -1016,13 +1003,11 @@ func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution w
 	createDeletionTask, createDecisionTask bool,
 	action func(builder *mutableStateBuilder) error) error {
 
-	context, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {

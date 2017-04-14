@@ -87,7 +87,8 @@ func (c *domainCache) GetDomain(name string) (*persistence.DomainInfo, *persiste
 
 	// Cache entry not found, Let's create an entry and add it to cache
 	if !cacheHit {
-		entry = c.PutIfNotExist(name, newDomainCacheEntry()).(*domainCacheEntry)
+		elem, _ := c.PutIfNotExist(name, newDomainCacheEntry())
+		entry = elem.(*domainCacheEntry)
 	}
 
 	// Now take a lock to update the entry

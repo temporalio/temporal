@@ -235,12 +235,11 @@ ProcessRetryLoop:
 				}
 			case persistence.TransferTaskTypeDeleteExecution:
 				{
-					context, _ := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+					context, release, _ := t.cache.getOrCreateWorkflowExecution(domainID, execution)
 
 					// TODO: We need to keep completed executions for auditing purpose.  Need a design for keeping them around
 					// for visibility purpose.
 					var mb *mutableStateBuilder
-					context.Lock()
 					mb, err = context.loadWorkflowExecution()
 					if err == nil {
 						err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
@@ -254,7 +253,7 @@ ProcessRetryLoop:
 							err = context.deleteWorkflowExecution()
 						}
 					}
-					context.Unlock()
+					release()
 				}
 			}
 
@@ -276,13 +275,11 @@ ProcessRetryLoop:
 
 func (t *transferQueueProcessorImpl) recordWorkflowExecutionStarted(
 	execution workflow.WorkflowExecution, task *persistence.TransferTaskInfo) error {
-	context, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 	mb, err := context.loadWorkflowExecution()
 	if err != nil {
 		return err

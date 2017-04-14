@@ -2148,10 +2148,11 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 }
 
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
-	context, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
 		return nil
 	}
+	defer release()
 
 	return context.msBuilder
 }

@@ -15,10 +15,14 @@ type Cache interface {
 	Put(key string, value interface{}) interface{}
 
 	// PutIfNotExist puts a value associated with a given key if it does not exist
-	PutIfNotExist(key string, value interface{}) interface{}
+	PutIfNotExist(key string, value interface{}) (interface{}, error)
 
 	// Delete deletes an element in the cache
 	Delete(key string)
+
+	// Release decrements the ref count of a pinned element. If the ref count
+	// drops to 0, the element can be evicted from the cache.
+	Release(key string)
 
 	// Size returns the number of entries currently stored in the Cache
 	Size() int
@@ -32,6 +36,9 @@ type Options struct {
 
 	// InitialCapacity controls the initial capacity of the cache
 	InitialCapacity int
+
+	// Pin prevents in-use objects from getting evicted
+	Pin bool
 
 	// RemovedFunc is an optional function called when an element
 	// is scheduled for deletion

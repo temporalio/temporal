@@ -588,10 +588,11 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 }
 
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
-	context, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
+	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
 		return nil
 	}
+	defer release()
 
 	return context.msBuilder
 }

@@ -395,13 +395,11 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		RunId:      common.StringPtr(timerTask.RunID),
 	}
 
-	context, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)
+	context, release, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
-
-	context.Lock()
-	defer context.Unlock()
+	defer release()
 
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
