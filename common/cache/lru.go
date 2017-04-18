@@ -176,17 +176,19 @@ func (c *lru) putInternal(key string, value interface{}, allowUpdate bool) (inte
 		entry.expiration = time.Now().Add(c.ttl)
 	}
 
-	// Check if there is room in the cache before inserting
-	if len(c.byKey) == c.maxSize-1 {
-		oldest := c.byAccess.Back().Value.(*cacheEntry)
-		if oldest.refCount > 0 {
-			return nil, ErrCacheFull
-		}
-	}
-
 	c.byKey[key] = c.byAccess.PushFront(entry)
 	if len(c.byKey) == c.maxSize {
-		oldest := c.byAccess.Remove(c.byAccess.Back()).(*cacheEntry)
+		oldest := c.byAccess.Back().Value.(*cacheEntry)
+
+		if oldest.refCount > 0 {
+			// Cache is full with pinned elements
+			// revert the insert and return
+			c.byAccess.Remove(c.byAccess.Front())
+			delete(c.byKey, key)
+			return nil, ErrCacheFull
+		}
+
+		c.byAccess.Remove(c.byAccess.Back())
 		if c.rmFunc != nil {
 			go c.rmFunc(oldest.value)
 		}

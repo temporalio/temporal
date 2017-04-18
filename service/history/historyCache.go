@@ -36,14 +36,14 @@ var (
 	ErrTryLock = &workflow.InternalServiceError{Message: "Failed to acquire lock, backoff and retry"}
 )
 
-func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
+func newHistoryCache(maxSize int, shard ShardContext, logger bark.Logger) *historyCache {
 	opts := &cache.Options{}
 	opts.InitialCapacity = historyCacheInitialSize
 	opts.TTL = historyCacheTTL
 	opts.Pin = true
 
 	return &historyCache{
-		Cache:            cache.New(historyCacheMaxSize, opts),
+		Cache:            cache.New(maxSize, opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
 		logger: logger.WithFields(bark.Fields{

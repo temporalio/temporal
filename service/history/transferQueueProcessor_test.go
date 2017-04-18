@@ -45,7 +45,7 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	s.SetupWorkflowStore()
 	s.mockMatching = &mocks.MatchingClient{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	cache := newHistoryCache(s.ShardContext, s.logger)
+	cache := newHistoryCache(historyCacheMaxSize, s.ShardContext, s.logger)
 	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, cache).(*transferQueueProcessorImpl)
 }
 
