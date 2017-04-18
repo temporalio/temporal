@@ -37,6 +37,13 @@ type (
 		domainCache      cache.DomainCache
 		logger           bark.Logger
 	}
+
+	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
+	// TODO: use to notify timerQueueProcessor as well.
+	shardContextWrapper struct {
+		ShardContext
+		txProcessor transferQueueProcessor
+	}
 )
 
 var _ Engine = (*historyEngineImpl)(nil)
@@ -53,6 +60,8 @@ var (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.MetadataManager,
 	visibilityMgr persistence.VisibilityManager, matching matching.Client) Engine {
+	shardWrapper := &shardContextWrapper{ShardContext: shard}
+	shard = shardWrapper
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
@@ -73,6 +82,7 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 		}),
 	}
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)
+	shardWrapper.txProcessor = txProcessor
 	return historyEngImpl
 }
 
@@ -1110,4 +1120,25 @@ Pagination_Loop:
 	executionHistory := workflow.NewHistory()
 	executionHistory.Events = historyEvents
 	return executionHistory, nil
+}
+
+func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
+	err := s.ShardContext.UpdateWorkflowExecution(request)
+	if err == nil {
+		if len(request.TransferTasks) > 0 {
+			s.txProcessor.NotifyNewTask()
+		}
+	}
+	return err
+}
+
+func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
+	*persistence.CreateWorkflowExecutionResponse, error) {
+	resp, err := s.ShardContext.CreateWorkflowExecution(request)
+	if err == nil {
+		if len(request.TransferTasks) > 0 {
+			s.txProcessor.NotifyNewTask()
+		}
+	}
+	return resp, err
 }

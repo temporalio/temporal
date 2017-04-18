@@ -3,7 +3,6 @@ package history
 import (
 	"os"
 	"testing"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
@@ -58,12 +57,6 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	s.ClearTransferQueue()
 }
 
-func (s *transferQueueProcessorSuite) TestNoTransferTask() {
-	tasksCh := make(chan *persistence.TransferTaskInfo)
-	newPollInterval := s.processor.processTransferTasks(tasksCh, transferProcessorMinPollInterval)
-	s.Equal(2*transferProcessorMinPollInterval, newPollInterval)
-}
-
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
@@ -74,8 +67,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
-	s.Equal(transferProcessorMinPollInterval, newPollInterval)
+	s.processor.processTransferTasks(tasksCh)
 workerPump:
 	for {
 		select {
@@ -106,8 +98,7 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
-	s.Equal(transferProcessorMinPollInterval, newPollInterval)
+	s.processor.processTransferTasks(tasksCh)
 workerPump:
 	for {
 		select {
@@ -155,8 +146,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	s.logger.Infof("Error creating new execution: %v", err2)
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	newPollInterval := s.processor.processTransferTasks(tasksCh, time.Second)
-	s.Equal(transferProcessorMinPollInterval, newPollInterval)
+	s.processor.processTransferTasks(tasksCh)
 workerPump:
 	for {
 		select {

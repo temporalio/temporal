@@ -17,7 +17,7 @@ import (
 
 const (
 	transferTaskBatchSize              = 10
-	transferProcessorMinPollInterval   = 10 * time.Millisecond
+	transferProcessorMaxPollRPS        = 100
 	transferProcessorMaxPollInterval   = 10 * time.Second
 	transferProcessorUpdateAckInterval = 10 * time.Second
 	taskWorkerCount                    = 10
@@ -30,6 +30,8 @@ type (
 		visibilityManager persistence.VisibilityManager
 		matchingClient    matching.Client
 		cache             *historyCache
+		rateLimiter       common.TokenBucket // Read rate limiter
+		appendCh          chan struct{}
 		isStarted         int32
 		isStopped         int32
 		shutdownWG        sync.WaitGroup
@@ -64,6 +66,8 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 		matchingClient:    matching,
 		visibilityManager: visibilityMgr,
 		cache:             cache,
+		rateLimiter:       common.NewTokenBucket(transferProcessorMaxPollRPS, common.NewRealTimeSource()),
+		appendCh:          make(chan struct{}, 1),
 		shutdownCh:        make(chan struct{}),
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueTransferQueueComponent,
@@ -98,6 +102,7 @@ func (t *transferQueueProcessorImpl) Start() {
 	defer logTransferQueueProcesorStartedEvent(t.logger)
 
 	t.shutdownWG.Add(1)
+	t.NotifyNewTask()
 	go t.processorPump()
 }
 
@@ -118,6 +123,14 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 }
 
+func (t *transferQueueProcessorImpl) NotifyNewTask() {
+	var event struct{}
+	select {
+	case t.appendCh <- event:
+	default: // channel already has an event, don't block
+	}
+}
+
 func (t *transferQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
 	tasksCh := make(chan *persistence.TransferTaskInfo, transferTaskBatchSize)
@@ -128,8 +141,7 @@ func (t *transferQueueProcessorImpl) processorPump() {
 		go t.taskWorker(tasksCh, &workerWG)
 	}
 
-	pollInterval := transferProcessorMinPollInterval
-	pollTimer := time.NewTimer(pollInterval)
+	pollTimer := time.NewTimer(transferProcessorMaxPollInterval)
 	defer pollTimer.Stop()
 	updateAckTimer := time.NewTimer(transferProcessorUpdateAckInterval)
 	defer updateAckTimer.Stop()
@@ -143,9 +155,10 @@ func (t *transferQueueProcessorImpl) processorPump() {
 				t.logger.Warn("Transfer queue processor timed out on worker shutdown.")
 			}
 			return
+		case <-t.appendCh:
+			t.processTransferTasks(tasksCh)
 		case <-pollTimer.C:
-			pollInterval = t.processTransferTasks(tasksCh, pollInterval)
-			pollTimer.Reset(pollInterval)
+			t.processTransferTasks(tasksCh)
 		case <-updateAckTimer.C:
 			t.ackMgr.updateAckLevel()
 			updateAckTimer = time.NewTimer(transferProcessorUpdateAckInterval)
@@ -153,24 +166,33 @@ func (t *transferQueueProcessorImpl) processorPump() {
 	}
 }
 
-func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo,
-	prevPollInterval time.Duration) time.Duration {
+func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo) {
+
+	if !t.rateLimiter.Consume(1, transferProcessorMaxPollInterval) {
+		t.NotifyNewTask() // re-enqueue the event
+		return
+	}
+
 	tasks, err := t.ackMgr.readTransferTasks()
 
 	if err != nil {
 		t.logger.Warnf("Processor unable to retrieve transfer tasks: %v", err)
-		return minDuration(2*prevPollInterval, transferProcessorMaxPollInterval)
+		t.NotifyNewTask() // re-enqueue the event
+		return
 	}
 
 	if len(tasks) == 0 {
-		return minDuration(2*prevPollInterval, transferProcessorMaxPollInterval)
+		return
 	}
 
 	for _, tsk := range tasks {
 		tasksCh <- tsk
 	}
 
-	return transferProcessorMinPollInterval
+	// There might be more task
+	// We return now to yield, but enqueue an event to poll later
+	t.NotifyNewTask()
+	return
 }
 
 func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.TransferTaskInfo, workerWG *sync.WaitGroup) {
