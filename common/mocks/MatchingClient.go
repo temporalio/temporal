@@ -66,15 +66,15 @@ func (_m *MatchingClient) PollForActivityTask(ctx thrift.Context,
 
 // PollForDecisionTask provides a mock function with given fields: ctx, pollRequest
 func (_m *MatchingClient) PollForDecisionTask(ctx thrift.Context,
-	pollRequest *matching.PollForDecisionTaskRequest) (*shared.PollForDecisionTaskResponse, error) {
+	pollRequest *matching.PollForDecisionTaskRequest) (*matching.PollForDecisionTaskResponse, error) {
 	ret := _m.Called(ctx, pollRequest)
 
-	var r0 *shared.PollForDecisionTaskResponse
-	if rf, ok := ret.Get(0).(func(thrift.Context, *matching.PollForDecisionTaskRequest) *shared.PollForDecisionTaskResponse); ok {
+	var r0 *matching.PollForDecisionTaskResponse
+	if rf, ok := ret.Get(0).(func(thrift.Context, *matching.PollForDecisionTaskRequest) *matching.PollForDecisionTaskResponse); ok {
 		r0 = rf(ctx, pollRequest)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*shared.PollForDecisionTaskResponse)
+			r0 = ret.Get(0).(*matching.PollForDecisionTaskResponse)
 		}
 	}
 

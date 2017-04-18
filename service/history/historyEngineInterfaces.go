@@ -32,11 +32,6 @@ type (
 		CreateEngine(context ShardContext) Engine
 	}
 
-	historySerializer interface {
-		Serialize(history []*workflow.HistoryEvent) ([]byte, error)
-		Deserialize(data []byte) ([]*workflow.HistoryEvent, error)
-	}
-
 	historyEventSerializer interface {
 		Serialize(event *workflow.HistoryEvent) ([]byte, error)
 		Deserialize(data []byte) (*workflow.HistoryEvent, error)

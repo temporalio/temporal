@@ -1,4 +1,4 @@
-package history
+package common
 
 import (
 	"encoding/json"
@@ -7,11 +7,18 @@ import (
 )
 
 type (
+	// HistorySerializer is used to serialize/deserialize history
+	HistorySerializer interface {
+		Serialize(history []*workflow.HistoryEvent) ([]byte, error)
+		Deserialize(data []byte) ([]*workflow.HistoryEvent, error)
+	}
+
 	jsonHistorySerializer struct {
 	}
 )
 
-func newJSONHistorySerializer() historySerializer {
+// NewJSONHistorySerializer returns a JSON HistorySerializer
+func NewJSONHistorySerializer() HistorySerializer {
 	return &jsonHistorySerializer{}
 }
 

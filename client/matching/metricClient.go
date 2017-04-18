@@ -66,7 +66,7 @@ func (c *metricClient) PollForActivityTask(context thrift.Context,
 }
 
 func (c *metricClient) PollForDecisionTask(context thrift.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (*workflow.PollForDecisionTaskResponse, error) {
+	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceLatency)

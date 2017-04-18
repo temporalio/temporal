@@ -94,7 +94,7 @@ func (s *engineSuite) SetupTest() {
 		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		logger:           s.logger,
 		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      newJSONHistorySerializer(),
+		hSerializer:      common.NewJSONHistorySerializer(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h

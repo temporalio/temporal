@@ -624,12 +624,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 		}()
 	}
 	workflowTypeName := "workflowType1"
-	activityID := "workflow1"
-	activityTypeName := "activity1"
 	workflowType := &workflow.WorkflowType{Name: &workflowTypeName}
-	activityType := &workflow.ActivityType{Name: &activityTypeName}
-
-	decisionInput := []byte("Decision1 Input")
 
 	identity := "nobody"
 
@@ -642,18 +637,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 				PreviousStartedEventId: &startedEventID,
 				StartedEventId:         &startedEventID,
 				WorkflowType:           workflowType,
-				History: &workflow.History{Events: []*workflow.HistoryEvent{
-					newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
-						&workflow.ScheduleActivityTaskDecisionAttributes{
-							ActivityId:   &activityID,
-							TaskList:     &workflow.TaskList{Name: taskList.Name},
-							ActivityType: activityType,
-							Input:        decisionInput,
-						}),
-					newActivityTaskStartedEvent(startedEventID, 0, &workflow.PollForActivityTaskRequest{
-						TaskList: &workflow.TaskList{Name: taskList.Name},
-						Identity: &identity,
-					})}}}
+			}
 		}, nil)
 	for p := 0; p < workerCount; p++ {
 		go func() {
@@ -672,8 +656,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 					s.logger.Debugf("empty poll returned")
 					continue
 				}
-				history := result.History.Events
-				s.EqualValues(2, len(history))
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				s.EqualValues(workflowType, result.WorkflowType)
 				s.EqualValues(startedEventID, *result.StartedEventId)
@@ -943,12 +925,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		}
 	}
 	workflowTypeName := "workflowType1"
-	activityID := "workflow1"
-	activityTypeName := "activity1"
 	workflowType := &workflow.WorkflowType{Name: &workflowTypeName}
-	activityType := &workflow.ActivityType{Name: &activityTypeName}
-
-	decisionInput := []byte("Decision1 Input")
 
 	identity := "nobody"
 	var startedEventID int64 = 1412
@@ -968,18 +945,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 				PreviousStartedEventId: &startedEventID,
 				StartedEventId:         &startedEventID,
 				WorkflowType:           workflowType,
-				History: &workflow.History{Events: []*workflow.HistoryEvent{
-					newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
-						&workflow.ScheduleActivityTaskDecisionAttributes{
-							ActivityId:   &activityID,
-							TaskList:     &workflow.TaskList{Name: taskList.Name},
-							ActivityType: activityType,
-							Input:        decisionInput,
-						}),
-					newActivityTaskStartedEvent(startedEventID, 0, &workflow.PollForActivityTaskRequest{
-						TaskList: &workflow.TaskList{Name: taskList.Name},
-						Identity: &identity,
-					})}}}
+			}
 		},
 		func(ctx thrift.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) error {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {

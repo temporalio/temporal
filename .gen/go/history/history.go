@@ -1924,7 +1924,6 @@ func (p *RecordDecisionTaskStartedRequest) String() string {
 //  - WorkflowType
 //  - PreviousStartedEventId
 //  - StartedEventId
-//  - History
 type RecordDecisionTaskStartedResponse struct {
   // unused fields # 1 to 9
   WorkflowType *shared.WorkflowType `thrift:"workflowType,10" db:"workflowType" json:"workflowType,omitempty"`
@@ -1932,8 +1931,6 @@ type RecordDecisionTaskStartedResponse struct {
   PreviousStartedEventId *int64 `thrift:"previousStartedEventId,20" db:"previousStartedEventId" json:"previousStartedEventId,omitempty"`
   // unused fields # 21 to 29
   StartedEventId *int64 `thrift:"startedEventId,30" db:"startedEventId" json:"startedEventId,omitempty"`
-  // unused fields # 31 to 39
-  History *shared.History `thrift:"history,40" db:"history" json:"history,omitempty"`
 }
 
 func NewRecordDecisionTaskStartedResponse() *RecordDecisionTaskStartedResponse {
@@ -1961,13 +1958,6 @@ func (p *RecordDecisionTaskStartedResponse) GetStartedEventId() int64 {
   }
 return *p.StartedEventId
 }
-var RecordDecisionTaskStartedResponse_History_DEFAULT *shared.History
-func (p *RecordDecisionTaskStartedResponse) GetHistory() *shared.History {
-  if !p.IsSetHistory() {
-    return RecordDecisionTaskStartedResponse_History_DEFAULT
-  }
-return p.History
-}
 func (p *RecordDecisionTaskStartedResponse) IsSetWorkflowType() bool {
   return p.WorkflowType != nil
 }
@@ -1978,10 +1968,6 @@ func (p *RecordDecisionTaskStartedResponse) IsSetPreviousStartedEventId() bool {
 
 func (p *RecordDecisionTaskStartedResponse) IsSetStartedEventId() bool {
   return p.StartedEventId != nil
-}
-
-func (p *RecordDecisionTaskStartedResponse) IsSetHistory() bool {
-  return p.History != nil
 }
 
 func (p *RecordDecisionTaskStartedResponse) Read(iprot thrift.TProtocol) error {
@@ -2007,10 +1993,6 @@ func (p *RecordDecisionTaskStartedResponse) Read(iprot thrift.TProtocol) error {
       }
     case 30:
       if err := p.ReadField30(iprot); err != nil {
-        return err
-      }
-    case 40:
-      if err := p.ReadField40(iprot); err != nil {
         return err
       }
     default:
@@ -2054,14 +2036,6 @@ func (p *RecordDecisionTaskStartedResponse)  ReadField30(iprot thrift.TProtocol)
   return nil
 }
 
-func (p *RecordDecisionTaskStartedResponse)  ReadField40(iprot thrift.TProtocol) error {
-  p.History = &shared.History{}
-  if err := p.History.Read(iprot); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.History), err)
-  }
-  return nil
-}
-
 func (p *RecordDecisionTaskStartedResponse) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RecordDecisionTaskStartedResponse"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -2069,7 +2043,6 @@ func (p *RecordDecisionTaskStartedResponse) Write(oprot thrift.TProtocol) error 
     if err := p.writeField10(oprot); err != nil { return err }
     if err := p.writeField20(oprot); err != nil { return err }
     if err := p.writeField30(oprot); err != nil { return err }
-    if err := p.writeField40(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2111,19 +2084,6 @@ func (p *RecordDecisionTaskStartedResponse) writeField30(oprot thrift.TProtocol)
     return thrift.PrependError(fmt.Sprintf("%T.startedEventId (30) field write error: ", p), err) }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 30:startedEventId: ", p), err) }
-  }
-  return err
-}
-
-func (p *RecordDecisionTaskStartedResponse) writeField40(oprot thrift.TProtocol) (err error) {
-  if p.IsSetHistory() {
-    if err := oprot.WriteFieldBegin("history", thrift.STRUCT, 40); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 40:history: ", p), err) }
-    if err := p.History.Write(oprot); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.History), err)
-    }
-    if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 40:history: ", p), err) }
   }
   return err
 }

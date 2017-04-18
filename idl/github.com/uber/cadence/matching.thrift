@@ -7,6 +7,14 @@ struct PollForDecisionTaskRequest {
   20: optional shared.PollForDecisionTaskRequest pollRequest
 }
 
+struct PollForDecisionTaskResponse {
+  10: optional binary taskToken
+  20: optional shared.WorkflowExecution workflowExecution
+  30: optional shared.WorkflowType workflowType
+  40: optional i64 (js.type = "Long") previousStartedEventId
+  50: optional i64 (js.type = "Long") startedEventId
+}
+
 struct PollForActivityTaskRequest {
   10: optional string domainUUID
   20: optional shared.PollForActivityTaskRequest pollRequest
@@ -39,7 +47,7 @@ service MatchingService {
   * PollForDecisionTask is called by frontend to process DecisionTask from a specific taskList.  A
   * DecisionTask is dispatched to callers for active workflow executions, with pending decisions.
   **/
-  shared.PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)
+  PollForDecisionTaskResponse PollForDecisionTask(1: PollForDecisionTaskRequest pollRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

@@ -153,6 +153,259 @@ func (p *PollForDecisionTaskRequest) String() string {
 }
 
 // Attributes:
+//  - TaskToken
+//  - WorkflowExecution
+//  - WorkflowType
+//  - PreviousStartedEventId
+//  - StartedEventId
+type PollForDecisionTaskResponse struct {
+  // unused fields # 1 to 9
+  TaskToken []byte `thrift:"taskToken,10" db:"taskToken" json:"taskToken,omitempty"`
+  // unused fields # 11 to 19
+  WorkflowExecution *shared.WorkflowExecution `thrift:"workflowExecution,20" db:"workflowExecution" json:"workflowExecution,omitempty"`
+  // unused fields # 21 to 29
+  WorkflowType *shared.WorkflowType `thrift:"workflowType,30" db:"workflowType" json:"workflowType,omitempty"`
+  // unused fields # 31 to 39
+  PreviousStartedEventId *int64 `thrift:"previousStartedEventId,40" db:"previousStartedEventId" json:"previousStartedEventId,omitempty"`
+  // unused fields # 41 to 49
+  StartedEventId *int64 `thrift:"startedEventId,50" db:"startedEventId" json:"startedEventId,omitempty"`
+}
+
+func NewPollForDecisionTaskResponse() *PollForDecisionTaskResponse {
+  return &PollForDecisionTaskResponse{}
+}
+
+var PollForDecisionTaskResponse_TaskToken_DEFAULT []byte
+
+func (p *PollForDecisionTaskResponse) GetTaskToken() []byte {
+  return p.TaskToken
+}
+var PollForDecisionTaskResponse_WorkflowExecution_DEFAULT *shared.WorkflowExecution
+func (p *PollForDecisionTaskResponse) GetWorkflowExecution() *shared.WorkflowExecution {
+  if !p.IsSetWorkflowExecution() {
+    return PollForDecisionTaskResponse_WorkflowExecution_DEFAULT
+  }
+return p.WorkflowExecution
+}
+var PollForDecisionTaskResponse_WorkflowType_DEFAULT *shared.WorkflowType
+func (p *PollForDecisionTaskResponse) GetWorkflowType() *shared.WorkflowType {
+  if !p.IsSetWorkflowType() {
+    return PollForDecisionTaskResponse_WorkflowType_DEFAULT
+  }
+return p.WorkflowType
+}
+var PollForDecisionTaskResponse_PreviousStartedEventId_DEFAULT int64
+func (p *PollForDecisionTaskResponse) GetPreviousStartedEventId() int64 {
+  if !p.IsSetPreviousStartedEventId() {
+    return PollForDecisionTaskResponse_PreviousStartedEventId_DEFAULT
+  }
+return *p.PreviousStartedEventId
+}
+var PollForDecisionTaskResponse_StartedEventId_DEFAULT int64
+func (p *PollForDecisionTaskResponse) GetStartedEventId() int64 {
+  if !p.IsSetStartedEventId() {
+    return PollForDecisionTaskResponse_StartedEventId_DEFAULT
+  }
+return *p.StartedEventId
+}
+func (p *PollForDecisionTaskResponse) IsSetTaskToken() bool {
+  return p.TaskToken != nil
+}
+
+func (p *PollForDecisionTaskResponse) IsSetWorkflowExecution() bool {
+  return p.WorkflowExecution != nil
+}
+
+func (p *PollForDecisionTaskResponse) IsSetWorkflowType() bool {
+  return p.WorkflowType != nil
+}
+
+func (p *PollForDecisionTaskResponse) IsSetPreviousStartedEventId() bool {
+  return p.PreviousStartedEventId != nil
+}
+
+func (p *PollForDecisionTaskResponse) IsSetStartedEventId() bool {
+  return p.StartedEventId != nil
+}
+
+func (p *PollForDecisionTaskResponse) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    case 30:
+      if err := p.ReadField30(iprot); err != nil {
+        return err
+      }
+    case 40:
+      if err := p.ReadField40(iprot); err != nil {
+        return err
+      }
+    case 50:
+      if err := p.ReadField50(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.TaskToken = v
+}
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse)  ReadField20(iprot thrift.TProtocol) error {
+  p.WorkflowExecution = &shared.WorkflowExecution{}
+  if err := p.WorkflowExecution.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.WorkflowExecution), err)
+  }
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse)  ReadField30(iprot thrift.TProtocol) error {
+  p.WorkflowType = &shared.WorkflowType{}
+  if err := p.WorkflowType.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.WorkflowType), err)
+  }
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse)  ReadField40(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI64(); err != nil {
+  return thrift.PrependError("error reading field 40: ", err)
+} else {
+  p.PreviousStartedEventId = &v
+}
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse)  ReadField50(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI64(); err != nil {
+  return thrift.PrependError("error reading field 50: ", err)
+} else {
+  p.StartedEventId = &v
+}
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("PollForDecisionTaskResponse"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+    if err := p.writeField30(oprot); err != nil { return err }
+    if err := p.writeField40(oprot); err != nil { return err }
+    if err := p.writeField50(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *PollForDecisionTaskResponse) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetTaskToken() {
+    if err := oprot.WriteFieldBegin("taskToken", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:taskToken: ", p), err) }
+    if err := oprot.WriteBinary(p.TaskToken); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.taskToken (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:taskToken: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetWorkflowExecution() {
+    if err := oprot.WriteFieldBegin("workflowExecution", thrift.STRUCT, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:workflowExecution: ", p), err) }
+    if err := p.WorkflowExecution.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.WorkflowExecution), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:workflowExecution: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) writeField30(oprot thrift.TProtocol) (err error) {
+  if p.IsSetWorkflowType() {
+    if err := oprot.WriteFieldBegin("workflowType", thrift.STRUCT, 30); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:workflowType: ", p), err) }
+    if err := p.WorkflowType.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.WorkflowType), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 30:workflowType: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) writeField40(oprot thrift.TProtocol) (err error) {
+  if p.IsSetPreviousStartedEventId() {
+    if err := oprot.WriteFieldBegin("previousStartedEventId", thrift.I64, 40); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 40:previousStartedEventId: ", p), err) }
+    if err := oprot.WriteI64(int64(*p.PreviousStartedEventId)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.previousStartedEventId (40) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 40:previousStartedEventId: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) writeField50(oprot thrift.TProtocol) (err error) {
+  if p.IsSetStartedEventId() {
+    if err := oprot.WriteFieldBegin("startedEventId", thrift.I64, 50); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 50:startedEventId: ", p), err) }
+    if err := oprot.WriteI64(int64(*p.StartedEventId)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.startedEventId (50) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 50:startedEventId: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("PollForDecisionTaskResponse(%+v)", *p)
+}
+
+// Attributes:
 //  - DomainUUID
 //  - PollRequest
 type PollForActivityTaskRequest struct {
@@ -770,7 +1023,7 @@ type MatchingService interface {  //MatchingService API is exposed to provide su
   // 
   // Parameters:
   //  - PollRequest
-  PollForDecisionTask(pollRequest *PollForDecisionTaskRequest) (r *shared.PollForDecisionTaskResponse, err error)
+  PollForDecisionTask(pollRequest *PollForDecisionTaskRequest) (r *PollForDecisionTaskResponse, err error)
   // PollForActivityTask is called by frontend to process ActivityTask from a specific taskList.  ActivityTask
   // is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
   // 
@@ -832,7 +1085,7 @@ func NewMatchingServiceClientProtocol(t thrift.TTransport, iprot thrift.TProtoco
 // 
 // Parameters:
 //  - PollRequest
-func (p *MatchingServiceClient) PollForDecisionTask(pollRequest *PollForDecisionTaskRequest) (r *shared.PollForDecisionTaskResponse, err error) {
+func (p *MatchingServiceClient) PollForDecisionTask(pollRequest *PollForDecisionTaskRequest) (r *PollForDecisionTaskResponse, err error) {
   if err = p.sendPollForDecisionTask(pollRequest); err != nil { return }
   return p.recvPollForDecisionTask()
 }
@@ -860,7 +1113,7 @@ func (p *MatchingServiceClient) sendPollForDecisionTask(pollRequest *PollForDeci
 }
 
 
-func (p *MatchingServiceClient) recvPollForDecisionTask() (value *shared.PollForDecisionTaskResponse, err error) {
+func (p *MatchingServiceClient) recvPollForDecisionTask() (value *PollForDecisionTaskResponse, err error) {
   iprot := p.InputProtocol
   if iprot == nil {
     iprot = p.ProtocolFactory.GetProtocol(p.Transport)
@@ -1242,7 +1495,7 @@ func (p *matchingServiceProcessorPollForDecisionTask) Process(seqId int32, iprot
 
   iprot.ReadMessageEnd()
   result := MatchingServicePollForDecisionTaskResult{}
-var retval *shared.PollForDecisionTaskResponse
+var retval *PollForDecisionTaskResponse
   var err2 error
   if retval, err2 = p.handler.PollForDecisionTask(args.PollRequest); err2 != nil {
   switch v := err2.(type) {
@@ -1542,7 +1795,7 @@ func (p *MatchingServicePollForDecisionTaskArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 type MatchingServicePollForDecisionTaskResult struct {
-  Success *shared.PollForDecisionTaskResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
+  Success *PollForDecisionTaskResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
 }
@@ -1551,8 +1804,8 @@ func NewMatchingServicePollForDecisionTaskResult() *MatchingServicePollForDecisi
   return &MatchingServicePollForDecisionTaskResult{}
 }
 
-var MatchingServicePollForDecisionTaskResult_Success_DEFAULT *shared.PollForDecisionTaskResponse
-func (p *MatchingServicePollForDecisionTaskResult) GetSuccess() *shared.PollForDecisionTaskResponse {
+var MatchingServicePollForDecisionTaskResult_Success_DEFAULT *PollForDecisionTaskResponse
+func (p *MatchingServicePollForDecisionTaskResult) GetSuccess() *PollForDecisionTaskResponse {
   if !p.IsSetSuccess() {
     return MatchingServicePollForDecisionTaskResult_Success_DEFAULT
   }
@@ -1625,7 +1878,7 @@ func (p *MatchingServicePollForDecisionTaskResult) Read(iprot thrift.TProtocol) 
 }
 
 func (p *MatchingServicePollForDecisionTaskResult)  ReadField0(iprot thrift.TProtocol) error {
-  p.Success = &shared.PollForDecisionTaskResponse{}
+  p.Success = &PollForDecisionTaskResponse{}
   if err := p.Success.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Success), err)
   }

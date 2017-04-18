@@ -81,7 +81,7 @@ func (h *Handler) PollForActivityTask(ctx thrift.Context,
 
 // PollForDecisionTask - long poll for a decision task.
 func (h *Handler) PollForDecisionTask(ctx thrift.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (*gen.PollForDecisionTaskResponse, error) {
+	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
 	h.Service.GetLogger().Debug("Engine Received PollForDecisionTask")
 	h.startWG.Wait()
 	response, error := h.engine.PollForDecisionTask(ctx, pollRequest)

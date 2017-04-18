@@ -25,10 +25,12 @@ var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
 type WorkflowHandler struct {
 	domainCache     cache.DomainCache
 	metadataMgr     persistence.MetadataManager
+	historyMgr      persistence.HistoryManager
+	visibitiltyMgr  persistence.VisibilityManager
 	history         history.Client
 	matching        matching.Client
 	tokenSerializer common.TaskTokenSerializer
-	visibitiltyMgr  persistence.VisibilityManager
+	hSerializer     common.HistorySerializer
 	startWG         sync.WaitGroup
 	service.Service
 }
@@ -40,13 +42,16 @@ var (
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(
-	sVice service.Service, metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager) (*WorkflowHandler, []thrift.TChanServer) {
+	sVice service.Service, metadataMgr persistence.MetadataManager,
+	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service:         sVice,
 		metadataMgr:     metadataMgr,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
-		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
+		historyMgr:      historyMgr,
 		visibitiltyMgr:  visibilityMgr,
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		hSerializer:     common.NewJSONHistorySerializer(),
+		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -248,15 +253,21 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	wh.Service.GetLogger().Infof("Poll for decision domain name: %v", domainName)
 	wh.Service.GetLogger().Infof("Poll for decision request domainID: %v", info.ID)
 
-	resp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
+	matchingResp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
 		DomainUUID:  common.StringPtr(info.ID),
 		PollRequest: pollRequest,
 	})
 	if err != nil {
 		wh.Service.GetLogger().Errorf(
 			"PollForDecisionTask failed. TaskList: %v, Error: %v", pollRequest.GetTaskList().GetName(), err)
+		return nil, wrapError(err)
 	}
-	return resp, wrapError(err)
+
+	history, err := wh.getHistory(info.ID, *matchingResp.GetWorkflowExecution(), matchingResp.GetStartedEventId()+1)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return createPollForDecisionTaskResponse(matchingResp, history), nil
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -471,7 +482,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx thrift.Context,
 	}
 
 	err = wh.history.SignalWorkflowExecution(ctx, &h.SignalWorkflowExecutionRequest{
-		DomainUUID: common.StringPtr(info.ID),
+		DomainUUID:    common.StringPtr(info.ID),
 		SignalRequest: signalRequest,
 	})
 
@@ -493,7 +504,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
 	}
 
 	err = wh.history.TerminateWorkflowExecution(ctx, &h.TerminateWorkflowExecutionRequest{
-		DomainUUID: common.StringPtr(info.ID),
+		DomainUUID:       common.StringPtr(info.ID),
 		TerminateRequest: terminateRequest,
 	})
 
@@ -643,6 +654,42 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 	return resp, nil
 }
 
+func (wh *WorkflowHandler) getHistory(
+	domainID string, execution gen.WorkflowExecution, nextEventID int64) (*gen.History, error) {
+
+	nextPageToken := []byte{}
+	historyEvents := []*gen.HistoryEvent{}
+Pagination_Loop:
+	for {
+		response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
+			DomainID:      domainID,
+			Execution:     execution,
+			NextEventID:   nextEventID,
+			PageSize:      100,
+			NextPageToken: nextPageToken,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, data := range response.Events {
+			events, _ := wh.hSerializer.Deserialize(data)
+			historyEvents = append(historyEvents, events...)
+		}
+
+		if len(response.NextPageToken) == 0 {
+			break Pagination_Loop
+		}
+
+		nextPageToken = response.NextPageToken
+	}
+
+	executionHistory := gen.NewHistory()
+	executionHistory.Events = historyEvents
+	return executionHistory, nil
+}
+
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {
 	logger := wh.Service.GetLogger()
 	task, err := wh.tokenSerializer.Deserialize(taskToken)
@@ -707,4 +754,16 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 	c.WorkflowExecutionRetentionPeriodInDays = common.Int32Ptr(config.Retention)
 
 	return i, c
+}
+
+func createPollForDecisionTaskResponse(
+	matchingResponse *m.PollForDecisionTaskResponse, history *gen.History) *gen.PollForDecisionTaskResponse {
+	resp := gen.NewPollForDecisionTaskResponse()
+	resp.TaskToken = matchingResponse.TaskToken
+	resp.WorkflowExecution = matchingResponse.WorkflowExecution
+	resp.WorkflowType = matchingResponse.WorkflowType
+	resp.PreviousStartedEventId = matchingResponse.PreviousStartedEventId
+	resp.StartedEventId = matchingResponse.StartedEventId
+	resp.History = history
+	return resp
 }

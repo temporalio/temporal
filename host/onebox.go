@@ -132,7 +132,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	rpFactory := newRingpopFactory(common.FrontendServiceName, rpHosts)
 	service := service.New(common.FrontendServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
 	var thriftServices []thrift.TChanServer
-	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service, c.metadataMgr, c.visibilityMgr)
+	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service, c.metadataMgr, c.historyMgr, c.visibilityMgr)
 	err := c.frontendHandler.Start(thriftServices)
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")

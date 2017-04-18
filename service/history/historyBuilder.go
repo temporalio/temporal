@@ -14,7 +14,7 @@ const (
 
 type (
 	historyBuilder struct {
-		serializer historySerializer
+		serializer common.HistorySerializer
 		history    []*workflow.HistoryEvent
 		msBuilder  *mutableStateBuilder
 		logger     bark.Logger
@@ -23,7 +23,7 @@ type (
 
 func newHistoryBuilder(msBuilder *mutableStateBuilder, logger bark.Logger) *historyBuilder {
 	return &historyBuilder{
-		serializer: newJSONHistorySerializer(),
+		serializer: common.NewJSONHistorySerializer(),
 		history:    []*workflow.HistoryEvent{},
 		msBuilder:  msBuilder,
 		logger:     logger.WithField(tagWorkflowComponent, tagValueHistoryBuilderComponent),
