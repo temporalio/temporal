@@ -1,1 +1,1 @@
-CREATE KEYSPACE IF NOT EXISTS cadence_staging_dca1a WITH replication = { 'class' : 'NetworkTopologyStrategy', 'dca1' : 3};
+CREATE KEYSPACE IF NOT EXISTS cadence WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1};
