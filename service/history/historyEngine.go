@@ -604,6 +604,7 @@ Update_History_Loop:
 		if (completedID - startedID) > 1 {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
+				DomainID:   domainID,
 				TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 				ScheduleID: newDecisionEvent.GetEventId(),
 			})
