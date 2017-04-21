@@ -94,6 +94,18 @@ func IsPersistenceTransientError(err error) bool {
 	return false
 }
 
+// IsServiceNonRetryableError checks if the error is a non retryable error.
+func IsServiceNonRetryableError(err error) bool {
+	switch err.(type) {
+	case *workflow.EntityNotExistsError:
+		return true
+	case *workflow.BadRequestError:
+		return true
+	}
+
+	return false
+}
+
 // WorkflowIDToHistoryShard is used to map workflowID to a shardID
 func WorkflowIDToHistoryShard(workflowID string, numberOfShards int) int {
 	hash := farm.Fingerprint32([]byte(workflowID))

@@ -179,6 +179,19 @@ service WorkflowService {
     )
 
   /**
+  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
+  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
+  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+  * anymore due to completion or doesn't exist.
+  **/
+  void RequestCancelWorkflowExecution(1: shared.RequestCancelWorkflowExecutionRequest cancelRequest)
+      throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+      )
+
+  /**
   * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
   * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
   **/

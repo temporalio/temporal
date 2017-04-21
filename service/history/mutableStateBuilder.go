@@ -6,6 +6,7 @@ import (
 	"time"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 
@@ -562,6 +563,41 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int6
 func (e *mutableStateBuilder) AddCompleteWorkflowExecutionFailedEvent(decisionCompletedEventID int64,
 	cause workflow.WorkflowCompleteFailedCause) *workflow.HistoryEvent {
 	return e.hBuilder.AddCompleteWorkflowExecutionFailedEvent(decisionCompletedEventID, cause)
+}
+
+func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(cause string,
+	request *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent {
+	return e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(cause, request)
+}
+
+func (e *mutableStateBuilder) AddCancelWorkflowExecutionFailedEvent(decisionTaskCompletedEventID int64,
+	cause workflow.WorkflowCancelFailedCause) *workflow.HistoryEvent {
+	return e.hBuilder.AddCancelWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, cause)
+}
+
+func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID int64,
+	attributes *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+
+	e.executionInfo.State = persistence.WorkflowStateCompleted
+	return e.hBuilder.AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID, attributes)
+}
+
+func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,
+	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	return e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		decisionCompletedEventID, request)
+}
+
+func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
+	decisionTaskCompletedEventID, initiatedEventID int64,
+	domain, workflowID, runID string, cause workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
+	return e.hBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
+		decisionTaskCompletedEventID, initiatedEventID, domain, workflowID, runID, cause)
+}
+
+func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(initiatedEventID int64,
+	domain, workflowID, runID string) *workflow.HistoryEvent {
+	return e.hBuilder.AddExternalWorkflowExecutionCancelRequested(initiatedEventID, domain, workflowID, runID)
 }
 
 func (e *mutableStateBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,

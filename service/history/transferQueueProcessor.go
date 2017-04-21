@@ -7,8 +7,10 @@ import (
 
 	"github.com/uber-common/bark"
 
+	"github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
@@ -25,10 +27,12 @@ const (
 
 type (
 	transferQueueProcessorImpl struct {
+		shard             ShardContext
 		ackMgr            *ackManager
 		executionManager  persistence.ExecutionManager
 		visibilityManager persistence.VisibilityManager
 		matchingClient    matching.Client
+		historyClient     hc.Client
 		cache             *historyCache
 		rateLimiter       common.TokenBucket // Read rate limiter
 		appendCh          chan struct{}
@@ -58,12 +62,14 @@ type (
 )
 
 func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.VisibilityManager,
-	matching matching.Client, cache *historyCache) transferQueueProcessor {
+	matching matching.Client, historyClient hc.Client, cache *historyCache) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
 	processor := &transferQueueProcessorImpl{
+		shard:             shard,
 		executionManager:  executionManager,
 		matchingClient:    matching,
+		historyClient:     historyClient,
 		visibilityManager: visibilityMgr,
 		cache:             cache,
 		rateLimiter:       common.NewTokenBucket(transferProcessorMaxPollRPS, common.NewRealTimeSource()),
@@ -276,6 +282,40 @@ ProcessRetryLoop:
 						}
 					}
 					release()
+				}
+
+			case persistence.TransferTaskTypeCancelExecution:
+				{
+					var context *workflowExecutionContext
+					var release releaseWorkflowExecutionFunc
+					context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
+					if err == nil {
+						// Load workflow execution.
+						_, err = context.loadWorkflowExecution()
+						if err == nil {
+							cancelRequest := &history.RequestCancelWorkflowExecutionRequest{
+								DomainUUID: common.StringPtr(targetDomainID),
+								CancelRequest: &workflow.RequestCancelWorkflowExecutionRequest{
+									WorkflowExecution: &workflow.WorkflowExecution{
+										WorkflowId: common.StringPtr(task.TargetWorkflowID),
+										RunId:      common.StringPtr(task.TargetRunID),
+									},
+									Identity: common.StringPtr("history-service"),
+								},
+								ExternalInitiatedEventId: common.Int64Ptr(task.ScheduleID),
+								ExternalWorkflowExecution: &workflow.WorkflowExecution{
+									WorkflowId: common.StringPtr(task.WorkflowID),
+									RunId: common.StringPtr(task.RunID),
+								},
+							}
+
+							err = context.requestExternalCancelWorkflowExecutionWithRetry(
+								t.historyClient,
+								cancelRequest,
+								task.ScheduleID)
+						}
+						release()
+					}
 				}
 			}
 

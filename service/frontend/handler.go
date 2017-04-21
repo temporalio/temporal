@@ -515,6 +515,30 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
 	return wrapError(err)
 }
 
+// RequestCancelWorkflowExecution - requests to cancel a workflow execution
+func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
+	ctx thrift.Context,
+	cancelRequest *gen.RequestCancelWorkflowExecutionRequest) error {
+	wh.startWG.Wait()
+
+	if !cancelRequest.IsSetDomain() {
+		return errDomainNotSet
+	}
+
+	domainName := cancelRequest.GetDomain()
+	info, _, err := wh.domainCache.GetDomain(domainName)
+	if err != nil {
+		return wrapError(err)
+	}
+
+	err = wh.history.RequestCancelWorkflowExecution(ctx, &h.RequestCancelWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(info.ID),
+		CancelRequest: cancelRequest,
+	})
+
+	return wrapError(err)
+}
+
 // ListOpenWorkflowExecutions - retrieves info for open workflow executions in a domain
 func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx thrift.Context,
 	listRequest *gen.ListOpenWorkflowExecutionsRequest) (*gen.ListOpenWorkflowExecutionsResponse, error) {

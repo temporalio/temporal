@@ -7,6 +7,7 @@ import (
 
 	hist "github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
@@ -24,6 +25,7 @@ type Handler struct {
 	visibilityMgr         persistence.VisibilityManager
 	historyMgr            persistence.HistoryManager
 	executionMgrFactory   persistence.ExecutionManagerFactory
+	historyServiceClient  hc.Client
 	matchingServiceClient matching.Client
 	hServiceResolver      membership.ServiceResolver
 	controller            *shardController
@@ -68,6 +70,12 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	}
 	h.matchingServiceClient = matchingServiceClient
 
+	historyServiceClient, err0 := h.Service.GetClientFactory().NewHistoryClient()
+	if err0 != nil {
+		return err0
+	}
+	h.historyServiceClient = historyServiceClient
+
 	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
@@ -89,7 +97,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr, h.matchingServiceClient)
+	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient)
 }
 
 // IsHealthy - Health endpoint.
@@ -406,6 +414,37 @@ func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
 		return nil, h.convertError(err2)
 	}
 	return resp, nil
+}
+
+// RequestCancelWorkflowExecution - requests cancellation of a workflow
+func (h *Handler) RequestCancelWorkflowExecution(ctx thrift.Context,
+	request *hist.RequestCancelWorkflowExecutionRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryRequestCancelWorkflowExecutionScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryRequestCancelWorkflowExecutionScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	cancelRequest := request.GetCancelRequest()
+	h.Service.GetLogger().Debugf("RequestCancelWorkflowExecution. DomainID: %v/%v, WorkflowID: %v, RunID: %v.",
+		cancelRequest.GetDomain(),
+		request.GetDomainUUID(),
+		cancelRequest.GetWorkflowExecution().GetWorkflowId(),
+		cancelRequest.GetWorkflowExecution().GetRunId())
+
+	engine, err1 := h.controller.GetEngine(cancelRequest.GetWorkflowExecution().GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryRequestCancelWorkflowExecutionScope, err1)
+		return err1
+	}
+
+	err2 := engine.RequestCancelWorkflowExecution(request)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryRequestCancelWorkflowExecutionScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
 }
 
 func (h *Handler) SignalWorkflowExecution(ctx thrift.Context,

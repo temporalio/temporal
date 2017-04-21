@@ -190,6 +190,20 @@ func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *gohistory.Reco
 	return r0, r1
 }
 
+// RequestCancelWorkflowExecution is mock implementation for RequestCancelWorkflowExecution of HistoryEngine
+func (_m *MockHistoryEngine) RequestCancelWorkflowExecution(request *gohistory.RequestCancelWorkflowExecutionRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.RequestCancelWorkflowExecutionRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SignalWorkflowExecution is mock implementation for SignalWorkflowExecution of HistoryEngine
 func (_m *MockHistoryEngine) SignalWorkflowExecution(request *gohistory.SignalWorkflowExecutionRequest) error {
 	ret := _m.Called(request)

@@ -29,8 +29,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/suite"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	tchannel "github.com/uber/tchannel-go"
 
@@ -60,11 +60,12 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		domainName string
-		host       Cadence
-		ch         *tchannel.Channel
-		engine     frontend.Client
-		logger     bark.Logger
+		domainName        string
+		foreignDomainName string
+		host              Cadence
+		ch                *tchannel.Channel
+		engine            frontend.Client
+		logger            bark.Logger
 		suite.Suite
 		persistence.TestBase
 	}
@@ -104,7 +105,7 @@ func (s *integrationSuite) SetupSuite() {
 	formatter := &log.TextFormatter{}
 	formatter.FullTimestamp = true
 	logger.Formatter = formatter
-	logger.Level = log.DebugLevel
+	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 
 	s.ch, _ = tchannel.NewChannel("cadence-integration-test", nil)
@@ -137,6 +138,14 @@ func (s *integrationSuite) SetupTest() {
 		Retention:   1,
 		EmitMetric:  false,
 	})
+	s.foreignDomainName = "integration-foreign-test-domain"
+	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+		Name:        s.foreignDomainName,
+		Status:      persistence.DomainStatusRegistered,
+		Description: "Test foregin domain for integration test",
+		Retention:   1,
+		EmitMetric:  false,
+	})
 }
 
 func (s *integrationSuite) TearDownTest() {
@@ -158,12 +167,12 @@ func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -180,9 +189,9 @@ func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 }
 
 func (s *integrationSuite) TestTerminateWorkflow() {
-	id := "interation-terminate-workflow-test"
-	wt := "interation-terminate-workflow-test-type"
-	tl := "interation-terminate-workflow-test-tasklist"
+	id := "integration-terminate-workflow-test"
+	wt := "integration-terminate-workflow-test-type"
+	tl := "integration-terminate-workflow-test-tasklist"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -193,12 +202,12 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -222,10 +231,10 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -312,12 +321,12 @@ GetHistoryLoop:
 StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflow.StartWorkflowExecutionRequest{
-			RequestId:                           common.StringPtr(uuid.New()),
-			Domain:                              common.StringPtr(s.domainName),
-			WorkflowId:                          common.StringPtr(id),
-			WorkflowType:                        workflowType,
-			TaskList:                            taskList,
-			Input:                               nil,
+			RequestId:    common.StringPtr(uuid.New()),
+			Domain:       common.StringPtr(s.domainName),
+			WorkflowId:   common.StringPtr(id),
+			WorkflowType: workflowType,
+			TaskList:     taskList,
+			Input:        nil,
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 			Identity:                            common.StringPtr(identity),
@@ -353,12 +362,12 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -382,10 +391,10 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -571,12 +580,12 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -601,10 +610,10 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
@@ -675,12 +684,12 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -705,10 +714,10 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(15),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
@@ -782,12 +791,12 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -815,10 +824,10 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(15),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
@@ -882,12 +891,12 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -960,12 +969,12 @@ func (s *integrationSuite) TestActivityCancelation() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -990,10 +999,10 @@ func (s *integrationSuite) TestActivityCancelation() {
 			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(15),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
@@ -1099,12 +1108,12 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// Start workflow execution
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -1131,10 +1140,10 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			return nil, []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
 				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:                    common.StringPtr(strconv.Itoa(int(1))),
-					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:                      &workflow.TaskList{Name: &tl},
-					Input:                         buf.Bytes(),
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -1276,12 +1285,12 @@ func (s *integrationSuite) TestVisibility() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id1),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id1),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 		Identity:                            common.StringPtr(identity),
@@ -1291,12 +1300,12 @@ func (s *integrationSuite) TestVisibility() {
 	s.Nil(err0)
 
 	request = &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id2),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id2),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 		Identity:                            common.StringPtr(identity),
@@ -1361,6 +1370,493 @@ ListClosedLoop:
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
 }
+
+func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
+	id := "integration-request-cancel-workflow-test"
+	wt := "integration-request-cancel-workflow-test-type"
+	tl := "integration-request-cancel-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CancelWorkflowExecution),
+			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
+				Details: []byte("Cancelled"),
+			},
+		}}
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = poller.pollAndProcessActivityTask(false)
+	s.logger.Infof("pollAndProcessActivityTask: %v", err)
+	s.Nil(err)
+
+	err = s.engine.RequestCancelWorkflowExecution(&workflow.RequestCancelWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+	})
+	s.Nil(err)
+
+	err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	executionCancelled := false
+GetHistoryLoop:
+	for i := 1; i < 3; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_WorkflowExecutionCanceled {
+			s.logger.Warnf("Execution not cancelled yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
+		s.Equal("Cancelled", string(cancelledEventAttributes.GetDetails()))
+		executionCancelled = true
+		break GetHistoryLoop
+	}
+	s.True(executionCancelled)
+}
+
+func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
+	id := "integration-cancel-workflow-decision-test"
+	wt := "integration-cancel-workflow-decision-test-type"
+	tl := "integration-cancel-workflow-decision-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	foreignRequest := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.foreignDomainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we2, err0 := s.engine.StartWorkflowExecution(foreignRequest)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, we2.GetRunId())
+
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelExternalWorkflowExecution),
+			RequestCancelExternalWorkflowExecutionDecisionAttributes: &workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+				Domain:     common.StringPtr(s.foreignDomainName),
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we2.GetRunId()),
+			},
+		}}
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	foreginWorkflowComplete := false
+	foreignActivityCount := int32(1)
+	foreignActivityCounter := int32(0)
+	foreignDtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if foreignActivityCounter < foreignActivityCount {
+			foreignActivityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
+
+			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(foreignActivityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		}
+
+		foreginWorkflowComplete = true
+		return []byte(strconv.Itoa(int(foreignActivityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CancelWorkflowExecution),
+			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
+				Details: []byte("Cancelled"),
+			},
+		}}
+	}
+
+	foreignPoller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.foreignDomainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: foreignDtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	// Start both current and foreign workflows to make some progress.
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = foreignPoller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = foreignPoller.pollAndProcessActivityTask(false)
+	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	s.Nil(err)
+
+	// Cancel the foreign workflow with this decision request.
+	err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	cancellationSent := false
+	intiatedEventId := 10
+CheckHistoryLoopForCancelSent:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_ExternalWorkflowExecutionCancelRequested {
+			s.logger.Info("Cancellaton has been sent.")
+			time.Sleep(100 * time.Millisecond)
+			continue CheckHistoryLoopForCancelSent
+		}
+
+		externalWorkflowExecutionCancelRequestedEvent := lastEvent.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
+		s.Equal(int64(intiatedEventId), externalWorkflowExecutionCancelRequestedEvent.GetInitiatedEventId())
+		s.Equal(id, externalWorkflowExecutionCancelRequestedEvent.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(we2.GetRunId(), externalWorkflowExecutionCancelRequestedEvent.GetWorkflowExecution().GetRunId())
+
+		cancellationSent = true
+		break
+	}
+
+	s.True(cancellationSent)
+
+	// Accept cancellation.
+	err = foreignPoller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	executionCancelled := false
+GetHistoryLoop:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.foreignDomainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we2.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_WorkflowExecutionCanceled {
+			s.logger.Warnf("Execution not cancelled yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
+		s.Equal("Cancelled", string(cancelledEventAttributes.GetDetails()))
+		executionCancelled = true
+
+		// Find cancel requested event and verify it.
+		var cancelRequestEvent *workflow.HistoryEvent
+		for _, x := range history.GetEvents() {
+			if x.GetEventType() == workflow.EventType_WorkflowExecutionCancelRequested {
+				cancelRequestEvent = x
+			}
+		}
+
+		s.NotNil(cancelRequestEvent)
+		cancelRequestEventAttributes := cancelRequestEvent.GetWorkflowExecutionCancelRequestedEventAttributes()
+		s.Equal(int64(intiatedEventId), cancelRequestEventAttributes.GetExternalInitiatedEventId())
+		s.Equal(id, cancelRequestEventAttributes.GetExternalWorkflowExecution().GetWorkflowId())
+		s.Equal(we.GetRunId(), cancelRequestEventAttributes.GetExternalWorkflowExecution().GetRunId())
+
+		break GetHistoryLoop
+	}
+	s.True(executionCancelled)
+}
+
+func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTarget() {
+	id := "integration-cancel-unknown-workflow-decision-test"
+	wt := "integration-cancel-unknown-workflow-decision-test-type"
+	tl := "integration-cancel-unknown-workflow-decision-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RequestCancelExternalWorkflowExecution),
+			RequestCancelExternalWorkflowExecutionDecisionAttributes: &workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+				Domain:     common.StringPtr(s.foreignDomainName),
+				WorkflowId: common.StringPtr("workflow_not_exist"),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		}}
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	// Start both current and foreign workflows to make some progress.
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// Cancel the foreign workflow with this decision request.
+	err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	cancellationSentFailed := false
+	intiatedEventId := 10
+CheckHistoryLoopForCancelSent:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_RequestCancelExternalWorkflowExecutionFailed {
+			s.logger.Info("Cancellaton has been sent.")
+			time.Sleep(100 * time.Millisecond)
+			continue CheckHistoryLoopForCancelSent
+		}
+
+		requestCancelExternalWorkflowExecutionFailedEvetn := lastEvent.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
+		s.Equal(int64(intiatedEventId), requestCancelExternalWorkflowExecutionFailedEvetn.GetInitiatedEventId())
+		s.Equal("workflow_not_exist", requestCancelExternalWorkflowExecutionFailedEvetn.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(we.GetRunId(), requestCancelExternalWorkflowExecutionFailedEvetn.GetWorkflowExecution().GetRunId())
+
+		cancellationSentFailed = true
+		break
+	}
+
+	s.True(cancellationSentFailed)
+}
+
 
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed

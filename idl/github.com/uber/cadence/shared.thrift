@@ -46,6 +46,8 @@ enum DecisionType {
   CompleteWorkflowExecution,
   FailWorkflowExecution,
   CancelTimer,
+  CancelWorkflowExecution,
+  RequestCancelExternalWorkflowExecution,
   RecordMarker,
 }
 
@@ -71,6 +73,12 @@ enum EventType {
   CompleteWorkflowExecutionFailed,
   CancelTimerFailed,
   TimerCanceled,
+  WorkflowExecutionCancelRequested,
+  CancelWorkflowExecutionFailed,
+  WorkflowExecutionCanceled,
+  RequestCancelExternalWorkflowExecutionInitiated,
+  RequestCancelExternalWorkflowExecutionFailed,
+  ExternalWorkflowExecutionCancelRequested,
   MarkerRecorded,
   WorkflowExecutionSignaled,
   WorkflowExecutionTerminated,
@@ -78,6 +86,14 @@ enum EventType {
 
 enum WorkflowCompleteFailedCause {
   UNHANDLED_DECISION,
+}
+
+enum WorkflowCancelFailedCause {
+  UNHANDLED_DECISION,
+}
+
+enum CancelExternalWorkflowExecutionFailedCause {
+  UNKNOWN_EXTERNAL_WORKFLOW_EXECUTION,
 }
 
 struct WorkflowType {
@@ -139,6 +155,17 @@ struct CancelTimerDecisionAttributes {
   10: optional string timerId
 }
 
+struct CancelWorkflowExecutionDecisionAttributes {
+  10: optional binary details
+}
+
+struct RequestCancelExternalWorkflowExecutionDecisionAttributes {
+    10: optional string domain
+    20: optional string workflowId
+    30: optional string runId
+    40: optional binary control
+}
+
 struct RecordMarkerDecisionAttributes {
   10: optional string markerName
   20: optional binary details
@@ -152,7 +179,9 @@ struct Decision {
   35: optional FailWorkflowExecutionDecisionAttributes failWorkflowExecutionDecisionAttributes
   40: optional RequestCancelActivityTaskDecisionAttributes requestCancelActivityTaskDecisionAttributes
   50: optional CancelTimerDecisionAttributes cancelTimerDecisionAttributes
-  60: optional RecordMarkerDecisionAttributes recordMarkerDecisionAttributes
+  60: optional CancelWorkflowExecutionDecisionAttributes cancelWorkflowExecutionDecisionAttributes
+  70: optional RequestCancelExternalWorkflowExecutionDecisionAttributes requestCancelExternalWorkflowExecutionDecisionAttributes
+  80: optional RecordMarkerDecisionAttributes recordMarkerDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -293,6 +322,23 @@ struct CancelTimerFailedEventAttributes {
   40: optional string identity
 }
 
+struct WorkflowExecutionCancelRequestedEventAttributes {
+  10: optional string cause
+  20: optional i64 (js.type = "Long") externalInitiatedEventId
+  30: optional WorkflowExecution externalWorkflowExecution
+  40: optional string identity
+}
+
+struct CancelWorkflowExecutionFailedEventAttributes {
+  10: optional WorkflowCancelFailedCause cause
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+}
+
+struct WorkflowExecutionCanceledEventAttributes {
+  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  20: optional binary details
+}
+
 struct MarkerRecordedEventAttributes {
   10: optional string markerName
   20: optional binary details
@@ -309,6 +355,28 @@ struct WorkflowExecutionTerminatedEventAttributes {
   10: optional string reason
   20: optional binary details
   30: optional string identity
+}
+
+struct RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
+  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  20: optional string domain
+  30: optional WorkflowExecution workflowExecution
+  40: optional binary control
+}
+
+struct RequestCancelExternalWorkflowExecutionFailedEventAttributes {
+  10: optional CancelExternalWorkflowExecutionFailedCause cause
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  30: optional string domain
+  40: optional WorkflowExecution workflowExecution
+  50: optional i64 (js.type = "Long") initiatedEventId
+  60: optional binary control
+}
+
+struct ExternalWorkflowExecutionCancelRequestedEventAttributes {
+  10: optional i64 (js.type = "Long") initiatedEventId
+  20: optional string domain
+  30: optional WorkflowExecution workflowExecution
 }
 
 struct HistoryEvent {
@@ -339,6 +407,12 @@ struct HistoryEvent {
   160: optional MarkerRecordedEventAttributes markerRecordedEventAttributes
   170: optional WorkflowExecutionSignaledEventAttributes workflowExecutionSignaledEventAttributes
   180: optional WorkflowExecutionTerminatedEventAttributes workflowExecutionTerminatedEventAttributes
+  190: optional WorkflowExecutionCancelRequestedEventAttributes workflowExecutionCancelRequestedEventAttributes
+  200: optional CancelWorkflowExecutionFailedEventAttributes cancelWorkflowExecutionFailedEventAttributes
+  210: optional WorkflowExecutionCanceledEventAttributes workflowExecutionCanceledEventAttributes
+  220: optional RequestCancelExternalWorkflowExecutionInitiatedEventAttributes requestCancelExternalWorkflowExecutionInitiatedEventAttributes
+  230: optional RequestCancelExternalWorkflowExecutionFailedEventAttributes requestCancelExternalWorkflowExecutionFailedEventAttributes
+  240: optional ExternalWorkflowExecutionCancelRequestedEventAttributes externalWorkflowExecutionCancelRequestedEventAttributes
 }
 
 struct History {
@@ -486,6 +560,12 @@ struct RespondActivityTaskFailedRequest {
 struct RespondActivityTaskCanceledRequest {
   10: optional binary taskToken
   20: optional binary details
+  30: optional string identity
+}
+
+struct RequestCancelWorkflowExecutionRequest {
+  10: optional string domain
+  20: optional WorkflowExecution workflowExecution
   30: optional string identity
 }
 

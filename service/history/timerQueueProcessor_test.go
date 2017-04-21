@@ -72,7 +72,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 	historyCache := newHistoryCache(historyCacheMaxSize, shard, s.logger)
 	historyCache.disabled = true
-	txProcessor := newTransferQueueProcessor(shard, s.mockVisibilityMgr, &mocks.MatchingClient{}, historyCache)
+	txProcessor := newTransferQueueProcessor(shard, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{}, historyCache)
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       s.HistoryMgr,
@@ -108,7 +108,7 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, historyCache)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, historyCache)
 	h := &historyEngineImpl{
 		shard:            mockShard,
 		historyMgr:       s.mockHistoryMgr,

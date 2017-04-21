@@ -31,6 +31,7 @@ const (
 	TransferTaskTypeDecisionTask = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
+	TransferTaskTypeCancelExecution
 )
 
 // Types of timers
@@ -95,14 +96,16 @@ type (
 
 	// TransferTaskInfo describes a transfer task
 	TransferTaskInfo struct {
-		DomainID       string
-		WorkflowID     string
-		RunID          string
-		TaskID         int64
-		TargetDomainID string
-		TaskList       string
-		TaskType       int
-		ScheduleID     int64
+		DomainID         string
+		WorkflowID       string
+		RunID            string
+		TaskID           int64
+		TargetDomainID   string
+		TargetWorkflowID string
+		TargetRunID      string
+		TaskList         string
+		TaskType         int
+		ScheduleID       int64
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -166,6 +169,15 @@ type (
 	DecisionTimeoutTask struct {
 		TaskID  int64
 		EventID int64
+	}
+
+	// CancelExecutionTask identifies a transfer task for cancel of execution
+	CancelExecutionTask struct {
+		TaskID           int64
+		TargetDomainID   string
+		TargetWorkflowID string
+		TargetRunID      string
+		ScheduleID       int64
 	}
 
 	// ActivityTimeoutTask identifies a timeout task.
@@ -652,5 +664,20 @@ func (u *UserTimerTask) GetTaskID() int64 {
 
 // SetTaskID sets the sequence ID of the timer task.
 func (u *UserTimerTask) SetTaskID(id int64) {
+	u.TaskID = id
+}
+
+// GetType returns the type of the cancel transfer task
+func (u *CancelExecutionTask) GetType() int {
+	return TransferTaskTypeCancelExecution
+}
+
+// GetTaskID returns the sequence ID of the cancel transfer task.
+func (u *CancelExecutionTask) GetTaskID() int64 {
+	return u.TaskID
+}
+
+// SetTaskID sets the sequence ID of the cancel transfer task.
+func (u *CancelExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }

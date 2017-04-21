@@ -21,8 +21,8 @@ type (
 		RespondActivityTaskCompleted(request *h.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *h.RespondActivityTaskFailedRequest) error
 		RespondActivityTaskCanceled(request *h.RespondActivityTaskCanceledRequest) error
-		RecordActivityTaskHeartbeat(
-			request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		RecordActivityTaskHeartbeat(request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		RequestCancelWorkflowExecution(request *h.RequestCancelWorkflowExecutionRequest) error
 		SignalWorkflowExecution(request *h.SignalWorkflowExecutionRequest) error
 		TerminateWorkflowExecution(request *h.TerminateWorkflowExecutionRequest) error
 	}

@@ -14,26 +14,28 @@ import (
 )
 
 const (
-	cassandraProtoVersion     = 4
-	defaultSessionTimeout     = 10 * time.Second
-	rowTypeExecutionTaskID    = int64(77)
-	permanentRunID            = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
-	rowTypeShardDomainID      = "85aa26d5-0361-f1d2-f7c0-55f32c164de8"
-	rowTypeShardWorkflowID    = "3fe89dad-8326-fac5-fd40-fe08cfa25dec"
-	rowTypeShardRunID         = "228ce20b-af54-fe2f-ff17-be728a00f785"
-	rowTypeTransferDomainID   = "b4b58501-dbd8-fc00-f57f-dd9939a28930"
-	rowTypeTransferWorkflowID = "5739f107-1a97-f929-fd00-b6fef701457d"
-	rowTypeTransferRunID      = "49756028-f1fa-fa16-f67b-4553d9859b8c"
-	rowTypeTimerDomainID      = "2b2dc6d8-e465-fb94-f66c-a5f2f38e16f5"
-	rowTypeTimerWorkflowID    = "cd1f9688-d7ac-fc6b-f69e-8b44a3460a3d"
-	rowTypeTimerRunID         = "c82b7881-892f-fd9e-feb3-a6d9f7b32f7f"
-	rowTypeShardTaskID        = int64(23)
-	defaultDeleteTTLSeconds   = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
+	cassandraProtoVersion                = 4
+	defaultSessionTimeout                = 10 * time.Second
+	rowTypeExecutionTaskID               = int64(77)
+	permanentRunID                       = "dcb940ac-0c63-ffa2-ffea-a6c305881d71"
+	rowTypeShardDomainID                 = "85aa26d5-0361-f1d2-f7c0-55f32c164de8"
+	rowTypeShardWorkflowID               = "3fe89dad-8326-fac5-fd40-fe08cfa25dec"
+	rowTypeShardRunID                    = "228ce20b-af54-fe2f-ff17-be728a00f785"
+	rowTypeTransferDomainID              = "b4b58501-dbd8-fc00-f57f-dd9939a28930"
+	rowTypeTransferWorkflowID            = "5739f107-1a97-f929-fd00-b6fef701457d"
+	rowTypeTransferRunID                 = "49756028-f1fa-fa16-f67b-4553d9859b8c"
+	rowTypeTimerDomainID                 = "2b2dc6d8-e465-fb94-f66c-a5f2f38e16f5"
+	rowTypeTimerWorkflowID               = "cd1f9688-d7ac-fc6b-f69e-8b44a3460a3d"
+	rowTypeTimerRunID                    = "c82b7881-892f-fd9e-feb3-a6d9f7b32f7f"
+	transferTaskTransferTargetWorkflowID = "11111111-1a97-f929-fd00-b6fef701457d"
+	transferTaskTypeTransferTargetRunID  = "11111111-f1fa-fa16-f67b-4553d9859b8c"
+	rowTypeShardTaskID                   = int64(23)
+	defaultDeleteTTLSeconds              = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
 )
 
 const (
 	// Row types for table executions
-	rowTypeShard        = iota
+	rowTypeShard = iota
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
@@ -41,7 +43,7 @@ const (
 
 const (
 	// Row types for table tasks
-	rowTypeTask     = iota
+	rowTypeTask = iota
 	rowTypeTaskList
 )
 
@@ -86,6 +88,8 @@ const (
 		`run_id: ?, ` +
 		`task_id: ?, ` +
 		`target_domain_id: ?, ` +
+		`target_workflow_id: ?, ` +
+		`target_run_id: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
 		`schedule_id: ?` +
@@ -1189,11 +1193,13 @@ PopulateTasks:
 }
 
 func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, domainID, workflowID,
-runID string, cqlNowTimestamp int64) {
+	runID string, cqlNowTimestamp int64) {
 	targetDomainID := domainID
 	for _, task := range transferTasks {
 		var taskList string
 		var scheduleID int64
+		targetWorkflowID := transferTaskTransferTargetWorkflowID
+		targetRunID := transferTaskTypeTransferTargetRunID
 
 		switch task.GetType() {
 		case TransferTaskTypeActivityTask:
@@ -1205,6 +1211,12 @@ runID string, cqlNowTimestamp int64) {
 			targetDomainID = task.(*DecisionTask).DomainID
 			taskList = task.(*DecisionTask).TaskList
 			scheduleID = task.(*DecisionTask).ScheduleID
+
+		case TransferTaskTypeCancelExecution:
+			targetDomainID = task.(*CancelExecutionTask).TargetDomainID
+			targetWorkflowID = task.(*CancelExecutionTask).TargetWorkflowID
+			targetRunID = task.(*CancelExecutionTask).TargetRunID
+			scheduleID = task.(*CancelExecutionTask).ScheduleID
 		}
 
 		batch.Query(templateCreateTransferTaskQuery,
@@ -1218,6 +1230,8 @@ runID string, cqlNowTimestamp int64) {
 			runID,
 			task.GetTaskID(),
 			targetDomainID,
+			targetWorkflowID,
+			targetRunID,
 			taskList,
 			task.GetType(),
 			scheduleID,
@@ -1429,6 +1443,10 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.TaskID = v.(int64)
 		case "target_domain_id":
 			info.TargetDomainID = v.(gocql.UUID).String()
+		case "target_workflow_id":
+			info.TargetWorkflowID = v.(string)
+		case "target_run_id":
+			info.TargetRunID = v.(gocql.UUID).String()
 		case "task_list":
 			info.TaskList = v.(string)
 		case "type":

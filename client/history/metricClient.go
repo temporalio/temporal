@@ -157,6 +157,21 @@ func (c *metricClient) RecordActivityTaskHeartbeat(context thrift.Context,
 	return resp, err
 }
 
+func (c *metricClient) RequestCancelWorkflowExecution(context thrift.Context,
+	request *h.RequestCancelWorkflowExecutionRequest) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.CadenceLatency)
+	err := c.client.RequestCancelWorkflowExecution(context, request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.CadenceFailures)
+	}
+
+	return err
+}
+
 func (c *metricClient) SignalWorkflowExecution(context thrift.Context,
 	request *h.SignalWorkflowExecutionRequest) error {
 	c.metricsClient.IncCounter(metrics.HistoryClientSignalWorkflowExecutionScope, metrics.CadenceRequests)

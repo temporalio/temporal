@@ -38,14 +38,16 @@ CREATE TYPE workflow_execution (
 
 -- TODO: Remove fields that are left over from activity and workflow tasks.
 CREATE TYPE transfer_task (
-  domain_id        uuid,
-  workflow_id      text,
-  run_id           uuid,
-  task_id          bigint,
-  target_domain_id uuid,
-  task_list        text,
-  type             int,  -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution}
-  schedule_id      bigint,
+  domain_id           uuid,   -- The domain ID that this transfer task belongs to
+  workflow_id         text,   -- The workflow ID that this transfer task belongs to
+  run_id              uuid,   -- The run ID that this transfer task belongs to
+  task_id             bigint,
+  target_domain_id    uuid,   -- The external domain ID that this transfer task is doing work for.
+  target_workflow_id  text,   -- The external workflow ID that this transfer task is doing work for.
+  target_run_id       uuid,   -- The external run ID that this transfer task is doing work for.
+  task_list           text,
+  type                int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution}
+  schedule_id         bigint,
 );
 
 CREATE TYPE timer_task (

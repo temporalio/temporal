@@ -8,6 +8,7 @@ import (
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
@@ -59,14 +60,14 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.MetadataManager,
-	visibilityMgr persistence.VisibilityManager, matching matching.Client) Engine {
+	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client) Engine {
 	shardWrapper := &shardContextWrapper{ShardContext: shard}
 	shard = shardWrapper
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(historyCacheMaxSize, shard, logger)
-	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyCache)
+	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyClient, historyCache)
 	historyEngImpl := &historyEngineImpl{
 		shard:            shard,
 		metadataMgr:      metadataMgr,
@@ -561,6 +562,20 @@ Update_History_Loop:
 				attributes := d.GetFailWorkflowExecutionDecisionAttributes()
 				msBuilder.AddFailWorkflowEvent(completedID, attributes)
 				isComplete = true
+			case workflow.DecisionType_CancelWorkflowExecution:
+				attributes := d.GetCancelWorkflowExecutionDecisionAttributes()
+
+				// Either we are already completed (or) we have a new pending event came while
+				// we are processing the decision, we would fail this and give a chance to client
+				// to process the new event.
+				if isComplete || ((completedID-startedID) > 1) {
+					msBuilder.AddCancelWorkflowExecutionFailedEvent(completedID,
+						workflow.WorkflowCancelFailedCause_UNHANDLED_DECISION)
+					continue Process_Decision_Loop
+				}
+				msBuilder.AddWorkflowExecutionCanceledEvent(completedID, attributes)
+				isComplete = true
+
 			case workflow.DecisionType_StartTimer:
 				attributes := d.GetStartTimerDecisionAttributes()
 				_, ti := msBuilder.AddTimerStartedEvent(completedID, attributes)
@@ -595,13 +610,37 @@ Update_History_Loop:
 			case workflow.DecisionType_RecordMarker:
 				msBuilder.AddRecordMarkerEvent(completedID, d.GetRecordMarkerDecisionAttributes())
 
+			case workflow.DecisionType_RequestCancelExternalWorkflowExecution:
+
+				attributes := d.GetRequestCancelExternalWorkflowExecutionDecisionAttributes()
+
+				foreignInfo, _, err := e.domainCache.GetDomain(attributes.GetDomain())
+				if err != nil {
+					return &workflow.InternalServiceError{
+						Message: fmt.Sprintf("Unable to schedule activity across domain: %v.",
+							attributes.GetDomain())}
+				}
+
+				wfCancelReqEvent := msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+					completedID, attributes)
+				if wfCancelReqEvent == nil {
+					return &workflow.InternalServiceError{Message: "Unable to add external cancel workflow request."}
+				}
+
+				transferTasks = append(transferTasks, &persistence.CancelExecutionTask{
+					TargetDomainID:   foreignInfo.ID,
+					TargetWorkflowID: attributes.GetWorkflowId(),
+					TargetRunID:      attributes.GetRunId(),
+					ScheduleID:       wfCancelReqEvent.GetEventId(),
+				})
+
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
 			}
 		}
 
 		// Schedule another decision task if new events came in during this decision
-		if (completedID - startedID) > 1 {
+		if (completedID-startedID) > 1 {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
 				DomainID:   domainID,
@@ -966,6 +1005,36 @@ Update_History_Loop:
 	return &workflow.RecordActivityTaskHeartbeatResponse{}, ErrMaxAttemptsExceeded
 }
 
+// RequestCancelWorkflowExecution
+// https://github.com/uber/cadence/issues/145
+// TODO: (1) Each external request can result in one cancel requested event. it would be nice
+//	 to have dedupe on the server side.
+//	(2) if there are multiple calls if one request goes through then can we respond to the other ones with
+//       cancellation in progress instead of success.
+func (e *historyEngineImpl) RequestCancelWorkflowExecution(
+	req *h.RequestCancelWorkflowExecutionRequest) error {
+	domainID := req.GetDomainUUID()
+	request := req.GetCancelRequest()
+
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(request.GetWorkflowExecution().GetWorkflowId()),
+		RunId:      common.StringPtr(request.GetWorkflowExecution().GetRunId()),
+	}
+
+	return e.updateWorkflowExecution(domainID, workflowExecution, false, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			if msBuilder.AddWorkflowExecutionCancelRequestedEvent("", req) == nil {
+				return &workflow.InternalServiceError{Message: "Unable to cancel workflow execution."}
+			}
+
+			return nil
+		})
+}
+
 func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkflowExecutionRequest) error {
 	domainID := signalRequest.GetDomainUUID()
 	request := signalRequest.GetSignalRequest()
@@ -1061,13 +1130,10 @@ Update_History_Loop:
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
-
 			return err
 		}
-
 		return nil
 	}
-
 	return ErrMaxAttemptsExceeded
 }
 

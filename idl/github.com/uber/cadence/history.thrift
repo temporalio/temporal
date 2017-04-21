@@ -85,6 +85,13 @@ struct TerminateWorkflowExecutionRequest {
   20: optional shared.TerminateWorkflowExecutionRequest terminateRequest
 }
 
+struct RequestCancelWorkflowExecutionRequest {
+    10: optional string domainUUID
+    20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest
+    30: optional i64 (js.type = "Long") externalInitiatedEventId
+    40: optional shared.WorkflowExecution externalWorkflowExecution
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -236,6 +243,20 @@ service HistoryService {
   * in the history and immediately terminating the execution instance.
   **/
   void TerminateWorkflowExecution(1: TerminateWorkflowExecutionRequest terminateRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
+  * It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new DecisionTask
+  * created for the workflow instance so new decisions could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
+  * anymore due to completion or doesn't exist.
+  **/
+  void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

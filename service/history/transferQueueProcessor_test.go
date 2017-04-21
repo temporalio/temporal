@@ -22,6 +22,7 @@ type (
 		persistence.TestBase
 		processor         *transferQueueProcessorImpl
 		mockMatching      *mocks.MatchingClient
+		mockHistoryClient *mocks.HistoryClient
 		mockVisibilityMgr *mocks.VisibilityManager
 		logger            bark.Logger
 	}
@@ -43,9 +44,10 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 
 	s.SetupWorkflowStore()
 	s.mockMatching = &mocks.MatchingClient{}
+	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	cache := newHistoryCache(historyCacheMaxSize, s.ShardContext, s.logger)
-	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, cache).(*transferQueueProcessorImpl)
+	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient, cache).(*transferQueueProcessorImpl)
 }
 
 func (s *transferQueueProcessorSuite) TearDownSuite() {
@@ -171,6 +173,112 @@ workerPump:
 	s.mockMatching.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
+
+func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
+	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("cancel-transfer-test"),
+		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+	taskList := "cancel-transfer-queue"
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	builder := newMutableStateBuilder(s.logger)
+	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info)
+	addDecisionTaskStartedEvent(builder, int64(2), taskList, "identity")
+
+	transferTasks := []persistence.Task{&persistence.CancelExecutionTask{
+		TaskID:           s.GetNextSequenceNumber(),
+		TargetDomainID:   "f2bfaab6-7e8b-4fac-9a62-17da8d37becb",
+		TargetWorkflowID: "target-workflow_id",
+		TargetRunID:      "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6",
+		ScheduleID:       1,
+	}}
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks)
+	s.Nil(err1, "No error expected.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
+			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+				if task.ScheduleID == firstEventID+1 {
+					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
+				}
+			} else if task.TaskType == persistence.TransferTaskTypeCancelExecution {
+				s.mockHistoryClient.On("RequestCancelWorkflowExecution", mock.Anything, mock.Anything).Return(nil).Once()
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+
+	s.mockMatching.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
+	s.mockHistoryClient.AssertExpectations(s.T())
+}
+
+func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_RequestFail() {
+	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("cancel-transfer-fail-test"),
+		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+	taskList := "cancel-transfer-fail-queue"
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	builder := newMutableStateBuilder(s.logger)
+	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info)
+	addDecisionTaskStartedEvent(builder, int64(2), taskList, "identity")
+
+	transferTasks := []persistence.Task{&persistence.CancelExecutionTask{
+		TaskID:           s.GetNextSequenceNumber(),
+		TargetDomainID:   "f2bfaab6-7e8b-4fac-9a62-17da8d37becb",
+		TargetWorkflowID: "target-workflow_id",
+		TargetRunID:      "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6",
+		ScheduleID:       1,
+	}}
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks)
+	s.Nil(err1, "No error expected.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
+			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+				if task.ScheduleID == firstEventID+1 {
+					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
+				}
+			} else if task.TaskType == persistence.TransferTaskTypeCancelExecution {
+				s.mockHistoryClient.On("RequestCancelWorkflowExecution", mock.Anything, mock.Anything).
+					Return(&workflow.EntityNotExistsError{}).Once()
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+
+	s.mockMatching.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
+	s.mockHistoryClient.AssertExpectations(s.T())
+}
+
 
 func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	var res interface{}
