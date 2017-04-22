@@ -134,6 +134,20 @@ func (b *historyBuilder) AddWorkflowExecutionTerminatedEvent(
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddContinuedAsNewEvent(decisionCompletedEventID int64, newRunID string,
+	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionContinuedAsNewEvent(decisionCompletedEventID, newRunID, attributes)
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddContinueAsNewFailedEvent(decisionCompletedEventID int64,
+	cause workflow.WorkflowCompleteFailedCause) *workflow.HistoryEvent {
+	event := b.newContinueAsNewWorkflowExecutionFailedEvent(decisionCompletedEventID, cause)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 	request *workflow.StartTimerDecisionAttributes) *workflow.HistoryEvent {
 
@@ -585,4 +599,31 @@ func (b *historyBuilder) newExternalWorkflowExecutionCancelRequestedEvent(initia
 	event.ExternalWorkflowExecutionCancelRequestedEventAttributes = attributes
 
 	return event
+}
+
+func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCompletedEventID int64,
+	newRunID string, request *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionContinuedAsNew)
+	attributes := workflow.NewWorkflowExecutionContinuedAsNewEventAttributes()
+	attributes.NewExecutionRunId_ = common.StringPtr(newRunID)
+	attributes.WorkflowType = request.GetWorkflowType()
+	attributes.TaskList = request.GetTaskList()
+	attributes.Input = request.GetInput()
+	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetExecutionStartToCloseTimeoutSeconds())
+	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetTaskStartToCloseTimeoutSeconds())
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = attributes
+
+	return historyEvent
+}
+
+func (b *historyBuilder) newContinueAsNewWorkflowExecutionFailedEvent(decisionTaskCompletedEventID int64,
+	cause workflow.WorkflowCompleteFailedCause) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ContinueAsNewWorkflowExecutionFailed)
+	attributes := workflow.NewContinueAsNewWorkflowExecutionFailedEventAttributes()
+	attributes.Cause = workflow.WorkflowCompleteFailedCausePtr(cause)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	historyEvent.ContinueAsNewWorkflowExecutionFailedEventAttributes = attributes
+
+	return historyEvent
 }

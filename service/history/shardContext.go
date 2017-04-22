@@ -181,6 +181,16 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		task.SetTaskID(id)
 	}
 
+	if request.ContinueAsNew != nil {
+		for _, task := range request.ContinueAsNew.TransferTasks {
+			id, err := s.getNextTransferTaskIDLocked()
+			if err != nil {
+				return err
+			}
+			task.SetTaskID(id)
+		}
+	}
+
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()

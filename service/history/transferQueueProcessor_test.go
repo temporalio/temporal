@@ -143,9 +143,6 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
-	_, err2 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
-	s.NotNil(err2, "Entity exist error expected.")
-	s.logger.Infof("Error creating new execution: %v", err2)
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
 	s.processor.processTransferTasks(tasksCh)

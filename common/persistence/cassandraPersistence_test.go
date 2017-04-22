@@ -63,7 +63,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 	log.Infof("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*gen.WorkflowExecutionAlreadyStartedError)
 	s.True(ok)
-	s.Equal(workflowExecution.GetRunId(), startedErr.GetRunId())
+	s.Equal(workflowExecution.GetRunId(), startedErr.GetRunId(), startedErr.GetMessage())
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
@@ -321,8 +321,11 @@ func (s *cassandraPersistenceSuite) TestGetCurrentWorkflow() {
 	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err2)
 
-	err3 := s.DeleteWorkflowExecution(info0.ExecutionInfo)
-	s.Nil(err3)
+	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
+	updatedInfo1.NextEventID = int64(6)
+	updatedInfo1.LastProcessedEvent = int64(2)
+	err3 := s.UpdateWorkflowExecutionAndDelete(updatedInfo1, int64(3))
+	s.Nil(err3, "No error expected.")
 
 	_, err4 := s.GetCurrentWorkflow(domainID, workflowExecution.GetWorkflowId())
 	s.NotNil(err4, "No error expected.")
@@ -435,7 +438,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 		WorkflowId: common.StringPtr("get-transfer-tasks-through-update-test"),
 		RunId:      common.StringPtr("2a038c8f-b575-4151-8d2c-d443e999ab5a"),
 	}
-	_, err6 := s.CreateWorkflowExecution(domainID, newExecution, "queue1", "wType", 13, nil, 3, 0, 2, nil)
+	_, err6 := s.GetCurrentWorkflow(domainID, "get-transfer-tasks-through-update-test")
 	s.NotNil(err6, "Entity exist error expected.")
 
 	tasks3, err7 := s.GetTransferTasks(1)
@@ -780,6 +783,51 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableStateInfo() {
 	s.NotNil(state.ExecutionInfo, "expected valid MS Info state.")
 	s.Equal(updatedInfo.NextEventID, state.ExecutionInfo.NextEventID)
 	s.Equal(updatedInfo.State, state.ExecutionInfo.State)
+}
+
+func (s *cassandraPersistenceSuite) TestContinueAsNew() {
+	domainID := "c1c0bb55-04e6-4a9c-89d0-1be7b96459f8"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("continue-as-new-workflow-test"),
+		RunId:      common.StringPtr("551c88d2-d9e6-404f-8131-9eec14f36643"),
+	}
+
+	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	continueAsNewInfo := copyWorkflowExecutionInfo(info0)
+	continueAsNewInfo.State = WorkflowStateCompleted
+	continueAsNewInfo.NextEventID = int64(5)
+	continueAsNewInfo.LastProcessedEvent = int64(2)
+
+	newWorkflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("continue-as-new-workflow-test"),
+		RunId:      common.StringPtr("64c7e15a-3fd7-4182-9c6f-6f25a4fa2614"),
+	}
+	err2 := s.ContinueAsNewExecution(continueAsNewInfo, info0.NextEventID, newWorkflowExecution, int64(3), int64(2))
+	s.Nil(err2, "No error expected.")
+
+	prevExecutionState, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err3)
+	prevExecutionInfo := prevExecutionState.ExecutionInfo
+	s.Equal(WorkflowStateCompleted, prevExecutionInfo.State)
+	s.Equal(int64(5), prevExecutionInfo.NextEventID)
+	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
+
+	newExecutionState, err4 := s.GetWorkflowExecutionInfo(domainID, newWorkflowExecution)
+	s.Nil(err4)
+	newExecutionInfo := newExecutionState.ExecutionInfo
+	s.Equal(WorkflowStateCreated, newExecutionInfo.State)
+	s.Equal(int64(3), newExecutionInfo.NextEventID)
+	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
+	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
+
+	newRunID, err5 := s.GetCurrentWorkflow(domainID, workflowExecution.GetWorkflowId())
+	s.Nil(err5)
+	s.Equal(newWorkflowExecution.GetRunId(), newRunID)
 }
 
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {

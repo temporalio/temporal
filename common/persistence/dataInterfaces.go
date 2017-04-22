@@ -15,7 +15,7 @@ const (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated = iota
+	WorkflowStateCreated   = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -28,7 +28,7 @@ const (
 
 // Transfer task types
 const (
-	TransferTaskTypeDecisionTask = iota
+	TransferTaskTypeDecisionTask    = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
 	TransferTaskTypeCancelExecution
@@ -263,6 +263,7 @@ type (
 		DecisionScheduleID          int64
 		DecisionStartedID           int64
 		DecisionStartToCloseTimeout int32
+		ContinueAsNew               bool
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -283,7 +284,7 @@ type (
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
 	GetCurrentExecutionRequest struct {
-		DomainID  string
+		DomainID   string
 		WorkflowID string
 	}
 
@@ -300,6 +301,8 @@ type (
 		DeleteTimerTask Task
 		Condition       int64
 		RangeID         int64
+		ContinueAsNew   *CreateWorkflowExecutionRequest
+		CloseExecution  bool
 
 		// Mutable state
 		UpsertActivityInfos []*ActivityInfo

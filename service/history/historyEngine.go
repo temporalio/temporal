@@ -124,7 +124,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// Generate first decision task event.
 	taskList := request.GetTaskList().GetName()
 	msBuilder := newMutableStateBuilder(e.logger)
-	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(workflowExecution, request)
+	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, workflowExecution, request)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -171,6 +171,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		DecisionScheduleID:          di.ScheduleID,
 		DecisionStartedID:           di.StartedID,
 		DecisionStartToCloseTimeout: di.DecisionTimeout,
+		ContinueAsNew:               false,
 	})
 
 	if err != nil {
@@ -196,6 +197,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			// are always created for a unique run_id which is not visible beyond this call yet.
 			// TODO: Handle error on deletion of execution history
 			e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
+				DomainID:  domainID,
 				Execution: workflowExecution,
 			})
 		}
@@ -491,10 +493,11 @@ Update_History_Loop:
 		}
 
 		completedID := completedEvent.GetEventId()
+		hasUnhandledEvents := ((completedID-startedID) > 1)
 		isComplete := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
-
+		var continueAsNewBuilder *mutableStateBuilder
 	Process_Decision_Loop:
 		for _, d := range request.Decisions {
 			switch d.GetDecisionType() {
@@ -545,7 +548,7 @@ Update_History_Loop:
 				defer e.timerProcessor.NotifyNewTimer(Schedule2CloseTimeoutTask.GetTaskID())
 
 			case workflow.DecisionType_CompleteWorkflowExecution:
-				if isComplete || msBuilder.hasPendingTasks() {
+				if isComplete || hasUnhandledEvents {
 					msBuilder.AddCompleteWorkflowExecutionFailedEvent(completedID,
 						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
 					continue Process_Decision_Loop
@@ -554,7 +557,7 @@ Update_History_Loop:
 				msBuilder.AddCompletedWorkflowEvent(completedID, attributes)
 				isComplete = true
 			case workflow.DecisionType_FailWorkflowExecution:
-				if isComplete || msBuilder.hasPendingTasks() {
+				if isComplete || hasUnhandledEvents {
 					msBuilder.AddCompleteWorkflowExecutionFailedEvent(completedID,
 						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
 					continue Process_Decision_Loop
@@ -568,7 +571,7 @@ Update_History_Loop:
 				// Either we are already completed (or) we have a new pending event came while
 				// we are processing the decision, we would fail this and give a chance to client
 				// to process the new event.
-				if isComplete || ((completedID-startedID) > 1) {
+				if isComplete || hasUnhandledEvents {
 					msBuilder.AddCancelWorkflowExecutionFailedEvent(completedID,
 						workflow.WorkflowCancelFailedCause_UNHANDLED_DECISION)
 					continue Process_Decision_Loop
@@ -634,13 +637,34 @@ Update_History_Loop:
 					ScheduleID:       wfCancelReqEvent.GetEventId(),
 				})
 
+			case workflow.DecisionType_ContinueAsNewWorkflowExecution:
+				if isComplete || hasUnhandledEvents {
+					msBuilder.AddContinueAsNewFailedEvent(completedID,
+						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
+					continue Process_Decision_Loop
+				}
+
+				attributes := d.GetContinueAsNewWorkflowExecutionDecisionAttributes()
+				if attributes == nil {
+					return &workflow.BadRequestError{
+						Message: "ContinueAsNew decision called without attributes.",
+					}
+				}
+				runID := uuid.New()
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainID, runID, attributes)
+				if err != nil {
+					return nil
+				}
+				isComplete = true
+				continueAsNewBuilder = newStateBuilder
+
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
 			}
 		}
 
 		// Schedule another decision task if new events came in during this decision
-		if (completedID-startedID) > 1 {
+		if hasUnhandledEvents {
 			newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 			transferTasks = append(transferTasks, &persistence.DecisionTask{
 				DomainID:   domainID,
@@ -662,13 +686,21 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecutionWithContext(request.GetExecutionContext(), transferTasks, timerTasks,
-			transactionID); err != nil {
-			if err == ErrConflict {
+		var updateErr error
+		if continueAsNewBuilder != nil {
+			updateErr = context.continueAsNewWorkflowExecution(request.GetExecutionContext(), continueAsNewBuilder,
+				transferTasks, transactionID)
+		} else {
+			updateErr = context.updateWorkflowExecutionWithContext(request.GetExecutionContext(), transferTasks, timerTasks,
+				transactionID)
+		}
+
+		if updateErr != nil {
+			if updateErr == ErrConflict {
 				continue Update_History_Loop
 			}
 
-			return err
+			return updateErr
 		}
 
 		return nil

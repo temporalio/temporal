@@ -21,6 +21,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		domainID  string
 		msBuilder *mutableStateBuilder
 		builder   *historyBuilder
 		logger    bark.Logger
@@ -36,6 +37,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.domainID = "history-builder-test-domain"
 	s.msBuilder = newMutableStateBuilder(s.logger)
 	s.builder = newHistoryBuilder(s.msBuilder, s.logger)
 }
@@ -291,7 +293,7 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.WorkflowExecution, workflowType,
 	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
-	e := s.msBuilder.AddWorkflowExecutionStartedEvent(we, &workflow.StartWorkflowExecutionRequest{
+	e := s.msBuilder.AddWorkflowExecutionStartedEvent(s.domainID, we, &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:                          common.StringPtr(we.GetWorkflowId()),
 		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 		TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},

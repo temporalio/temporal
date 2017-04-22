@@ -49,6 +49,7 @@ enum DecisionType {
   CancelWorkflowExecution,
   RequestCancelExternalWorkflowExecution,
   RecordMarker,
+  ContinueAsNewWorkflowExecution
 }
 
 enum EventType {
@@ -82,6 +83,8 @@ enum EventType {
   MarkerRecorded,
   WorkflowExecutionSignaled,
   WorkflowExecutionTerminated,
+  WorkflowExecutionContinuedAsNew,
+  ContinueAsNewWorkflowExecutionFailed,
 }
 
 enum WorkflowCompleteFailedCause {
@@ -171,6 +174,14 @@ struct RecordMarkerDecisionAttributes {
   20: optional binary details
 }
 
+struct ContinueAsNewWorkflowExecutionDecisionAttributes {
+  10: optional WorkflowType workflowType
+  20: optional TaskList taskList
+  30: optional binary input
+  40: optional i32 executionStartToCloseTimeoutSeconds
+  50: optional i32 taskStartToCloseTimeoutSeconds
+}
+
 struct Decision {
   10: optional DecisionType decisionType
   20: optional ScheduleActivityTaskDecisionAttributes scheduleActivityTaskDecisionAttributes
@@ -182,6 +193,7 @@ struct Decision {
   60: optional CancelWorkflowExecutionDecisionAttributes cancelWorkflowExecutionDecisionAttributes
   70: optional RequestCancelExternalWorkflowExecutionDecisionAttributes requestCancelExternalWorkflowExecutionDecisionAttributes
   80: optional RecordMarkerDecisionAttributes recordMarkerDecisionAttributes
+  90: optional ContinueAsNewWorkflowExecutionDecisionAttributes continueAsNewWorkflowExecutionDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -208,7 +220,22 @@ struct WorkflowExecutionTimedOutEventAttributes {
   10: optional TimeoutType timeoutType
 }
 
+struct WorkflowExecutionContinuedAsNewEventAttributes {
+  10: optional string newExecutionRunId
+  20: optional WorkflowType workflowType
+  30: optional TaskList taskList
+  40: optional binary input
+  50: optional i32 executionStartToCloseTimeoutSeconds
+  60: optional i32 taskStartToCloseTimeoutSeconds
+  70: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+}
+
 struct CompleteWorkflowExecutionFailedEventAttributes {
+  10: optional WorkflowCompleteFailedCause cause
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+}
+
+struct ContinueAsNewWorkflowExecutionFailedEventAttributes {
   10: optional WorkflowCompleteFailedCause cause
   20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
 }
@@ -413,6 +440,8 @@ struct HistoryEvent {
   220: optional RequestCancelExternalWorkflowExecutionInitiatedEventAttributes requestCancelExternalWorkflowExecutionInitiatedEventAttributes
   230: optional RequestCancelExternalWorkflowExecutionFailedEventAttributes requestCancelExternalWorkflowExecutionFailedEventAttributes
   240: optional ExternalWorkflowExecutionCancelRequestedEventAttributes externalWorkflowExecutionCancelRequestedEventAttributes
+  250: optional WorkflowExecutionContinuedAsNewEventAttributes workflowExecutionContinuedAsNewEventAttributes
+  260: optional ContinueAsNewWorkflowExecutionFailedEventAttributes continueAsNewWorkflowExecutionFailedEventAttributes
 }
 
 struct History {

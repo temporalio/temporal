@@ -460,6 +460,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
 	activity2Input := []byte("input2")
+	activity2Result := []byte("activity2_result")
 	workflowResult := []byte("workflow result")
 
 	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
@@ -473,11 +474,13 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent1.GetEventId(),
 		activity2ID, activity2Type, tl, activity2Input, 100, 10, 5)
 	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.GetEventId(), tl, identity)
-	addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.GetEventId(), tl, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.GetEventId(), tl, identity)
 	addActivityTaskCompletedEvent(msBuilder, activity1ScheduledEvent.GetEventId(),
 		activity1StartedEvent.GetEventId(), activity1Result, identity)
 	decisionScheduledEvent2, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent2.GetEventId(), tl, identity)
+	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.GetEventId(),
+		activity2StartedEvent.GetEventId(), activity2Result, identity)
 
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: we.GetWorkflowId(),
@@ -510,11 +513,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(14), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(16), executionBuilder.executionInfo.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), executionBuilder.executionInfo.LastProcessedEvent)
 	s.Equal(context, executionBuilder.executionInfo.ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.True(executionBuilder.HasPendingDecisionTask())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
@@ -533,6 +536,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	activity2ID := "activity2"
 	activity2Type := "activity_type2"
 	activity2Input := []byte("input2")
+	activity2Result := []byte("activity2_result")
 	reason := "workflow fail reason"
 	details := []byte("workflow fail details")
 
@@ -547,11 +551,13 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent1.GetEventId(), activity2ID,
 		activity2Type, tl, activity2Input, 100, 10, 5)
 	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.GetEventId(), tl, identity)
-	addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.GetEventId(), tl, identity)
+	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.GetEventId(), tl, identity)
 	addActivityTaskCompletedEvent(msBuilder, activity1ScheduledEvent.GetEventId(),
 		activity1StartedEvent.GetEventId(), activity1Result, identity)
 	decisionScheduledEvent2, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent2 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent2.GetEventId(), tl, identity)
+	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.GetEventId(),
+		activity2StartedEvent.GetEventId(), activity2Result, identity)
 
 	taskToken, _ := json.Marshal(&common.TaskToken{
 		WorkflowID: we.GetWorkflowId(),
@@ -585,11 +591,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(14), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(16), executionBuilder.executionInfo.NextEventID)
 	s.Equal(decisionStartedEvent2.GetEventId(), executionBuilder.executionInfo.LastProcessedEvent)
 	s.Equal(context, executionBuilder.executionInfo.ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
-	s.False(executionBuilder.HasPendingDecisionTask())
+	s.True(executionBuilder.HasPendingDecisionTask())
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {
@@ -2205,7 +2211,7 @@ func (s *engineSuite) printHistory(builder *mutableStateBuilder) string {
 func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExecution workflow.WorkflowExecution,
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
-	e := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &workflow.StartWorkflowExecutionRequest{
+	e := builder.AddWorkflowExecutionStartedEvent("domainId", workflowExecution, &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:   common.StringPtr(workflowExecution.GetWorkflowId()),
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},

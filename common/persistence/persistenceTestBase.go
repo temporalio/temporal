@@ -361,6 +361,48 @@ func (s *TestBase) GetCurrentWorkflow(domainID, workflowID string) (string, erro
 	return response.RunID, nil
 }
 
+// ContinueAsNewExecution is a utility method to create workflow executions
+func (s *TestBase) ContinueAsNewExecution(updatedInfo *WorkflowExecutionInfo, condition int64,
+	newExecution workflow.WorkflowExecution, nextEventID, decisionScheduleID int64) error {
+	newdecisionTask := &DecisionTask{
+		TaskID:     s.GetNextSequenceNumber(),
+		DomainID:   updatedInfo.DomainID,
+		TaskList:   updatedInfo.TaskList,
+		ScheduleID: int64(decisionScheduleID),
+	}
+
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:       updatedInfo,
+		TransferTasks:       []Task{newdecisionTask},
+		TimerTasks:          nil,
+		Condition:           condition,
+		DeleteTimerTask:     nil,
+		RangeID:             s.ShardContext.GetRangeID(),
+		UpsertActivityInfos: nil,
+		DeleteActivityInfo:  nil,
+		UpserTimerInfos:     nil,
+		DeleteTimerInfos:    nil,
+		ContinueAsNew: &CreateWorkflowExecutionRequest{
+			RequestID:                   uuid.New(),
+			DomainID:                    updatedInfo.DomainID,
+			Execution:                   newExecution,
+			TaskList:                    updatedInfo.TaskList,
+			WorkflowTypeName:            updatedInfo.WorkflowTypeName,
+			DecisionTimeoutValue:        updatedInfo.DecisionTimeoutValue,
+			ExecutionContext:            nil,
+			NextEventID:                 nextEventID,
+			LastProcessedEvent:          common.EmptyEventID,
+			RangeID:                     s.ShardContext.GetRangeID(),
+			TransferTasks:               nil,
+			TimerTasks:                  nil,
+			DecisionScheduleID:          decisionScheduleID,
+			DecisionStartedID:           common.EmptyEventID,
+			DecisionStartToCloseTimeout: 1,
+			ContinueAsNew:               true,
+		},
+	})
+}
+
 // UpdateWorkflowExecution is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task,
@@ -386,6 +428,7 @@ func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecuti
 		DeleteActivityInfo:  nil,
 		UpserTimerInfos:     nil,
 		DeleteTimerInfos:    nil,
+		CloseExecution:      true,
 	})
 }
 
@@ -429,10 +472,10 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task) error {
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       transferTasks,
-		Condition:           condition,
-		RangeID:             s.ShardContext.GetRangeID(),
+		ExecutionInfo: updatedInfo,
+		TransferTasks: transferTasks,
+		Condition:     condition,
+		RangeID:       s.ShardContext.GetRangeID(),
 	})
 }
 
