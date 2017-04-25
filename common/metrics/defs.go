@@ -33,7 +33,7 @@ const (
 
 // Service names for all services that emit metrics.
 const (
-	Common = iota
+	Common      = iota
 	Frontend
 	History
 	Matching
@@ -88,40 +88,56 @@ var GoRuntimeMetrics = map[MetricName]MetricType{
 const (
 	// -- Common Operation scopes --
 
-	// CreateShardScope tracks CreateShard calls made by service to persistence layer
-	CreateShardScope = iota
-	// GetShardScope tracks GetShard calls made by service to persistence layer
-	GetShardScope
-	// UpdateShardScope tracks UpdateShard calls made by service to persistence layer
-	UpdateShardScope
-	// CreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
-	CreateWorkflowExecutionScope
-	// GetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to persistence layer
-	GetWorkflowExecutionScope
-	// UpdateWorkflowExecutionScope tracks UpdateWorkflowExecution calls made by service to persistence layer
-	UpdateWorkflowExecutionScope
-	// DeleteWorkflowExecutionScope tracks DeleteWorkflowExecution calls made by service to persistence layer
-	DeleteWorkflowExecutionScope
-	// GetCurrentExecutionScope tracks GetCurrentExecution calls made by service to persistence layer
-	GetCurrentExecutionScope
-	// GetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
-	GetTransferTasksScope
-	// CompleteTransferTasksScope tracks CompleteTransferTasks calls made by service to persistence layer
-	CompleteTransferTaskScope
-	// GetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
-	GetTimerIndexTasksScope
-	// CompleteTimerTasksScope tracks CompleteTimerTasks calls made by service to persistence layer
-	CompleteTimerTaskScope
-	// CreateTaskScope tracks CreateTask calls made by service to persistence layer
-	CreateTaskScope
-	// GetTasksScope tracks GetTasks calls made by service to persistence layer
-	GetTasksScope
-	// CompleteTaskScope tracks CompleteTask calls made by service to persistence layer
-	CompleteTaskScope
-	// LeaseTaskListScope tracks LeaseTaskList calls made by service to persistence layer
-	LeaseTaskListScope
-	// UpdateTaskListScope tracks UpdateTaskListScope calls made by service to persistence layer
-	UpdateTaskListScope
+	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
+	PersistenceCreateShardScope = iota
+	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
+	PersistenceGetShardScope
+	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
+	PersistenceUpdateShardScope
+	// PersistenceCreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
+	PersistenceCreateWorkflowExecutionScope
+	// PersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to persistence layer
+	PersistenceGetWorkflowExecutionScope
+	// PersistenceUpdateWorkflowExecutionScope tracks UpdateWorkflowExecution calls made by service to persistence layer
+	PersistenceUpdateWorkflowExecutionScope
+	// PersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecution calls made by service to persistence layer
+	PersistenceDeleteWorkflowExecutionScope
+	// PersistenceGetCurrentExecutionScope tracks GetCurrentExecution calls made by service to persistence layer
+	PersistenceGetCurrentExecutionScope
+	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
+	PersistenceGetTransferTasksScope
+	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
+	PersistenceCompleteTransferTaskScope
+	// PersistenceGetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
+	PersistenceGetTimerIndexTasksScope
+	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
+	PersistenceCompleteTimerTaskScope
+	// PersistenceCreateTaskScope tracks CreateTask calls made by service to persistence layer
+	PersistenceCreateTaskScope
+	// PersistenceGetTasksScope tracks GetTasks calls made by service to persistence layer
+	PersistenceGetTasksScope
+	// PersistenceCompleteTaskScope tracks CompleteTask calls made by service to persistence layer
+	PersistenceCompleteTaskScope
+	// PersistenceLeaseTaskListScope tracks LeaseTaskList calls made by service to persistence layer
+	PersistenceLeaseTaskListScope
+	// PersistenceUpdateTaskListScope tracks PersistenceUpdateTaskListScope calls made by service to persistence layer
+	PersistenceUpdateTaskListScope
+	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
+	PersistenceAppendHistoryEventsScope
+	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
+	PersistenceGetWorkflowExecutionHistoryScope
+	// PersistenceDeleteWorkflowExecutionHistoryScope tracks DeleteWorkflowExecutionHistory calls made by service to persistence layer
+	PersistenceDeleteWorkflowExecutionHistoryScope
+	// PersistenceCreateDomainScope tracks CreateDomain calls made by service to persistence layer
+	PersistenceCreateDomainScope
+	// PersistenceGetDomainScope tracks GetDomain calls made by service to persistence layer
+	PersistenceGetDomainScope
+	// PersistenceUpdateDomainScope tracks UpdateDomain calls made by service to persistence layer
+	PersistenceUpdateDomainScope
+	// PersistenceDeleteDomainScope tracks DeleteDomain calls made by service to persistence layer
+	PersistenceDeleteDomainScope
+	// PersistenceDeleteDomainByNameScope tracks DeleteDomainByName calls made by service to persistence layer
+	PersistenceDeleteDomainByNameScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -230,23 +246,31 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		CreateShardScope:             {operation: "CreateShard"},
-		GetShardScope:                {operation: "GetShard"},
-		UpdateShardScope:             {operation: "UpdateShard"},
-		CreateWorkflowExecutionScope: {operation: "CreateWorkflowExecution"},
-		GetWorkflowExecutionScope:    {operation: "GetWorkflowExecution"},
-		UpdateWorkflowExecutionScope: {operation: "UpdateWorkflowExecution"},
-		DeleteWorkflowExecutionScope: {operation: "DeleteWorkflowExecution"},
-		GetCurrentExecutionScope:     {operation: "GetCurrentExecution"},
-		GetTransferTasksScope:        {operation: "GetTransferTasks"},
-		CompleteTransferTaskScope:    {operation: "CompleteTransferTask"},
-		GetTimerIndexTasksScope:      {operation: "GetTimerIndexTasks"},
-		CompleteTimerTaskScope:       {operation: "CompleteTimerTask"},
-		CreateTaskScope:              {operation: "CreateTask"},
-		GetTasksScope:                {operation: "GetTasks"},
-		CompleteTaskScope:            {operation: "CompleteTask"},
-		LeaseTaskListScope:           {operation: "LeaseTaskList"},
-		UpdateTaskListScope:          {operation: "UpdateTaskList"},
+		PersistenceCreateShardScope:             {operation: "CreateShard"},
+		PersistenceGetShardScope:                {operation: "GetShard"},
+		PersistenceUpdateShardScope:             {operation: "UpdateShard"},
+		PersistenceCreateWorkflowExecutionScope: {operation: "CreateWorkflowExecution"},
+		PersistenceGetWorkflowExecutionScope:        {operation: "GetWorkflowExecution"},
+		PersistenceUpdateWorkflowExecutionScope:     {operation: "UpdateWorkflowExecution"},
+		PersistenceDeleteWorkflowExecutionScope:        {operation: "DeleteWorkflowExecution"},
+		PersistenceGetCurrentExecutionScope:            {operation: "GetCurrentExecution"},
+		PersistenceGetTransferTasksScope:               {operation: "GetTransferTasks"},
+		PersistenceCompleteTransferTaskScope:           {operation: "CompleteTransferTask"},
+		PersistenceGetTimerIndexTasksScope:             {operation: "GetTimerIndexTasks"},
+		PersistenceCompleteTimerTaskScope:              {operation: "CompleteTimerTask"},
+		PersistenceCreateTaskScope:                     {operation: "CreateTask"},
+		PersistenceGetTasksScope:                       {operation: "GetTasks"},
+		PersistenceCompleteTaskScope:                   {operation: "CompleteTask"},
+		PersistenceLeaseTaskListScope:                  {operation: "LeaseTaskList"},
+		PersistenceUpdateTaskListScope:                 {operation: "UpdateTaskList"},
+		PersistenceAppendHistoryEventsScope:            {operation: "AppendHistoryEvents"},
+		PersistenceGetWorkflowExecutionHistoryScope:    {operation: "GetWorkflowExecutionHistory"},
+		PersistenceDeleteWorkflowExecutionHistoryScope: {operation: "DeleteWorkflowExecutionHistory"},
+		PersistenceCreateDomainScope:                   {operation: "CreateDomain"},
+		PersistenceGetDomainScope:                      {operation: "GetDomain"},
+		PersistenceUpdateDomainScope:                   {operation: "UpdateDomain"},
+		PersistenceDeleteDomainScope:                   {operation: "DeleteDomain"},
+		PersistenceDeleteDomainByNameScope:             {operation: "DeleteDomainByName"},
 
 		HistoryClientStartWorkflowExecutionScope:         {operation: "HistoryClientStartWorkflowExecution"},
 		HistoryClientRecordActivityTaskHeartbeatScope:    {operation: "HistoryClientRecordActivityTaskHeartbeat"},
@@ -302,12 +326,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 // Common Metrics enum
 const (
-	CadenceRequests = iota
+	CadenceRequests                          = iota
 	CadenceFailures
 	CadenceLatency
 	CadenceErrBadRequestCounter
 	CadenceErrEntityNotExistsCounter
 	CadenceErrExecutionAlreadyStartedCounter
+	CadenceErrDomainAlreadyExistsCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -321,7 +346,7 @@ const (
 
 // History Metrics enum
 const (
-	TransferTasksProcessedCounter = iota + NumCommonMetrics
+	TransferTasksProcessedCounter        = iota + NumCommonMetrics
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter
 )

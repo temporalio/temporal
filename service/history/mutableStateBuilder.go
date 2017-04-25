@@ -582,10 +582,9 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(scheduleEventID, star
 
 func (e *mutableStateBuilder) AddCompletedWorkflowEvent(decisionCompletedEventID int64,
 	attributes *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	if e.hasPendingTasks() || e.HasPendingDecisionTask() {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted {
 		logInvalidHistoryActionEvent(e.logger, tagValueActionCompleteWorkflow, e.GetNextEventID(), fmt.Sprintf(
-			"{OutStandingActivityTasks: %v, HasPendingDecision: %v}", len(e.pendingActivityInfoIDs),
-			e.HasPendingDecisionTask()))
+			"{State: %v}", e.executionInfo.State))
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
@@ -594,10 +593,9 @@ func (e *mutableStateBuilder) AddCompletedWorkflowEvent(decisionCompletedEventID
 
 func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int64,
 	attributes *workflow.FailWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	if e.hasPendingTasks() || e.HasPendingDecisionTask() {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted {
 		logInvalidHistoryActionEvent(e.logger, tagValueActionFailWorkflow, e.GetNextEventID(), fmt.Sprintf(
-			"{OutStandingActivityTasks: %v, HasPendingDecision: %v}", len(e.pendingActivityInfoIDs),
-			e.HasPendingDecisionTask()))
+			"{State: %v}", e.executionInfo.State))
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
@@ -621,6 +619,10 @@ func (e *mutableStateBuilder) AddCancelWorkflowExecutionFailedEvent(decisionTask
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID int64,
 	attributes *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted {
+		logInvalidHistoryActionEvent(e.logger, tagValueActionWorkflowCanceled, e.GetNextEventID(), fmt.Sprintf(
+			"{State: %v}", e.executionInfo.State))
+	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
 	return e.hBuilder.AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID, attributes)
