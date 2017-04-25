@@ -282,7 +282,8 @@ const (
 		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
-		`and task_id > ? LIMIT ?`
+		`and task_id > ? ` +
+		`and task_id <= ? LIMIT ?`
 
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -888,6 +889,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		request.ReadLevel,
+		request.MaxReadLevel,
 		request.BatchSize)
 
 	iter := query.Iter()

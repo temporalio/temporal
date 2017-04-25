@@ -493,7 +493,7 @@ Update_History_Loop:
 		}
 
 		completedID := completedEvent.GetEventId()
-		hasUnhandledEvents := ((completedID-startedID) > 1)
+		hasUnhandledEvents := ((completedID - startedID) > 1)
 		isComplete := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}

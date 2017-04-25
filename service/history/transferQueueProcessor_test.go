@@ -276,7 +276,6 @@ workerPump:
 	s.mockHistoryClient.AssertExpectations(s.T())
 }
 
-
 func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	var res interface{}
 	domainID := task.DomainID

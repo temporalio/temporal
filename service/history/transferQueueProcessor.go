@@ -57,6 +57,7 @@ type (
 		sync.RWMutex
 		outstandingTasks map[int64]bool
 		readLevel        int64
+		maxReadLevel     int64
 		ackLevel         int64
 	}
 )
@@ -305,7 +306,7 @@ ProcessRetryLoop:
 								ExternalInitiatedEventId: common.Int64Ptr(task.ScheduleID),
 								ExternalWorkflowExecution: &workflow.WorkflowExecution{
 									WorkflowId: common.StringPtr(task.WorkflowID),
-									RunId: common.StringPtr(task.RunID),
+									RunId:      common.StringPtr(task.RunID),
 								},
 							}
 
@@ -362,8 +363,9 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error
 	rLevel := a.readLevel
 	a.RUnlock()
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel: rLevel,
-		BatchSize: transferTaskBatchSize,
+		ReadLevel:    rLevel,
+		MaxReadLevel: a.shard.GetTransferMaxReadLevel(),
+		BatchSize:    transferTaskBatchSize,
 	})
 
 	if err != nil {

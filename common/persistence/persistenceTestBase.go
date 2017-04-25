@@ -98,6 +98,10 @@ func (s *testShardContext) GetNextTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&s.transferSequenceNumber, 1), nil
 }
 
+func (s *testShardContext) GetTransferMaxReadLevel() int64 {
+	return atomic.LoadInt64(&s.transferSequenceNumber)
+}
+
 func (s *testShardContext) GetTransferAckLevel() int64 {
 	return atomic.LoadInt64(&s.shardInfo.TransferAckLevel)
 }
@@ -252,7 +256,7 @@ func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) er
 
 // CreateWorkflowExecution is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
-wType string, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	wType string, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []Task) (string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
@@ -489,8 +493,9 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 // GetTransferTasks is a utility method to get tasks from transfer task queue
 func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		ReadLevel: s.GetReadLevel(),
-		BatchSize: batchSize,
+		ReadLevel:    s.GetReadLevel(),
+		MaxReadLevel: int64(math.MaxInt64),
+		BatchSize:    batchSize,
 	})
 
 	if err != nil {

@@ -21,6 +21,7 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		GetNextTransferTaskID() (int64, error)
 		GetTransferSequenceNumber() int64
+		GetTransferMaxReadLevel() int64
 		GetTransferAckLevel() int64
 		UpdateAckLevel(ackLevel int64) error
 		GetTimerSequenceNumber() int64
@@ -49,6 +50,7 @@ type (
 		shardInfo                 *persistence.ShardInfo
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
+		transferMaxReadLevel      int64
 	}
 )
 
@@ -83,6 +85,12 @@ func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	return s.shardInfo.TransferAckLevel
 }
 
+func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+	return s.transferMaxReadLevel
+}
+
 func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -114,6 +122,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 	s.Lock()
 	defer s.Unlock()
 
+	transferMaxReadLevel := int64(0)
 	// assign IDs for the transfer tasks
 	// Must be done under the shard lock to ensure transfer tasks are written to persistence in increasing
 	// ID order
@@ -123,7 +132,9 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 			return nil, err
 		}
 		task.SetTaskID(id)
+		transferMaxReadLevel = id
 	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -170,6 +181,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 	s.Lock()
 	defer s.Unlock()
 
+	transferMaxReadLevel := int64(0)
 	// assign IDs for the transfer tasks
 	// Must be done under the shard lock to ensure transfer tasks are written to persistence in increasing
 	// ID order
@@ -179,6 +191,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 			return err
 		}
 		task.SetTaskID(id)
+		transferMaxReadLevel = id
 	}
 
 	if request.ContinueAsNew != nil {
@@ -188,8 +201,10 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 				return err
 			}
 			task.SetTaskID(id)
+			transferMaxReadLevel = id
 		}
 	}
+	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -314,6 +329,7 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	// Range is successfully updated in cassandra now update shard context to reflect new range
 	s.transferSequenceNumber = updatedShardInfo.RangeID << s.rangeSize
 	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.rangeSize
+	s.transferMaxReadLevel = s.transferSequenceNumber - 1
 	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
 	s.shardInfo = updatedShardInfo
 
@@ -321,6 +337,13 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		s.maxTransferSequenceNumber)
 
 	return nil
+}
+
+func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
+	if rl > s.transferMaxReadLevel {
+		s.logger.Debugf("Updating MaxReadLevel: %v", rl)
+		s.transferMaxReadLevel = rl
+	}
 }
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
