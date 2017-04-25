@@ -2,6 +2,7 @@ package matching
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/uber-common/bark"
 	s "github.com/uber/cadence/.gen/go/shared"
@@ -28,12 +29,13 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		tlMgr       *taskListManagerImpl
-		taskListID  *taskListID
-		taskManager persistence.TaskManager
-		appendCh    chan *writeTaskRequest
-		shutdownCh  chan struct{}
-		logger      bark.Logger
+		tlMgr        *taskListManagerImpl
+		taskListID   *taskListID
+		taskManager  persistence.TaskManager
+		appendCh     chan *writeTaskRequest
+		maxReadLevel int64
+		shutdownCh   chan struct{}
+		logger       bark.Logger
 	}
 )
 
@@ -49,6 +51,7 @@ func newTaskWriter(tlMgr *taskListManagerImpl, shutdownCh chan struct{}) *taskWr
 }
 
 func (w *taskWriter) Start() {
+	w.maxReadLevel = w.tlMgr.getTaskSequenceNumber() - 1
 	go w.taskWriterLoop()
 }
 
@@ -71,6 +74,10 @@ func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 	}
 }
 
+func (w *taskWriter) GetMaxReadLevel() int64 {
+	return atomic.LoadInt64(&w.maxReadLevel)
+}
+
 func (w *taskWriter) taskWriterLoop() {
 	defer close(w.appendCh)
 
@@ -83,6 +90,8 @@ writerLoop:
 				reqs := []*writeTaskRequest{request}
 				reqs = w.getWriteBatch(reqs)
 				batchSize := len(reqs)
+
+				maxReadLevel := int64(0)
 
 				taskIDs, err := w.tlMgr.newTaskIDs(batchSize)
 				if err != nil {
@@ -101,6 +110,7 @@ writerLoop:
 					if req.rangeID > rangeID {
 						rangeID = req.rangeID // use the maximum rangeID provided for the write operation
 					}
+					maxReadLevel = taskIDs[i]
 				}
 
 				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
@@ -117,6 +127,11 @@ writerLoop:
 					logPersistantStoreErrorEvent(w.logger, tagValueStoreOperationCreateTask, err,
 						fmt.Sprintf("{taskID: [%v, %v], taskType: %v, taskList: %v}",
 							taskIDs[0], taskIDs[batchSize-1], w.taskListID.taskType, w.taskListID.taskListName))
+				}
+
+				// Update the maxReadLevel after the writes are completed.
+				if maxReadLevel > 0 {
+					atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
 				}
 
 				w.sendWriteResponse(reqs, err, r)

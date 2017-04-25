@@ -173,7 +173,7 @@ func (c *taskListManagerImpl) persistAckLevel() error {
 	return err
 }
 
-// initiateTaskAppend returns taskID to use to persist the task
+// newTaskIDs taskID to use to persist the task
 func (c *taskListManagerImpl) newTaskIDs(count int) (taskID []int64, err error) {
 	c.Lock()
 	defer c.Unlock()
@@ -186,6 +186,12 @@ func (c *taskListManagerImpl) newTaskIDs(count int) (taskID []int64, err error) 
 		c.taskSequenceNumber++
 	}
 	return
+}
+
+func (c *taskListManagerImpl) getTaskSequenceNumber() int64 {
+	c.Lock()
+	defer c.Unlock()
+	return c.taskSequenceNumber
 }
 
 func (c *taskListManagerImpl) getAckLevel() (ackLevel int64) {
@@ -233,7 +239,7 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
 			BatchSize:    getTasksBatchSize,
 			RangeID:      c.rangeID,
 			ReadLevel:    c.taskAckManager.getReadLevel(),
-			MaxReadLevel: c.taskSequenceNumber,
+			MaxReadLevel: c.taskWriter.GetMaxReadLevel(),
 		}
 		c.Unlock()
 		return c.engine.taskManager.GetTasks(request)
