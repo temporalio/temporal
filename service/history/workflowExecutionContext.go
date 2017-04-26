@@ -3,9 +3,10 @@ package history
 import (
 	"fmt"
 	"sync"
+	"time"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/persistence"
@@ -164,6 +165,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 
 	// Update went through so update the condition for new updates
 	c.updateCondition = c.msBuilder.GetNextEventID()
+	c.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now()
 	return nil
 }
 
@@ -244,7 +246,6 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithRetry(
 	request *persistence.UpdateWorkflowExecutionRequest) error {
 	op := func() error {
 		return c.shard.UpdateWorkflowExecution(request)
-
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)

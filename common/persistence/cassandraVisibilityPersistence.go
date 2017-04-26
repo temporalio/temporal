@@ -114,6 +114,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
 		request.WorkflowTypeName,
 	)
+	query = query.WithTimestamp(common.UnixNanoToCQLTimestamp(request.StartTimestamp))
 	err := query.Exec()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -147,6 +148,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		request.WorkflowTypeName,
 		defaultDeleteTTLSeconds,
 	)
+
+	batch = batch.WithTimestamp(common.UnixNanoToCQLTimestamp(request.CloseTimestamp))
 	err := v.session.ExecuteBatch(batch)
 	if err != nil {
 		return &workflow.InternalServiceError{
