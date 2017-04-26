@@ -559,7 +559,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		if _, ok := err.(*gocql.RequestErrWriteTimeout); ok {
+		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
 			return nil, &TimeoutError{Msg: fmt.Sprintf("CreateWorkflowExecution timed out. Error: %v", err)}
@@ -769,7 +769,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		if _, ok := err.(*gocql.RequestErrWriteTimeout); ok {
+		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
 			return &TimeoutError{Msg: fmt.Sprintf("UpdateWorkflowExecution timed out. Error: %v", err)}
@@ -1591,4 +1591,15 @@ func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
 	}
 
 	return info
+}
+
+func isTimeoutError(err error) bool {
+	if err == gocql.ErrTimeoutNoResponse {
+		return true
+	}
+	if err == gocql.ErrConnectionClosed {
+		return true
+	}
+	_, ok := err.(*gocql.RequestErrWriteTimeout)
+	return ok
 }
