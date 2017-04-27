@@ -246,12 +246,12 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		PersistenceCreateShardScope:             {operation: "CreateShard"},
-		PersistenceGetShardScope:                {operation: "GetShard"},
-		PersistenceUpdateShardScope:             {operation: "UpdateShard"},
-		PersistenceCreateWorkflowExecutionScope: {operation: "CreateWorkflowExecution"},
-		PersistenceGetWorkflowExecutionScope:        {operation: "GetWorkflowExecution"},
-		PersistenceUpdateWorkflowExecutionScope:     {operation: "UpdateWorkflowExecution"},
+		PersistenceCreateShardScope:                    {operation: "CreateShard"},
+		PersistenceGetShardScope:                       {operation: "GetShard"},
+		PersistenceUpdateShardScope:                    {operation: "UpdateShard"},
+		PersistenceCreateWorkflowExecutionScope:        {operation: "CreateWorkflowExecution"},
+		PersistenceGetWorkflowExecutionScope:           {operation: "GetWorkflowExecution"},
+		PersistenceUpdateWorkflowExecutionScope:        {operation: "UpdateWorkflowExecution"},
 		PersistenceDeleteWorkflowExecutionScope:        {operation: "DeleteWorkflowExecution"},
 		PersistenceGetCurrentExecutionScope:            {operation: "GetCurrentExecution"},
 		PersistenceGetTransferTasksScope:               {operation: "GetTransferTasks"},
@@ -360,6 +360,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrBadRequestCounter:              {metricName: "cadence.errors.bad-request", metricType: Counter},
 		CadenceErrEntityNotExistsCounter:         {metricName: "cadence.errors.entity-not-exists", metricType: Counter},
 		CadenceErrExecutionAlreadyStartedCounter: {metricName: "cadence.errors.execution-already-started", metricType: Counter},
+		CadenceErrDomainAlreadyExistsCounter:     {metricName: "cadence.errors.domain-already-exists", metricType: Counter},
 		PersistenceRequests:                      {metricName: "persistence.requests", metricType: Counter},
 		PersistenceFailures:                      {metricName: "persistence.errors", metricType: Counter},
 		PersistenceLatency:                       {metricName: "persistence.latency", metricType: Timer},
