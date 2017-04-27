@@ -379,7 +379,6 @@ func newTaskListID(domainID, taskListName string, taskType int) *taskListID {
 func createEmptyGetTasksRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(emptyGetRetryInitialInterval)
 	policy.SetMaximumInterval(emptyGetRetryMaxInterval)
-	policy.SetExpirationInterval(time.Duration(math.MaxInt64)) // keep retrying forever
 
 	return policy
 }

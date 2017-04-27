@@ -710,17 +710,19 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 			Identity: &identity},
 	})
 
-	s.Equal(err, ctx.Err())
+	s.Equal(ctx.Err(), err)
 
 	// Try with expired context
 	ctx, cancel = thrift.NewContext(time.Second)
-	_, err = s.matchingEngine.PollForActivityTask(ctx, &matching.PollForActivityTaskRequest{
+	resp, err := s.matchingEngine.PollForActivityTask(ctx, &matching.PollForActivityTaskRequest{
 		DomainUUID: common.StringPtr(domainID),
 		PollRequest: &workflow.PollForActivityTaskRequest{
 			TaskList: taskList,
 			Identity: &identity},
 	})
-	s.Equal(err, ctx.Err())
+	s.Nil(err)
+	s.Equal(emptyPollForActivityTaskResponse, resp)
+
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {

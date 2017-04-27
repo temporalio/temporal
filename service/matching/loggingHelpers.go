@@ -27,6 +27,10 @@ const (
 	tagWorkflowExecutionID  = "execution-id"
 	tagWorkflowRunID        = "run-id"
 
+	// task list tags
+	tagTaskListType = "task-list-type"
+	tagTaskListName = "task-list-name"
+
 	// workflow logging tag values
 	// tagWorkflowComponent Values
 	tagValueHistoryBuilderComponent = "history-builder"

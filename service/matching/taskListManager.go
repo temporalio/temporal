@@ -13,13 +13,15 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
+	"golang.org/x/net/context"
 )
 
 const (
 	defaultRangeSize  = 100000
 	getTasksBatchSize = 100
 	// To perform one db operation if there are no pollers
-	taskBufferSize = getTasksBatchSize - 1
+	taskBufferSize    = getTasksBatchSize - 1
+	updateAckInterval = 10 * time.Second
 
 	done time.Duration = -1
 )
@@ -34,11 +36,15 @@ type taskListManager interface {
 
 func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListManager {
 	tlMgr := &taskListManagerImpl{
-		engine:         e,
-		taskBuffer:     make(chan *persistence.TaskInfo, taskBufferSize),
-		shutdownCh:     make(chan struct{}),
-		taskListID:     taskList,
-		logger:         e.logger,
+		engine:     e,
+		taskBuffer: make(chan *persistence.TaskInfo, taskBufferSize),
+		notifyCh:   make(chan struct{}, 1),
+		shutdownCh: make(chan struct{}),
+		taskListID: taskList,
+		logger: e.logger.WithFields(bark.Fields{
+			tagTaskListType: taskList.taskType,
+			tagTaskListName: taskList.taskListName,
+		}),
 		taskAckManager: newAckManager(e.logger),
 		syncMatch:      make(chan *getTaskResult),
 	}
@@ -65,6 +71,7 @@ type taskListManagerImpl struct {
 	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
 	// only if there is waiting poll that consumes from it.
 	syncMatch  chan *getTaskResult
+	notifyCh   chan struct{} // Used as signal to notify pump of new tasks
 	shutdownCh chan struct{} // Delivers stop to the pump that populates taskBuffer
 	stopped    int32
 
@@ -96,6 +103,7 @@ func (c *taskListManagerImpl) Start() error {
 		return err
 	}
 	c.taskWriter.Start()
+	c.signalNewTask()
 	go c.getTasksPump()
 	return nil
 }
@@ -120,6 +128,9 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 		r, err = c.taskWriter.appendTask(execution, taskInfo, rangeID)
 		return r, err
 	})
+	if err == nil {
+		c.signalNewTask()
+	}
 	return err
 }
 
@@ -224,7 +235,11 @@ func (c *taskListManagerImpl) getTask(ctx thrift.Context) (*getTaskResult, error
 	case <-timer.C:
 		return nil, ErrNoTasks
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		err := ctx.Err()
+		if err == context.DeadlineExceeded {
+			err = ErrNoTasks
+		}
+		return nil, err
 	}
 }
 
@@ -237,7 +252,7 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
 			TaskList:     c.taskListID.taskListName,
 			TaskType:     c.taskListID.taskType,
 			BatchSize:    getTasksBatchSize,
-			RangeID:      c.rangeID,
+			RangeID:      rangeID,
 			ReadLevel:    c.taskAckManager.getReadLevel(),
 			MaxReadLevel: c.taskWriter.GetMaxReadLevel(),
 		}
@@ -328,58 +343,50 @@ func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persist
 
 func (c *taskListManagerImpl) getTasksPump() {
 	defer close(c.taskBuffer)
-	retrier := backoff.NewRetrier(emptyGetTasksRetryPolicy, backoff.SystemClock)
+
+	updateAckTimer := time.NewTimer(updateAckInterval)
+	defer updateAckTimer.Stop()
+
 getTasksPumpLoop:
 	for {
-		err := c.persistAckLevel()
-		//var err error
-		if err != nil {
-			logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateTaskList, err,
-				fmt.Sprintf("{taskType: %v, taskList: %v}",
-					c.taskListID.taskType, c.taskListID.taskListName))
-			// keep going as saving ack is not critical
-		}
-		var tasks []*persistence.TaskInfo
-		tasks, err = c.getTaskBatch()
-
-		if err != nil {
-			if _, ok := err.(*persistence.ConditionFailedError); ok {
-				break getTasksPumpLoop
-			}
-			logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetTasks, err,
-				fmt.Sprintf("{taskType: %v, taskList: %v}",
-					c.taskListID.taskType, c.taskListID.taskListName))
-			// TODO: Should we ever stop retrying on db errors?
-			continue getTasksPumpLoop
-		}
-		// Exponential sleep on empty poll
-		if len(tasks) == 0 {
-			var next time.Duration
-			if next = retrier.NextBackOff(); next != done {
-				// Sleep for next time obeying shutdown request
-				timer := time.NewTimer(next)
-				select {
-				case <-timer.C:
-				case <-c.shutdownCh:
-					timer.Stop()
-					break getTasksPumpLoop
+		select {
+		case <-c.shutdownCh:
+			break getTasksPumpLoop
+		case <-c.notifyCh:
+			{
+				tasks, err := c.getTaskBatch()
+				if err != nil {
+					logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetTasks, err,
+						fmt.Sprintf("{taskType: %v, taskList: %v}",
+							c.taskListID.taskType, c.taskListID.taskListName))
+					c.signalNewTask() // re-enqueue the event
+					// TODO: Should we ever stop retrying on db errors?
+					continue getTasksPumpLoop
 				}
-				timer.Stop()
+				c.Lock()
+				for _, t := range tasks {
+					c.taskAckManager.addTask(t.TaskID)
+				}
+				c.Unlock()
+				for _, t := range tasks {
+					select {
+					case c.taskBuffer <- t:
+					case <-c.shutdownCh:
+						break getTasksPumpLoop
+					}
+				}
 			}
-			continue getTasksPumpLoop
-		}
-		retrier.Reset()
-		c.Lock()
-		for _, t := range tasks {
-			c.taskAckManager.addTask(t.TaskID)
-		}
-		c.Unlock()
-
-		for _, t := range tasks {
-			select {
-			case c.taskBuffer <- t:
-			case <-c.shutdownCh:
-				break getTasksPumpLoop
+		case <-updateAckTimer.C:
+			{
+				err := c.persistAckLevel()
+				//var err error
+				if err != nil {
+					logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateTaskList, err,
+						fmt.Sprintf("{taskType: %v, taskList: %v}",
+							c.taskListID.taskType, c.taskListID.taskListName))
+					// keep going as saving ack is not critical
+				}
+				c.signalNewTask() // periodically signal pump to check persistence for tasks
 			}
 		}
 	}
@@ -405,7 +412,6 @@ func (c *taskListManagerImpl) executeWithRetry(
 		if _, ok := err.(*persistence.ConditionFailedError); ok {
 			if c.isEqualRangeID(rangeID) {
 				c.logger.Debug("Retry range id didn't change. stopping task list")
-				c.Stop() // Some other instance owns the range, stop this one.
 				return false
 			}
 			// Our range has changed.
@@ -416,7 +422,20 @@ func (c *taskListManagerImpl) executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
+
+	if _, ok := err.(*persistence.ConditionFailedError); ok {
+		c.logger.Debugf("Stopping task list due to persistence condition failure. Err: %v", err)
+		c.Stop()
+	}
 	return
+}
+
+func (c *taskListManagerImpl) signalNewTask() {
+	var event struct{}
+	select {
+	case c.notifyCh <- event:
+	default: // channel already has an event, don't block
+	}
 }
 
 func (c *taskContext) RecordDecisionTaskStartedWithRetry(
@@ -487,6 +506,7 @@ func (c *taskContext) completeTask(err error) {
 			tlMgr.Stop()
 			return
 		}
+		tlMgr.signalNewTask()
 	}
 
 	tlMgr.completeTaskPoll(c.info.TaskID)
