@@ -135,32 +135,38 @@ func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
 
 func (tb *timerBuilder) AddScheduleToStartActivityTimeout(
 	ai *persistence.ActivityInfo) *persistence.ActivityTimeoutTask {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_START, ai.ScheduleToStartTimeout)
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_START, ai.ScheduleToStartTimeout, nil)
 }
 
 func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(
 	ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask, error) {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout), nil
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout, nil), nil
 }
 
 func (tb *timerBuilder) AddStartToCloseActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
 	error) {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout), nil
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout, nil), nil
 }
 
 func (tb *timerBuilder) AddHeartBeatActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
 	error) {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout), nil
+	// We want to create the timer starting from the last heart beat time stamp but
+	// avoid creating timers before the current timer frame.
+	targetTime := common.AddSecondsToBaseTime(ai.LastHeartBeatUpdatedTime.UnixNano(), int64(ai.HeartbeatTimeout))
+	if targetTime > time.Now().UnixNano() {
+		return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout, &ai.LastHeartBeatUpdatedTime), nil
+	}
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout, nil), nil
 }
 
 // AddActivityTimeoutTask - Adds an activity timeout task.
 func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
-	timeoutType w.TimeoutType, fireTimeout int32) *persistence.ActivityTimeoutTask {
+	timeoutType w.TimeoutType, fireTimeout int32, baseTime *time.Time) *persistence.ActivityTimeoutTask {
 	if fireTimeout <= 0 {
 		return nil
 	}
 
-	timeOutTask := tb.createActivityTimeoutTask(fireTimeout, timeoutType, scheduleID)
+	timeOutTask := tb.createActivityTimeoutTask(fireTimeout, timeoutType, scheduleID, baseTime)
 	tb.logger.Debugf("Adding Activity Timeout: SequenceID: %v, TimeoutType: %v, EventID: %v",
 		SequenceID(timeOutTask.TaskID), timeoutType.String(), timeOutTask.EventID)
 	return timeOutTask
@@ -213,8 +219,15 @@ func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int
 }
 
 // createActivityTimeoutTask - Creates a activity timeout task.
-func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType w.TimeoutType, eventID int64) *persistence.ActivityTimeoutTask {
-	expiryTime := common.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
+func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType w.TimeoutType,
+	eventID int64, baseTime *time.Time) *persistence.ActivityTimeoutTask {
+	var expiryTime int64
+	if baseTime != nil {
+		expiryTime = common.AddSecondsToBaseTime(baseTime.UnixNano(), int64(fireTimeOut))
+	} else {
+		expiryTime = common.AddSecondsToBaseTime(time.Now().UnixNano(), int64(fireTimeOut))
+	}
+
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
 	return &persistence.ActivityTimeoutTask{
 		TaskID:      int64(seqID),

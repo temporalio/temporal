@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
 	h "github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 
@@ -176,8 +176,10 @@ func (e *mutableStateBuilder) hasPendingTasks() bool {
 	return len(e.pendingActivityInfoIDs) > 0 || len(e.pendingTimerInfoIDs) > 0
 }
 
-func (e *mutableStateBuilder) updateActivityProgress(ai *persistence.ActivityInfo, details []byte) {
-	ai.Details = details
+func (e *mutableStateBuilder) updateActivityProgress(ai *persistence.ActivityInfo,
+	request *workflow.RecordActivityTaskHeartbeatRequest) {
+	ai.Details = request.GetDetails()
+	ai.LastHeartBeatUpdatedTime = time.Now()
 	e.updateActivityInfos = append(e.updateActivityInfos, ai)
 }
 
@@ -305,8 +307,8 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(d
 		WorkflowType:                        wType,
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeout),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(attributes.GetExecutionStartToCloseTimeoutSeconds()),
-		Input:                               attributes.GetInput(),
-		Identity:                            nil,
+		Input:    attributes.GetInput(),
+		Identity: nil,
 	}
 
 	return e.AddWorkflowExecutionStartedEvent(domainID, execution, createRequest)
@@ -445,16 +447,17 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEve
 	heartbeatTimeout := attributes.GetHeartbeatTimeoutSeconds()
 
 	ai := &persistence.ActivityInfo{
-		ScheduleID:             scheduleEventID,
-		ScheduledEvent:         scheduleEvent,
-		StartedID:              emptyEventID,
-		ActivityID:             attributes.GetActivityId(),
-		ScheduleToStartTimeout: scheduleToStartTimeout,
-		ScheduleToCloseTimeout: scheduleToCloseTimeout,
-		StartToCloseTimeout:    startToCloseTimeout,
-		HeartbeatTimeout:       heartbeatTimeout,
-		CancelRequested:        false,
-		CancelRequestID:        emptyEventID,
+		ScheduleID:               scheduleEventID,
+		ScheduledEvent:           scheduleEvent,
+		StartedID:                emptyEventID,
+		ActivityID:               attributes.GetActivityId(),
+		ScheduleToStartTimeout:   scheduleToStartTimeout,
+		ScheduleToCloseTimeout:   scheduleToCloseTimeout,
+		StartToCloseTimeout:      startToCloseTimeout,
+		HeartbeatTimeout:         heartbeatTimeout,
+		CancelRequested:          false,
+		CancelRequestID:          emptyEventID,
+		LastHeartBeatUpdatedTime: time.Time{},
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai

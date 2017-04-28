@@ -672,6 +672,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
+	currentTime := time.Now().UTC()
 	activityInfos := []*ActivityInfo{
 		{
 			ScheduleID:             1,
@@ -682,6 +683,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 			ScheduleToStartTimeout: 2,
 			StartToCloseTimeout:    3,
 			HeartbeatTimeout:       4,
+			LastHeartBeatUpdatedTime: currentTime,
 		}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
@@ -701,6 +703,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
 	s.Equal(int32(3), ai.StartToCloseTimeout)
 	s.Equal(int32(4), ai.HeartbeatTimeout)
+	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, common.Int64Ptr(1), nil, nil)
 	s.Nil(err2, "No error expected.")

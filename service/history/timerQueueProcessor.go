@@ -427,12 +427,14 @@ Update_History_Loop:
 			return err1
 		}
 
-		referenceExpiryTime, _ := DeconstructTimerKey(SequenceID(task.TaskID))
 		context.tBuilder.LoadUserTimers(msBuilder)
 
 		var timerTasks []persistence.Task
 		var clearTimerTask persistence.Task
+
 		scheduleNewDecision := false
+		timerTaskExpiryTime, _ := DeconstructTimerKey(SequenceID(task.TaskID))
+
 	ExpireUserTimers:
 		for _, td := range context.tBuilder.AllTimers() {
 			hasTimer, ti := context.tBuilder.UserTimer(td.SequenceID)
@@ -441,7 +443,7 @@ Update_History_Loop:
 				return fmt.Errorf("failed to find user timer")
 			}
 
-			if isExpired := context.tBuilder.IsTimerExpired(td, referenceExpiryTime); isExpired {
+			if isExpired := context.tBuilder.IsTimerExpired(td, timerTaskExpiryTime); isExpired {
 				// Add TimerFired event to history.
 				if msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID) == nil {
 					return errFailedToAddTimerFiredEvent
@@ -502,6 +504,7 @@ Update_History_Loop:
 
 		clearTimerTask := &persistence.ActivityTimeoutTask{TaskID: timerTask.TaskID}
 
+		var timerTasks []persistence.Task
 		scheduleNewDecision := false
 		updateHistory := false
 
@@ -535,13 +538,29 @@ Update_History_Loop:
 
 			case workflow.TimeoutType_HEARTBEAT:
 				{
-					if ai.StartedID != emptyEventID {
+					timerTaskExpiryTime, _ := DeconstructTimerKey(SequenceID(timerTask.TaskID))
+					l := common.AddSecondsToBaseTime(
+						ai.LastHeartBeatUpdatedTime.UnixNano(),
+						int64(ai.HeartbeatTimeout))
+
+					if timerTaskExpiryTime > l {
+						t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
 						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
 						}
 
 						updateHistory = true
 						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
+					} else {
+						// Re-Schedule next heartbeat.
+						hbTimeoutTask, err := context.tBuilder.AddHeartBeatActivityTimeout(ai)
+						if err != nil {
+							return err
+						}
+						if hbTimeoutTask != nil {
+							timerTasks = append(timerTasks, hbTimeoutTask)
+							defer t.NotifyNewTimer(hbTimeoutTask.GetTaskID())
+						}
 					}
 				}
 
@@ -562,7 +581,7 @@ Update_History_Loop:
 		if updateHistory {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, nil, clearTimerTask)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, timerTasks, clearTimerTask)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop

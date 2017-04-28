@@ -15,7 +15,7 @@ const (
 
 // Workflow execution states
 const (
-	WorkflowStateCreated   = iota
+	WorkflowStateCreated = iota
 	WorkflowStateRunning
 	WorkflowStateCompleted
 )
@@ -28,7 +28,7 @@ const (
 
 // Transfer task types
 const (
-	TransferTaskTypeDecisionTask    = iota
+	TransferTaskTypeDecisionTask = iota
 	TransferTaskTypeActivityTask
 	TransferTaskTypeDeleteExecution
 	TransferTaskTypeCancelExecution
@@ -202,19 +202,20 @@ type (
 
 	// ActivityInfo details.
 	ActivityInfo struct {
-		ScheduleID             int64
-		ScheduledEvent         []byte
-		StartedID              int64
-		StartedEvent           []byte
-		ActivityID             string
-		RequestID              string
-		Details                []byte
-		ScheduleToStartTimeout int32
-		ScheduleToCloseTimeout int32
-		StartToCloseTimeout    int32
-		HeartbeatTimeout       int32
-		CancelRequested        bool
-		CancelRequestID        int64
+		ScheduleID               int64
+		ScheduledEvent           []byte
+		StartedID                int64
+		StartedEvent             []byte
+		ActivityID               string
+		RequestID                string
+		Details                  []byte
+		ScheduleToStartTimeout   int32
+		ScheduleToCloseTimeout   int32
+		StartToCloseTimeout      int32
+		HeartbeatTimeout         int32
+		CancelRequested          bool
+		CancelRequestID          int64
+		LastHeartBeatUpdatedTime time.Time
 	}
 
 	// TimerInfo details - metadata about user timer info.

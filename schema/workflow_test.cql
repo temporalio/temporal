@@ -75,6 +75,7 @@ CREATE TYPE activity_info (
   heart_beat_timeout        int,
   cancel_requested          boolean, -- If a cancel request is made to cancel the activity in progress.
   cancel_request_id         bigint,  -- Event ID that identifies the cancel request.
+  last_hb_updated_time      timestamp, -- Last time the heartbeat is received.
 );
 
 -- User timer details

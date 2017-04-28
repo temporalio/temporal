@@ -999,21 +999,11 @@ Update_History_Loop:
 
 		cancelRequested := ai.CancelRequested
 
-		var timerTasks []persistence.Task
-		var transferTasks []persistence.Task
-
 		e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, CancelRequested: %v",
 			scheduleID, ai, cancelRequested)
 
-		// Re-schedule next heartbeat.
-		start2HeartBeatTimeoutTask, _ := context.tBuilder.AddHeartBeatActivityTimeout(ai)
-		if start2HeartBeatTimeoutTask != nil {
-			timerTasks = append(timerTasks, start2HeartBeatTimeoutTask)
-			defer e.timerProcessor.NotifyNewTimer(start2HeartBeatTimeoutTask.GetTaskID())
-		}
-
-		// Save progress reported.
-		msBuilder.updateActivityProgress(ai, request.GetDetails())
+		// Save progress and last HB reported time.
+		msBuilder.updateActivityProgress(ai, request)
 
 		// Generate a transaction ID for appending events to history
 		transactionID, err2 := e.shard.GetNextTransferTaskID()
@@ -1023,14 +1013,13 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
+		if err := context.updateWorkflowExecution(nil, nil, transactionID); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
 
 			return nil, err
 		}
-
 		return &workflow.RecordActivityTaskHeartbeatResponse{CancelRequested: common.BoolPtr(cancelRequested)}, nil
 	}
 
