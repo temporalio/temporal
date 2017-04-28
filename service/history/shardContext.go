@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
@@ -154,7 +155,7 @@ Create_Loop:
 						s.closeShard()
 					}
 				}
-			case *persistence.TimeoutError:
+			case *shared.InternalServiceError, *persistence.TimeoutError:
 				{
 					// We have no idea if the write failed or will eventually make it to
 					// persistence. Increment RangeID to guarantee that subsequent reads
@@ -224,7 +225,7 @@ Update_Loop:
 						s.closeShard()
 					}
 				}
-			case *persistence.TimeoutError:
+			case *shared.InternalServiceError, *persistence.TimeoutError:
 				{
 					// We have no idea if the write failed or will eventually make it to
 					// persistence. Increment RangeID to guarantee that subsequent reads
