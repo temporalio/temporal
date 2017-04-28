@@ -345,7 +345,6 @@ func (c *taskListManagerImpl) getTasksPump() {
 	defer close(c.taskBuffer)
 
 	updateAckTimer := time.NewTimer(updateAckInterval)
-	defer updateAckTimer.Stop()
 
 getTasksPumpLoop:
 	for {
@@ -375,6 +374,12 @@ getTasksPumpLoop:
 						break getTasksPumpLoop
 					}
 				}
+
+				if len(tasks) > 0 {
+					// There maybe more tasks.
+					// We yield now, but signal pump to check again later.
+					c.signalNewTask()
+				}
 			}
 		case <-updateAckTimer.C:
 			{
@@ -387,9 +392,12 @@ getTasksPumpLoop:
 					// keep going as saving ack is not critical
 				}
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
+				updateAckTimer = time.NewTimer(updateAckInterval)
 			}
 		}
 	}
+
+	updateAckTimer.Stop()
 }
 
 // Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().

@@ -149,28 +149,32 @@ func (t *transferQueueProcessorImpl) processorPump() {
 	}
 
 	pollTimer := time.NewTimer(transferProcessorMaxPollInterval)
-	defer pollTimer.Stop()
 	updateAckTimer := time.NewTimer(transferProcessorUpdateAckInterval)
-	defer updateAckTimer.Stop()
+
+processorPumpLoop:
 	for {
 		select {
 		case <-t.shutdownCh:
-			t.logger.Info("Transfer queue processor pump shutting down.")
-			// This is the only pump which writes to tasksCh, so it is safe to close channel here
-			close(tasksCh)
-			if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-				t.logger.Warn("Transfer queue processor timed out on worker shutdown.")
-			}
-			return
+			break processorPumpLoop
 		case <-t.appendCh:
 			t.processTransferTasks(tasksCh)
 		case <-pollTimer.C:
 			t.processTransferTasks(tasksCh)
+			pollTimer = time.NewTimer(transferProcessorMaxPollInterval)
 		case <-updateAckTimer.C:
 			t.ackMgr.updateAckLevel()
 			updateAckTimer = time.NewTimer(transferProcessorUpdateAckInterval)
 		}
 	}
+
+	t.logger.Info("Transfer queue processor pump shutting down.")
+	// This is the only pump which writes to tasksCh, so it is safe to close channel here
+	close(tasksCh)
+	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
+		t.logger.Warn("Transfer queue processor timed out on worker shutdown.")
+	}
+	updateAckTimer.Stop()
+	pollTimer.Stop()
 }
 
 func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo) {
