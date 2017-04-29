@@ -277,6 +277,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRespondDecisionTaskCompletedScope:   {operation: "HistoryClientRespondDecisionTaskCompleted"},
 		HistoryClientRespondActivityTaskCompletedScope:   {operation: "HistoryClientRespondActivityTaskCompleted"},
 		HistoryClientRespondActivityTaskFailedScope:      {operation: "HistoryClientRespondActivityTaskFailed"},
+		HistoryClientRespondActivityTaskCanceledScope:    {operation: "HistoryClientRespondActivityTaskCanceled"},
 		HistoryClientGetWorkflowExecutionHistoryScope:    {operation: "HistoryClientGetWorkflowExecutionHistory"},
 		HistoryClientRecordDecisionTaskStartedScope:      {operation: "HistoryClientRecordDecisionTaskStarted"},
 		HistoryClientRecordActivityTaskStartedScope:      {operation: "HistoryClientRecordActivityTaskStarted"},
