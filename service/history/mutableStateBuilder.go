@@ -69,6 +69,7 @@ func newMutableStateBuilder(logger bark.Logger) *mutableStateBuilder {
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		NextEventID:        firstEventID,
 		State:              persistence.WorkflowStateCreated,
+		CloseStatus:        persistence.WorkflowCloseStatusNone,
 		LastProcessedEvent: emptyEventID,
 	}
 
@@ -330,6 +331,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(domainID string, 
 	e.executionInfo.DecisionTimeoutValue = request.GetTaskStartToCloseTimeoutSeconds()
 
 	e.executionInfo.State = persistence.WorkflowStateCreated
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusNone
 	e.executionInfo.LastProcessedEvent = emptyEventID
 	e.executionInfo.CreateRequestID = request.GetRequestId()
 	e.executionInfo.DecisionScheduleID = emptyEventID
@@ -591,6 +593,7 @@ func (e *mutableStateBuilder) AddCompletedWorkflowEvent(decisionCompletedEventID
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusCompleted
 	return e.hBuilder.AddCompletedWorkflowEvent(decisionCompletedEventID, attributes)
 }
 
@@ -602,6 +605,7 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int6
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusFailed
 	return e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, attributes)
 }
 
@@ -628,6 +632,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskComp
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusCanceled
 	return e.hBuilder.AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID, attributes)
 }
 
@@ -735,6 +740,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionTerminatedEvent(
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusTerminated
 	return e.hBuilder.AddWorkflowExecutionTerminatedEvent(request)
 }
 
@@ -759,6 +765,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 	}
 
 	e.executionInfo.State = persistence.WorkflowStateCompleted
+	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusContinuedAsNew
 	newExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(e.executionInfo.WorkflowID),
 		RunId:      common.StringPtr(newRunID),

@@ -71,6 +71,7 @@ const (
 		`decision_task_timeout: ?, ` +
 		`execution_context: ?, ` +
 		`state: ?, ` +
+		`close_status: ?, ` +
 		`next_event_id: ?, ` +
 		`last_processed_event: ?, ` +
 		`start_time: ?, ` +
@@ -645,6 +646,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		request.DecisionTimeoutValue,
 		request.ExecutionContext,
 		WorkflowStateCreated,
+		WorkflowCloseStatusNone,
 		request.NextEventID,
 		request.LastProcessedEvent,
 		cqlNowTimestamp,
@@ -720,6 +722,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.DecisionTimeoutValue,
 		executionInfo.ExecutionContext,
 		executionInfo.State,
+		executionInfo.CloseStatus,
 		executionInfo.NextEventID,
 		executionInfo.LastProcessedEvent,
 		executionInfo.StartTimestamp,
@@ -830,6 +833,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 		info.DecisionTimeoutValue,
 		info.ExecutionContext,
 		info.State,
+		info.CloseStatus,
 		info.NextEventID,
 		info.LastProcessedEvent,
 		info.StartTimestamp,

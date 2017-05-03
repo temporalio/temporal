@@ -20,6 +20,17 @@ const (
 	WorkflowStateCompleted
 )
 
+// Workflow execution close status
+const (
+	WorkflowCloseStatusNone = iota
+	WorkflowCloseStatusCompleted
+	WorkflowCloseStatusFailed
+	WorkflowCloseStatusCanceled
+	WorkflowCloseStatusTerminated
+	WorkflowCloseStatusContinuedAsNew
+	WorkflowCloseStatusTimedOut
+)
+
 // Types of task lists
 const (
 	TaskListTypeDecision = iota
@@ -83,6 +94,7 @@ type (
 		DecisionTimeoutValue int32
 		ExecutionContext     []byte
 		State                int
+		CloseStatus          int
 		NextEventID          int64
 		LastProcessedEvent   int64
 		StartTimestamp       time.Time
