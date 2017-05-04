@@ -2,6 +2,7 @@ package history
 
 import (
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/shared"
 )
 
 // This is duplicated
@@ -12,13 +13,14 @@ const (
 	invalidHistoryActionEventID = 1000
 
 	// History Engine events
-	historyEngineStarting            = 2000
-	historyEngineStarted             = 2001
-	historyEngineShuttingDown        = 2002
-	historyEngineShutdown            = 2003
-	persistentStoreErrorEventID      = 2010
-	historySerializationErrorEventID = 2020
-	duplicateTaskEventID             = 2030
+	historyEngineStarting              = 2000
+	historyEngineStarted               = 2001
+	historyEngineShuttingDown          = 2002
+	historyEngineShutdown              = 2003
+	persistentStoreErrorEventID        = 2010
+	historySerializationErrorEventID   = 2020
+	duplicateTaskEventID               = 2030
+	multipleCompletionDecisionsEventID = 2040
 
 	// Transfer Queue Processor events
 	transferQueueProcessorStarting         = 2100
@@ -61,6 +63,7 @@ const (
 	tagWorkflowExecutionID  = "execution-id"
 	tagWorkflowRunID        = "run-id"
 	tagHistoryShardID       = "shard-id"
+	tagDecisionType         = "decision-type"
 
 	// workflow logging tag values
 	// tagWorkflowComponent Values
@@ -77,6 +80,7 @@ const (
 	tagValueActionDecisionTaskStarted             = "add-decisiontask-started-event"
 	tagValueActionDecisionTaskCompleted           = "add-decisiontask-completed-event"
 	tagValueActionDecisionTaskTimedOut            = "add-decisiontask-timedout-event"
+	tagValueActionDecisionTaskFailed              = "add-decisiontask-failed-event"
 	tagValueActionActivityTaskScheduled           = "add-activitytask-scheduled-event"
 	tagValueActionActivityTaskStarted             = "add-activitytask-started-event"
 	tagValueActionActivityTaskCompleted           = "add-activitytask-completed-event"
@@ -283,4 +287,11 @@ func logMutableStateInvalidAction(logger bark.Logger, errorMsg string) {
 	logger.WithFields(bark.Fields{
 		tagWorkflowEventID: invalidMutableStateActionEventID,
 	}).Errorf("%v.  ", errorMsg)
+}
+
+func logMultipleCompletionDecisionsEvent(lg bark.Logger, decisionType shared.DecisionType) {
+	lg.WithFields(bark.Fields{
+		tagWorkflowEventID: multipleCompletionDecisionsEventID,
+		tagDecisionType:    decisionType,
+	}).Warnf("Multiple completion decisions.  DecisionType: %v", decisionType)
 }

@@ -418,6 +418,24 @@ func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64
 	return event
 }
 
+func (e *mutableStateBuilder) AddDecisionTaskFailedEvent(scheduleEventID int64,
+	startedEventID int64, cause workflow.DecisionTaskFailedCause,
+	request *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent {
+	hasPendingDecision := e.HasPendingDecisionTask()
+	pendingDecisionTask, ok := e.GetPendingDecision(scheduleEventID)
+	if !hasPendingDecision || !ok || pendingDecisionTask.StartedID != startedEventID {
+		logInvalidHistoryActionEvent(e.logger, tagValueActionDecisionTaskFailed, e.GetNextEventID(), fmt.Sprintf(
+			"{HasPending: %v, ScheduleID: %v, StartedID: %v, Exist: %v}", hasPendingDecision, scheduleEventID,
+			startedEventID, ok))
+		return nil
+	}
+
+	event := e.hBuilder.AddDecisionTaskFailedEvent(scheduleEventID, startedEventID, cause, request)
+
+	e.DeleteDecision()
+	return event
+}
+
 func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID int64,
 	attributes *workflow.ScheduleActivityTaskDecisionAttributes) (*workflow.HistoryEvent, *persistence.ActivityInfo) {
 	if ai, ok := e.GetActivityInfo(e.GetNextEventID()); ok {
@@ -609,19 +627,9 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int6
 	return e.hBuilder.AddFailWorkflowEvent(decisionCompletedEventID, attributes)
 }
 
-func (e *mutableStateBuilder) AddCompleteWorkflowExecutionFailedEvent(decisionCompletedEventID int64,
-	cause workflow.WorkflowCompleteFailedCause) *workflow.HistoryEvent {
-	return e.hBuilder.AddCompleteWorkflowExecutionFailedEvent(decisionCompletedEventID, cause)
-}
-
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(cause string,
 	request *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent {
 	return e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(cause, request)
-}
-
-func (e *mutableStateBuilder) AddCancelWorkflowExecutionFailedEvent(decisionTaskCompletedEventID int64,
-	cause workflow.WorkflowCancelFailedCause) *workflow.HistoryEvent {
-	return e.hBuilder.AddCancelWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, cause)
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID int64,
@@ -803,9 +811,4 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 	}
 
 	return e.hBuilder.AddContinuedAsNewEvent(decisionCompletedEventID, newRunID, attributes), newStateBuilder, nil
-}
-
-func (e *mutableStateBuilder) AddContinueAsNewFailedEvent(decisionCompletedEventID int64,
-	cause workflow.WorkflowCompleteFailedCause) *workflow.HistoryEvent {
-	return e.hBuilder.AddContinueAsNewFailedEvent(decisionCompletedEventID, cause)
 }

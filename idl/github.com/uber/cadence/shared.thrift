@@ -61,6 +61,7 @@ enum EventType {
   DecisionTaskStarted,
   DecisionTaskCompleted,
   DecisionTaskTimedOut
+  DecisionTaskFailed,
   ActivityTaskScheduled,
   ActivityTaskStarted,
   ActivityTaskCompleted,
@@ -71,11 +72,9 @@ enum EventType {
   ActivityTaskCanceled,
   TimerStarted,
   TimerFired,
-  CompleteWorkflowExecutionFailed,
   CancelTimerFailed,
   TimerCanceled,
   WorkflowExecutionCancelRequested,
-  CancelWorkflowExecutionFailed,
   WorkflowExecutionCanceled,
   RequestCancelExternalWorkflowExecutionInitiated,
   RequestCancelExternalWorkflowExecutionFailed,
@@ -84,14 +83,9 @@ enum EventType {
   WorkflowExecutionSignaled,
   WorkflowExecutionTerminated,
   WorkflowExecutionContinuedAsNew,
-  ContinueAsNewWorkflowExecutionFailed,
 }
 
-enum WorkflowCompleteFailedCause {
-  UNHANDLED_DECISION,
-}
-
-enum WorkflowCancelFailedCause {
+enum DecisionTaskFailedCause {
   UNHANDLED_DECISION,
 }
 
@@ -230,16 +224,6 @@ struct WorkflowExecutionContinuedAsNewEventAttributes {
   70: optional i64 (js.type = "Long") decisionTaskCompletedEventId
 }
 
-struct CompleteWorkflowExecutionFailedEventAttributes {
-  10: optional WorkflowCompleteFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
-struct ContinueAsNewWorkflowExecutionFailedEventAttributes {
-  10: optional WorkflowCompleteFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
 struct DecisionTaskScheduledEventAttributes {
   10: optional TaskList taskList
   20: optional i32 startToCloseTimeoutSeconds
@@ -262,6 +246,13 @@ struct DecisionTaskTimedOutEventAttributes {
   10: optional i64 (js.type = "Long") scheduledEventId
   20: optional i64 (js.type = "Long") startedEventId
   30: optional TimeoutType timeoutType
+}
+
+struct DecisionTaskFailedEventAttributes {
+  10: optional i64 (js.type = "Long") scheduledEventId
+  20: optional i64 (js.type = "Long") startedEventId
+  30: optional DecisionTaskFailedCause cause
+  40: optional string identity
 }
 
 struct ActivityTaskScheduledEventAttributes {
@@ -356,11 +347,6 @@ struct WorkflowExecutionCancelRequestedEventAttributes {
   40: optional string identity
 }
 
-struct CancelWorkflowExecutionFailedEventAttributes {
-  10: optional WorkflowCancelFailedCause cause
-  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
-}
-
 struct WorkflowExecutionCanceledEventAttributes {
   10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   20: optional binary details
@@ -410,38 +396,36 @@ struct HistoryEvent {
   10:  optional i64 (js.type = "Long") eventId
   20:  optional i64 (js.type = "Long") timestamp
   30:  optional EventType eventType
-  35:  optional WorkflowExecutionStartedEventAttributes workflowExecutionStartedEventAttributes
-  40:  optional WorkflowExecutionCompletedEventAttributes workflowExecutionCompletedEventAttributes
-  45:  optional WorkflowExecutionFailedEventAttributes workflowExecutionFailedEventAttributes
-  50:  optional WorkflowExecutionTimedOutEventAttributes workflowExecutionTimedOutEventAttributes
-  55:  optional DecisionTaskScheduledEventAttributes decisionTaskScheduledEventAttributes
-  60:  optional DecisionTaskStartedEventAttributes decisionTaskStartedEventAttributes
-  63:  optional DecisionTaskTimedOutEventAttributes decisionTaskTimedOutEventAttributes
-  65:  optional DecisionTaskCompletedEventAttributes decisionTaskCompletedEventAttributes
-  70:  optional ActivityTaskScheduledEventAttributes activityTaskScheduledEventAttributes
-  75:  optional ActivityTaskStartedEventAttributes activityTaskStartedEventAttributes
-  80:  optional ActivityTaskCompletedEventAttributes activityTaskCompletedEventAttributes
-  85:  optional ActivityTaskFailedEventAttributes activityTaskFailedEventAttributes
-  90:  optional ActivityTaskTimedOutEventAttributes activityTaskTimedOutEventAttributes
-  95:  optional TimerStartedEventAttributes timerStartedEventAttributes
-  100: optional TimerFiredEventAttributes timerFiredEventAttributes
-  105: optional CompleteWorkflowExecutionFailedEventAttributes completeWorkflowExecutionFailedEventAttributes
-  110: optional ActivityTaskCancelRequestedEventAttributes activityTaskCancelRequestedEventAttributes
-  120: optional RequestCancelActivityTaskFailedEventAttributes requestCancelActivityTaskFailedEventAttributes
-  130: optional ActivityTaskCanceledEventAttributes activityTaskCanceledEventAttributes
-  140: optional TimerCanceledEventAttributes timerCanceledEventAttributes
-  150: optional CancelTimerFailedEventAttributes cancelTimerFailedEventAttributes
-  160: optional MarkerRecordedEventAttributes markerRecordedEventAttributes
-  170: optional WorkflowExecutionSignaledEventAttributes workflowExecutionSignaledEventAttributes
-  180: optional WorkflowExecutionTerminatedEventAttributes workflowExecutionTerminatedEventAttributes
-  190: optional WorkflowExecutionCancelRequestedEventAttributes workflowExecutionCancelRequestedEventAttributes
-  200: optional CancelWorkflowExecutionFailedEventAttributes cancelWorkflowExecutionFailedEventAttributes
-  210: optional WorkflowExecutionCanceledEventAttributes workflowExecutionCanceledEventAttributes
-  220: optional RequestCancelExternalWorkflowExecutionInitiatedEventAttributes requestCancelExternalWorkflowExecutionInitiatedEventAttributes
-  230: optional RequestCancelExternalWorkflowExecutionFailedEventAttributes requestCancelExternalWorkflowExecutionFailedEventAttributes
-  240: optional ExternalWorkflowExecutionCancelRequestedEventAttributes externalWorkflowExecutionCancelRequestedEventAttributes
-  250: optional WorkflowExecutionContinuedAsNewEventAttributes workflowExecutionContinuedAsNewEventAttributes
-  260: optional ContinueAsNewWorkflowExecutionFailedEventAttributes continueAsNewWorkflowExecutionFailedEventAttributes
+  40:  optional WorkflowExecutionStartedEventAttributes workflowExecutionStartedEventAttributes
+  50:  optional WorkflowExecutionCompletedEventAttributes workflowExecutionCompletedEventAttributes
+  60:  optional WorkflowExecutionFailedEventAttributes workflowExecutionFailedEventAttributes
+  70:  optional WorkflowExecutionTimedOutEventAttributes workflowExecutionTimedOutEventAttributes
+  80:  optional DecisionTaskScheduledEventAttributes decisionTaskScheduledEventAttributes
+  90:  optional DecisionTaskStartedEventAttributes decisionTaskStartedEventAttributes
+  100:  optional DecisionTaskCompletedEventAttributes decisionTaskCompletedEventAttributes
+  110:  optional DecisionTaskTimedOutEventAttributes decisionTaskTimedOutEventAttributes
+  120: optional DecisionTaskFailedEventAttributes decisionTaskFailedEventAttributes
+  130:  optional ActivityTaskScheduledEventAttributes activityTaskScheduledEventAttributes
+  140:  optional ActivityTaskStartedEventAttributes activityTaskStartedEventAttributes
+  150:  optional ActivityTaskCompletedEventAttributes activityTaskCompletedEventAttributes
+  160:  optional ActivityTaskFailedEventAttributes activityTaskFailedEventAttributes
+  170:  optional ActivityTaskTimedOutEventAttributes activityTaskTimedOutEventAttributes
+  180:  optional TimerStartedEventAttributes timerStartedEventAttributes
+  190: optional TimerFiredEventAttributes timerFiredEventAttributes
+  200: optional ActivityTaskCancelRequestedEventAttributes activityTaskCancelRequestedEventAttributes
+  210: optional RequestCancelActivityTaskFailedEventAttributes requestCancelActivityTaskFailedEventAttributes
+  220: optional ActivityTaskCanceledEventAttributes activityTaskCanceledEventAttributes
+  230: optional TimerCanceledEventAttributes timerCanceledEventAttributes
+  240: optional CancelTimerFailedEventAttributes cancelTimerFailedEventAttributes
+  250: optional MarkerRecordedEventAttributes markerRecordedEventAttributes
+  260: optional WorkflowExecutionSignaledEventAttributes workflowExecutionSignaledEventAttributes
+  270: optional WorkflowExecutionTerminatedEventAttributes workflowExecutionTerminatedEventAttributes
+  280: optional WorkflowExecutionCancelRequestedEventAttributes workflowExecutionCancelRequestedEventAttributes
+  290: optional WorkflowExecutionCanceledEventAttributes workflowExecutionCanceledEventAttributes
+  300: optional RequestCancelExternalWorkflowExecutionInitiatedEventAttributes requestCancelExternalWorkflowExecutionInitiatedEventAttributes
+  310: optional RequestCancelExternalWorkflowExecutionFailedEventAttributes requestCancelExternalWorkflowExecutionFailedEventAttributes
+  320: optional ExternalWorkflowExecutionCancelRequestedEventAttributes externalWorkflowExecutionCancelRequestedEventAttributes
+  330: optional WorkflowExecutionContinuedAsNewEventAttributes workflowExecutionContinuedAsNewEventAttributes
 }
 
 struct History {

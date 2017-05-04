@@ -224,6 +224,8 @@ const (
 	HistoryProcessTransferTasksScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
 	HistoryRequestCancelWorkflowExecutionScope
+	// HistoryMultipleCompletionDecisionsScope tracks number of duplicate completion decisions for an execution
+	HistoryMultipleCompletionDecisionsScope
 
 	NumHistoryScopes
 )
@@ -315,6 +317,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
 		HistoryProcessTransferTasksScope:           {operation: "ProcessTransferTask"},
 		HistoryRequestCancelWorkflowExecutionScope: {operation: "RequestCancelWorkflowExecution"},
+		HistoryMultipleCompletionDecisionsScope:    {operation: "MultipleCompletionDecisions"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -348,6 +351,7 @@ const (
 // History Metrics enum
 const (
 	TransferTasksProcessedCounter        = iota + NumCommonMetrics
+	MultipleCompletionDecisionsCounter
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter
 )
@@ -373,6 +377,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Frontend: {},
 	History: {
 		TransferTasksProcessedCounter:        {metricName: "transfer-tasks-processed", metricType: Counter},
+		MultipleCompletionDecisionsCounter:   {metricName: "multiple-completion-decisions", metricType: Counter},
 		CadenceErrShardOwnershipLostCounter:  {metricName: "cadence.errors.shard-ownership-lost", metricType: Counter},
 		CadenceErrEventAlreadyStartedCounter: {metricName: "cadence.errors.event-already-started", metricType: Counter},
 	},

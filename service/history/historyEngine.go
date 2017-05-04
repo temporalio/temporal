@@ -36,6 +36,7 @@ type (
 		metricsReporter  metrics.Client
 		historyCache     *historyCache
 		domainCache      cache.DomainCache
+		metricsClient    metrics.Client
 		logger           bark.Logger
 	}
 
@@ -81,6 +82,7 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 		logger: logger.WithFields(bark.Fields{
 			tagWorkflowComponent: tagValueHistoryEngineComponent,
 		}),
+		metricsClient: shard.GetMetricsClient(),
 	}
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(historyEngImpl, executionManager, logger)
 	shardWrapper.txProcessor = txProcessor
@@ -548,34 +550,68 @@ Update_History_Loop:
 				defer e.timerProcessor.NotifyNewTimer(Schedule2CloseTimeoutTask.GetTaskID())
 
 			case workflow.DecisionType_CompleteWorkflowExecution:
-				if isComplete || hasUnhandledEvents {
-					msBuilder.AddCompleteWorkflowExecutionFailedEvent(completedID,
-						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
+				if hasUnhandledEvents {
+					var err error
+					msBuilder, err = e.failDecision(context, scheduleID, startedID,
+						workflow.DecisionTaskFailedCause_UNHANDLED_DECISION, request)
+					if err != nil {
+						return err
+					}
+					break Process_Decision_Loop
+				}
+
+				// If the decision has more than one completion event than just pick the first one
+				if isComplete {
+					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter, 1)
+					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetCompleteWorkflowExecutionDecisionAttributes()
 				msBuilder.AddCompletedWorkflowEvent(completedID, attributes)
 				isComplete = true
 			case workflow.DecisionType_FailWorkflowExecution:
-				if isComplete || hasUnhandledEvents {
-					msBuilder.AddCompleteWorkflowExecutionFailedEvent(completedID,
-						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
+				if hasUnhandledEvents {
+					var err error
+					msBuilder, err = e.failDecision(context, scheduleID, startedID,
+						workflow.DecisionTaskFailedCause_UNHANDLED_DECISION, request)
+					if err != nil {
+						return err
+					}
+					break Process_Decision_Loop
+				}
+
+				// If the decision has more than one completion event than just pick the first one
+				if isComplete {
+					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter, 1)
+					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetFailWorkflowExecutionDecisionAttributes()
 				msBuilder.AddFailWorkflowEvent(completedID, attributes)
 				isComplete = true
 			case workflow.DecisionType_CancelWorkflowExecution:
-				attributes := d.GetCancelWorkflowExecutionDecisionAttributes()
-
-				// Either we are already completed (or) we have a new pending event came while
-				// we are processing the decision, we would fail this and give a chance to client
+				// If new events came while we are processing the decision, we would fail this and give a chance to client
 				// to process the new event.
-				if isComplete || hasUnhandledEvents {
-					msBuilder.AddCancelWorkflowExecutionFailedEvent(completedID,
-						workflow.WorkflowCancelFailedCause_UNHANDLED_DECISION)
+				if hasUnhandledEvents {
+					var err error
+					msBuilder, err = e.failDecision(context, scheduleID, startedID,
+						workflow.DecisionTaskFailedCause_UNHANDLED_DECISION, request)
+					if err != nil {
+						return err
+					}
+					break Process_Decision_Loop
+				}
+
+				// If the decision has more than one completion event than just pick the first one
+				if isComplete {
+					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter, 1)
+					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
+				attributes := d.GetCancelWorkflowExecutionDecisionAttributes()
 				msBuilder.AddWorkflowExecutionCanceledEvent(completedID, attributes)
 				isComplete = true
 
@@ -638,12 +674,23 @@ Update_History_Loop:
 				})
 
 			case workflow.DecisionType_ContinueAsNewWorkflowExecution:
-				if isComplete || hasUnhandledEvents {
-					msBuilder.AddContinueAsNewFailedEvent(completedID,
-						workflow.WorkflowCompleteFailedCause_UNHANDLED_DECISION)
-					continue Process_Decision_Loop
+				if hasUnhandledEvents {
+					var err error
+					msBuilder, err = e.failDecision(context, scheduleID, startedID,
+						workflow.DecisionTaskFailedCause_UNHANDLED_DECISION, request)
+					if err != nil {
+						return err
+					}
+					break Process_Decision_Loop
 				}
 
+				// If the decision has more than one completion event than just pick the first one
+				if isComplete {
+					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter, 1)
+					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
+					continue Process_Decision_Loop
+				}
 				attributes := d.GetContinueAsNewWorkflowExecutionDecisionAttributes()
 				if attributes == nil {
 					return &workflow.BadRequestError{
@@ -1208,6 +1255,24 @@ Pagination_Loop:
 	executionHistory := workflow.NewHistory()
 	executionHistory.Events = historyEvents
 	return executionHistory, nil
+}
+
+func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, scheduleID, startedID int64,
+	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) (*mutableStateBuilder,
+	error) {
+	// Clear any updates we have accumulated so far
+	context.clear()
+
+	// Reload workflow execution so we can apply the decision task failure event
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+
+	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, request)
+
+	// Return new builder back to the caller for further updates
+	return msBuilder, nil
 }
 
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
