@@ -555,12 +555,17 @@ struct PollForActivityTaskRequest {
 }
 
 struct PollForActivityTaskResponse {
-  10: optional binary taskToken
-  20: optional WorkflowExecution workflowExecution
-  30: optional string activityId
-  40: optional ActivityType activityType
-  50: optional binary input
-  60: optional i64 (js.type = "Long") startedEventId
+  10:  optional binary taskToken
+  20:  optional WorkflowExecution workflowExecution
+  30:  optional string activityId
+  40:  optional ActivityType activityType
+  50:  optional binary input
+  60:  optional i64 (js.type = "Long") startedEventId
+  70:  optional i64 (js.type = "Long") scheduledTimestamp
+  80:  optional i32 scheduleToCloseTimeoutSeconds
+  90:  optional i64 (js.type = "Long") startedTimestamp
+  100: optional i32 startToCloseTimeoutSeconds
+  110: optional i32 heartbeatTimeoutSeconds
 }
 
 struct RecordActivityTaskHeartbeatRequest {

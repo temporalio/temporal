@@ -361,6 +361,11 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.Input = attributes.GetInput()
 	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
+	response.ScheduledTimestamp = common.Int64Ptr(scheduledEvent.GetTimestamp())
+	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
+	response.StartedTimestamp = common.Int64Ptr(startedEvent.GetTimestamp())
+	response.StartToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetStartToCloseTimeoutSeconds())
+	response.HeartbeatTimeoutSeconds = common.Int32Ptr(attributes.GetHeartbeatTimeoutSeconds())
 
 	token := &common.TaskToken{
 		DomainID:   task.DomainID,

@@ -297,10 +297,13 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
 					&workflow.ScheduleActivityTaskDecisionAttributes{
-						ActivityId:   &activityID,
-						TaskList:     &workflow.TaskList{Name: taskList.Name},
-						ActivityType: activityType,
-						Input:        activityInput,
+						ActivityId:                    &activityID,
+						TaskList:                      &workflow.TaskList{Name: taskList.Name},
+						ActivityType:                  activityType,
+						Input:                         activityInput,
+						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+						StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(10),
 					}),
 				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
 					TaskList: &workflow.TaskList{Name: taskList.Name},
@@ -329,6 +332,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
+		s.Equal(true, validateTimeRange(time.Unix(0, result.GetScheduledTimestamp()), time.Minute))
+		s.Equal(int32(100), result.GetScheduleToCloseTimeoutSeconds())
+		s.Equal(true, validateTimeRange(time.Unix(0, result.GetStartedTimestamp()), time.Minute))
+		s.Equal(int32(50), result.GetStartToCloseTimeoutSeconds())
+		s.Equal(int32(10), result.GetHeartbeatTimeoutSeconds())
 		token := &common.TaskToken{
 			DomainID:   domainID,
 			WorkflowID: workflowID,
@@ -1319,4 +1327,14 @@ func (m *testTaskManager) String() string {
 		tl.Unlock()
 	}
 	return result
+}
+
+func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
+	currentTime := time.Now()
+	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
+	if diff > expectedDuration {
+		log.Infof("Current time: %v, Application time: %v, Differenrce: %v", currentTime, t, diff)
+		return false
+	}
+	return true
 }
