@@ -104,6 +104,7 @@ const (
 	tagValueStoreOperationGetWorkflowExecution    = "get-wf-execution"
 	tagValueStoreOperationUpdateWorkflowExecution = "update-wf-execution"
 	tagValueStoreOperationDeleteWorkflowExecution = "delete-wf-execution"
+	tagValueStoreOperationUpdateShard             = "update-shard"
 )
 
 func logInvalidHistoryActionEvent(logger bark.Logger, action string, eventID int64, state string) {

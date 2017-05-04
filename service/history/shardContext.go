@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -43,7 +44,7 @@ type (
 		timerSequenceNumber int64
 		rangeSize           uint
 		closeCh             chan<- int
-		isClosed            int32
+		isClosed            bool
 		logger              bark.Logger
 		metricsClient       metrics.Client
 
@@ -132,6 +133,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 		if err != nil {
 			return nil, err
 		}
+		s.logger.Debugf("Assigning transfer task ID: %v", id)
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -155,7 +157,8 @@ Create_Loop:
 						s.closeShard()
 					}
 				}
-			case *shared.InternalServiceError, *persistence.TimeoutError:
+			case *shared.WorkflowExecutionAlreadyStartedError:
+			default:
 				{
 					// We have no idea if the write failed or will eventually make it to
 					// persistence. Increment RangeID to guarantee that subsequent reads
@@ -191,6 +194,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		if err != nil {
 			return err
 		}
+		s.logger.Debugf("Assigning transfer task ID: %v", id)
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
@@ -201,6 +205,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 			if err != nil {
 				return err
 			}
+			s.logger.Debugf("Assigning transfer task ID: %v", id)
 			task.SetTaskID(id)
 			transferMaxReadLevel = id
 		}
@@ -225,7 +230,8 @@ Update_Loop:
 						s.closeShard()
 					}
 				}
-			case *shared.InternalServiceError, *persistence.TimeoutError:
+			case *persistence.ConditionFailedError:
+			default:
 				{
 					// We have no idea if the write failed or will eventually make it to
 					// persistence. Increment RangeID to guarantee that subsequent reads
@@ -277,11 +283,15 @@ func (s *shardContextImpl) getRangeID() int64 {
 }
 
 func (s *shardContextImpl) closeShard() {
-	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
+	if s.isClosed {
 		return
 	}
 
-	s.rangeID = -1 // fails any writes that may start after this point.
+	s.isClosed = true
+
+	// fails any writes that may start after this point.
+	s.shardInfo.RangeID = -1
+	atomic.StoreInt64(&s.rangeID, s.shardInfo.RangeID)
 
 	if s.closeCh != nil {
 		// This is the channel passed in by shard controller to monitor if a shard needs to be unloaded
@@ -320,6 +330,8 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
+		logPersistantStoreErrorEvent(s.logger, tagValueStoreOperationUpdateShard, err,
+			fmt.Sprintf("{RangeID: %v}", s.shardInfo.RangeID))
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
 			s.closeShard()
