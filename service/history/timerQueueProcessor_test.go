@@ -26,12 +26,8 @@ type (
 		shardClosedCh    chan int
 		logger           bark.Logger
 
-		mockHistoryEngine  *historyEngineImpl
-		mockMatchingClient *mocks.MatchingClient
 		mockMetadataMgr    *mocks.MetadataManager
 		mockVisibilityMgr  *mocks.VisibilityManager
-		mockExecutionMgr   *mocks.ExecutionManager
-		mockHistoryMgr     *mocks.HistoryManager
 	}
 )
 
@@ -76,7 +72,6 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	s.engineImpl = &historyEngineImpl{
 		shard:            shard,
 		historyMgr:       s.HistoryMgr,
-		executionManager: s.WorkflowMgr,
 		txProcessor:      txProcessor,
 		historyCache:     historyCache,
 		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
@@ -86,61 +81,19 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 }
 
-func (s *timerQueueProcessorSuite) SetupTest() {
-	shardID := 0
-	s.mockMatchingClient = &mocks.MatchingClient{}
-	s.mockExecutionMgr = &mocks.ExecutionManager{}
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockHistoryMgr = &mocks.HistoryManager{}
-	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.shardClosedCh = make(chan int, 100)
-
-	mockShard := &shardContextImpl{
-		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
-		transferSequenceNumber:    1,
-		executionManager:          s.mockExecutionMgr,
-		shardManager:              s.mockShardManager,
-		historyMgr:                s.mockHistoryMgr,
-		rangeSize:                 defaultRangeSize,
-		maxTransferSequenceNumber: 100000,
-		closeCh:                   s.shardClosedCh,
-		logger:                    s.logger,
-	}
-
-	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, historyCache)
-	h := &historyEngineImpl{
-		shard:            mockShard,
-		historyMgr:       s.mockHistoryMgr,
-		executionManager: s.mockExecutionMgr,
-		txProcessor:      txProcessor,
-		historyCache:     historyCache,
-		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      common.NewJSONHistorySerializer(),
-	}
-	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
-	s.mockHistoryEngine = h
-}
-
 func (s *timerQueueProcessorSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
 func (s *timerQueueProcessorSuite) TearDownTest() {
 	s.mockShardManager.AssertExpectations(s.T())
-	s.mockMatchingClient.AssertExpectations(s.T())
-	s.mockExecutionMgr.AssertExpectations(s.T())
-	s.mockHistoryMgr.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we workflow.WorkflowExecution, tl,
 	identity string, timeOuts []int32) (*persistence.WorkflowMutableState, []persistence.Task) {
 
 	// Generate first decision task event.
-	logger := bark.NewLoggerFromLogrus(log.New())
-	builder := newMutableStateBuilder(logger)
+	builder := newMutableStateBuilder(s.logger)
 	addWorkflowExecutionStartedEvent(builder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(builder)
 
@@ -154,14 +107,14 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	state0, err2 := s.GetWorkflowExecutionInfo(domainID, we)
 	s.Nil(err2, "No error expected.")
 
-	builder = newMutableStateBuilder(logger)
+	builder = newMutableStateBuilder(s.logger)
 	builder.Load(state0)
 	startedEvent := addDecisionTaskStartedEvent(builder, scheduleEvent.GetEventId(), tl, identity)
 	addDecisionTaskCompletedEvent(builder, scheduleEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 	timerTasks := []persistence.Task{}
 	timerInfos := []*persistence.TimerInfo{}
 	decisionCompletedID := int64(4)
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, logger)
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
 	for _, timeOut := range timeOuts {
 		_, ti := builder.AddTimerStartedEvent(decisionCompletedID,
 			&workflow.StartTimerDecisionAttributes{
@@ -180,6 +133,77 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	s.Nil(err3)
 
 	return createMutableState(builder), timerTasks
+}
+
+func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow.WorkflowExecution, tb *timerBuilder) *persistence.DecisionTimeoutTask {
+	state, err := s.GetWorkflowExecutionInfo(domainID, we)
+	s.Nil(err)
+
+	condition := state.ExecutionInfo.NextEventID
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+
+	scheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, scheduledEvent.GetEventId(), state.ExecutionInfo.TaskList, "identity")
+
+	timeOutTask := tb.AddDecisionTimoutTask(scheduledEvent.GetEventId(), 1)
+	timerTasks := []persistence.Task{timeOutTask}
+
+	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, condition, timerTasks, nil, nil, nil, nil, nil)
+	s.Nil(err2, "No error expected.")
+	return timeOutTask
+}
+
+func (s *timerQueueProcessorSuite) addUserTimer(domainID string, we workflow.WorkflowExecution, timerID string, tb *timerBuilder) persistence.Task {
+	state, err := s.GetWorkflowExecutionInfo(domainID, we)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	// create a user timer
+	_, ti := builder.AddTimerStartedEvent(emptyEventID,
+		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr(timerID), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
+	t := tb.AddUserTimer(ti, builder)
+	s.NotNil(t)
+	timerTasks := []persistence.Task{t}
+
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
+	return t
+}
+
+func (s *timerQueueProcessorSuite) addHeartBeatTimer(domainID string,
+	we workflow.WorkflowExecution, tb *timerBuilder) (*workflow.HistoryEvent, *persistence.ActivityTimeoutTask) {
+	state, err := s.GetWorkflowExecutionInfo(domainID, we)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			HeartbeatTimeoutSeconds: common.Int32Ptr(1),
+		})
+	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+
+	// create a heart beat timeout
+	t, err := tb.AddHeartBeatActivityTimeout(ai)
+	s.NoError(err)
+	s.NotNil(t)
+	timerTasks := []persistence.Task{t}
+
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
+	return ase, t
+}
+
+func (s *timerQueueProcessorSuite) closeWorkflow(domainID string, we workflow.WorkflowExecution) {
+	state, err := s.GetWorkflowExecutionInfo(domainID, we)
+	s.Nil(err)
+
+	state.ExecutionInfo.State = persistence.WorkflowStateCompleted
+
+	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, state.ExecutionInfo.NextEventID, nil, nil, nil, nil, nil, nil)
+	s.Nil(err2, "No error expected.")
 }
 
 func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
@@ -250,31 +274,15 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	s.Equal(uint64(3), processor.timerFiredCount)
 }
 
-/*
 func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("After-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "After-timer-queue"
 	identity := "testIdentity"
 
-	s.createExecutionWithTimers()
-
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	decisionScheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionStartedEvent := builder.AddDecisionTaskStartedEvent(decisionScheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{})
 
 	timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
@@ -283,28 +291,11 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	processor := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
-	timeOutTask := tBuilder.createDecisionTimeoutTask(1, decisionScheduledEvent.GetEventId())
-	timerTasks := []persistence.Task{timeOutTask}
-
-	info, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
-	s.Nil(err1)
-	info.DecisionScheduleID = decisionScheduledEvent.GetEventId()
-	info.DecisionStartedID = decisionStartedEvent.GetEventId()
-	err2 := s.UpdateWorkflowExecution(info, nil, nil, int64(4), timerTasks, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
-
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	timeOutTask := s.addDecisionTimer(domainID, workflowExecution, tBuilder)
 	processor.NotifyNewTimer(timeOutTask.GetTaskID())
 
-	for {
-		timerInfo, err := s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
-		//fmt.Printf("TestAfterTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
-		s.Nil(err, "No error expected.")
-		if len(timerInfo) == 0 {
-			processor.Stop()
-			break
-		}
-		time.Sleep(1000 * time.Millisecond)
-	}
+	s.waitForTimerTasksToProcess(processor)
 
 	timerInfo, err = s.GetTimerIndexTasks(int64(MinTimerKey), int64(MaxTimerKey))
 	s.Nil(err, "No error expected.")
@@ -326,640 +317,463 @@ func (s *timerQueueProcessorSuite) waitForTimerTasksToProcess(p timerQueueProces
 	}
 }
 
-func (s *timerQueueProcessorSuite) checkTimedOutEventFor(workflowExecution workflow.WorkflowExecution,
-	scheduleID int64) (bool, bool, *historyBuilder) {
-	info, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
+func (s *timerQueueProcessorSuite) checkTimedOutEventFor(domainID string, we workflow.WorkflowExecution,
+	scheduleID int64) bool {
+	info, err1 := s.GetWorkflowExecutionInfo(domainID, we)
 	s.Nil(err1)
-	builder := newHistoryBuilder(s.logger)
-	builder.loadExecutionInfo(info)
-	isRunning, _ := builder.isActivityTaskRunning(scheduleID)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(info)
+	_, isRunning := builder.GetActivityInfo(scheduleID)
 
-	minfo, err1 := s.GetWorkflowMutableState(workflowExecution)
-	s.Nil(err1)
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.Load(minfo.ActivitInfos, minfo.TimerInfos, minfo.ExecutionInfo)
-	_, isRunningFromMutableState := msBuilder.GetActivityInfo(scheduleID)
-
-	return isRunning, isRunningFromMutableState, builder
+	return isRunning
 }
 
-func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(workflowExecution workflow.WorkflowExecution,
-	startedID int64) (bool, *historyBuilder) {
-	info, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
+func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(domainID string, we workflow.WorkflowExecution,
+	timerID string) bool {
+	info, err1 := s.GetWorkflowExecutionInfo(domainID, we)
 	s.Nil(err1)
-	builder := newHistoryBuilder(s.logger)
-	builder.loadExecutionInfo(info)
-	startedEvent := builder.GetEvent(startedID)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(info)
 
-	minfo, err1 := s.GetWorkflowMutableState(workflowExecution)
-	s.Nil(err1)
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.Load(minfo.ActivitInfos, minfo.TimerInfos, minfo.ExecutionInfo)
-	isRunning, _ := msBuilder.GetUserTimer(startedEvent.GetTimerStartedEventAttributes().GetTimerId())
-	return isRunning, builder
+	isRunning, _ := builder.GetUserTimer(timerID)
+	return isRunning
 }
 
-func (s *timerQueueProcessorSuite) updateHistoryAndTimers(workflowExecution workflow.WorkflowExecution, history []byte, nextEventID int64,
-	timerTasks []persistence.Task, activityInfos []*persistence.ActivityInfo, timerInfos []*persistence.TimerInfo) {
-	info, err1 := s.GetWorkflowExecutionInfo(workflowExecution)
-	s.Nil(err1)
-	condition := info.NextEventID
-	info.History = history
-	info.NextEventID = nextEventID
-	err2 := s.UpdateWorkflowExecution(info, nil, nil, condition, timerTasks, nil, activityInfos, nil, timerInfos, nil)
-	s.Nil(err2, "No error expected.")
+func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms *mutableStateBuilder, timerTasks []persistence.Task, condition int64) {
+	updatedState := createMutableState(ms)
+
+	actInfos := []*persistence.ActivityInfo{}
+	for _, x := range updatedState.ActivitInfos {
+		actInfos = append(actInfos, x)
+	}
+	timerInfos := []*persistence.TimerInfo{}
+	for _, x := range updatedState.TimerInfos {
+		timerInfos = append(timerInfos, x)
+	}
+	err3 := s.UpdateWorkflowExecution(
+		updatedState.ExecutionInfo, nil, nil, condition, timerTasks, nil, actInfos, nil, timerInfos, nil)
+	s.Nil(err3)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutStart() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_SCHEDULE_TO_START - Without Start
 	processor := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
-	activityScheduled := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	activityScheduledEvent, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		})
-	history, err := builder.Serialize()
-	s.Nil(err)
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	t := tBuilder.AddScheduleToStartActivityTimeout(activityScheduled.GetEventId(), activityScheduled, msBuilder)
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t := tBuilder.AddScheduleToStartActivityTimeout(ai)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	processor.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
-	running, isRunningFromMS, b := s.checkTimedOutEventFor(workflowExecution, activityScheduled.GetEventId())
-	if running {
-		common.PrettyPrintHistory(b.getHistory(), s.logger)
-	}
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, activityScheduledEvent.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStart() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_SCHEDULE_TO_START - With Start
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
-	history, err := builder.Serialize()
-	s.Nil(err)
-	s.logger.Infof("Added Schedule Activity ID: %v, Start Activity ID: %v", ase.GetEventId(), aste.GetEventId())
-	common.PrettyPrintHistory(builder.getHistory(), s.logger)
+	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	t := tBuilder.AddScheduleToStartActivityTimeout(ase.GetEventId(), ase, msBuilder)
+	// create a schedule to start timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t := tBuilder.AddScheduleToStartActivityTimeout(ai)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
-	msBuilder.updateActivityInfos[0].StartedID = aste.GetEventId()
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, builder := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
-	s.logger.Infof("HERE!!!! Running: %v, TimerID: %v", running, t.GetTaskID())
-	if !running {
-		s.logger.Info("Printing History: ")
-		common.PrettyPrintHistory(builder.getHistory(), s.logger)
-	}
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.True(running)
-	s.True(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e123"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_START_TO_CLOSE - Just start.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.ScheduleActivityTaskDecisionAttributes{
-			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
-
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{
-		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), StartToCloseTimeout: 1})
-	t, err := tBuilder.AddStartToCloseActivityTimeout(ase.GetEventId(), msBuilder)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+		})
+	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+
+	// create a start to close timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t, err := tBuilder.AddStartToCloseActivityTimeout(ai)
+	s.NoError(err)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, builder := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedActivity() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Completed-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_START_TO_CLOSE - Start and Completed activity.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.ScheduleActivityTaskDecisionAttributes{
-			StartToCloseTimeoutSeconds: common.Int32Ptr(1),
-		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
-
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{StartToCloseTimeout: 1})
-	t, err := tBuilder.AddStartToCloseActivityTimeout(ase.GetEventId(), msBuilder)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
-	s.NotNil(t)
-	timerTasks := []persistence.Task{t}
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
 
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+		})
+	aste := builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 	builder.AddActivityTaskCompletedEvent(ase.GetEventId(), aste.GetEventId(), &workflow.RespondActivityTaskCompletedRequest{
 		Identity: common.StringPtr("test-id"),
 		Result_:  []byte("result"),
 	})
 
-	history, err := builder.Serialize()
-	s.Nil(err)
+	// create a start to close timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t, err := tBuilder.AddStartToCloseActivityTimeout(ai)
+	s.NoError(err)
+	s.NotNil(t)
+	timerTasks := []persistence.Task{t}
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, builder := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustScheduled() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Scheduled-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Just Scheduled.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
-			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		})
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{
-		ScheduleID: ase.GetEventId(), StartedID: emptyEventID, ScheduleToCloseTimeout: 1})
-	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ase.GetEventId(), msBuilder)
-	s.Nil(err)
+	// create a schedule to close timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai)
+	s.NoError(err)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, _ := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Scheduled and started.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.ScheduleActivityTaskDecisionAttributes{
-			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
-		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
-
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{
-		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), ScheduleToCloseTimeout: 1})
-	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ase.GetEventId(), msBuilder)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+		})
+	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+
+	// create a schedule to close timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai)
+	s.NoError(err)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, _ := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Completed() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Completed-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_SCHEDULE_TO_CLOSE - Scheduled, started, completed.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.ScheduleActivityTaskDecisionAttributes{
-			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
-		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
-
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{ScheduleToCloseTimeout: 1})
-	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ase.GetEventId(), msBuilder)
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
-	s.NotNil(t)
-	timerTasks := []persistence.Task{t}
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
 
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+		})
+	aste := builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 	builder.AddActivityTaskCompletedEvent(ase.GetEventId(), aste.GetEventId(), &workflow.RespondActivityTaskCompletedRequest{
 		Identity: common.StringPtr("test-id"),
 		Result_:  []byte("result"),
 	})
 
-	history, err := builder.Serialize()
-	s.Nil(err)
+	// create a schedule to close timeout
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai)
+	s.NoError(err)
+	s.NotNil(t)
+	timerTasks := []persistence.Task{t}
 
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(t.GetTaskID())
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, _ := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-hb-started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "activity-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
 
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// TimeoutType_HEARTBEAT - Scheduled, started.
 	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	p.Start()
 
-	ase := builder.AddActivityTaskScheduledEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.ScheduleActivityTaskDecisionAttributes{
-			HeartbeatTimeoutSeconds: common.Int32Ptr(1),
-		})
-	aste := builder.AddActivityTaskStartedEvent(ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	ase, t := s.addHeartBeatTimer(domainID, workflowExecution, tBuilder)
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	msBuilder.UpdateActivity(ase.GetEventId(), &persistence.ActivityInfo{
-		ScheduleID: ase.GetEventId(), StartedID: aste.GetEventId(), HeartbeatTimeout: 1})
-
-	t, err := tBuilder.AddHeartBeatActivityTimeout(ase.GetEventId(), msBuilder)
-	s.Nil(err)
-	s.NotNil(t)
-	timerTasks := []persistence.Task{t}
-
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, msBuilder.updateActivityInfos, nil)
 	p.NotifyNewTimer(t.GetTaskID())
-
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
-	running, isRunningFromMS, _ := s.checkTimedOutEventFor(workflowExecution, ase.GetEventId())
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, ase.GetEventId())
 	s.False(running)
-	s.False(isRunningFromMS)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "user-timer-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// Single timer.
-	processor := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
-	processor.Start()
+	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
+	p.Start()
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	startTimerEvent := builder.AddTimerStartedEvent(decisionTaskStartEvent.GetEventId(),
-		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid1"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
-	t1, err := tBuilder.AddUserTimer("tid1", 1, startTimerEvent.GetEventId(), msBuilder)
-	s.Nil(err)
-
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	timerTasks := []persistence.Task{t1}
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, msBuilder.updateTimerInfos)
-	processor.NotifyNewTimer(t1.GetTaskID())
-
-	s.waitForTimerTasksToProcess(processor)
-	s.Equal(uint64(1), processor.timerFiredCount)
-	running, _ := s.checkTimedOutEventForUserTimer(workflowExecution, startTimerEvent.GetEventId())
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	timerID := "tid1"
+	t := s.addUserTimer(domainID, workflowExecution, timerID, tBuilder)
+	p.NotifyNewTimer(t.GetTaskID())
+	s.waitForTimerTasksToProcess(p)
+	s.Equal(uint64(1), p.timerFiredCount)
+	running := s.checkTimedOutEventForUserTimer(domainID, workflowExecution, timerID)
 	s.False(running)
 }
 
 func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-same-expiry-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "user-timer-same-expiry-queue"
-	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-	scheduledEvent := builder.AddDecisionTaskScheduledEvent(taskList, 1)
-	decisionTaskStartEvent := builder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), uuid.New(),
-		&workflow.PollForDecisionTaskRequest{Identity: common.StringPtr("test-ID")})
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	task0, err0 := s.CreateWorkflowExecution(workflowExecution, taskList, h, nil, 4, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
 
 	// Two timers.
-	processor := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
-	processor.Start()
+	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
+	p.Start()
 
-	msBuilder := newMutableStateBuilder(s.logger)
-	startTimerEvent1 := builder.AddTimerStartedEvent(decisionTaskStartEvent.GetEventId(),
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	// create two user timers.
+	_, ti := builder.AddTimerStartedEvent(emptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid1"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
-	startTimerEvent2 := builder.AddTimerStartedEvent(decisionTaskStartEvent.GetEventId(),
+	_, ti2 := builder.AddTimerStartedEvent(emptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 
-	t1, err := tBuilder.AddUserTimer("tid1", 1, startTimerEvent1.GetEventId(), msBuilder)
-	s.Nil(err)
-
-	msBuilder = newMutableStateBuilder(s.logger)
-	t2, err := tBuilder.AddUserTimer("tid2", 1, startTimerEvent2.GetEventId(), msBuilder)
-	s.Nil(err)
-
-	history, err := builder.Serialize()
-	s.Nil(err)
-
-	timerTasks := []persistence.Task{t2}
-
-	s.updateHistoryAndTimers(workflowExecution, history, builder.nextEventID, timerTasks, nil, msBuilder.updateTimerInfos)
-	processor.NotifyNewTimer(t1.GetTaskID())
-
-	s.waitForTimerTasksToProcess(processor)
-	s.Equal(uint64(1), processor.timerFiredCount)
-	running, _ := s.checkTimedOutEventForUserTimer(workflowExecution, startTimerEvent1.GetEventId())
-	s.False(running)
-	running, _ = s.checkTimedOutEventForUserTimer(workflowExecution, startTimerEvent2.GetEventId())
-	s.False(running)
-}
-
-func (s *timerQueueProcessorSuite) TestTimerUpdateTimesOut() {
-	taskList := "user-timer-update-times-out"
-	builder := newHistoryBuilder(s.logger)
-	builder.AddWorkflowExecutionStartedEvent(&workflow.StartWorkflowExecutionRequest{
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
-	})
-
-	decisionScheduledEvent := addDecisionTaskScheduledEvent(builder, taskList, 1)
-	decisionStartedEvent := addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), taskList, uuid.New())
-
-	h, serializedError := builder.Serialize()
-	s.Nil(serializedError)
-
-	waitCh := make(chan struct{})
-
-	taskID := int64(100)
-	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
-		TaskType: persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutType_START_TO_CLOSE),
-		EventID: decisionScheduledEvent.GetEventId()}
-	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
-
-	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once() // initial
-
-	for i := 0; i < 2; i++ {
-		s.mockExecutionMgr.On("GetTimerIndexTasks",
-			&persistence.GetTimerIndexTasksRequest{MinKey: 100, MaxKey: 101, BatchSize: 1}).Return(timerIndexResponse, nil).Once()
-		wfResponse := &persistence.GetWorkflowExecutionResponse{
-			ExecutionInfo: &persistence.WorkflowExecutionInfo{
-				WorkflowID:           "wId",
-				RunID:                "rId",
-				TaskList:             taskList,
-				History:              h,
-				ExecutionContext:     nil,
-				State:                persistence.WorkflowStateRunning,
-				NextEventID:          builder.nextEventID,
-				LastProcessedEvent:   emptyEventID,
-				LastUpdatedTimestamp: time.Time{}},
-		}
-		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
-
-		ms := createMutableState(builder.nextEventID)
-		addDecisionToMutableState(ms, decisionScheduledEvent.GetEventId(), decisionStartedEvent.GetEventId(), uuid.New(), 1)
-		gwmsResponse := &persistence.GetWorkflowMutableStateResponse{State: ms}
-
-		s.mockExecutionMgr.On("GetWorkflowMutableState", mock.Anything).Return(gwmsResponse, nil).Run(func(args mock.Arguments) {
-			s.logger.Infof("GetWorkflowMutableState Count: EventID: %v ", builder.nextEventID)
-		}).Once()
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+	timerTasks := []persistence.Task{}
+	t1 := tBuilder.AddUserTimer(ti, builder)
+	if t1 != nil {
+		timerTasks = append(timerTasks, t1)
+	}
+	t2 := tBuilder.AddUserTimer(ti2, builder)
+	if t2 != nil {
+		timerTasks = append(timerTasks, t2)
 	}
 
-	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(
-		&persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}, nil)
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
+	p.NotifyNewTimer(timerTasks[0].GetTaskID())
 
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(errors.New("FAILED")).Once()
-	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Run(func(arguments mock.Arguments) {
-		// Done.
-		waitCh <- struct{}{}
-	}).Once()
-
-	processor := newTimerQueueProcessor(s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
-	processor.NotifyNewTimer(taskID)
-
-	// Start timer Processor.
-	processor.Start()
-	<-waitCh
-	processor.Stop()
+	s.waitForTimerTasksToProcess(p)
+	s.Equal(uint64(len(timerTasks)), p.timerFiredCount)
+	running := s.checkTimedOutEventForUserTimer(domainID, workflowExecution, ti.TimerID)
+	s.False(running)
+	running = s.checkTimedOutEventForUserTimer(domainID, workflowExecution, ti2.TimerID)
+	s.False(running)
 }
-*/
+
+func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("closed-workflow-test"),
+		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+
+	taskList := "closed-workflow-queue"
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
+
+	p := newTimerQueueProcessor(s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
+	p.Start()
+
+	tBuilder := newTimerBuilder(&localSeqNumGenerator{counter: 1}, s.logger)
+
+	// Start of one of each timers each
+	dt := s.addDecisionTimer(domainID, workflowExecution, tBuilder)
+	s.addUserTimer(domainID, workflowExecution, "tid1", tBuilder)
+	s.addHeartBeatTimer(domainID, workflowExecution, tBuilder)
+
+	// GEt current state of workflow.
+	state0, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+
+	// close workflow
+	s.closeWorkflow(domainID, workflowExecution)
+
+	p.NotifyNewTimer(dt.GetTaskID())
+	s.waitForTimerTasksToProcess(p)
+	s.Equal(uint64(3), p.timerFiredCount)
+
+	// Verify that no new events are added to workflow.
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	s.Equal(state0.ExecutionInfo.NextEventID, state1.ExecutionInfo.NextEventID)
+}
+
+func (s *timerQueueProcessorSuite) printHistory(builder *mutableStateBuilder) string {
+	history, err := builder.hBuilder.Serialize()
+	if err != nil {
+		s.logger.Errorf("Error serializing history: %v", err)
+		return ""
+	}
+
+	//s.logger.Info(string(history))
+	return string(history)
+}

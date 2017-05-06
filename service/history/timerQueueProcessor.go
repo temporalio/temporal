@@ -386,7 +386,7 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 	}
 
 	t.logger.Debugf("Processing found timer: %s, for WorkflowID: %v, RunID: %v, Type: %v, TimeoutTupe: %v, EventID: %v",
-		SequenceID(timerTask.TaskID), timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType,
+		SequenceID(timerTask.TaskID), timerTask.WorkflowID, timerTask.RunID, t.getTimerTaskType(timerTask.TaskType),
 		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
 
 	domainID := timerTask.DomainID
@@ -425,6 +425,15 @@ Update_History_Loop:
 		msBuilder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
 			return err1
+		}
+
+		if !msBuilder.isWorkflowExecutionRunning() {
+			// Workflow is completed.
+			err := t.executionManager.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{TaskID: task.TaskID})
+			if err != nil {
+				t.logger.Warnf("Processor unable to complete user timer task '%v': %v", task.TaskID, err)
+			}
+			return nil
 		}
 
 		context.tBuilder.LoadUserTimers(msBuilder)
@@ -508,7 +517,7 @@ Update_History_Loop:
 		scheduleNewDecision := false
 		updateHistory := false
 
-		if ai, isRunning := msBuilder.GetActivityInfo(scheduleID); isRunning {
+		if ai, isRunning := msBuilder.GetActivityInfo(scheduleID); isRunning && msBuilder.isWorkflowExecutionRunning() {
 			timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
 			t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
 				timeoutType, scheduleID, ai.StartedID)
@@ -622,7 +631,7 @@ Update_History_Loop:
 		clearTimerTask := &persistence.DecisionTimeoutTask{TaskID: task.TaskID}
 
 		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
-		if isRunning {
+		if isRunning && msBuilder.isWorkflowExecutionRunning() {
 			// Add a decision task timeout event.
 			timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 			if timeoutEvent == nil {
@@ -682,4 +691,16 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 		}
 	}
 	return err
+}
+
+func (t *timerQueueProcessorImpl) getTimerTaskType(taskType int) string {
+	switch taskType {
+	case persistence.TaskTypeUserTimer:
+		return "UserTimer"
+	case persistence.TaskTypeActivityTimeout:
+		return "ActivityTimeout"
+	case persistence.TaskTypeDecisionTimeout:
+		return "DecisionTimeout"
+	}
+	return "UnKnown"
 }

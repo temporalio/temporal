@@ -282,6 +282,14 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
+	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	for shardID := 2; shardID < numShards; shardID++ {
+		mockEngine := historyEngines[shardID]
+		mockEngine.On("Stop").Return().Once()
+		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+	}
+	s.controller.Stop()
+
 	for _, mockEngine := range historyEngines {
 		mockEngine.AssertExpectations(s.T())
 	}
@@ -349,6 +357,14 @@ func (s *shardControllerSuite) TestRingUpdated() {
 	}
 
 	workerWG.Wait()
+
+	s.mockServiceResolver.On("RemoveListener", shardControllerMembershipUpdateListenerName).Return(nil)
+	for shardID := 2; shardID < numShards; shardID++ {
+		mockEngine := historyEngines[shardID]
+		mockEngine.On("Stop").Return().Once()
+		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil)
+	}
+	s.controller.Stop()
 
 	for _, mockEngine := range historyEngines {
 		mockEngine.AssertExpectations(s.T())

@@ -126,10 +126,12 @@ func (tb *timerBuilder) UserTimer(taskID SequenceID) (bool, *persistence.TimerIn
 	return ok, ti
 }
 
-// AddDecisionTimoutTask - Add a decision timeout task.
+// AddDecisionTimeoutTask - Add a decision timeout task.
 func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
 	startToCloseTimeout int32) *persistence.DecisionTimeoutTask {
 	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID)
+	tb.logger.Debugf("Adding Decision Timeout: SequenceID: %v, EventID: %v",
+		SequenceID(timeOutTask.TaskID), timeOutTask.EventID)
 	return timeOutTask
 }
 
@@ -174,7 +176,7 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 
 // AddUserTimer - Adds an user timeout request.
 func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder *mutableStateBuilder) persistence.Task {
-	tb.logger.Debugf("Adding User Timer: %s", ti.TimerID)
+	tb.logger.Debugf("Adding User Timeout: %s", ti.TimerID)
 
 	// TODO: This is broken.  We need to comeup with a better way to implement this
 	tb.LoadUserTimers(msBuilder)
@@ -239,10 +241,12 @@ func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType
 // createUserTimerTask - Creates a user timer task.
 func (tb *timerBuilder) createUserTimerTask(expiryTime int64, startedEventID int64) *persistence.UserTimerTask {
 	seqID := ConstructTimerKey(expiryTime, tb.seqNumGen.NextSeq())
-	return &persistence.UserTimerTask{
+	t := &persistence.UserTimerTask{
 		TaskID:  int64(seqID),
 		EventID: startedEventID,
 	}
+	tb.logger.Debugf("createUserTimerTask: %v", t)
+	return t
 }
 
 func (tb *timerBuilder) loadUserTimer(expires int64, task *persistence.UserTimerTask, taskCreated bool) (*timerDetails, bool) {
@@ -256,7 +260,6 @@ func (tb *timerBuilder) createTimer(expires int64, task *persistence.UserTimerTa
 		TimerTask:   task,
 		TaskCreated: taskCreated}
 	isFirst := tb.insertTimer(timer)
-	tb.logger.Debugf("createTimer: td: %s \n", timer)
 	return timer, isFirst
 }
 
