@@ -12,15 +12,15 @@ import (
 
 const (
 	templateAppendHistoryEvents = `INSERT INTO events (` +
-		`domain_id, workflow_id, run_id, first_event_id, range_id, tx_id, data) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+		`domain_id, workflow_id, run_id, first_event_id, range_id, tx_id, data, data_encoding, data_version) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateOverwriteHistoryEvents = `UPDATE events ` +
-		`SET range_id = ?, tx_id = ?, data = ? ` +
+		`SET range_id = ?, tx_id = ?, data = ?, data_encoding = ?, data_version = ? ` +
 		`WHERE domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id = ? ` +
 		`IF range_id <= ? AND tx_id < ?`
 
-	templateGetWorkflowExecutionHistory = `SELECT first_event_id, data FROM events ` +
+	templateGetWorkflowExecutionHistory = `SELECT first_event_id, data, data_encoding, data_version FROM events ` +
 		`WHERE domain_id = ? ` +
 		`AND workflow_id = ? ` +
 		`AND run_id = ? ` +
@@ -34,8 +34,8 @@ const (
 
 type (
 	cassandraHistoryPersistence struct {
-		session      *gocql.Session
-		logger       bark.Logger
+		session *gocql.Session
+		logger  bark.Logger
 	}
 )
 
@@ -63,7 +63,9 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 		query = h.session.Query(templateOverwriteHistoryEvents,
 			request.RangeID,
 			request.TransactionID,
-			request.Events,
+			request.Events.Data,
+			request.Events.EncodingType,
+			request.Events.Version,
 			request.DomainID,
 			request.Execution.GetWorkflowId(),
 			request.Execution.GetRunId(),
@@ -78,7 +80,9 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 			request.FirstEventID,
 			request.RangeID,
 			request.TransactionID,
-			request.Events)
+			request.Events.Data,
+			request.Events.EncodingType,
+			request.Events.Version)
 	}
 
 	previous := make(map[string]interface{})
@@ -120,13 +124,13 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 	}
 
 	var firstEventID int64
-	var events []byte
+	var history SerializedHistoryEventBatch
 	response := &GetWorkflowExecutionHistoryResponse{}
 	found := false
-	for iter.Scan(&firstEventID, &events) {
+	for iter.Scan(&firstEventID, &history.Data, &history.EncodingType, &history.Version) {
 		found = true
-		response.Events = append(response.Events, events)
-		events = nil
+		response.Events = append(response.Events, history)
+		history = SerializedHistoryEventBatch{}
 	}
 
 	nextPageToken := iter.PageState()

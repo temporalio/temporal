@@ -88,15 +88,15 @@ func (s *engineSuite) SetupTest() {
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache)
 	h := &historyEngineImpl{
-		shard:            mockShard,
-		executionManager: s.mockExecutionMgr,
-		historyMgr:       s.mockHistoryMgr,
-		txProcessor:      txProcessor,
-		historyCache:     historyCache,
-		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
-		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      common.NewJSONHistorySerializer(),
+		shard:              mockShard,
+		executionManager:   s.mockExecutionMgr,
+		historyMgr:         s.mockHistoryMgr,
+		txProcessor:        txProcessor,
+		historyCache:       historyCache,
+		domainCache:        cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		logger:             s.logger,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
@@ -2212,7 +2212,7 @@ func (s *engineSuite) printHistory(builder *mutableStateBuilder) string {
 	}
 
 	//s.logger.Info(string(history))
-	return string(history)
+	return history.String()
 }
 
 func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExecution workflow.WorkflowExecution,

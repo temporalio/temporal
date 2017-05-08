@@ -86,15 +86,15 @@ func (s *engine2Suite) SetupTest() {
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache)
 	h := &historyEngineImpl{
-		shard:            mockShard,
-		executionManager: s.mockExecutionMgr,
-		historyMgr:       s.mockHistoryMgr,
-		txProcessor:      txProcessor,
-		historyCache:     historyCache,
-		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
-		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      common.NewJSONHistorySerializer(),
+		shard:              mockShard,
+		executionManager:   s.mockExecutionMgr,
+		historyMgr:         s.mockHistoryMgr,
+		txProcessor:        txProcessor,
+		historyCache:       historyCache,
+		domainCache:        cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		logger:             s.logger,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.historyEngine = h
@@ -594,8 +594,8 @@ func (s *engine2Suite) printHistory(builder *mutableStateBuilder) string {
 		s.logger.Errorf("Error serializing history: %v", err)
 		return ""
 	}
-	s.logger.Infof("Printing History: %v", string(history))
-	return string(history)
+	s.logger.Infof("Printing History: %v", history)
+	return history.String()
 }
 
 func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {

@@ -102,7 +102,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	if builder.history != nil && len(builder.history) > 0 {
 		// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
 		firstEvent := builder.history[0]
-		newEvents, err := builder.Serialize()
+		serializedHistory, err := builder.Serialize()
 		if err != nil {
 			logHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
 			return err
@@ -113,7 +113,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			Execution:     c.workflowExecution,
 			TransactionID: transactionID,
 			FirstEventID:  firstEvent.GetEventId(),
-			Events:        newEvents,
+			Events:        serializedHistory,
 		}); err0 != nil {
 			// Clear all cached state in case of error
 			c.clear()
@@ -180,10 +180,10 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	firstEvent := newStateBuilder.hBuilder.history[0]
 
 	// Serialize the history
-	events, serializedError := newStateBuilder.hBuilder.Serialize()
+	serializedHistory, serializedError := newStateBuilder.hBuilder.Serialize()
 	if serializedError != nil {
 		logHistorySerializationErrorEvent(c.logger, serializedError, fmt.Sprintf(
-			"History serialization error on start workflow.  WorkflowID: %v, RunID: %v", newExecution.GetWorkflowId(),
+			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", newExecution.GetWorkflowId(),
 			newExecution.GetRunId()))
 		return serializedError
 	}
@@ -195,7 +195,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 		// no potential duplicates to override.
 		TransactionID: 0,
 		FirstEventID:  firstEvent.GetEventId(),
-		Events:        events,
+		Events:        serializedHistory,
 	})
 	if err1 != nil {
 		return err1

@@ -73,14 +73,14 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, historyCache)
 	h := &historyEngineImpl{
-		shard:            mockShard,
-		historyMgr:       s.mockHistoryMgr,
-		executionManager: s.mockExecutionMgr,
-		txProcessor:      txProcessor,
-		historyCache:     historyCache,
-		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      common.NewJSONHistorySerializer(),
+		shard:              mockShard,
+		historyMgr:         s.mockHistoryMgr,
+		executionManager:   s.mockExecutionMgr,
+		txProcessor:        txProcessor,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h

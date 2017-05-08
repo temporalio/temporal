@@ -15,3 +15,14 @@ const (
 	// MatchingServiceName is the name of the matching service
 	MatchingServiceName = "cadence-matching"
 )
+
+// Data encoding types
+const (
+	EncodingTypeJSON EncodingType = "json"
+	EncodingTypeGob               = "gob"
+)
+
+type (
+	// EncodingType is an enum that represents various data encoding types
+	EncodingType string
+)

@@ -26,8 +26,8 @@ type (
 		shardClosedCh    chan int
 		logger           bark.Logger
 
-		mockMetadataMgr    *mocks.MetadataManager
-		mockVisibilityMgr  *mocks.VisibilityManager
+		mockMetadataMgr   *mocks.MetadataManager
+		mockVisibilityMgr *mocks.VisibilityManager
 	}
 )
 
@@ -70,14 +70,14 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	historyCache.disabled = true
 	txProcessor := newTransferQueueProcessor(shard, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{}, historyCache)
 	s.engineImpl = &historyEngineImpl{
-		shard:            shard,
-		historyMgr:       s.HistoryMgr,
-		txProcessor:      txProcessor,
-		historyCache:     historyCache,
-		domainCache:      cache.NewDomainCache(s.mockMetadataMgr, s.logger),
-		logger:           s.logger,
-		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
-		hSerializer:      common.NewJSONHistorySerializer(),
+		shard:              shard,
+		historyMgr:         s.HistoryMgr,
+		txProcessor:        txProcessor,
+		historyCache:       historyCache,
+		domainCache:        cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		logger:             s.logger,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 }
 
@@ -775,5 +775,5 @@ func (s *timerQueueProcessorSuite) printHistory(builder *mutableStateBuilder) st
 	}
 
 	//s.logger.Info(string(history))
-	return string(history)
+	return history.String()
 }

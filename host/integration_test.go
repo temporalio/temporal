@@ -142,7 +142,7 @@ func (s *integrationSuite) SetupTest() {
 	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
 		Name:        s.foreignDomainName,
 		Status:      persistence.DomainStatusRegistered,
-		Description: "Test foregin domain for integration test",
+		Description: "Test foreign domain for integration test",
 		Retention:   1,
 		EmitMetric:  false,
 	})
@@ -186,12 +186,12 @@ func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
 	s.Equal(we0.GetRunId(), we1.GetRunId())
 
 	newRequest := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 		Identity:                            common.StringPtr(identity),
@@ -1296,12 +1296,12 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	taskList.Name = common.StringPtr(tl)
 
 	request := &workflow.StartWorkflowExecutionRequest{
-		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(s.domainName),
-		WorkflowId:                          common.StringPtr(id),
-		WorkflowType:                        workflowType,
-		TaskList:                            taskList,
-		Input:                               nil,
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 		Identity:                            common.StringPtr(identity),
@@ -1325,9 +1325,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
 				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ContinueAsNewWorkflowExecution),
 				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-					WorkflowType:                        workflowType,
-					TaskList:                            &workflow.TaskList{Name: &tl},
-					Input:                               buf.Bytes(),
+					WorkflowType: workflowType,
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 				},
@@ -1952,6 +1952,145 @@ CheckHistoryLoopForCancelSent:
 	s.True(cancellationSentFailed)
 }
 
+func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
+	id := "integration-history-version-workflow-test"
+	wt := "integration-history-version-workflow-test-type"
+	tl := "integration-history-version-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_simple"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	// override the default / max versions to force history
+	// version incompatibilities
+	prevMaxVersion := persistence.GetMaxSupportedHistoryVersion()
+	prevDefaultVersion := persistence.GetDefaultHistoryVersion()
+	defer func() {
+		persistence.SetMaxSupportedHistoryVersion(prevMaxVersion)
+		persistence.SetDefaultHistoryVersion(prevDefaultVersion)
+	}()
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	activityCount := int32(4)
+	activityCounter := int32(0)
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_ScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(10),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(10),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(10),
+				},
+			}}
+		}
+
+		s.logger.Info("Completing Workflow.")
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result_: []byte("Done."),
+			},
+		}}
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		s.Equal(id, execution.GetWorkflowId())
+		s.Equal(activityName, activityType.GetName())
+		s.logger.Infof("Activity ID: %v", activityID)
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+	}
+
+	upgradeRollbackStep := 2
+	testDecisionPollFailStep := 3
+
+	for i := 0; i < int(activityCount)+1; i++ {
+
+		if i == upgradeRollbackStep {
+			// force history to be persisted with a higher version
+			persistence.SetMaxSupportedHistoryVersion(prevMaxVersion + 1)
+			persistence.SetDefaultHistoryVersion(prevMaxVersion + 1)
+		}
+
+		s.logger.Infof("Calling Decision Task: %d", i)
+		err := poller.pollAndProcessDecisionTask(false, false)
+
+		if i == testDecisionPollFailStep {
+			// make sure we get an error due to history version
+			// incompatibility i.e. old code, new history version
+			s.NotNil(err)
+			// reset the supported versions, this should make subsequent
+			// polls / activities to succeed
+			persistence.SetMaxSupportedHistoryVersion(prevMaxVersion + 1)
+			persistence.SetDefaultHistoryVersion(prevMaxVersion + 1)
+			continue
+		}
+
+		s.True(err == nil || err == matching.ErrNoTasks)
+		s.logger.Infof("Calling Activity Task: %d", i)
+		err = poller.pollAndProcessActivityTask(false)
+		s.True(err == nil || err == matching.ErrNoTasks)
+
+		if i == upgradeRollbackStep {
+			// now revert the versions back to the original
+			// this simulates a rollback of code deployment
+			// and a persisted history with future version
+			persistence.SetMaxSupportedHistoryVersion(prevMaxVersion)
+			persistence.SetDefaultHistoryVersion(prevMaxVersion)
+		}
+	}
+
+	s.logger.Infof("Waiting for workflow to complete: RunId: %v", we.GetRunId())
+
+	s.False(workflowComplete)
+	s.Nil(poller.pollAndProcessDecisionTask(true, false))
+	s.True(workflowComplete)
+}
 
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed

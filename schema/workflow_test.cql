@@ -144,6 +144,8 @@ CREATE TABLE events (
   range_id       bigint,
   tx_id          bigint,
   data           blob, -- Batch of workflow execution history events as a blob
+  data_encoding  text, -- Protocol used for history serialization
+  data_version   int,  -- history blob version
   PRIMARY KEY ((domain_id, workflow_id, run_id), first_event_id)
 );
 

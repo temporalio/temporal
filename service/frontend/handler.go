@@ -23,15 +23,15 @@ var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
 
 // WorkflowHandler - Thrift handler inteface for workflow service
 type WorkflowHandler struct {
-	domainCache     cache.DomainCache
-	metadataMgr     persistence.MetadataManager
-	historyMgr      persistence.HistoryManager
-	visibitiltyMgr  persistence.VisibilityManager
-	history         history.Client
-	matching        matching.Client
-	tokenSerializer common.TaskTokenSerializer
-	hSerializer     common.HistorySerializer
-	startWG         sync.WaitGroup
+	domainCache        cache.DomainCache
+	metadataMgr        persistence.MetadataManager
+	historyMgr         persistence.HistoryManager
+	visibitiltyMgr     persistence.VisibilityManager
+	history            history.Client
+	matching           matching.Client
+	tokenSerializer    common.TaskTokenSerializer
+	hSerializerFactory persistence.HistorySerializerFactory
+	startWG            sync.WaitGroup
 	service.Service
 }
 
@@ -45,13 +45,13 @@ func NewWorkflowHandler(
 	sVice service.Service, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
-		Service:         sVice,
-		metadataMgr:     metadataMgr,
-		historyMgr:      historyMgr,
-		visibitiltyMgr:  visibilityMgr,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
-		hSerializer:     common.NewJSONHistorySerializer(),
-		domainCache:     cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
+		Service:            sVice,
+		metadataMgr:        metadataMgr,
+		historyMgr:         historyMgr,
+		visibitiltyMgr:     visibilityMgr,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -532,7 +532,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	}
 
 	err = wh.history.RequestCancelWorkflowExecution(ctx, &h.RequestCancelWorkflowExecutionRequest{
-		DomainUUID: common.StringPtr(info.ID),
+		DomainUUID:    common.StringPtr(info.ID),
 		CancelRequest: cancelRequest,
 	})
 
@@ -701,9 +701,14 @@ Pagination_Loop:
 			return nil, err
 		}
 
-		for _, data := range response.Events {
-			events, _ := wh.hSerializer.Deserialize(data)
-			historyEvents = append(historyEvents, events...)
+		for _, e := range response.Events {
+			setSerializedHistoryDefaults(&e)
+			s, _ := wh.hSerializerFactory.Get(e.EncodingType)
+			history, err1 := s.Deserialize(&e)
+			if err1 != nil {
+				return nil, err1
+			}
+			historyEvents = append(historyEvents, history.Events...)
 		}
 
 		if len(response.NextPageToken) == 0 {
@@ -716,6 +721,18 @@ Pagination_Loop:
 	executionHistory := gen.NewHistory()
 	executionHistory.Events = historyEvents
 	return executionHistory, nil
+}
+
+// sets the version and encoding types to defaults if they
+// are missing from persistence. This is purely for backwards
+// compatibility
+func setSerializedHistoryDefaults(history *persistence.SerializedHistoryEventBatch) {
+	if history.Version == 0 {
+		history.Version = persistence.GetDefaultHistoryVersion()
+	}
+	if len(history.EncodingType) == 0 {
+		history.EncodingType = persistence.DefaultEncodingType
+	}
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {

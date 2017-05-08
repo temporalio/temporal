@@ -490,5 +490,5 @@ func (s *historyBuilderSuite) printHistory() string {
 	}
 
 	//s.logger.Info(string(history))
-	return string(history)
+	return history.String()
 }
