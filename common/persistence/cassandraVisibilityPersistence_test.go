@@ -319,3 +319,68 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	s.Equal(1, len(resp.Executions))
 	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
 }
+
+func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
+	testDomainUUID := uuid.New()
+	startTime := time.Now().UnixNano()
+
+	// Create 2 executions
+	workflowExecution1 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test1"),
+		RunId:      common.StringPtr("fb15e4b5-356f-466d-8c6d-a29223e5c536"),
+	}
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+	})
+	s.Nil(err0)
+
+	workflowExecution2 := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-filtering-test2"),
+		RunId:      common.StringPtr("843f6fc7-102a-4c63-a2d4-7c653b01bf52"),
+	}
+	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+	})
+	s.Nil(err1)
+
+	// Close both executions with different status
+	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution1,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
+		Status:           gen.WorkflowExecutionCloseStatus_COMPLETED,
+	})
+	s.Nil(err2)
+
+	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution2,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
+		Status:           gen.WorkflowExecutionCloseStatus_FAILED,
+	})
+	s.Nil(err3)
+
+	// List closed with filtering
+	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutionsByStatus(&ListClosedWorkflowExecutionsByStatusRequest{
+		ListWorkflowExecutionsRequest: ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          2,
+			EarliestStartTime: startTime,
+			LatestStartTime:   startTime,
+		},
+		Status: gen.WorkflowExecutionCloseStatus_FAILED,
+	})
+	s.Nil(err4)
+	s.Equal(1, len(resp.Executions))
+	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+}

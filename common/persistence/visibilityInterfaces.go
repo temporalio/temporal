@@ -26,6 +26,7 @@ type (
 		WorkflowTypeName string
 		StartTimestamp   int64
 		CloseTimestamp   int64
+		Status           s.WorkflowExecutionCloseStatus
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
@@ -62,6 +63,13 @@ type (
 		WorkflowID string
 	}
 
+	// ListClosedWorkflowExecutionsByStatusRequest is used to list executions that
+	// have specific close status
+	ListClosedWorkflowExecutionsByStatusRequest struct {
+		ListWorkflowExecutionsRequest
+		Status s.WorkflowExecutionCloseStatus
+	}
+
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
@@ -72,5 +80,6 @@ type (
 		ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 	}
 )

@@ -281,6 +281,7 @@ ProcessRetryLoop:
 							WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
 							StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
 							CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
+							Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
 						})
 						if err == nil {
 							err = context.deleteWorkflowExecution()
@@ -441,4 +442,23 @@ func minDuration(x, y time.Duration) time.Duration {
 	}
 
 	return y
+}
+
+func getWorkflowExecutionCloseStatus(status int) workflow.WorkflowExecutionCloseStatus {
+	switch status {
+	case persistence.WorkflowCloseStatusCompleted:
+		return workflow.WorkflowExecutionCloseStatus_COMPLETED
+	case persistence.WorkflowCloseStatusFailed:
+		return workflow.WorkflowExecutionCloseStatus_FAILED
+	case persistence.WorkflowCloseStatusCanceled:
+		return workflow.WorkflowExecutionCloseStatus_CANCELED
+	case persistence.WorkflowCloseStatusTerminated:
+		return workflow.WorkflowExecutionCloseStatus_TERMINATED
+	case persistence.WorkflowCloseStatusContinuedAsNew:
+		return workflow.WorkflowExecutionCloseStatus_CONTINUED_AS_NEW
+	case persistence.WorkflowCloseStatusTimedOut:
+		return workflow.WorkflowExecutionCloseStatus_TIMED_OUT
+	default:
+		panic("Invalid value for enum WorkflowExecutionCloseStatus")
+	}
 }

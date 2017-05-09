@@ -31,6 +31,29 @@ func (_m *VisibilityManager) ListClosedWorkflowExecutions(request *persistence.L
 	return r0, r1
 }
 
+// ListClosedWorkflowExecutionsByStatus provides a mock function with given fields: request
+func (_m *VisibilityManager) ListClosedWorkflowExecutionsByStatus(request *persistence.ListClosedWorkflowExecutionsByStatusRequest) (*persistence.ListWorkflowExecutionsResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.ListWorkflowExecutionsResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ListClosedWorkflowExecutionsByStatusRequest) *persistence.ListWorkflowExecutionsResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ListWorkflowExecutionsResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ListClosedWorkflowExecutionsByStatusRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ListClosedWorkflowExecutionsByType provides a mock function with given fields: request
 func (_m *VisibilityManager) ListClosedWorkflowExecutionsByType(request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.ListWorkflowExecutionsResponse, error) {
 	ret := _m.Called(request)

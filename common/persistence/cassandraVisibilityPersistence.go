@@ -28,8 +28,8 @@ const (
 		`AND run_id = ?`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
-		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?) using TTL ?`
+		`domain_id, domain_partition, workflow_id, run_id, start_time, close_time, workflow_type_name, status) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, workflow_type_name ` +
 		`FROM open_executions ` +
@@ -38,7 +38,7 @@ const (
 		`AND start_time >= ? ` +
 		`AND start_time <= ? `
 
-	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name ` +
+	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition IN (?) ` +
@@ -53,7 +53,7 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_type_name = ? `
 
-	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name ` +
+	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
@@ -69,13 +69,21 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
-	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name ` +
+	templateGetClosedWorkflowExecutionsByID = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status ` +
 		`FROM closed_executions ` +
 		`WHERE domain_id = ? ` +
 		`AND domain_partition = ? ` +
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
+
+	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, close_time, workflow_type_name, status ` +
+		`FROM closed_executions ` +
+		`WHERE domain_id = ? ` +
+		`AND domain_partition = ? ` +
+		`AND start_time >= ? ` +
+		`AND start_time <= ? ` +
+		`AND status = ? `
 )
 
 type (
@@ -146,6 +154,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
 		common.UnixNanoToCQLTimestamp(request.CloseTimestamp),
 		request.WorkflowTypeName,
+		request.Status,
 		defaultDeleteTTLSeconds,
 	)
 
@@ -373,6 +382,42 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	return response, nil
 }
 
+func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
+	request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
+	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatus,
+		request.DomainUUID,
+		domainPartition,
+		common.UnixNanoToCQLTimestamp(request.EarliestStartTime),
+		common.UnixNanoToCQLTimestamp(request.LatestStartTime),
+		request.Status)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	if iter == nil {
+		// TODO: should return a bad request error if the token is invalid
+		return nil, &workflow.InternalServiceError{
+			Message: "ListClosedWorkflowExecutionsByStatus operation failed.  Not able to create query iterator.",
+		}
+	}
+
+	response := &ListWorkflowExecutionsResponse{}
+	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
+	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
+	for has {
+		response.Executions = append(response.Executions, wfexecution)
+		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
+	}
+
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ListClosedWorkflowExecutionsByStatus operation failed. Error: %v", err),
+		}
+	}
+
+	return response, nil
+}
+
 func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID gocql.UUID
@@ -401,7 +446,8 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExec
 	var typeName string
 	var startTime time.Time
 	var closeTime time.Time
-	if iter.Scan(&workflowID, &runID, &startTime, &closeTime, &typeName) {
+	var status workflow.WorkflowExecutionCloseStatus
+	if iter.Scan(&workflowID, &runID, &startTime, &closeTime, &typeName, &status) {
 		execution := workflow.NewWorkflowExecution()
 		execution.WorkflowId = common.StringPtr(workflowID)
 		execution.RunId = common.StringPtr(runID.String())
@@ -414,6 +460,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*workflow.WorkflowExec
 		record.StartTime = common.Int64Ptr(startTime.UnixNano())
 		record.CloseTime = common.Int64Ptr(closeTime.UnixNano())
 		record.Type = wfType
+		record.CloseStatus = workflow.WorkflowExecutionCloseStatusPtr(status)
 		return record, true
 	}
 	return nil, false

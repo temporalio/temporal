@@ -636,9 +636,20 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 		}
 	}
 
-	if listRequest.IsSetExecutionFilter() && listRequest.IsSetTypeFilter() {
+	filterCount := 0
+	if listRequest.IsSetExecutionFilter() {
+		filterCount++
+	}
+	if listRequest.IsSetTypeFilter() {
+		filterCount++
+	}
+	if listRequest.IsSetStatusFilter() {
+		filterCount++
+	}
+
+	if filterCount > 1 {
 		return nil, &gen.BadRequestError{
-			Message: "Only one of ExecutionFilter or TypeFilter is allowed",
+			Message: "Only one of ExecutionFilter, TypeFilter or StatusFilter is allowed",
 		}
 	}
 
@@ -667,6 +678,11 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
 			ListWorkflowExecutionsRequest: baseReq,
 			WorkflowTypeName:              listRequest.TypeFilter.GetName(),
+		})
+	} else if listRequest.IsSetStatusFilter() {
+		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+			ListWorkflowExecutionsRequest: baseReq,
+			Status: listRequest.GetStatusFilter(),
 		})
 	} else {
 		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutions(&baseReq)

@@ -1450,6 +1450,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.ExecutionContext = v.([]byte)
 		case "state":
 			info.State = v.(int)
+		case "close_status":
+			info.CloseStatus = v.(int)
 		case "next_event_id":
 			info.NextEventID = v.(int64)
 		case "last_processed_event":

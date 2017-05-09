@@ -445,6 +445,71 @@ func (p * CancelExternalWorkflowExecutionFailedCause) Value() (driver.Value, err
   }
 return int64(*p), nil
 }
+type WorkflowExecutionCloseStatus int64
+const (
+  WorkflowExecutionCloseStatus_COMPLETED WorkflowExecutionCloseStatus = 0
+  WorkflowExecutionCloseStatus_FAILED WorkflowExecutionCloseStatus = 1
+  WorkflowExecutionCloseStatus_CANCELED WorkflowExecutionCloseStatus = 2
+  WorkflowExecutionCloseStatus_TERMINATED WorkflowExecutionCloseStatus = 3
+  WorkflowExecutionCloseStatus_CONTINUED_AS_NEW WorkflowExecutionCloseStatus = 4
+  WorkflowExecutionCloseStatus_TIMED_OUT WorkflowExecutionCloseStatus = 5
+)
+
+func (p WorkflowExecutionCloseStatus) String() string {
+  switch p {
+  case WorkflowExecutionCloseStatus_COMPLETED: return "COMPLETED"
+  case WorkflowExecutionCloseStatus_FAILED: return "FAILED"
+  case WorkflowExecutionCloseStatus_CANCELED: return "CANCELED"
+  case WorkflowExecutionCloseStatus_TERMINATED: return "TERMINATED"
+  case WorkflowExecutionCloseStatus_CONTINUED_AS_NEW: return "CONTINUED_AS_NEW"
+  case WorkflowExecutionCloseStatus_TIMED_OUT: return "TIMED_OUT"
+  }
+  return "<UNSET>"
+}
+
+func WorkflowExecutionCloseStatusFromString(s string) (WorkflowExecutionCloseStatus, error) {
+  switch s {
+  case "COMPLETED": return WorkflowExecutionCloseStatus_COMPLETED, nil 
+  case "FAILED": return WorkflowExecutionCloseStatus_FAILED, nil 
+  case "CANCELED": return WorkflowExecutionCloseStatus_CANCELED, nil 
+  case "TERMINATED": return WorkflowExecutionCloseStatus_TERMINATED, nil 
+  case "CONTINUED_AS_NEW": return WorkflowExecutionCloseStatus_CONTINUED_AS_NEW, nil 
+  case "TIMED_OUT": return WorkflowExecutionCloseStatus_TIMED_OUT, nil 
+  }
+  return WorkflowExecutionCloseStatus(0), fmt.Errorf("not a valid WorkflowExecutionCloseStatus string")
+}
+
+
+func WorkflowExecutionCloseStatusPtr(v WorkflowExecutionCloseStatus) *WorkflowExecutionCloseStatus { return &v }
+
+func (p WorkflowExecutionCloseStatus) MarshalText() ([]byte, error) {
+return []byte(p.String()), nil
+}
+
+func (p *WorkflowExecutionCloseStatus) UnmarshalText(text []byte) error {
+q, err := WorkflowExecutionCloseStatusFromString(string(text))
+if (err != nil) {
+return err
+}
+*p = q
+return nil
+}
+
+func (p *WorkflowExecutionCloseStatus) Scan(value interface{}) error {
+v, ok := value.(int64)
+if !ok {
+return errors.New("Scan value is not int64")
+}
+*p = WorkflowExecutionCloseStatus(v)
+return nil
+}
+
+func (p * WorkflowExecutionCloseStatus) Value() (driver.Value, error) {
+  if p == nil {
+    return nil, nil
+  }
+return int64(*p), nil
+}
 // Attributes:
 //  - Message
 type BadRequestError struct {
@@ -1519,6 +1584,7 @@ func (p *WorkflowExecution) String() string {
 //  - Type
 //  - StartTime
 //  - CloseTime
+//  - CloseStatus
 type WorkflowExecutionInfo struct {
   // unused fields # 1 to 9
   Execution *WorkflowExecution `thrift:"execution,10" db:"execution" json:"execution,omitempty"`
@@ -1528,6 +1594,8 @@ type WorkflowExecutionInfo struct {
   StartTime *int64 `thrift:"startTime,30" db:"startTime" json:"startTime,omitempty"`
   // unused fields # 31 to 39
   CloseTime *int64 `thrift:"closeTime,40" db:"closeTime" json:"closeTime,omitempty"`
+  // unused fields # 41 to 49
+  CloseStatus *WorkflowExecutionCloseStatus `thrift:"closeStatus,50" db:"closeStatus" json:"closeStatus,omitempty"`
 }
 
 func NewWorkflowExecutionInfo() *WorkflowExecutionInfo {
@@ -1562,6 +1630,13 @@ func (p *WorkflowExecutionInfo) GetCloseTime() int64 {
   }
 return *p.CloseTime
 }
+var WorkflowExecutionInfo_CloseStatus_DEFAULT WorkflowExecutionCloseStatus
+func (p *WorkflowExecutionInfo) GetCloseStatus() WorkflowExecutionCloseStatus {
+  if !p.IsSetCloseStatus() {
+    return WorkflowExecutionInfo_CloseStatus_DEFAULT
+  }
+return *p.CloseStatus
+}
 func (p *WorkflowExecutionInfo) IsSetExecution() bool {
   return p.Execution != nil
 }
@@ -1576,6 +1651,10 @@ func (p *WorkflowExecutionInfo) IsSetStartTime() bool {
 
 func (p *WorkflowExecutionInfo) IsSetCloseTime() bool {
   return p.CloseTime != nil
+}
+
+func (p *WorkflowExecutionInfo) IsSetCloseStatus() bool {
+  return p.CloseStatus != nil
 }
 
 func (p *WorkflowExecutionInfo) Read(iprot thrift.TProtocol) error {
@@ -1605,6 +1684,10 @@ func (p *WorkflowExecutionInfo) Read(iprot thrift.TProtocol) error {
       }
     case 40:
       if err := p.ReadField40(iprot); err != nil {
+        return err
+      }
+    case 50:
+      if err := p.ReadField50(iprot); err != nil {
         return err
       }
     default:
@@ -1656,6 +1739,16 @@ func (p *WorkflowExecutionInfo)  ReadField40(iprot thrift.TProtocol) error {
   return nil
 }
 
+func (p *WorkflowExecutionInfo)  ReadField50(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI32(); err != nil {
+  return thrift.PrependError("error reading field 50: ", err)
+} else {
+  temp := WorkflowExecutionCloseStatus(v)
+  p.CloseStatus = &temp
+}
+  return nil
+}
+
 func (p *WorkflowExecutionInfo) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("WorkflowExecutionInfo"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -1664,6 +1757,7 @@ func (p *WorkflowExecutionInfo) Write(oprot thrift.TProtocol) error {
     if err := p.writeField20(oprot); err != nil { return err }
     if err := p.writeField30(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
+    if err := p.writeField50(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -1718,6 +1812,18 @@ func (p *WorkflowExecutionInfo) writeField40(oprot thrift.TProtocol) (err error)
     return thrift.PrependError(fmt.Sprintf("%T.closeTime (40) field write error: ", p), err) }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 40:closeTime: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowExecutionInfo) writeField50(oprot thrift.TProtocol) (err error) {
+  if p.IsSetCloseStatus() {
+    if err := oprot.WriteFieldBegin("closeStatus", thrift.I32, 50); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 50:closeStatus: ", p), err) }
+    if err := oprot.WriteI32(int32(*p.CloseStatus)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.closeStatus (50) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 50:closeStatus: ", p), err) }
   }
   return err
 }
@@ -17226,6 +17332,7 @@ func (p *ListOpenWorkflowExecutionsResponse) String() string {
 //  - StartTimeFilter
 //  - ExecutionFilter
 //  - TypeFilter
+//  - StatusFilter
 type ListClosedWorkflowExecutionsRequest struct {
   // unused fields # 1 to 9
   Domain *string `thrift:"domain,10" db:"domain" json:"domain,omitempty"`
@@ -17239,6 +17346,8 @@ type ListClosedWorkflowExecutionsRequest struct {
   ExecutionFilter *WorkflowExecutionFilter `thrift:"executionFilter,50" db:"executionFilter" json:"executionFilter,omitempty"`
   // unused fields # 51 to 59
   TypeFilter *WorkflowTypeFilter `thrift:"typeFilter,60" db:"typeFilter" json:"typeFilter,omitempty"`
+  // unused fields # 61 to 69
+  StatusFilter *WorkflowExecutionCloseStatus `thrift:"statusFilter,70" db:"statusFilter" json:"statusFilter,omitempty"`
 }
 
 func NewListClosedWorkflowExecutionsRequest() *ListClosedWorkflowExecutionsRequest {
@@ -17285,6 +17394,13 @@ func (p *ListClosedWorkflowExecutionsRequest) GetTypeFilter() *WorkflowTypeFilte
   }
 return p.TypeFilter
 }
+var ListClosedWorkflowExecutionsRequest_StatusFilter_DEFAULT WorkflowExecutionCloseStatus
+func (p *ListClosedWorkflowExecutionsRequest) GetStatusFilter() WorkflowExecutionCloseStatus {
+  if !p.IsSetStatusFilter() {
+    return ListClosedWorkflowExecutionsRequest_StatusFilter_DEFAULT
+  }
+return *p.StatusFilter
+}
 func (p *ListClosedWorkflowExecutionsRequest) IsSetDomain() bool {
   return p.Domain != nil
 }
@@ -17307,6 +17423,10 @@ func (p *ListClosedWorkflowExecutionsRequest) IsSetExecutionFilter() bool {
 
 func (p *ListClosedWorkflowExecutionsRequest) IsSetTypeFilter() bool {
   return p.TypeFilter != nil
+}
+
+func (p *ListClosedWorkflowExecutionsRequest) IsSetStatusFilter() bool {
+  return p.StatusFilter != nil
 }
 
 func (p *ListClosedWorkflowExecutionsRequest) Read(iprot thrift.TProtocol) error {
@@ -17344,6 +17464,10 @@ func (p *ListClosedWorkflowExecutionsRequest) Read(iprot thrift.TProtocol) error
       }
     case 60:
       if err := p.ReadField60(iprot); err != nil {
+        return err
+      }
+    case 70:
+      if err := p.ReadField70(iprot); err != nil {
         return err
       }
     default:
@@ -17412,6 +17536,16 @@ func (p *ListClosedWorkflowExecutionsRequest)  ReadField60(iprot thrift.TProtoco
   return nil
 }
 
+func (p *ListClosedWorkflowExecutionsRequest)  ReadField70(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI32(); err != nil {
+  return thrift.PrependError("error reading field 70: ", err)
+} else {
+  temp := WorkflowExecutionCloseStatus(v)
+  p.StatusFilter = &temp
+}
+  return nil
+}
+
 func (p *ListClosedWorkflowExecutionsRequest) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("ListClosedWorkflowExecutionsRequest"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -17422,6 +17556,7 @@ func (p *ListClosedWorkflowExecutionsRequest) Write(oprot thrift.TProtocol) erro
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField50(oprot); err != nil { return err }
     if err := p.writeField60(oprot); err != nil { return err }
+    if err := p.writeField70(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -17501,6 +17636,18 @@ func (p *ListClosedWorkflowExecutionsRequest) writeField60(oprot thrift.TProtoco
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 60:typeFilter: ", p), err) }
+  }
+  return err
+}
+
+func (p *ListClosedWorkflowExecutionsRequest) writeField70(oprot thrift.TProtocol) (err error) {
+  if p.IsSetStatusFilter() {
+    if err := oprot.WriteFieldBegin("statusFilter", thrift.I32, 70); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 70:statusFilter: ", p), err) }
+    if err := oprot.WriteI32(int32(*p.StatusFilter)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.statusFilter (70) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 70:statusFilter: ", p), err) }
   }
   return err
 }
