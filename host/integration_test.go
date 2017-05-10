@@ -1113,6 +1113,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		Domain: common.StringPtr(s.domainName),
 		WorkflowExecution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(uuid.New()),
 		},
 		SignalName: common.StringPtr("failed signal."),
 		Input:      nil,
