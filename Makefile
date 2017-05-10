@@ -18,11 +18,11 @@ THRIFT_SRCS = idl/github.com/uber/cadence/cadence.thrift \
 PROGS = cadence
 TEST_ARG ?= -race -v -timeout 5m
 BUILD := ./build
+TOOLS_CMD_ROOT=./cmd/tools
 
 export PATH := $(GOPATH)/bin:$(PATH)
 
 THRIFT_GEN=$(GOPATH)/bin/thrift-gen
-
 
 define thriftrule
 THRIFT_GEN_SRC += $(THRIFT_GENDIR)/go/$1/tchan-$1.go
@@ -43,22 +43,31 @@ ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
 	-e ".*/_.*" \
 	-e ".*/mocks.*")
 
+# filter out the src files for tools
+TOOLS_SRC := $(shell find ./tools -name "*.go")
+TOOLS_SRC += $(TOOLS_CMD_ROOT)
+
 # all directories with *_test.go files in them
 TEST_DIRS := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 
-glide:
+vendor/glide.updated: glide.lock glide.yaml
 	glide install
+	touch vendor/glide.updated
 
 clean_thrift:
 	rm -rf .gen
 
-thriftc: clean_thrift glide $(THRIFT_GEN_SRC)
+thriftc: clean_thrift vendor/glide.updated $(THRIFT_GEN_SRC)
 
-bins: thriftc
+cadence-cassandra-tool: vendor/glide.updated $(TOOLS_SRC)
+	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
+
+cadence: vendor/glide.updated main.go
 	go build -i -o cadence main.go
 
-bins_nothrift: glide
-	go build -i -o cadence main.go
+bins_nothrift: cadence-cassandra-tool cadence
+
+bins: thriftc bins_nothrift
 
 test: bins
 	@rm -f test
@@ -86,3 +95,4 @@ cover_ci: cover_profile
 
 clean:
 	rm -rf cadence
+	rm -rf cadence-cassandra-tool

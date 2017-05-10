@@ -719,8 +719,7 @@ func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bo
 	}
 	s.createCluster(testWorkflowClusterHosts, testDatacenter, gocql.Consistency(1), keySpace)
 	s.createKeyspace(1, dropKeySpace)
-	s.loadSchema("workflow_test.cql", schemaDir)
-	s.loadSchema("visibility_test.cql", schemaDir)
+	s.loadSchema([]string{"workflow_test.cql", "visibility_test.cql"}, schemaDir)
 }
 
 func (s *CassandraTestCluster) tearDownTestCluster() {
@@ -757,15 +756,13 @@ func (s *CassandraTestCluster) dropKeyspace() {
 	}
 }
 
-func (s *CassandraTestCluster) loadSchema(fileName string, schemaDir string) {
-	cqlshDir := "cqlsh"
+func (s *CassandraTestCluster) loadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := "./schema/"
-
 	if schemaDir != "" {
 		workflowSchemaDir = schemaDir + "/schema/"
 	}
 
-	err := common.LoadCassandraSchema(cqlshDir, workflowSchemaDir+fileName, s.keyspace)
+	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}

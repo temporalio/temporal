@@ -6,11 +6,11 @@ import (
 
 	"github.com/uber/cadence/common/logging"
 
-	"bytes"
-	"os/exec"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	"github.com/uber/cadence/tools/cassandra"
+	"io/ioutil"
+	"os"
 )
 
 // NewCassandraCluster creates a cassandra cluster given comma separated list of clusterHosts
@@ -58,19 +58,39 @@ func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
 	return
 }
 
-// LoadCassandraSchema loads the schema from the given .cql file on this keyspace using cqlsh
-func LoadCassandraSchema(cqlshpath string, fileName string, keyspace string) (err error) {
-	// Using cqlsh as I couldn't find a way to execute multiple commands through gocql.Session
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd := exec.Command(cqlshpath, fmt.Sprintf("--keyspace=%v", keyspace), fmt.Sprintf("--file=%v", fileName))
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	err = cmd.Run()
+// LoadCassandraSchema loads the schema from the given .cql files on this keyspace
+func LoadCassandraSchema(dir string, fileNames []string, keyspace string) (err error) {
 
-	// CQLSH doesn't return non-zero for some errors
-	if err != nil || len(stderr.String()) > 0 {
-		err = fmt.Errorf("LoadSchema %v returned %v. STDERR: %v", cmd.Path, err, stderr.String())
+	tmpFile, err := ioutil.TempFile("", "_cadence_")
+	if err != nil {
+		return fmt.Errorf("error creating tmp file:%v", err.Error())
+	}
+	defer os.Remove(tmpFile.Name())
+
+	for _, file := range fileNames {
+		content, err := ioutil.ReadFile(dir + "/" + file)
+		if err != nil {
+			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
+		}
+		tmpFile.WriteString(string(content))
+		tmpFile.WriteString("\n")
+	}
+
+	tmpFile.Close()
+
+	config := &cassandra.SetupSchemaConfig{
+		BaseConfig: cassandra.BaseConfig{
+			CassHosts:    "127.0.0.1",
+			CassKeyspace: keyspace,
+		},
+		SchemaFilePath:    tmpFile.Name(),
+		Overwrite:         true,
+		DisableVersioning: true,
+	}
+
+	err = cassandra.SetupSchema(config)
+	if err != nil {
+		err = fmt.Errorf("error loading schema:%v", err.Error())
 	}
 	return
 }

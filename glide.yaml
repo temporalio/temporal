@@ -22,3 +22,4 @@ import:
 - package: github.com/uber-go/timer
   subpackages:
   - twheel
+- package: github.com/urfave/cli
