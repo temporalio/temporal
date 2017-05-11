@@ -11,6 +11,7 @@ import (
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
 	"golang.org/x/net/context"
@@ -42,8 +43,8 @@ func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListMan
 		shutdownCh: make(chan struct{}),
 		taskListID: taskList,
 		logger: e.logger.WithFields(bark.Fields{
-			tagTaskListType: taskList.taskType,
-			tagTaskListName: taskList.taskListName,
+			logging.TagTaskListType: taskList.taskType,
+			logging.TagTaskListName: taskList.taskListName,
 		}),
 		taskAckManager: newAckManager(e.logger),
 		syncMatch:      make(chan *getTaskResult),
@@ -355,7 +356,7 @@ getTasksPumpLoop:
 			{
 				tasks, err := c.getTaskBatch()
 				if err != nil {
-					logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetTasks, err,
+					logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetTasks, err,
 						fmt.Sprintf("{taskType: %v, taskList: %v}",
 							c.taskListID.taskType, c.taskListID.taskListName))
 					c.signalNewTask() // re-enqueue the event
@@ -386,7 +387,7 @@ getTasksPumpLoop:
 				err := c.persistAckLevel()
 				//var err error
 				if err != nil {
-					logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateTaskList, err,
+					logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err,
 						fmt.Sprintf("{taskType: %v, taskList: %v}",
 							c.taskListID.taskType, c.taskListID.taskListName))
 					// keep going as saving ack is not critical
@@ -508,7 +509,7 @@ func (c *taskContext) completeTask(err error) {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
 			// We still can't lose the old task so we just unload the entire task list
-			logPersistantStoreErrorEvent(tlMgr.logger, tagValueStoreOperationStopTaskList, err,
+			logging.LogPersistantStoreErrorEvent(tlMgr.logger, logging.TagValueStoreOperationStopTaskList, err,
 				fmt.Sprintf("task writer failed to write task. Unloading TaskList{taskType: %v, taskList: %v}",
 					tlMgr.taskListID.taskType, tlMgr.taskListID.taskListName))
 			tlMgr.Stop()
@@ -531,7 +532,7 @@ func (c *taskContext) completeTask(err error) {
 	})
 
 	if err2 != nil {
-		logPersistantStoreErrorEvent(tlMgr.logger, tagValueStoreOperationCompleteTask, err2,
+		logging.LogPersistantStoreErrorEvent(tlMgr.logger, logging.TagValueStoreOperationCompleteTask, err2,
 			fmt.Sprintf("{taskID: %v, taskType: %v, taskList: %v}",
 				c.info.TaskID, tlMgr.taskListID.taskType, tlMgr.taskListID.taskListName))
 	}

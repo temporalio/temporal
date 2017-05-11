@@ -12,6 +12,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -36,7 +37,7 @@ type (
 		metricsReporter    metrics.Client
 		historyCache       *historyCache
 		domainCache        cache.DomainCache
-    metricsClient      metrics.Client
+		metricsClient      metrics.Client
 		logger             bark.Logger
 	}
 
@@ -80,7 +81,7 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 		historyCache:       historyCache,
 		domainCache:        cache.NewDomainCache(metadataMgr, logger),
 		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueHistoryEngineComponent,
+			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
 		}),
 		metricsClient: shard.GetMetricsClient(),
 	}
@@ -93,8 +94,8 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
-	logHistoryEngineStartingEvent(e.logger)
-	defer logHistoryEngineStartedEvent(e.logger)
+	logging.LogHistoryEngineStartingEvent(e.logger)
+	defer logging.LogHistoryEngineStartedEvent(e.logger)
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
@@ -102,8 +103,8 @@ func (e *historyEngineImpl) Start() {
 
 // Stop the service.
 func (e *historyEngineImpl) Stop() {
-	logHistoryEngineShuttingDownEvent(e.logger)
-	defer logHistoryEngineShutdownEvent(e.logger)
+	logging.LogHistoryEngineShuttingDownEvent(e.logger)
+	defer logging.LogHistoryEngineShutdownEvent(e.logger)
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
@@ -139,7 +140,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// Serialize the history
 	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
 	if serializedError != nil {
-		logHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
+		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
 			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", executionID, runID))
 		return nil, serializedError
 	}
@@ -204,7 +205,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			})
 		}
 
-		logPersistantStoreErrorEvent(e.logger, tagValueStoreOperationCreateWorkflowExecution, err,
+		logging.LogPersistantStoreErrorEvent(e.logger, logging.TagValueStoreOperationCreateWorkflowExecution, err,
 			fmt.Sprintf("{WorkflowID: %v, RunID: %v}", executionID, runID))
 		return nil, err
 	}
@@ -280,7 +281,7 @@ Update_History_Loop:
 		if !msBuilder.isWorkflowExecutionRunning() || !isRunning {
 			// Looks like DecisionTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
-			logDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeDecisionTask, request.GetTaskId(), requestID,
+			logging.LogDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeDecisionTask, request.GetTaskId(), requestID,
 				scheduleID, emptyEventID, isRunning)
 
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
@@ -294,7 +295,7 @@ Update_History_Loop:
 
 			// Looks like DecisionTask already started as a result of another call.
 			// It is OK to drop the task at this point.
-			logDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, request.GetTaskId(), requestID,
+			logging.LogDuplicateTaskEvent(context.logger, persistence.TaskListTypeDecision, request.GetTaskId(), requestID,
 				scheduleID, di.StartedID, isRunning)
 
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task already started."}
@@ -365,7 +366,7 @@ Update_History_Loop:
 		if !msBuilder.isWorkflowExecutionRunning() || !isRunning {
 			// Looks like ActivityTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
-			logDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeActivityTask, request.GetTaskId(), requestID,
+			logging.LogDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeActivityTask, request.GetTaskId(), requestID,
 				scheduleID, emptyEventID, isRunning)
 
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task not found."}
@@ -391,7 +392,7 @@ Update_History_Loop:
 
 			// Looks like ActivityTask already started as a result of another call.
 			// It is OK to drop the task at this point.
-			logDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeActivityTask, request.GetTaskId(), requestID,
+			logging.LogDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeActivityTask, request.GetTaskId(), requestID,
 				scheduleID, ai.StartedID, isRunning)
 
 			return nil, &workflow.EntityNotExistsError{Message: "Activity task already started."}
@@ -563,7 +564,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
 						metrics.MultipleCompletionDecisionsCounter, 1)
-					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
+					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetCompleteWorkflowExecutionDecisionAttributes()
@@ -584,7 +585,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
 						metrics.MultipleCompletionDecisionsCounter, 1)
-					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
+					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetFailWorkflowExecutionDecisionAttributes()
@@ -607,7 +608,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
 						metrics.MultipleCompletionDecisionsCounter, 1)
-					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
+					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetCancelWorkflowExecutionDecisionAttributes()
@@ -687,7 +688,7 @@ Update_History_Loop:
 				if isComplete {
 					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
 						metrics.MultipleCompletionDecisionsCounter, 1)
-					logMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
+					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
 				attributes := d.GetContinueAsNewWorkflowExecutionDecisionAttributes()

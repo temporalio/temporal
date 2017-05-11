@@ -16,6 +16,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -84,7 +85,7 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 		rangeSize:                  defaultRangeSize,
 		longPollExpirationInterval: defaultLongPollExpirationInterval,
 		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueWorkflowEngineComponent,
+			logging.TagWorkflowComponent: logging.TagValueMatchingEngineComponent,
 		}),
 	}
 }

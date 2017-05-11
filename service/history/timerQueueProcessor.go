@@ -10,6 +10,7 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
@@ -127,7 +128,7 @@ func newTimerQueueProcessor(historyService *historyEngineImpl, executionManager 
 		newTimerCh:        make(chan struct{}, 1),
 		minPendingTimerID: MaxTimerKey,
 		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueTimerQueueComponent,
+			logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
 		}),
 	}
 }

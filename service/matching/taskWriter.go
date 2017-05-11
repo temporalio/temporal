@@ -6,6 +6,7 @@ import (
 
 	"github.com/uber-common/bark"
 	s "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -124,7 +125,7 @@ writerLoop:
 				})
 
 				if err != nil {
-					logPersistantStoreErrorEvent(w.logger, tagValueStoreOperationCreateTask, err,
+					logging.LogPersistantStoreErrorEvent(w.logger, logging.TagValueStoreOperationCreateTask, err,
 						fmt.Sprintf("{taskID: [%v, %v], taskType: %v, taskList: %v}",
 							taskIDs[0], taskIDs[batchSize-1], w.taskListID.taskType, w.taskListID.taskListName))
 				}

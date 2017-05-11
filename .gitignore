@@ -15,4 +15,5 @@ test.log
 
 # Executables produced by cadence repo
 cadence
+cadence-cassandra-tool
 

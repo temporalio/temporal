@@ -5,6 +5,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -27,7 +28,7 @@ func newHistoryBuilder(msBuilder *mutableStateBuilder, logger bark.Logger) *hist
 		serializer: persistence.NewJSONHistorySerializer(),
 		history:    []*workflow.HistoryEvent{},
 		msBuilder:  msBuilder,
-		logger:     logger.WithField(tagWorkflowComponent, tagValueHistoryBuilderComponent),
+		logger:     logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
 	}
 }
 

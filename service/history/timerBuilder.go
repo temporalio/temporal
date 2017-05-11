@@ -10,6 +10,7 @@ import (
 	"github.com/uber-common/bark"
 	w "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -110,7 +111,7 @@ func newTimerBuilder(seqNumGen SequenceNumberGenerator, logger bark.Logger) *tim
 	return &timerBuilder{
 		timers:            timers{},
 		pendingUserTimers: make(map[SequenceID]*persistence.TimerInfo),
-		logger:            logger.WithField(tagWorkflowComponent, "timer"),
+		logger:            logger.WithField(logging.TagWorkflowComponent, "timer"),
 		seqNumGen:         seqNumGen,
 		localSeqNumGen:    &localSeqNumGenerator{counter: 1}}
 }

@@ -9,6 +9,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
@@ -38,8 +39,8 @@ var (
 func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExecution, shard ShardContext,
 	executionManager persistence.ExecutionManager, logger bark.Logger) *workflowExecutionContext {
 	lg := logger.WithFields(bark.Fields{
-		tagWorkflowExecutionID: execution.GetWorkflowId(),
-		tagWorkflowRunID:       execution.GetRunId(),
+		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+		logging.TagWorkflowRunID:       execution.GetRunId(),
 	})
 	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: shard}, lg)
 
@@ -63,7 +64,7 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 		Execution: c.workflowExecution,
 	})
 	if err != nil {
-		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationGetWorkflowExecution, err, "")
+		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetWorkflowExecution, err, "")
 		return nil, err
 	}
 
@@ -104,7 +105,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		firstEvent := builder.history[0]
 		serializedHistory, err := builder.Serialize()
 		if err != nil {
-			logHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
+			logging.LogHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
 			return err
 		}
 
@@ -123,7 +124,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 				return ErrConflict
 			}
 
-			logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateWorkflowExecution, err0,
+			logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err0,
 				fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 			return err0
 		}
@@ -158,7 +159,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			return ErrConflict
 		}
 
-		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationUpdateWorkflowExecution, err1,
+		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err1,
 			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 		return err1
 	}
@@ -182,7 +183,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	// Serialize the history
 	serializedHistory, serializedError := newStateBuilder.hBuilder.Serialize()
 	if serializedError != nil {
-		logHistorySerializationErrorEvent(c.logger, serializedError, fmt.Sprintf(
+		logging.LogHistorySerializationErrorEvent(c.logger, serializedError, fmt.Sprintf(
 			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", newExecution.GetWorkflowId(),
 			newExecution.GetRunId()))
 		return serializedError
@@ -217,7 +218,7 @@ func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 	if err != nil {
 		// TODO: We will be needing a background job to delete all leaking workflow executions due to failed delete
 		// We cannot return an error back to client at this stage.  For now just log and move on.
-		logPersistantStoreErrorEvent(c.logger, tagValueStoreOperationDeleteWorkflowExecution, err,
+		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationDeleteWorkflowExecution, err,
 			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 	}
 

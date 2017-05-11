@@ -6,6 +6,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
@@ -47,7 +48,7 @@ func newHistoryCache(maxSize int, shard ShardContext, logger bark.Logger) *histo
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
 		logger: logger.WithFields(bark.Fields{
-			tagWorkflowComponent: tagValueHistoryCacheComponent,
+			logging.TagWorkflowComponent: logging.TagValueHistoryCacheComponent,
 		}),
 	}
 }
