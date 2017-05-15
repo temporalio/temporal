@@ -463,6 +463,14 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, errTaskListNotSet
 	}
 
+	if !startRequest.IsSetExecutionStartToCloseTimeoutSeconds() || startRequest.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		return nil, &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
+	}
+
+	if !startRequest.IsSetTaskStartToCloseTimeoutSeconds() || startRequest.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		return nil, &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
+	}
+
 	domainName := startRequest.GetDomain()
 	wh.Service.GetLogger().Infof("Start workflow execution request domain: %v", domainName)
 	info, _, err := wh.domainCache.GetDomain(domainName)
