@@ -19,6 +19,7 @@ PROGS = cadence
 TEST_ARG ?= -race -v -timeout 5m
 BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
+INTEG_TEST_ROOT=./host
 
 export PATH := $(GOPATH)/bin:$(PATH)
 
@@ -50,6 +51,21 @@ TOOLS_SRC += $(TOOLS_CMD_ROOT)
 # all directories with *_test.go files in them
 TEST_DIRS := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 
+# dirs that contain integration tests, these need to be treated
+# differently to get correct code coverage
+INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)%,$(TEST_DIRS))
+# all tests other than integration test fall into the pkg_test category
+PKG_TEST_DIRS := $(filter-out $(INTEG_TEST_ROOT)%,$(TEST_DIRS))
+
+
+# Need the following option to have integration tests
+# count towards coverage. godoc below:
+# -coverpkg pkg1,pkg2,pkg3
+#   Apply coverage analysis in each test to the given list of packages.
+#   The default is for each test to analyze only the package being tested.
+#   Packages are specified as import paths.
+GOCOVERPKG_ARG := -coverpkg="$(PROJECT_ROOT)/common/...,$(PROJECT_ROOT)/service/...,$(PROJECT_ROOT)/client/...,$(PROJECT_ROOT)/tools/..."
+
 vendor/glide.updated: glide.lock glide.yaml
 	glide install
 	touch vendor/glide.updated
@@ -77,22 +93,30 @@ test: bins
 	done;
 
 cover_profile: clean bins_nothrift
-	@echo Testing packages:
-	@for dir in $(TEST_DIRS); do \
+	@mkdir -p $(BUILD)
+	@echo "mode: atomic" > $(BUILD)/cover.out
+
+	@echo Running integration tests:
+	@time for dir in $(INTEG_TEST_DIRS); do \
+		mkdir -p $(BUILD)/"$$dir"; \
+		go test "$$dir" $(TEST_ARG) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/"$$dir"/coverage.out || exit 1; \
+		cat $(BUILD)/"$$dir"/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out; \
+	done
+
+	@echo Running package tests:
+	@for dir in $(PKG_TEST_DIRS); do \
 		mkdir -p $(BUILD)/"$$dir"; \
 		go test "$$dir" $(TEST_ARG) -coverprofile=$(BUILD)/"$$dir"/coverage.out || exit 1; \
+		cat $(BUILD)/"$$dir"/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out; \
 	done;
 
 cover: cover_profile
-	@for dir in $(TEST_DIRS); do \
-		go tool cover -html=$(BUILD)/"$$dir"/coverage.out; \
-	done
+	go tool cover -html=$(BUILD)/cover.out;
 
 cover_ci: cover_profile
-	@for dir in $(TEST_DIRS); do \
-		goveralls -coverprofile=$(BUILD)/"$$dir"/coverage.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
-	done
+	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
 
 clean:
-	rm -rf cadence
-	rm -rf cadence-cassandra-tool
+	rm -f cadence
+	rm -f cadence-cassandra-tool
+	rm -Rf $(BUILD)
