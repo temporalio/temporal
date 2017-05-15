@@ -74,6 +74,7 @@ func (s *CQLClientTestSuite) SetupSuite() {
 
 func (s *CQLClientTestSuite) TearDownSuite() {
 	s.client.Exec("DROP keyspace " + s.keyspace)
+	s.client.Close()
 }
 
 func (s *CQLClientTestSuite) TestParseCQLFile() {
@@ -93,19 +94,19 @@ func (s *CQLClientTestSuite) TestParseCQLFile() {
 
 func (s *CQLClientTestSuite) testUpdate(client CQLClient) {
 	// Update / Read schema version test
-	err := client.UpdateSchemaVersion(10, 5)
+	err := client.UpdateSchemaVersion("10.0", "5.0")
 	s.Nil(err)
-	err = client.WriteSchemaUpdateLog(9, 10, "abc", "test")
+	err = client.WriteSchemaUpdateLog("9.0", "10.0", "abc", "test")
 	s.Nil(err)
 
 	ver, err := client.ReadSchemaVersion()
 	s.Nil(err)
-	s.Equal(10, int(ver))
+	s.Equal("10.0", ver)
 
-	err = client.UpdateSchemaVersion(12, 5)
+	err = client.UpdateSchemaVersion("12.0", "5.0")
 	ver, err = client.ReadSchemaVersion()
 	s.Nil(err)
-	s.Equal(12, int(ver))
+	s.Equal("12.0", ver)
 }
 
 func (s *CQLClientTestSuite) testDrop(client CQLClient) {

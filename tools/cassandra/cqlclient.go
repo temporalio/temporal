@@ -30,6 +30,7 @@ import (
 
 	"fmt"
 	"github.com/gocql/gocql"
+	"log"
 )
 
 type (
@@ -49,14 +50,18 @@ type (
 		DropTable(name string) error
 		// DropType drops a user defined type from keyspace
 		DropType(name string) error
+		// DropKeyspace drops a keyspace
+		DropKeyspace(keyspace string) error
 		// CreateSchemaVersionTables sets up the schema version tables
 		CreateSchemaVersionTables() error
 		// ReadSchemaVersion returns the current schema version for the keyspace
-		ReadSchemaVersion() (int64, error)
+		ReadSchemaVersion() (string, error)
 		// UpdateSchemaVersion updates the schema version for the keyspace
-		UpdateSchemaVersion(newVersion int64, minCompatibleVersion int64) error
+		UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error
 		// WriteSchemaUpdateLog adds an entry to the schema update history table
-		WriteSchemaUpdateLog(oldVersion int64, newVersion int64, manifestMD5 string, desc string) error
+		WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error
+		// Close gracefully closes the client object
+		Close()
 	}
 	cqlClient struct {
 		session       *gocql.Session
@@ -83,8 +88,8 @@ const (
 
 	createSchemaVersionTableCQL = `CREATE TABLE schema_version(keyspace_name text PRIMARY KEY, ` +
 		`creation_time timestamp, ` +
-		`curr_version bigint, ` +
-		`min_compatible_version bigint);`
+		`curr_version text, ` +
+		`min_compatible_version text);`
 
 	createSchemaUpdateHistoryTableCQL = `CREATE TABLE schema_update_history(` +
 		`year int, ` +
@@ -92,8 +97,8 @@ const (
 		`update_time timestamp, ` +
 		`description text, ` +
 		`manifest_md5 text, ` +
-		`new_version bigint, ` +
-		`old_version bigint, ` +
+		`new_version text, ` +
+		`old_version text, ` +
 		`PRIMARY KEY ((year, month), update_time));`
 
 	createKeyspaceCQL = `CREATE KEYSPACE IF NOT EXISTS %v ` +
@@ -166,6 +171,11 @@ func (client *cqlClient) DropType(name string) error {
 	return client.Exec(fmt.Sprintf("DROP TYPE %v", name))
 }
 
+// DropKeyspace drops a keyspace
+func (client *cqlClient) DropKeyspace(keyspace string) error {
+	return client.Exec(fmt.Sprintf("DROP KEYSPACE %v", keyspace))
+}
+
 // CreateSchemaVersionTables sets up the schema version tables
 func (client *cqlClient) CreateSchemaVersionTables() error {
 	if err := client.Exec(createSchemaVersionTableCQL); err != nil {
@@ -178,28 +188,28 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 }
 
 // ReadSchemaVersion returns the current schema version for the keyspace
-func (client *cqlClient) ReadSchemaVersion() (int64, error) {
+func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	query := client.session.Query(readSchemaVersionCQL, client.clusterConfig.Keyspace)
 	iter := query.Iter()
-	var version int64
+	var version string
 	if !iter.Scan(&version) {
 		iter.Close()
-		return 0, errGetSchemaVersion
+		return "", errGetSchemaVersion
 	}
 	if err := iter.Close(); err != nil {
-		return 0, err
+		return "", err
 	}
 	return version, nil
 }
 
 // UpdateShemaVersion updates the schema version for the keyspace
-func (client *cqlClient) UpdateSchemaVersion(newVersion int64, minCompatibleVersion int64) error {
+func (client *cqlClient) UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error {
 	query := client.session.Query(writeSchemaVersionCQL, client.clusterConfig.Keyspace, time.Now(), newVersion, minCompatibleVersion)
 	return query.Exec()
 }
 
 // WriteSchemaUpdateLog adds an entry to the schema update history table
-func (client *cqlClient) WriteSchemaUpdateLog(oldVersion int64, newVersion int64, manifestMD5 string, desc string) error {
+func (client *cqlClient) WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error {
 	now := time.Now().UTC()
 	query := client.session.Query(writeSchemaUpdateHistoryCQL)
 	query.Bind(now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
@@ -209,6 +219,13 @@ func (client *cqlClient) WriteSchemaUpdateLog(oldVersion int64, newVersion int64
 // Exec executes a cql statement
 func (client *cqlClient) Exec(stmt string) error {
 	return client.session.Query(stmt).Exec()
+}
+
+// Close closes the cql client
+func (client *cqlClient) Close() {
+	if client.session != nil {
+		client.session.Close()
+	}
 }
 
 func parseHosts(input string) []string {
@@ -266,29 +283,29 @@ func ParseCQLFile(filePath string) ([]string, error) {
 	return nil, err
 }
 
-// dropKeyspace deletes all tables/types in the
+// dropAllTablesTypes deletes all tables/types in the
 // keyspace without deleting the keyspace
-func dropKeyspace(client CQLClient) {
+func dropAllTablesTypes(client CQLClient) {
 	tables, err := client.ListTables()
 	if err != nil {
 		return
 	}
-	fmt.Printf("Dropping following tables: %v\n", tables)
+	log.Printf("Dropping following tables: %v\n", tables)
 	for _, table := range tables {
 		err1 := client.DropTable(table)
 		if err1 != nil {
-			fmt.Printf("Error dropping table %v, err=%v\n", table, err1)
+			log.Printf("Error dropping table %v, err=%v\n", table, err1)
 		}
 	}
 	types, err := client.ListTypes()
 	if err != nil {
 		return
 	}
-	fmt.Printf("Dropping following types: %v\n", types)
+	log.Printf("Dropping following types: %v\n", types)
 	for _, t := range types {
 		err1 := client.DropType(t)
 		if err1 != nil {
-			fmt.Printf("Error dropping type %v, err=%v\n", t, err1)
+			log.Printf("Error dropping type %v, err=%v\n", t, err1)
 		}
 	}
 }

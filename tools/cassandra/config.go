@@ -20,7 +20,10 @@
 
 package cassandra
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
 
 type (
 	// baseConfig is the common config
@@ -35,7 +38,7 @@ type (
 	// params for executing a UpdateSchemaTask
 	UpdateSchemaConfig struct {
 		BaseConfig
-		TargetVersion int
+		TargetVersion string
 		SchemaDir     string
 		IsDryRun      bool
 	}
@@ -45,7 +48,7 @@ type (
 	SetupSchemaConfig struct {
 		BaseConfig
 		SchemaFilePath    string
-		InitialVersion    int
+		InitialVersion    string
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
 	}
@@ -64,6 +67,9 @@ const (
 	cliOptSchemaFile        = "schema-file"
 	cliOptOverwrite         = "overwrite"
 	cliOptDisableVersioning = "disable-versioning"
+	cliOptTargetVersion     = "version"
+	cliOptDryrun            = "dryrun"
+	cliOptSchemaDir         = "schema-dir"
 
 	cliFlagEndpoint          = cliOptEndpoint + ", ep"
 	cliFlagKeyspace          = cliOptKeyspace + ", k"
@@ -71,7 +77,12 @@ const (
 	cliFlagSchemaFile        = cliOptSchemaFile + ", f"
 	cliFlagOverwrite         = cliOptOverwrite + ", o"
 	cliFlagDisableVersioning = cliOptDisableVersioning + ", d"
+	cliFlagTargetVersion     = cliOptTargetVersion + ", v"
+	cliFlagDryrun            = cliOptDryrun + ", y"
+	cliFlagSchemaDir         = cliOptSchemaDir + ", d"
 )
+
+var rmspaceRegex = regexp.MustCompile("\\s+")
 
 func newConfigError(msg string) error {
 	return &ConfigError{msg: msg}

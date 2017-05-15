@@ -21,8 +21,7 @@
 package cassandra
 
 import (
-	"fmt"
-	"regexp"
+	"log"
 )
 
 // SetupSchemaTask represents a task
@@ -49,49 +48,53 @@ func (task *SetupSchemaTask) run() error {
 
 	config := task.config
 
-	fmt.Printf("Starting schema setup, config=%+v\n", config)
+	defer func() {
+		task.client.Close()
+	}()
+
+	log.Printf("Starting schema setup, config=%+v\n", config)
 
 	if config.Overwrite {
-		dropKeyspace(task.client)
+		dropAllTablesTypes(task.client)
 	}
 
 	if !config.DisableVersioning {
-		fmt.Printf("Setting up version tables\n")
+		log.Printf("Setting up version tables\n")
 		if err := task.client.CreateSchemaVersionTables(); err != nil {
 			return err
 		}
 	}
 
-	stmts, err := ParseCQLFile(config.SchemaFilePath)
-	if err != nil {
-		return err
-	}
-
-	re := regexp.MustCompile("\\s+")
-
-	fmt.Println("----- Creating types and tables -----")
-	for _, stmt := range stmts {
-		fmt.Println(re.ReplaceAllString(stmt, " "))
-		if err := task.client.Exec(stmt); err != nil {
+	if len(config.SchemaFilePath) > 0 {
+		stmts, err := ParseCQLFile(config.SchemaFilePath)
+		if err != nil {
 			return err
 		}
+
+		log.Println("----- Creating types and tables -----")
+		for _, stmt := range stmts {
+			log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
+			if err := task.client.Exec(stmt); err != nil {
+				return err
+			}
+		}
+		log.Println("----- Done -----")
 	}
-	fmt.Println("----- Done -----")
 
 	if !config.DisableVersioning {
-		fmt.Printf("Setting initial schema version to %v\n", config.InitialVersion)
-		err := task.client.UpdateSchemaVersion(int64(config.InitialVersion), int64(config.InitialVersion))
+		log.Printf("Setting initial schema version to %v\n", config.InitialVersion)
+		err := task.client.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Updating schema update log\n")
-		err = task.client.WriteSchemaUpdateLog(int64(0), int64(config.InitialVersion), "", "initial version")
+		log.Printf("Updating schema update log\n")
+		err = task.client.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
 		if err != nil {
 			return err
 		}
 	}
 
-	fmt.Println("Schema setup complete")
+	log.Println("Schema setup complete")
 
 	return nil
 }

@@ -55,7 +55,8 @@ func (s *SetupSchemaTestSuite) SetupSuite() {
 }
 
 func (s *SetupSchemaTestSuite) TearDownSuite() {
-	s.client.Exec("DROP keyspace " + s.keyspace)
+	s.client.DropKeyspace(s.keyspace)
+	s.client.Close()
 }
 
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
@@ -87,12 +88,12 @@ func (s *SetupSchemaTestSuite) TestSetupSchema() {
 
 	for i := 0; i < 4; i++ {
 
-		ver := int(s.rand.Int31())
+		ver := strconv.Itoa(int(s.rand.Int31()))
 		versioningEnabled := (i%2 == 0)
 
 		// test overwrite with versioning works
 		if versioningEnabled {
-			RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name(), "-version", strconv.Itoa(ver), "-o"})
+			RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name(), "-version", ver, "-o"})
 		} else {
 			RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name(), "-d", "-o"})
 		}
@@ -112,7 +113,7 @@ func (s *SetupSchemaTestSuite) TestSetupSchema() {
 		gotVer, err := client.ReadSchemaVersion()
 		if versioningEnabled {
 			s.Nil(err)
-			s.Equal(ver, int(gotVer))
+			s.Equal(ver, gotVer)
 		} else {
 			s.NotNil(err)
 		}

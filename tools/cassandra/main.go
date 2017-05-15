@@ -66,13 +66,13 @@ func buildCLIOptions() *cli.App {
 			Aliases: []string{"setup"},
 			Usage:   "setup initial version of cassandra schema",
 			Flags: []cli.Flag{
-				cli.IntFlag{
+				cli.StringFlag{
 					Name:  cliFlagVersion,
 					Usage: "initial version of the schema, cannot be used with disable-versioning",
 				},
 				cli.StringFlag{
 					Name:  cliFlagSchemaFile,
-					Usage: "path to the .cql schema file",
+					Usage: "path to the .cql schema file; if un-specified, will just setup versioning tables",
 				},
 				cli.BoolFlag{
 					Name:  cliFlagDisableVersioning,
@@ -85,6 +85,28 @@ func buildCLIOptions() *cli.App {
 			},
 			Action: func(c *cli.Context) {
 				setupSchema(c)
+			},
+		},
+		{
+			Name:    "update-schema",
+			Aliases: []string{"update"},
+			Usage:   "update cassandra schema to a specific version",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  cliFlagTargetVersion,
+					Usage: "target version for the schema update, defaults to latest",
+				},
+				cli.StringFlag{
+					Name:  cliFlagSchemaDir,
+					Usage: "path to directory containing versioned schema",
+				},
+				cli.BoolFlag{
+					Name:  cliFlagDryrun,
+					Usage: "do a dryrun",
+				},
+			},
+			Action: func(c *cli.Context) {
+				updateSchema(c)
 			},
 		},
 	}
