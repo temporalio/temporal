@@ -65,12 +65,12 @@ const (
 
 	templateUpdateDomainQuery = `UPDATE domains ` +
 		`SET domain = ` + templateDomainType + `, ` +
-		`config = ` + templateDomainConfigType +  ` ` +
+		`config = ` + templateDomainConfigType + ` ` +
 		`WHERE id = ?`
 
 	templateUpdateDomainByNameQuery = `UPDATE domains_by_name ` +
 		`SET domain = ` + templateDomainType + `, ` +
-		`config = ` + templateDomainConfigType +  ` ` +
+		`config = ` + templateDomainConfigType + ` ` +
 		`WHERE name = ?`
 
 	templateDeleteDomainQuery = `DELETE FROM domains ` +
@@ -87,7 +87,7 @@ type (
 	}
 )
 
-// NewCassandraHistoryPersistence is used to create an instance of HistoryManager implementation
+// NewCassandraMetadataPersistence is used to create an instance of HistoryManager implementation
 func NewCassandraMetadataPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (MetadataManager,
 	error) {
 	cluster := common.NewCassandraCluster(hosts, dc)

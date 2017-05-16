@@ -26,7 +26,7 @@ import (
 )
 
 type (
-	// baseConfig is the common config
+	// BaseConfig is the common config
 	// for all of the tasks that work
 	// with cassandra
 	BaseConfig struct {

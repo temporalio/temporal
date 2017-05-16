@@ -695,14 +695,14 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	currentTime := time.Now().UTC()
 	activityInfos := []*ActivityInfo{
 		{
-			ScheduleID:             1,
-			ScheduledEvent:         []byte("scheduled_event_1"),
-			StartedID:              2,
-			StartedEvent:           []byte("started_event_1"),
-			ScheduleToCloseTimeout: 1,
-			ScheduleToStartTimeout: 2,
-			StartToCloseTimeout:    3,
-			HeartbeatTimeout:       4,
+			ScheduleID:               1,
+			ScheduledEvent:           []byte("scheduled_event_1"),
+			StartedID:                2,
+			StartedEvent:             []byte("started_event_1"),
+			ScheduleToCloseTimeout:   1,
+			ScheduleToStartTimeout:   2,
+			StartToCloseTimeout:      3,
+			HeartbeatTimeout:         4,
 			LastHeartBeatUpdatedTime: currentTime,
 		}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil, nil, nil)

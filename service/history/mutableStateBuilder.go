@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	emptyUuid = "emptyUuid"
+	emptyUUID = "emptyUuid"
 )
 
 type (
@@ -284,7 +284,7 @@ func (e *mutableStateBuilder) DeleteDecision() {
 	emptyDecisionInfo := &decisionInfo{
 		ScheduleID:      emptyEventID,
 		StartedID:       emptyEventID,
-		RequestID:       emptyUuid,
+		RequestID:       emptyUUID,
 		DecisionTimeout: 0,
 	}
 	e.UpdateDecision(emptyDecisionInfo)
@@ -357,7 +357,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(domainID string, 
 	e.executionInfo.CreateRequestID = request.GetRequestId()
 	e.executionInfo.DecisionScheduleID = emptyEventID
 	e.executionInfo.DecisionStartedID = emptyEventID
-	e.executionInfo.DecisionRequestID = emptyUuid
+	e.executionInfo.DecisionRequestID = emptyUUID
 	e.executionInfo.DecisionTimeout = 0
 
 	return e.hBuilder.AddWorkflowExecutionStartedEvent(request)
@@ -377,7 +377,7 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*workflow.History
 	di := &decisionInfo{
 		ScheduleID:      newDecisionEvent.GetEventId(),
 		StartedID:       emptyEventID,
-		RequestID:       emptyUuid,
+		RequestID:       emptyUUID,
 		DecisionTimeout: newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetStartToCloseTimeoutSeconds(),
 	}
 	e.UpdateDecision(di)

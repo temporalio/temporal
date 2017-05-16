@@ -90,7 +90,7 @@ func NewHistoryPersistenceClient(persistence HistoryManager, m3Client metrics.Cl
 	}
 }
 
-// NewHistoryPersistenceClient creates a HistoryManager client to manage workflow execution history
+// NewMetadataPersistenceClient creates a HistoryManager client to manage workflow execution history
 func NewMetadataPersistenceClient(persistence MetadataManager, m3Client metrics.Client) MetadataManager {
 	return &metadataPersistenceClient{
 		persistence: persistence,

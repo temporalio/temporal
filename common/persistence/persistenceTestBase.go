@@ -372,6 +372,7 @@ func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution w
 	return response.State, nil
 }
 
+// GetCurrentWorkflow returns the workflow state for the given params
 func (s *TestBase) GetCurrentWorkflow(domainID, workflowID string) (string, error) {
 	response, err := s.WorkflowMgr.GetCurrentExecution(&GetCurrentExecutionRequest{
 		DomainID:   domainID,

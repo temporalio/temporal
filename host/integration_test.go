@@ -1751,7 +1751,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	s.Nil(err)
 
 	cancellationSent := false
-	intiatedEventId := 10
+	intiatedEventID := 10
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
@@ -1773,7 +1773,7 @@ CheckHistoryLoopForCancelSent:
 		}
 
 		externalWorkflowExecutionCancelRequestedEvent := lastEvent.GetExternalWorkflowExecutionCancelRequestedEventAttributes()
-		s.Equal(int64(intiatedEventId), externalWorkflowExecutionCancelRequestedEvent.GetInitiatedEventId())
+		s.Equal(int64(intiatedEventID), externalWorkflowExecutionCancelRequestedEvent.GetInitiatedEventId())
 		s.Equal(id, externalWorkflowExecutionCancelRequestedEvent.GetWorkflowExecution().GetWorkflowId())
 		s.Equal(we2.GetRunId(), externalWorkflowExecutionCancelRequestedEvent.GetWorkflowExecution().GetRunId())
 
@@ -1823,7 +1823,7 @@ GetHistoryLoop:
 
 		s.NotNil(cancelRequestEvent)
 		cancelRequestEventAttributes := cancelRequestEvent.GetWorkflowExecutionCancelRequestedEventAttributes()
-		s.Equal(int64(intiatedEventId), cancelRequestEventAttributes.GetExternalInitiatedEventId())
+		s.Equal(int64(intiatedEventID), cancelRequestEventAttributes.GetExternalInitiatedEventId())
 		s.Equal(id, cancelRequestEventAttributes.GetExternalWorkflowExecution().GetWorkflowId())
 		s.Equal(we.GetRunId(), cancelRequestEventAttributes.GetExternalWorkflowExecution().GetRunId())
 
@@ -1920,7 +1920,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	s.Nil(err)
 
 	cancellationSentFailed := false
-	intiatedEventId := 10
+	intiatedEventID := 10
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
@@ -1942,7 +1942,7 @@ CheckHistoryLoopForCancelSent:
 		}
 
 		requestCancelExternalWorkflowExecutionFailedEvetn := lastEvent.GetRequestCancelExternalWorkflowExecutionFailedEventAttributes()
-		s.Equal(int64(intiatedEventId), requestCancelExternalWorkflowExecutionFailedEvetn.GetInitiatedEventId())
+		s.Equal(int64(intiatedEventID), requestCancelExternalWorkflowExecutionFailedEvetn.GetInitiatedEventId())
 		s.Equal("workflow_not_exist", requestCancelExternalWorkflowExecutionFailedEvetn.GetWorkflowExecution().GetWorkflowId())
 		s.Equal(we.GetRunId(), requestCancelExternalWorkflowExecutionFailedEvetn.GetWorkflowExecution().GetRunId())
 

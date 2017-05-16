@@ -115,6 +115,10 @@ func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
 	return true, nil
 }
 
+// RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level
+// entity within Cadence, used as a container for all resources like workflow executions, tasklists, etc.  Domain
+// acts as a sandbox and provides isolation for all resources within the domain.  All resources belongs to exactly one
+// domain.
 func (wh *WorkflowHandler) RegisterDomain(ctx thrift.Context, registerRequest *gen.RegisterDomainRequest) error {
 	wh.startWG.Wait()
 
@@ -140,6 +144,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx thrift.Context, registerRequest *g
 	return nil
 }
 
+// DescribeDomain returns the information and configuration for a registered domain.
 func (wh *WorkflowHandler) DescribeDomain(ctx thrift.Context,
 	describeRequest *gen.DescribeDomainRequest) (*gen.DescribeDomainResponse, error) {
 	wh.startWG.Wait()
@@ -162,6 +167,7 @@ func (wh *WorkflowHandler) DescribeDomain(ctx thrift.Context,
 	return response, nil
 }
 
+// UpdateDomain is used to update the information and configuration for a registered domain.
 func (wh *WorkflowHandler) UpdateDomain(ctx thrift.Context,
 	updateRequest *gen.UpdateDomainRequest) (*gen.UpdateDomainResponse, error) {
 	wh.startWG.Wait()
@@ -216,6 +222,9 @@ func (wh *WorkflowHandler) UpdateDomain(ctx thrift.Context,
 	return response, nil
 }
 
+// DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
+// it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
+// deprecated domains.
 func (wh *WorkflowHandler) DeprecateDomain(ctx thrift.Context, deprecateRequest *gen.DeprecateDomainRequest) error {
 	wh.startWG.Wait()
 
@@ -553,6 +562,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	return response, nil
 }
 
+// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
 func (wh *WorkflowHandler) SignalWorkflowExecution(ctx thrift.Context,
 	signalRequest *gen.SignalWorkflowExecutionRequest) error {
 	wh.startWG.Wait()
@@ -592,6 +603,8 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx thrift.Context,
 	return wrapError(err)
 }
 
+// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
+// in the history and immediately terminating the execution instance.
 func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
 	terminateRequest *gen.TerminateWorkflowExecutionRequest) error {
 	wh.startWG.Wait()

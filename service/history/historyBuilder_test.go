@@ -73,7 +73,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	taskTimeout := int32(10)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(id),
-		RunId: common.StringPtr(rid),
+		RunId:      common.StringPtr(rid),
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
@@ -193,7 +193,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowStartFailures() {
 	taskTimeout := int32(10)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(id),
-		RunId: common.StringPtr(rid),
+		RunId:      common.StringPtr(rid),
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
@@ -228,7 +228,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionScheduledFailures() {
 	taskTimeout := int32(10)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(id),
-		RunId: common.StringPtr(rid),
+		RunId:      common.StringPtr(rid),
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
@@ -263,7 +263,7 @@ func (s *historyBuilderSuite) TestHistoryBuilderDecisionStartedFailures() {
 	taskTimeout := int32(10)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(id),
-		RunId: common.StringPtr(rid),
+		RunId:      common.StringPtr(rid),
 	}
 
 	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(we, wt, tl, input, execTimeout, taskTimeout, identity)
@@ -314,10 +314,10 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.Workf
 	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
 	e := s.msBuilder.AddWorkflowExecutionStartedEvent(s.domainID, we, &workflow.StartWorkflowExecutionRequest{
-		WorkflowId:                          common.StringPtr(we.GetWorkflowId()),
-		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                               input,
+		WorkflowId:   common.StringPtr(we.GetWorkflowId()),
+		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:        input,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
@@ -351,18 +351,18 @@ func (s *historyBuilderSuite) addDecisionTaskCompletedEvent(scheduleID, startedI
 }
 
 func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID int64, activityID, activityType,
-taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	return s.msBuilder.AddActivityTaskScheduledEvent(decisionCompletedID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
-		ActivityId:                    common.StringPtr(activityID),
-		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
-		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:                         input,
-		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
-		HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),
-	})
+			ActivityId:   common.StringPtr(activityID),
+			ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			Input:        input,
+			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
+			HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),
+		})
 }
 
 func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64, taskList,
@@ -398,7 +398,7 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *workflow.HistoryEvent, workflowType,
-taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) {
+	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32, identity string) {
 	s.NotNil(event)
 	s.Equal(workflow.EventType_WorkflowExecutionStarted, event.GetEventType())
 	s.Equal(firstEventID, event.GetEventId())
@@ -435,7 +435,7 @@ func (s *historyBuilderSuite) validateDecisionTaskStartedEvent(event *workflow.H
 }
 
 func (s *historyBuilderSuite) validateDecisionTaskCompletedEvent(event *workflow.HistoryEvent, eventID,
-scheduleID, startedID int64, context []byte, identity string) {
+	scheduleID, startedID int64, context []byte, identity string) {
 	s.NotNil(event)
 	s.Equal(workflow.EventType_DecisionTaskCompleted, event.GetEventType())
 	s.Equal(eventID, event.GetEventId())
@@ -476,7 +476,7 @@ func (s *historyBuilderSuite) validateActivityTaskStartedEvent(event *workflow.H
 }
 
 func (s *historyBuilderSuite) validateActivityTaskCompletedEvent(event *workflow.HistoryEvent, eventID,
-scheduleID, startedID int64, result []byte, identity string) {
+	scheduleID, startedID int64, result []byte, identity string) {
 	s.NotNil(event)
 	s.Equal(workflow.EventType_ActivityTaskCompleted, event.GetEventType())
 	s.Equal(eventID, event.GetEventId())
@@ -489,7 +489,7 @@ scheduleID, startedID int64, result []byte, identity string) {
 }
 
 func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *workflow.HistoryEvent, eventID,
-scheduleID, startedID int64, reason string, details []byte, identity string) {
+	scheduleID, startedID int64, reason string, details []byte, identity string) {
 	s.NotNil(event)
 	s.Equal(workflow.EventType_ActivityTaskFailed, event.GetEventType())
 	s.Equal(eventID, event.GetEventId())

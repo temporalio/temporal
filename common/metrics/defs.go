@@ -53,7 +53,7 @@ const (
 
 // Service names for all services that emit metrics.
 const (
-	Common      = iota
+	Common = iota
 	Frontend
 	History
 	Matching
@@ -350,7 +350,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 
 // Common Metrics enum
 const (
-	CadenceRequests                          = iota
+	CadenceRequests = iota
 	CadenceFailures
 	CadenceLatency
 	CadenceErrBadRequestCounter
@@ -370,7 +370,7 @@ const (
 
 // History Metrics enum
 const (
-	TransferTasksProcessedCounter        = iota + NumCommonMetrics
+	TransferTasksProcessedCounter = iota + NumCommonMetrics
 	MultipleCompletionDecisionsCounter
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter

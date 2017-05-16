@@ -467,6 +467,8 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx thrift.Context,
 	return nil
 }
 
+// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
+// WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
 func (h *Handler) SignalWorkflowExecution(ctx thrift.Context,
 	wrappedRequest *hist.SignalWorkflowExecutionRequest) error {
 	h.startWG.Wait()
@@ -496,6 +498,8 @@ func (h *Handler) SignalWorkflowExecution(ctx thrift.Context,
 	return nil
 }
 
+// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
+// in the history and immediately terminating the execution instance.
 func (h *Handler) TerminateWorkflowExecution(ctx thrift.Context,
 	wrappedRequest *hist.TerminateWorkflowExecutionRequest) error {
 	h.startWG.Wait()

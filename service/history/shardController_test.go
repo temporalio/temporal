@@ -34,11 +34,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber-go/tally"
 )
 
 type (

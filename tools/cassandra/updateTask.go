@@ -173,7 +173,7 @@ func (task *UpdateSchemaTask) updateSchemaVersion(oldVer string, cs *changeSet) 
 
 	err = task.client.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
 	if err != nil {
-		return fmt.Errorf("failed to add entry to schema_update_history, err=%v\n", err.Error())
+		return fmt.Errorf("failed to add entry to schema_update_history, err=%v", err.Error())
 	}
 
 	return nil

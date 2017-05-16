@@ -62,10 +62,10 @@ func updateSchema(cli *cli.Context) error {
 func handleUpdateSchema(config *UpdateSchemaConfig) error {
 	task, err := NewUpdateSchemaTask(config)
 	if err != nil {
-		return fmt.Errorf("Error creating task, err=%v\n", err)
+		return fmt.Errorf("error creating task, err=%v", err)
 	}
 	if err := task.run(); err != nil {
-		return fmt.Errorf("Error setting up schema, err=%v\n", err)
+		return fmt.Errorf("error setting up schema, err=%v", err)
 	}
 	return nil
 }
@@ -73,10 +73,10 @@ func handleUpdateSchema(config *UpdateSchemaConfig) error {
 func handleSetupSchema(config *SetupSchemaConfig) error {
 	task, err := newSetupSchemaTask(config)
 	if err != nil {
-		return fmt.Errorf("Error creating task, err=%v\n", err)
+		return fmt.Errorf("error creating task, err=%v", err)
 	}
 	if err := task.run(); err != nil {
-		return fmt.Errorf("Error setting up schema, err=%v\n", err)
+		return fmt.Errorf("error setting up schema, err=%v", err)
 	}
 	return nil
 }

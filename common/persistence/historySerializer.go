@@ -79,6 +79,7 @@ type (
 )
 
 const (
+	// DefaultEncodingType is the default encoding format for persisted history
 	DefaultEncodingType = common.EncodingTypeJSON
 )
 

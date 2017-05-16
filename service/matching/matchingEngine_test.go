@@ -317,10 +317,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			return &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
 					&workflow.ScheduleActivityTaskDecisionAttributes{
-						ActivityId:                    &activityID,
-						TaskList:                      &workflow.TaskList{Name: taskList.Name},
-						ActivityType:                  activityType,
-						Input:                         activityInput,
+						ActivityId:   &activityID,
+						TaskList:     &workflow.TaskList{Name: taskList.Name},
+						ActivityType: activityType,
+						Input:        activityInput,
 						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(10),

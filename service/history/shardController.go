@@ -196,7 +196,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	}
 
 	if c.isStopping {
-		return nil, fmt.Errorf("ShardController for host '%v' shutting down.", c.host.Identity())
+		return nil, fmt.Errorf("shardController for host '%v' shutting down", c.host.Identity())
 	}
 	info, err := c.hServiceResolver.Lookup(string(shardID))
 	if err != nil {

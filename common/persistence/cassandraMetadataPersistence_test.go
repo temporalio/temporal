@@ -310,7 +310,6 @@ func (m *metadataPersistenceSuite) UpdateDomain(info *DomainInfo, config *Domain
 func (m *metadataPersistenceSuite) DeleteDomain(id, name string) error {
 	if len(id) > 0 {
 		return m.MetadataManager.DeleteDomain(&DeleteDomainRequest{ID: id})
-	} else {
-		return m.MetadataManager.DeleteDomainByName(&DeleteDomainByNameRequest{Name: name})
 	}
+	return m.MetadataManager.DeleteDomainByName(&DeleteDomainByNameRequest{Name: name})
 }

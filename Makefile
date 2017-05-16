@@ -81,7 +81,7 @@ cadence-cassandra-tool: vendor/glide.updated $(TOOLS_SRC)
 cadence: vendor/glide.updated main.go
 	go build -i -o cadence main.go
 
-bins_nothrift: cadence-cassandra-tool cadence
+bins_nothrift: lint cadence-cassandra-tool cadence
 
 bins: thriftc bins_nothrift
 
@@ -115,6 +115,22 @@ cover: cover_profile
 
 cover_ci: cover_profile
 	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
+
+lint:
+	@lintFail=0; for file in $(ALL_SRC); do \
+		golint -set_exit_status "$$file"; \
+		if [ $$? -eq 1 ]; then lintFail=1; fi; \
+	done; \
+	if [ $$lintFail -eq 1 ]; then exit 1; fi;
+	@OUTPUT=`gofmt -l $(ALL_SRC) 2>&1`; \
+	if [ "$$OUTPUT" ]; then \
+		echo "Run 'make fmt'. gofmt must be run on the following files:"; \
+		echo "$$OUTPUT"; \
+		exit 1; \
+	fi
+
+fmt:
+	@gofmt -w $(ALL_SRC)
 
 clean:
 	rm -f cadence
