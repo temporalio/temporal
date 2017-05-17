@@ -511,7 +511,7 @@ func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 		TargetRunID:      targetRunID,
 		ScheduleID:       1,
 	}}
-	err1 = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks)
+	err1 = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
 	s.Nil(err1, "No error expected.")
 
 	tasks, err := s.GetTransferTasks(1)

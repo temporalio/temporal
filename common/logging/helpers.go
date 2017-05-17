@@ -102,6 +102,14 @@ func LogDuplicateTaskEvent(lg bark.Logger, taskType int, taskID int64, requestID
 		taskID, taskType, requestID, scheduleID, startedID, isRunning)
 }
 
+// LogDuplicateTransferTaskEvent is used to log the event when duplicate processing of the same transfer task is detected
+func LogDuplicateTransferTaskEvent(lg bark.Logger, taskType int, taskID int64, scheduleID int64) {
+	lg.WithFields(bark.Fields{
+		TagWorkflowEventID: DuplicateTransferTaskEventID,
+	}).Debugf("Potentially duplicate task.  TaskID: %v, TaskType: %v, scheduleID: %v",
+		taskID, taskType, scheduleID)
+}
+
 // LogTransferQueueProcesorStartingEvent is used to log transfer queue processor starting
 func LogTransferQueueProcesorStartingEvent(logger bark.Logger) {
 	logger.WithFields(bark.Fields{

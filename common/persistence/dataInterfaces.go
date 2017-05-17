@@ -164,11 +164,12 @@ type (
 
 	// TaskInfo describes either activity or decision task
 	TaskInfo struct {
-		DomainID   string
-		WorkflowID string
-		RunID      string
-		TaskID     int64
-		ScheduleID int64
+		DomainID               string
+		WorkflowID             string
+		RunID                  string
+		TaskID                 int64
+		ScheduleID             int64
+		ScheduleToStartTimeout int32
 	}
 
 	// Task is the generic interface for workflow tasks

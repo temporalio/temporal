@@ -210,10 +210,11 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 		return err
 	}
 	taskInfo := &persistence.TaskInfo{
-		DomainID:   sourceDomainID,
-		RunID:      addRequest.GetExecution().GetRunId(),
-		WorkflowID: addRequest.GetExecution().GetWorkflowId(),
-		ScheduleID: addRequest.GetScheduleId(),
+		DomainID:               sourceDomainID,
+		RunID:                  addRequest.GetExecution().GetRunId(),
+		WorkflowID:             addRequest.GetExecution().GetWorkflowId(),
+		ScheduleID:             addRequest.GetScheduleId(),
+		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
 	}
 	return tlMgr.AddTask(addRequest.GetExecution(), taskInfo)
 }

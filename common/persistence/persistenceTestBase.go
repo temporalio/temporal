@@ -495,12 +495,13 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 
 // UpdateWorkflowExecutionWithTransferTasks is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
-	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task) error {
+	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task, upsertActivityInfo []*ActivityInfo) error {
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo: updatedInfo,
-		TransferTasks: transferTasks,
-		Condition:     condition,
-		RangeID:       s.ShardContext.GetRangeID(),
+		ExecutionInfo:       updatedInfo,
+		TransferTasks:       transferTasks,
+		Condition:           condition,
+		UpsertActivityInfos: upsertActivityInfo,
+		RangeID:             s.ShardContext.GetRangeID(),
 	})
 }
 

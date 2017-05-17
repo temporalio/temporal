@@ -53,6 +53,7 @@ struct AddActivityTaskRequest {
   30: optional string sourceDomainUUID
   40: optional shared.TaskList taskList
   50: optional i64 (js.type = "Long") scheduleId
+  60: optional i32 scheduleToStartTimeoutSeconds
 }
 
 /**

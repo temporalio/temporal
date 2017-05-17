@@ -94,7 +94,7 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
 			if task.ScheduleID == firstEventID+1 {
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 			}
@@ -113,11 +113,34 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("many-transfertasks-test"),
 		RunId: common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
 	taskList := "many-transfertasks-queue"
-	activityTaskScheduleIds := []int64{2, 3, 4, 5, 6}
-	task0, err0 := s.CreateWorkflowExecutionManyTasks(domainID, workflowExecution, taskList, nil, 7, 0, nil,
-		activityTaskScheduleIds)
+	activityCount := 5
+	timeoutSeconds := int32(10)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 2, 0, 1, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
+	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
+
+	builder := newMutableStateBuilder(s.logger)
+	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info)
+	addDecisionTaskStartedEvent(builder, int64(1), taskList, "identity")
+	addDecisionTaskCompletedEvent(builder, int64(1), int64(2), nil, "identity")
+
+	transferTasks := []persistence.Task{}
+	for i := 0; i < activityCount; i++ {
+		_, ai := addActivityTaskScheduledEvent(builder, int64(3), "activityID", "aType", taskList, nil, timeoutSeconds, timeoutSeconds, timeoutSeconds)
+		transferTasks = append(transferTasks,
+			&persistence.ActivityTask{
+				TaskID:     s.GetNextSequenceNumber(),
+				DomainID:   domainID,
+				TaskList:   taskList,
+				ScheduleID: int64(ai.ScheduleID),
+			})
+		s.Equal(ai.ScheduleToCloseTimeout, timeoutSeconds)
+	}
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(2), transferTasks, builder.updateActivityInfos)
+	s.Nil(err1)
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
 	s.processor.processTransferTasks(tasksCh)
@@ -125,7 +148,9 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.mockMatching.On("AddActivityTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+			if task.TaskType == persistence.TransferTaskTypeActivityTask {
+				s.mockMatching.On("AddActivityTask", mock.Anything, createAddRequestFromTask(task, timeoutSeconds)).Once().Return(nil)
+			}
 			s.processor.processTransferTask(task)
 		default:
 			break workerPump
@@ -171,7 +196,7 @@ workerPump:
 		select {
 		case task := <-tasksCh:
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
-				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
@@ -214,7 +239,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 		ScheduleID:       1,
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
@@ -225,7 +250,7 @@ workerPump:
 		case task := <-tasksCh:
 			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
-				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
@@ -266,7 +291,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 		ScheduleID:       1,
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
@@ -277,7 +302,7 @@ workerPump:
 		case task := <-tasksCh:
 			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
-				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task)).Once().Return(nil)
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
@@ -296,7 +321,7 @@ workerPump:
 	s.mockHistoryClient.AssertExpectations(s.T())
 }
 
-func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
+func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStartTimeout int32) interface{} {
 	var res interface{}
 	domainID := task.DomainID
 	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
@@ -306,11 +331,12 @@ func createAddRequestFromTask(task *persistence.TransferTaskInfo) interface{} {
 	}
 	if task.TaskType == persistence.TransferTaskTypeActivityTask {
 		res = &m.AddActivityTaskRequest{
-			DomainUUID:       common.StringPtr(domainID),
-			SourceDomainUUID: common.StringPtr(domainID),
-			Execution:        &execution,
-			TaskList:         taskList,
-			ScheduleId:       &task.ScheduleID,
+			DomainUUID:                    common.StringPtr(domainID),
+			SourceDomainUUID:              common.StringPtr(domainID),
+			Execution:                     &execution,
+			TaskList:                      taskList,
+			ScheduleId:                    &task.ScheduleID,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
 		}
 	} else if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 		res = &m.AddDecisionTaskRequest{

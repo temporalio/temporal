@@ -337,6 +337,10 @@ const (
 		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `)`
 
+	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
+		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateTaskType + `) USING TTL ?`
+
 	templateGetTasksQuery = `SELECT task_id, task ` +
 		`FROM tasks ` +
 		`WHERE domain_id = ? ` +
@@ -1100,17 +1104,30 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 
 	for _, task := range request.Tasks {
 		scheduleID := task.Data.ScheduleID
-
-		batch.Query(templateCreateTaskQuery,
-			domainID,
-			taskList,
-			taskListType,
-			rowTypeTask,
-			task.TaskID,
-			domainID,
-			task.Execution.GetWorkflowId(),
-			task.Execution.GetRunId(),
-			scheduleID)
+		if task.Data.ScheduleToStartTimeout == 0 {
+			batch.Query(templateCreateTaskQuery,
+				domainID,
+				taskList,
+				taskListType,
+				rowTypeTask,
+				task.TaskID,
+				domainID,
+				task.Execution.GetWorkflowId(),
+				task.Execution.GetRunId(),
+				scheduleID)
+		} else {
+			batch.Query(templateCreateTaskWithTTLQuery,
+				domainID,
+				taskList,
+				taskListType,
+				rowTypeTask,
+				task.TaskID,
+				domainID,
+				task.Execution.GetWorkflowId(),
+				task.Execution.GetRunId(),
+				scheduleID,
+				task.Data.ScheduleToStartTimeout)
+		}
 	}
 
 	// The following query is used to ensure that range_id didn't change

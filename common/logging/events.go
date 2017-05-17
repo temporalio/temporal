@@ -34,6 +34,7 @@ const (
 	HistorySerializationErrorEventID   = 2020
 	DuplicateTaskEventID               = 2030
 	MultipleCompletionDecisionsEventID = 2040
+	DuplicateTransferTaskEventID       = 2050
 
 	// Transfer Queue Processor events
 	TransferQueueProcessorStarting         = 2100

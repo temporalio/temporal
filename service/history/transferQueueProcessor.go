@@ -261,13 +261,24 @@ ProcessRetryLoop:
 					taskList := &workflow.TaskList{
 						Name: &task.TaskList,
 					}
-					err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
-						DomainUUID:       common.StringPtr(targetDomainID),
-						SourceDomainUUID: common.StringPtr(domainID),
-						Execution:        &execution,
-						TaskList:         taskList,
-						ScheduleId:       &task.ScheduleID,
-					})
+					context, release, _ := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+					var mb *mutableStateBuilder
+					mb, err = context.loadWorkflowExecution()
+					if err == nil {
+						if ai, found := mb.GetActivityInfo(task.ScheduleID); found {
+							err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
+								DomainUUID:                    common.StringPtr(targetDomainID),
+								SourceDomainUUID:              common.StringPtr(domainID),
+								Execution:                     &execution,
+								TaskList:                      taskList,
+								ScheduleId:                    &task.ScheduleID,
+								ScheduleToStartTimeoutSeconds: common.Int32Ptr(ai.ScheduleToStartTimeout),
+							})
+						} else {
+							logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeActivityTask, task.TaskID, task.ScheduleID)
+						}
+					}
+					release()
 				}
 			case persistence.TransferTaskTypeDecisionTask:
 				{
