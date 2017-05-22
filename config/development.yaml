@@ -1,0 +1,39 @@
+cassandra:
+  hosts: "127.0.0.1"
+  keyspace: "cadence"
+  consistency: "One"
+  numHistoryShards: 4
+
+ringpop:
+  name: cadence
+  bootstrapMode: hosts
+  bootstrapHosts: ["127.0.0.1:7933", "127.0.0.1:7934", "127.0.0.1:7935"]
+  maxJoinDuration: 30s
+
+services:
+  frontend:
+    tchannel:
+      port: 7933
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+
+  matching:
+    tchannel:
+      port: 7935
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+
+  history:
+    tchannel:
+      port: 7934
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"

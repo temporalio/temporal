@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/service/config"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uber-common/bark"
@@ -41,51 +42,65 @@ import (
 
 var cadenceServices = []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName}
 
-// TChannelFactory creates a TChannel and Thrift server
-type TChannelFactory func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server)
+type (
+	// BootstrapParams holds the set of parameters
+	// needed to bootstrap a service
+	BootstrapParams struct {
+		Name            string
+		Logger          bark.Logger
+		MetricScope     tally.Scope
+		RingpopFactory  RingpopFactory
+		TChannelFactory TChannelFactory
+		CassandraConfig config.Cassandra
+	}
 
-// RingpopFactory provides a bootstrapped ringpop
-type RingpopFactory interface {
-	CreateRingpop(ch *tchannel.Channel) (*ringpop.Ringpop, error)
-}
+	// TChannelFactory creates a TChannel and Thrift server
+	TChannelFactory interface {
+		// CreateChannel creates and returns the (tchannel, thriftServer) tuple
+		// The implementation typically also starts the server as part of this call
+		CreateChannel(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server)
+	}
 
-// Service contains the objects specific to this service
-type serviceImpl struct {
-	sName                  string
-	hostName               string
-	hostPort               string
-	hostInfo               *membership.HostInfo
-	server                 *thrift.Server
-	ch                     *tchannel.Channel
-	rp                     *ringpop.Ringpop
-	rpFactory              RingpopFactory
-	membershipMonitor      membership.Monitor
-	tchannelFactory        TChannelFactory
-	clientFactory          client.Factory
-	numberOfHistoryShards  int
-	logger                 bark.Logger
-	metricsScope           tally.Scope
-	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
-	metricsClient          metrics.Client
-}
+	// RingpopFactory provides a bootstrapped ringpop
+	RingpopFactory interface {
+		// CreateRingpop vends a bootstrapped ringpop object
+		CreateRingpop(ch *tchannel.Channel) (*ringpop.Ringpop, error)
+	}
+
+	// Service contains the objects specific to this service
+	serviceImpl struct {
+		sName                  string
+		hostName               string
+		hostPort               string
+		hostInfo               *membership.HostInfo
+		server                 *thrift.Server
+		ch                     *tchannel.Channel
+		rp                     *ringpop.Ringpop
+		rpFactory              RingpopFactory
+		membershipMonitor      membership.Monitor
+		tchannelFactory        TChannelFactory
+		clientFactory          client.Factory
+		numberOfHistoryShards  int
+		logger                 bark.Logger
+		metricsScope           tally.Scope
+		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+		metricsClient          metrics.Client
+	}
+)
 
 // New instantiates a Service Instance
 // TODO: have a better name for Service.
-// TODO: consider passing a config object if the parameter list gets too big
-// this is the object which holds all the common stuff
-// shared by all the services.
-func New(serviceName string, logger bark.Logger, scope tally.Scope, tchanFactory TChannelFactory,
-	rpFactory RingpopFactory, numberOfHistoryShards int) Service {
+func New(params *BootstrapParams) Service {
 	sVice := &serviceImpl{
-		sName:                 serviceName,
-		logger:                logger.WithField("Service", serviceName),
-		tchannelFactory:       tchanFactory,
-		rpFactory:             rpFactory,
-		metricsScope:          scope,
-		numberOfHistoryShards: numberOfHistoryShards,
+		sName:                 params.Name,
+		logger:                params.Logger.WithField("Service", params.Name),
+		tchannelFactory:       params.TChannelFactory,
+		rpFactory:             params.RingpopFactory,
+		metricsScope:          params.MetricScope,
+		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
 	}
-	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(scope, time.Minute, sVice.logger)
-	sVice.metricsClient = metrics.NewClient(scope, getMetricsServiceIdx(serviceName, logger))
+	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
+	sVice.metricsClient = metrics.NewClient(params.MetricScope, getMetricsServiceIdx(params.Name, params.Logger))
 
 	// Get the host name and set it on the service.  This is used for emitting metric with a tag for hostname
 	if hostName, e := os.Hostname(); e != nil {
@@ -118,7 +133,7 @@ func (h *serviceImpl) Start(thriftServices []thrift.TChanServer) {
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	h.runtimeMetricsReporter.Start()
 
-	h.ch, h.server = h.tchannelFactory(h.sName, thriftServices)
+	h.ch, h.server = h.tchannelFactory.CreateChannel(h.sName, thriftServices)
 
 	// use actual listen port (in case service is bound to :0 or 0.0.0.0:0)
 	h.hostPort = h.ch.PeerInfo().HostPort

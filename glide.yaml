@@ -23,3 +23,6 @@ import:
   subpackages:
   - twheel
 - package: github.com/urfave/cli
+- package: gopkg.in/yaml.v2
+- package: gopkg.in/validator.v2
+- package: github.com/cactus/go-statsd-client/statsd

@@ -145,12 +145,15 @@ func (c *cadenceImpl) MatchingServiceAddress() string {
 }
 
 func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startWG *sync.WaitGroup) {
-	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
-		return c.createTChannel(sName, c.FrontendAddress(), thriftServices)
-	}
-	scope := tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	rpFactory := newRingpopFactory(common.FrontendServiceName, rpHosts)
-	service := service.New(common.FrontendServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
+	params := new(service.BootstrapParams)
+	params.Name = common.FrontendServiceName
+	params.Logger = logger
+	params.TChannelFactory = newTChannelFactory(c.FrontendAddress(), logger)
+	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
+	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+	params.CassandraConfig.Hosts = "127.0.0.1"
+	service := service.New(params)
 	var thriftServices []thrift.TChanServer
 	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service, c.metadataMgr, c.historyMgr, c.visibilityMgr)
 	err := c.frontendHandler.Start(thriftServices)
@@ -165,13 +168,16 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
+
 	for _, hostport := range c.HistoryServiceAddress() {
-		tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
-			return c.createTChannel(sName, hostport, thriftServices)
-		}
-		scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		rpFactory := newRingpopFactory(common.FrontendServiceName, rpHosts)
-		service := service.New(common.HistoryServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
+		params := new(service.BootstrapParams)
+		params.Name = common.HistoryServiceName
+		params.Logger = logger
+		params.TChannelFactory = newTChannelFactory(hostport, logger)
+		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
+		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+		service := service.New(params)
 		var thriftServices []thrift.TChanServer
 		var handler *history.Handler
 		handler, thriftServices = history.NewHandler(service, shardMgr, metadataMgr, visibilityMgr, historyMgr, executionMgrFactory,
@@ -186,36 +192,22 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 
 func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.TaskManager,
 	rpHosts []string, startWG *sync.WaitGroup) {
-	tchanFactory := func(sName string, thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
-		return c.createTChannel(sName, c.MatchingServiceAddress(), thriftServices)
-	}
-	scope := tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	rpFactory := newRingpopFactory(common.FrontendServiceName, rpHosts)
-	service := service.New(common.MatchingServiceName, logger, scope, tchanFactory, rpFactory, c.numberOfHistoryShards)
+
+	params := new(service.BootstrapParams)
+	params.Name = common.MatchingServiceName
+	params.Logger = logger
+
+	params.TChannelFactory = newTChannelFactory(c.MatchingServiceAddress(), logger)
+	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
+	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+	service := service.New(params)
 	var thriftServices []thrift.TChanServer
 	c.matchingHandler, thriftServices = matching.NewHandler(taskMgr, service)
 	c.matchingHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()
-}
-
-func (c *cadenceImpl) createTChannel(sName string, hostPort string,
-	thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
-	ch, err := tchannel.NewChannel(sName, nil)
-	if err != nil {
-		c.logger.WithField("error", err).Fatal("Failed to create TChannel")
-	}
-	server := thrift.NewServer(ch)
-	for _, thriftService := range thriftServices {
-		server.Register(thriftService)
-	}
-
-	err = ch.ListenAndServe(hostPort)
-	if err != nil {
-		c.logger.WithField("error", err).Fatal("Failed to listen on tchannel")
-	}
-	return ch, server
 }
 
 func newRingpopFactory(service string, rpHosts []string) service.RingpopFactory {
@@ -248,4 +240,35 @@ func (p *ringpopFactoryImpl) bootstrapRingpop(rp *ringpop.Ringpop, rpHosts []str
 
 	_, err := rp.Bootstrap(bOptions)
 	return err
+}
+
+type tchannelFactoryImpl struct {
+	hostPort string
+	logger   bark.Logger
+}
+
+func newTChannelFactory(hostPort string, logger bark.Logger) service.TChannelFactory {
+	return &tchannelFactoryImpl{
+		hostPort: hostPort,
+		logger:   logger,
+	}
+}
+
+func (c *tchannelFactoryImpl) CreateChannel(sName string,
+	thriftServices []thrift.TChanServer) (*tchannel.Channel, *thrift.Server) {
+
+	ch, err := tchannel.NewChannel(sName, nil)
+	if err != nil {
+		c.logger.WithField("error", err).Fatal("Failed to create TChannel")
+	}
+	server := thrift.NewServer(ch)
+	for _, thriftService := range thriftServices {
+		server.Register(thriftService)
+	}
+
+	err = ch.ListenAndServe(c.hostPort)
+	if err != nil {
+		c.logger.WithField("error", err).Fatal("Failed to listen on tchannel")
+	}
+	return ch, server
 }

@@ -20,14 +20,35 @@
 
 package main
 
-// import (
-// 	"testing"
+import (
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"testing"
+)
 
-// 	"github.com/stretchr/testify/assert"
-// )
+type CadenceSuite struct {
+	*require.Assertions
+	suite.Suite
+}
 
-// func TestHello(t *testing.T) {
-// 	handler := myHandler{}
-// 	_, err := handler.Hello(nil)
-// 	assert.NoError(t, err, "Handler failed")
-// }
+func TestCadenceSuite(t *testing.T) {
+	suite.Run(t, new(CadenceSuite))
+}
+
+func (s *CadenceSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *CadenceSuite) TestIsValidService() {
+	s.True(isValidService("history"))
+	s.True(isValidService("matching"))
+	s.True(isValidService("frontend"))
+	s.False(isValidService("cadence-history"))
+	s.False(isValidService("cadence-matching"))
+	s.False(isValidService("cadence-frontend"))
+	s.False(isValidService("foobar"))
+}
+
+func (s *CadenceSuite) TestPath() {
+	s.Equal("foo/bar", path("foo", "bar"))
+}
