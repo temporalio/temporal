@@ -359,7 +359,7 @@ const (
 		`and workflow_id = ?` +
 		`and run_id = ?` +
 		`and task_id >= ?` +
-		`and task_id < ?`
+		`and task_id < ? LIMIT ?`
 
 	templateCompleteTimerTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -1298,7 +1298,8 @@ func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error 
 	return nil
 }
 
-func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
+func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse,
+	error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could loose task
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
@@ -1307,7 +1308,8 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 		rowTypeTimerWorkflowID,
 		rowTypeTimerRunID,
 		request.MinKey,
-		request.MaxKey)
+		request.MaxKey,
+		request.BatchSize)
 
 	iter := query.Iter()
 	if iter == nil {
@@ -1318,23 +1320,12 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 
 	response := &GetTimerIndexTasksResponse{}
 	task := make(map[string]interface{})
-PopulateTasks:
 	for iter.MapScan(task) {
 		t := createTimerTaskInfo(task["timer"].(map[string]interface{}))
 		// Reset task map to get it ready for next scan
 		task = make(map[string]interface{})
-		// Skip the task if it is not in the bounds.
-		if t.TaskID < request.MinKey {
-			continue
-		}
-		if t.TaskID >= request.MaxKey {
-			break PopulateTasks
-		}
 
 		response.Timers = append(response.Timers, t)
-		if len(response.Timers) == request.BatchSize {
-			break PopulateTasks
-		}
 	}
 
 	if err := iter.Close(); err != nil {
