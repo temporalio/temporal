@@ -182,6 +182,10 @@ const (
 	HistoryClientSignalWorkflowExecutionScope
 	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientTerminateWorkflowExecutionScope
+	// HistoryClientScheduleDecisionTaskScope tracks RPC calls to history service
+	HistoryClientScheduleDecisionTaskScope
+	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
+	HistoryClientRecordChildExecutionCompletedScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -240,6 +244,10 @@ const (
 	HistorySignalWorkflowExecutionScope
 	// HistoryTerminateWorkflowExecutionScope tracks TerminateWorkflowExecution API calls received by service
 	HistoryTerminateWorkflowExecutionScope
+	// HistoryScheduleDecisionTaskScope tracks ScheduleDecisionTask API calls received by service
+	HistoryScheduleDecisionTaskScope
+	// HistoryRecordChildExecutionCompletedScope tracks CompleteChildExecution API calls received by service
+	HistoryRecordChildExecutionCompletedScope
 	// HistoryProcessTransferTasksScope tracks number of transfer tasks processed
 	HistoryProcessTransferTasksScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
@@ -306,6 +314,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRequestCancelWorkflowExecutionScope: {operation: "HistoryClientRequestCancelWorkflowExecution"},
 		HistoryClientSignalWorkflowExecutionScope:        {operation: "HistoryClientSignalWorkflowExecution"},
 		HistoryClientTerminateWorkflowExecutionScope:     {operation: "HistoryClientTerminateWorkflowExecution"},
+		HistoryClientScheduleDecisionTaskScope:           {operation: "HistoryClientScheduleDecisionTask"},
+		HistoryClientRecordChildExecutionCompletedScope:  {operation: "HistoryClientRecordChildExecutionCompleted"},
 		MatchingClientPollForDecisionTaskScope:           {operation: "MatchingClientPollForDecisionTask"},
 		MatchingClientPollForActivityTaskScope:           {operation: "MatchingClientPollForActivityTask"},
 		MatchingClientAddActivityTaskScope:               {operation: "MatchingClientAddActivityTask"},
@@ -335,6 +345,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRecordActivityTaskStartedScope:      {operation: "RecordActivityTaskStarted"},
 		HistorySignalWorkflowExecutionScope:        {operation: "SignalWorkflowExecution"},
 		HistoryTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
+		HistoryScheduleDecisionTaskScope:           {operation: "ScheduleDecisionTask"},
+		HistoryRecordChildExecutionCompletedScope:  {operation: "RecordChildExecutionCompleted"},
 		HistoryProcessTransferTasksScope:           {operation: "ProcessTransferTask"},
 		HistoryRequestCancelWorkflowExecutionScope: {operation: "RequestCancelWorkflowExecution"},
 		HistoryMultipleCompletionDecisionsScope:    {operation: "MultipleCompletionDecisions"},

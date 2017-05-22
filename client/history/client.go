@@ -293,6 +293,34 @@ func (c *clientImpl) TerminateWorkflowExecution(context thrift.Context,
 	return err
 }
 
+func (c *clientImpl) ScheduleDecisionTask(context thrift.Context, request *h.ScheduleDecisionTaskRequest) error {
+	client, err := c.getHostForRequest(request.GetWorkflowExecution().GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.ScheduleDecisionTask(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
+}
+
+func (c *clientImpl) RecordChildExecutionCompleted(context thrift.Context, request *h.RecordChildExecutionCompletedRequest) error {
+	client, err := c.getHostForRequest(request.GetWorkflowExecution().GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	op := func(context thrift.Context, client h.TChanHistoryService) error {
+		ctx, cancel := c.createContext(context)
+		defer cancel()
+		return client.RecordChildExecutionCompleted(ctx, request)
+	}
+	err = c.executeWithRedirect(context, client, op)
+	return err
+}
+
 func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService, error) {
 	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	host, err := c.resolver.Lookup(string(key))

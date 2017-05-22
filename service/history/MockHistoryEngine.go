@@ -252,4 +252,32 @@ func (_m *MockHistoryEngine) TerminateWorkflowExecution(request *gohistory.Termi
 	return r0
 }
 
+// ScheduleDecisionTask is mock implementation for ScheduleDecisionTask of HistoryEngine
+func (_m *MockHistoryEngine) ScheduleDecisionTask(request *gohistory.ScheduleDecisionTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.ScheduleDecisionTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RecordChildExecutionCompleted is mock implementation for CompleteChildExecution of HistoryEngine
+func (_m *MockHistoryEngine) RecordChildExecutionCompleted(request *gohistory.RecordChildExecutionCompletedRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.RecordChildExecutionCompletedRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 var _ Engine = (*MockHistoryEngine)(nil)

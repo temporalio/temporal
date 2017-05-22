@@ -159,17 +159,19 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		deleteExecution = true
 	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       c.msBuilder.executionInfo,
-		TransferTasks:       transferTasks,
-		TimerTasks:          timerTasks,
-		Condition:           c.updateCondition,
-		DeleteTimerTask:     c.deleteTimerTask,
-		UpsertActivityInfos: updates.updateActivityInfos,
-		DeleteActivityInfo:  updates.deleteActivityInfo,
-		UpserTimerInfos:     updates.updateTimerInfos,
-		DeleteTimerInfos:    updates.deleteTimerInfos,
-		ContinueAsNew:       continueAsNew,
-		CloseExecution:      deleteExecution,
+		ExecutionInfo:             c.msBuilder.executionInfo,
+		TransferTasks:             transferTasks,
+		TimerTasks:                timerTasks,
+		Condition:                 c.updateCondition,
+		DeleteTimerTask:           c.deleteTimerTask,
+		UpsertActivityInfos:       updates.updateActivityInfos,
+		DeleteActivityInfo:        updates.deleteActivityInfo,
+		UpserTimerInfos:           updates.updateTimerInfos,
+		DeleteTimerInfos:          updates.deleteTimerInfos,
+		UpsertChildExecutionInfos: updates.updateChildExecutionInfos,
+		DeleteChildExecutionInfo:  updates.deleteChildExecutionInfo,
+		ContinueAsNew:             continueAsNew,
+		CloseExecution:            deleteExecution,
 	}); err1 != nil {
 		// Clear all cached state in case of error
 		c.clear()

@@ -239,7 +239,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo2 := copyWorkflowExecutionInfo(info1)
 	failedUpdatedInfo2.NextEventID = int64(6)
 	failedUpdatedInfo2.LastProcessedEvent = int64(3)
-	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil)
+	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil)
 	s.NotNil(err5, "expected non nil error.")
 	s.IsType(&ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -777,6 +777,69 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Timers() {
 	s.Equal(0, len(state.TimerInfos))
 }
 
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_ChildExecutions() {
+	domainID := "88236cd2-c439-4cec-9957-2748ce3be074"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-mutable-child-executions-parent-test"),
+		RunId:      common.StringPtr("c63dba1e-929c-4fbf-8ec5-4533b16269a9"),
+	}
+
+	parentDomainID := "6036ded3-e541-42c9-8f69-3d9354dad081"
+	parentExecution := &gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-mutable-child-executions-child-test"),
+		RunId:      common.StringPtr("73e89362-25ec-4305-bcb8-d9448b90856c"),
+	}
+
+	task0, err0 := s.CreateChildWorkflowExecution(domainID, workflowExecution, parentDomainID, parentExecution, 1, "taskList", "wType", 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+	s.Equal(parentDomainID, info0.ParentDomainID)
+	s.Equal(parentExecution.GetWorkflowId(), info0.ParentWorkflowID)
+	s.Equal(parentExecution.GetRunId(), info0.ParentRunID)
+	s.Equal(int64(1), info0.InitiatedID)
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	createRequestID := uuid.New()
+	childExecutionInfos := []*ChildExecutionInfo{
+		{
+			InitiatedID:     1,
+			InitiatedEvent:  []byte("initiated_event_1"),
+			StartedID:       2,
+			StartedEvent:    []byte("started_event_1"),
+			CreateRequestID: createRequestID,
+		}}
+	err2 := s.UpsertChildExecutionsState(updatedInfo, int64(3), childExecutionInfos)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(1, len(state.ChildExecutionInfos))
+	ci, ok := state.ChildExecutionInfos[1]
+	s.True(ok)
+	s.NotNil(ci)
+	s.Equal(int64(1), ci.InitiatedID)
+	s.Equal([]byte("initiated_event_1"), ci.InitiatedEvent)
+	s.Equal(int64(2), ci.StartedID)
+	s.Equal([]byte("started_event_1"), ci.StartedEvent)
+	s.Equal(createRequestID, ci.CreateRequestID)
+
+	err2 = s.DeleteChildExecutionsState(updatedInfo, int64(5), int64(1))
+	s.Nil(err2, "No error expected.")
+
+	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(0, len(state.ChildExecutionInfos))
+}
+
 func (s *cassandraPersistenceSuite) TestWorkflowMutableStateInfo() {
 	domainID := "9ed8818b-3090-4160-9f21-c6b70e64d2dd"
 	workflowExecution := gen.WorkflowExecution{
@@ -858,6 +921,11 @@ func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecu
 		DomainID:             sourceInfo.DomainID,
 		WorkflowID:           sourceInfo.WorkflowID,
 		RunID:                sourceInfo.RunID,
+		ParentDomainID:       sourceInfo.ParentDomainID,
+		ParentWorkflowID:     sourceInfo.ParentWorkflowID,
+		ParentRunID:          sourceInfo.ParentRunID,
+		InitiatedID:          sourceInfo.InitiatedID,
+		CompletionEvent:      sourceInfo.CompletionEvent,
 		TaskList:             sourceInfo.TaskList,
 		WorkflowTypeName:     sourceInfo.WorkflowTypeName,
 		DecisionTimeoutValue: sourceInfo.DecisionTimeoutValue,

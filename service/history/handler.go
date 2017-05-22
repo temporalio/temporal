@@ -59,7 +59,8 @@ var _ hist.TChanHistoryService = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
 
 var (
-	errDomainNotSet = &gen.BadRequestError{Message: "Domain not set on request."}
+	errDomainNotSet            = &gen.BadRequestError{Message: "Domain not set on request."}
+	errWorkflowExecutionNotSet = &gen.BadRequestError{Message: "WorkflowExecution not set on request."}
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -523,6 +524,74 @@ func (h *Handler) TerminateWorkflowExecution(ctx thrift.Context,
 	err2 := engine.TerminateWorkflowExecution(wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
+// ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+// used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
+// child execution without creating the decision task and then calls this API after updating the mutable state of
+// parent execution.
+func (h *Handler) ScheduleDecisionTask(ctx thrift.Context, request *hist.ScheduleDecisionTaskRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryScheduleDecisionTaskScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryScheduleDecisionTaskScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if !request.IsSetDomainUUID() {
+		return errDomainNotSet
+	}
+
+	if !request.IsSetWorkflowExecution() {
+		return errWorkflowExecutionNotSet
+	}
+
+	workflowExecution := request.GetWorkflowExecution()
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, err1)
+		return err1
+	}
+
+	err2 := engine.ScheduleDecisionTask(request)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
+// RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
+// This is mainly called by transfer queue processor during the processing of DeleteExecution task.
+func (h *Handler) RecordChildExecutionCompleted(ctx thrift.Context, request *hist.RecordChildExecutionCompletedRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryRecordChildExecutionCompletedScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryRecordChildExecutionCompletedScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if !request.IsSetDomainUUID() {
+		return errDomainNotSet
+	}
+
+	if !request.IsSetWorkflowExecution() {
+		return errWorkflowExecutionNotSet
+	}
+
+	workflowExecution := request.GetWorkflowExecution()
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryRecordChildExecutionCompletedScope, err1)
+		return err1
+	}
+
+	err2 := engine.RecordChildExecutionCompleted(request)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryRecordChildExecutionCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 

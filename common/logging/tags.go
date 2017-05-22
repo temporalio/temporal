@@ -75,6 +75,12 @@ const (
 	TagValueActionWorkflowSignaled                = "add-workflowexecution-signaled-event"
 	TagValueActionContinueAsNew                   = "add-continue-as-new-event"
 	TagValueActionWorkflowCanceled                = "add-workflowexecution-canceled-event"
+	TagValueActionChildExecutionStarted           = "add-childexecution-started-event"
+	TagValueActionStartChildExecutionFailed       = "add-start-childexecution-failed-event"
+	TagValueActionChildExecutionCompleted         = "add-childexecution-completed-event"
+	TagValueActionChildExecutionFailed            = "add-childexecution-failed-event"
+	TagValueActionChildExecutionCanceled          = "add-childexecution-canceled-event"
+	TagValueActionChildExecutionTerminated        = "add-childexecution-terminated-event"
 
 	// TagStoreOperation values
 	TagValueStoreOperationGetTasks                = "get-tasks"

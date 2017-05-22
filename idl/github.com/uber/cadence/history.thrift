@@ -31,9 +31,16 @@ exception ShardOwnershipLostError {
   20: optional string owner
 }
 
+struct ParentExecutionInfo {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") initiatedId
+}
+
 struct StartWorkflowExecutionRequest {
   10: optional string domainUUID
   20: optional shared.StartWorkflowExecutionRequest startRequest
+  30: optional ParentExecutionInfo parentExecutionInfo
 }
 
 struct GetWorkflowExecutionHistoryRequest {
@@ -106,10 +113,30 @@ struct TerminateWorkflowExecutionRequest {
 }
 
 struct RequestCancelWorkflowExecutionRequest {
-    10: optional string domainUUID
-    20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest
-    30: optional i64 (js.type = "Long") externalInitiatedEventId
-    40: optional shared.WorkflowExecution externalWorkflowExecution
+  10: optional string domainUUID
+  20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest
+  30: optional i64 (js.type = "Long") externalInitiatedEventId
+  40: optional shared.WorkflowExecution externalWorkflowExecution
+}
+
+struct ScheduleDecisionTaskRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution workflowExecution
+}
+
+/**
+* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
+* execution which started it.  When a child execution is completed it creates this request and calls the
+* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
+* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
+* child creates multiple runs through ContinueAsNew before finally completing.
+**/
+struct RecordChildExecutionCompletedRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution workflowExecution
+  30: optional i64 (js.type = "Long") initiatedId
+  40: optional shared.WorkflowExecution completedExecution
+  50: optional shared.HistoryEvent completionEvent
 }
 
 /**
@@ -277,6 +304,32 @@ service HistoryService {
   * anymore due to completion or doesn't exist.
   **/
   void RequestCancelWorkflowExecution(1: RequestCancelWorkflowExecutionRequest cancelRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * ScheduleDecisionTask is used for creating a decision task for already started workflow execution.  This is mainly
+  * used by transfer queue processor during the processing of StartChildWorkflowExecution task, where it first starts
+  * child execution without creating the decision task and then calls this API after updating the mutable state of
+  * parent execution.
+  **/
+  void ScheduleDecisionTask(1: ScheduleDecisionTaskRequest scheduleRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
+  * This is mainly called by transfer queue processor during the processing of DeleteExecution task.
+  **/
+  void RecordChildExecutionCompleted(1: RecordChildExecutionCompletedRequest completionRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

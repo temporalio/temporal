@@ -358,6 +358,46 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 	return response.TaskID, nil
 }
 
+// CreateChildWorkflowExecution is a utility method to create child workflow executions
+func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution,
+	parentDomainID string, parentExecution *workflow.WorkflowExecution, initiatedID int64, taskList, wType string,
+	decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	decisionScheduleID int64, timerTasks []Task) (string, error) {
+	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            workflowExecution,
+		ParentDomainID:       parentDomainID,
+		ParentExecution:      parentExecution,
+		InitiatedID:          initiatedID,
+		TaskList:             taskList,
+		WorkflowTypeName:     wType,
+		DecisionTimeoutValue: decisionTimeout,
+		ExecutionContext:     executionContext,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardContext.GetRangeID(),
+		TransferTasks: []Task{
+			&DecisionTask{
+				TaskID:     s.GetNextSequenceNumber(),
+				DomainID:   domainID,
+				TaskList:   taskList,
+				ScheduleID: decisionScheduleID,
+			},
+		},
+		TimerTasks:                  timerTasks,
+		DecisionScheduleID:          decisionScheduleID,
+		DecisionStartedID:           common.EmptyEventID,
+		DecisionStartToCloseTimeout: 1,
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return response.TaskID, nil
+}
+
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
 func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution workflow.WorkflowExecution) (
 	*WorkflowMutableState, error) {
@@ -435,7 +475,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
 		s.ShardContext.GetRangeID(), condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfo,
-		upsertTimerInfos, deleteTimerInfos)
+		upsertTimerInfos, deleteTimerInfos, nil, nil)
 }
 
 // UpdateWorkflowExecutionAndDelete is a utility method to update workflow execution
@@ -457,11 +497,27 @@ func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecuti
 	})
 }
 
+// UpsertChildExecutionsState is a utility method to update mutable state of workflow execution
+func (s *TestBase) UpsertChildExecutionsState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	upsertChildInfos []*ChildExecutionInfo) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
+		nil, nil, upsertChildInfos, nil)
+}
+
+// DeleteChildExecutionsState is a utility method to delete child execution from mutable state
+func (s *TestBase) DeleteChildExecutionsState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	deleteChildInfo int64) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
+		nil, nil, nil, &deleteChildInfo)
+}
+
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
-	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64,
-	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo,
+	deleteTimerInfos []string, upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{
@@ -480,16 +536,18 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 	}
 
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       transferTasks,
-		TimerTasks:          timerTasks,
-		Condition:           condition,
-		DeleteTimerTask:     deleteTimerTask,
-		RangeID:             rangeID,
-		UpsertActivityInfos: upsertActivityInfos,
-		DeleteActivityInfo:  deleteActivityInfo,
-		UpserTimerInfos:     upsertTimerInfos,
-		DeleteTimerInfos:    deleteTimerInfos,
+		ExecutionInfo:             updatedInfo,
+		TransferTasks:             transferTasks,
+		TimerTasks:                timerTasks,
+		Condition:                 condition,
+		DeleteTimerTask:           deleteTimerTask,
+		RangeID:                   rangeID,
+		UpsertActivityInfos:       upsertActivityInfos,
+		DeleteActivityInfo:        deleteActivityInfo,
+		UpserTimerInfos:           upsertTimerInfos,
+		DeleteTimerInfos:          deleteTimerInfos,
+		UpsertChildExecutionInfos: upsertChildInfos,
+		DeleteChildExecutionInfo:  deleteChildInfo,
 	})
 }
 

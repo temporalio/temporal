@@ -242,3 +242,31 @@ func (_m *HistoryClient) TerminateWorkflowExecution(ctx thrift.Context, terminat
 
 	return r0
 }
+
+// ScheduleDecisionTask provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) ScheduleDecisionTask(ctx thrift.Context, request *history.ScheduleDecisionTaskRequest) error {
+	ret := _m.Called(ctx, request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(thrift.Context, *history.ScheduleDecisionTaskRequest) error); ok {
+		r0 = rf(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RecordChildExecutionCompleted provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) RecordChildExecutionCompleted(ctx thrift.Context, request *history.RecordChildExecutionCompletedRequest) error {
+	ret := _m.Called(ctx, request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(thrift.Context, *history.RecordChildExecutionCompletedRequest) error); ok {
+		r0 = rf(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

@@ -144,6 +144,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		RunId:      common.StringPtr(runID),
 	}
 
+	var parentExecution *workflow.WorkflowExecution
+	initiatedID := emptyEventID
+	parentDomainID := ""
+	parentInfo := startRequest.GetParentExecutionInfo()
+	if parentInfo != nil {
+		parentDomainID = parentInfo.GetDomainUUID()
+		parentExecution = parentInfo.GetExecution()
+		initiatedID = parentInfo.GetInitiatedId()
+	}
+
 	// Generate first decision task event.
 	taskList := request.GetTaskList().GetName()
 	msBuilder := newMutableStateBuilder(e.logger)
@@ -152,9 +162,23 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
 
-	_, di := msBuilder.AddDecisionTaskScheduledEvent()
-	if di == nil {
-		return nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
+	var transferTasks []persistence.Task
+	decisionScheduleID := emptyEventID
+	decisionStartID := emptyEventID
+	decisionTimeout := int32(0)
+	if parentInfo == nil {
+		// DecisionTask is only created when it is not a Child Workflow Execution
+		_, di := msBuilder.AddDecisionTaskScheduledEvent()
+		if di == nil {
+			return nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
+		}
+
+		transferTasks = []persistence.Task{&persistence.DecisionTask{
+			DomainID: domainID, TaskList: taskList, ScheduleID: di.ScheduleID,
+		}}
+		decisionScheduleID = di.ScheduleID
+		decisionStartID = di.StartedID
+		decisionTimeout = di.DecisionTimeout
 	}
 
 	// Serialize the history
@@ -179,21 +203,22 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	_, err := e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
-		RequestID:            request.GetRequestId(),
-		DomainID:             domainID,
-		Execution:            workflowExecution,
-		TaskList:             request.GetTaskList().GetName(),
-		WorkflowTypeName:     request.GetWorkflowType().GetName(),
-		DecisionTimeoutValue: request.GetTaskStartToCloseTimeoutSeconds(),
-		ExecutionContext:     nil,
-		NextEventID:          msBuilder.GetNextEventID(),
-		LastProcessedEvent:   emptyEventID,
-		TransferTasks: []persistence.Task{&persistence.DecisionTask{
-			DomainID: domainID, TaskList: taskList, ScheduleID: di.ScheduleID,
-		}},
-		DecisionScheduleID:          di.ScheduleID,
-		DecisionStartedID:           di.StartedID,
-		DecisionStartToCloseTimeout: di.DecisionTimeout,
+		RequestID:                   request.GetRequestId(),
+		DomainID:                    domainID,
+		Execution:                   workflowExecution,
+		ParentDomainID:              parentDomainID,
+		ParentExecution:             parentExecution,
+		InitiatedID:                 initiatedID,
+		TaskList:                    request.GetTaskList().GetName(),
+		WorkflowTypeName:            request.GetWorkflowType().GetName(),
+		DecisionTimeoutValue:        request.GetTaskStartToCloseTimeoutSeconds(),
+		ExecutionContext:            nil,
+		NextEventID:                 msBuilder.GetNextEventID(),
+		LastProcessedEvent:          emptyEventID,
+		TransferTasks:               transferTasks,
+		DecisionScheduleID:          decisionScheduleID,
+		DecisionStartedID:           decisionStartID,
+		DecisionStartToCloseTimeout: decisionTimeout,
 		ContinueAsNew:               false,
 	})
 
@@ -725,6 +750,27 @@ Update_History_Loop:
 				isComplete = true
 				continueAsNewBuilder = newStateBuilder
 
+			case workflow.DecisionType_StartChildWorkflowExecution:
+				targetDomainID := domainID
+				attributes := d.GetStartChildWorkflowExecutionDecisionAttributes()
+				// First check if we need to use a different target domain to schedule child execution
+				if attributes.IsSetDomain() {
+					// TODO: Error handling for DecisionType_StartChildWorkflowExecution failed when domain lookup fails
+					info, _, err := e.domainCache.GetDomain(attributes.GetDomain())
+					if err != nil {
+						return &workflow.InternalServiceError{Message: "Unable to schedule child execution across domain."}
+					}
+					targetDomainID = info.ID
+				}
+
+				requestID := uuid.New()
+				initiatedEvent, _ := msBuilder.AddStartChildWorkflowExecutionInitiatedEvent(completedID, requestID, attributes)
+				transferTasks = append(transferTasks, &persistence.StartChildExecutionTask{
+					TargetDomainID:   targetDomainID,
+					TargetWorkflowID: attributes.GetWorkflowId(),
+					InitiatedID:      initiatedEvent.GetEventId(),
+				})
+
 			default:
 				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", d.GetDecisionType())}
 			}
@@ -1161,6 +1207,69 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.Termi
 
 			if msBuilder.AddWorkflowExecutionTerminatedEvent(request) == nil {
 				return &workflow.InternalServiceError{Message: "Unable to terminate workflow execution."}
+			}
+
+			return nil
+		})
+}
+
+// ScheduleDecisionTask schedules a decision if no outstanding decision found
+func (e *historyEngineImpl) ScheduleDecisionTask(scheduleRequest *h.ScheduleDecisionTaskRequest) error {
+	domainID := scheduleRequest.GetDomainUUID()
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(scheduleRequest.GetWorkflowExecution().GetWorkflowId()),
+		RunId:      common.StringPtr(scheduleRequest.GetWorkflowExecution().GetRunId()),
+	}
+
+	return e.updateWorkflowExecution(domainID, execution, false, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			// Noop
+
+			return nil
+		})
+}
+
+// RecordChildExecutionCompleted records the completion of child execution into parent execution history
+func (e *historyEngineImpl) RecordChildExecutionCompleted(completionRequest *h.RecordChildExecutionCompletedRequest) error {
+	domainID := completionRequest.GetDomainUUID()
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(completionRequest.GetWorkflowExecution().GetWorkflowId()),
+		RunId:      common.StringPtr(completionRequest.GetWorkflowExecution().GetRunId()),
+	}
+
+	return e.updateWorkflowExecution(domainID, execution, false, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			initiatedID := completionRequest.GetInitiatedId()
+			completedExecution := completionRequest.GetCompletedExecution()
+			completionEvent := completionRequest.GetCompletionEvent()
+
+			// Check mutable state to make sure child execution is in pending child executions
+			ci, isRunning := msBuilder.GetChildExecutionInfo(initiatedID)
+			if !isRunning || ci.StartedID == emptyEventID {
+				return &workflow.EntityNotExistsError{Message: "Pending child execution not found."}
+			}
+
+			switch completionEvent.GetEventType() {
+			case workflow.EventType_WorkflowExecutionCompleted:
+				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
+				msBuilder.AddChildWorkflowExecutionCompletedEvent(initiatedID, completedExecution, attributes)
+			case workflow.EventType_WorkflowExecutionFailed:
+				attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
+				msBuilder.AddChildWorkflowExecutionFailedEvent(initiatedID, completedExecution, attributes)
+			case workflow.EventType_WorkflowExecutionCanceled:
+				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
+				msBuilder.AddChildWorkflowExecutionCanceledEvent(initiatedID, completedExecution, attributes)
+			case workflow.EventType_WorkflowExecutionTerminated:
+				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
+				msBuilder.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
 			}
 
 			return nil
