@@ -33,10 +33,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -115,6 +117,7 @@ func (s *engineSuite) SetupTest() {
 		historyCache:       historyCache,
 		domainCache:        cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		logger:             s.logger,
+		metricsClient:      metrics.NewClient(tally.NewTestScope("", nil), metrics.History),
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
@@ -621,6 +624,67 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	s.Equal(context, executionBuilder.executionInfo.ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
 	s.True(executionBuilder.HasPendingDecisionTask())
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+	identity := "testIdentity"
+	context := []byte("context")
+	activity1ID := "activity1"
+	activity1Type := "activity_type1"
+	activity1Input := []byte("input1")
+	activity1Result := []byte("activity1_result")
+
+	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
+	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
+	decisionCompletedEvent1 := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent1.GetEventId(),
+		decisionStartedEvent1.GetEventId(), nil, identity)
+	activity1ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent1.GetEventId(), activity1ID,
+		activity1Type, tl, activity1Input, 100, 10, 5)
+	activity1StartedEvent := addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.GetEventId(), tl, identity)
+	addActivityTaskCompletedEvent(msBuilder, activity1ScheduledEvent.GetEventId(),
+		activity1StartedEvent.GetEventId(), activity1Result, identity)
+	decisionScheduledEvent2, _ := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent2.GetEventId(), tl, identity)
+
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: we.GetWorkflowId(),
+		RunID:      we.GetRunId(),
+		ScheduleID: decisionScheduledEvent2.GetEventId(),
+	})
+
+	// Decision with nil attributes
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_CompleteWorkflowExecution),
+	}}
+
+	for i := 0; i < 2; i++ {
+		ms := createMutableState(msBuilder)
+		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	}
+
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: context,
+			Identity:         &identity,
+		},
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.BadRequestError{}, err)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {

@@ -384,6 +384,7 @@ const (
 const (
 	TransferTasksProcessedCounter = iota + NumCommonMetrics
 	MultipleCompletionDecisionsCounter
+	FailedDecisionsCounter
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter
 )
@@ -410,6 +411,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	History: {
 		TransferTasksProcessedCounter:        {metricName: "transfer-tasks-processed", metricType: Counter},
 		MultipleCompletionDecisionsCounter:   {metricName: "multiple-completion-decisions", metricType: Counter},
+		FailedDecisionsCounter:               {metricName: "failed-decisions", metricType: Counter},
 		CadenceErrShardOwnershipLostCounter:  {metricName: "cadence.errors.shard-ownership-lost", metricType: Counter},
 		CadenceErrEventAlreadyStartedCounter: {metricName: "cadence.errors.event-already-started", metricType: Counter},
 	},

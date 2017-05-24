@@ -395,11 +395,31 @@ return int64(*p), nil
 type DecisionTaskFailedCause int64
 const (
   DecisionTaskFailedCause_UNHANDLED_DECISION DecisionTaskFailedCause = 0
+  DecisionTaskFailedCause_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES DecisionTaskFailedCause = 1
+  DecisionTaskFailedCause_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES DecisionTaskFailedCause = 2
+  DecisionTaskFailedCause_BAD_START_TIMER_ATTRIBUTES DecisionTaskFailedCause = 3
+  DecisionTaskFailedCause_BAD_CANCEL_TIMER_ATTRIBUTES DecisionTaskFailedCause = 4
+  DecisionTaskFailedCause_BAD_RECORD_MARKER_ATTRIBUTES DecisionTaskFailedCause = 5
+  DecisionTaskFailedCause_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 6
+  DecisionTaskFailedCause_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 7
+  DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 8
+  DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 9
+  DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES DecisionTaskFailedCause = 10
 )
 
 func (p DecisionTaskFailedCause) String() string {
   switch p {
   case DecisionTaskFailedCause_UNHANDLED_DECISION: return "UNHANDLED_DECISION"
+  case DecisionTaskFailedCause_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES: return "BAD_SCHEDULE_ACTIVITY_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES: return "BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_START_TIMER_ATTRIBUTES: return "BAD_START_TIMER_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_CANCEL_TIMER_ATTRIBUTES: return "BAD_CANCEL_TIMER_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_RECORD_MARKER_ATTRIBUTES: return "BAD_RECORD_MARKER_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES"
+  case DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES: return "BAD_CONTINUE_AS_NEW_ATTRIBUTES"
   }
   return "<UNSET>"
 }
@@ -407,6 +427,16 @@ func (p DecisionTaskFailedCause) String() string {
 func DecisionTaskFailedCauseFromString(s string) (DecisionTaskFailedCause, error) {
   switch s {
   case "UNHANDLED_DECISION": return DecisionTaskFailedCause_UNHANDLED_DECISION, nil 
+  case "BAD_SCHEDULE_ACTIVITY_ATTRIBUTES": return DecisionTaskFailedCause_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, nil 
+  case "BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES": return DecisionTaskFailedCause_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, nil 
+  case "BAD_START_TIMER_ATTRIBUTES": return DecisionTaskFailedCause_BAD_START_TIMER_ATTRIBUTES, nil 
+  case "BAD_CANCEL_TIMER_ATTRIBUTES": return DecisionTaskFailedCause_BAD_CANCEL_TIMER_ATTRIBUTES, nil 
+  case "BAD_RECORD_MARKER_ATTRIBUTES": return DecisionTaskFailedCause_BAD_RECORD_MARKER_ATTRIBUTES, nil 
+  case "BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
+  case "BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
+  case "BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
+  case "BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
+  case "BAD_CONTINUE_AS_NEW_ATTRIBUTES": return DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES, nil 
   }
   return DecisionTaskFailedCause(0), fmt.Errorf("not a valid DecisionTaskFailedCause string")
 }
