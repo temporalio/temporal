@@ -367,6 +367,11 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 	var mb *mutableStateBuilder
 	mb, err = context.loadWorkflowExecution()
 	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, but the mutable state was
+			// already deleted on a previous attempt to process the task.
+			return nil
+		}
 		return err
 	}
 

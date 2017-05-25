@@ -431,9 +431,22 @@ func (t *timerQueueProcessorImpl) processTimerTask(key SequenceID) error {
 		err = t.processDecisionTimeout(context, timerTask)
 	}
 
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// Timer could fire after the execution is deleted.
+			// In which case just ignore the error so we can complete the timer task.
+			err = nil
+		}
+	}
+
 	if err == nil {
 		// Tracking only successful ones.
 		atomic.AddUint64(&t.timerFiredCount, 1)
+		err := t.executionManager.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{TaskID: timerTask.TaskID})
+		if err != nil {
+			t.logger.Warnf("Processor unable to complete timer task '%v': %v", timerTask.TaskID, err)
+		}
+		return nil
 	}
 
 	return err
@@ -619,10 +632,7 @@ Update_History_Loop:
 			}
 			return err
 		}
-		err := t.executionManager.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{TaskID: timerTask.TaskID})
-		if err != nil {
-			t.logger.Warnf("Processor unable to complete timer task '%v': %v", timerTask.TaskID, err)
-		}
+
 		return nil
 
 	}
@@ -674,10 +684,7 @@ Update_History_Loop:
 			}
 			return err
 		}
-		err := t.executionManager.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{TaskID: task.TaskID})
-		if err != nil {
-			t.logger.Warnf("Processor unable to complete timer task '%v': %v", task.TaskID, err)
-		}
+
 		return nil
 
 	}
