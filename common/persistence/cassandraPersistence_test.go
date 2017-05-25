@@ -300,28 +300,12 @@ func (s *cassandraPersistenceSuite) TestDeleteWorkflow() {
 	err4 := s.DeleteWorkflowExecution(info0)
 	s.Nil(err4, "No error expected.")
 
-	state1, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err3, "No error expected.")
-	info1 := state1.ExecutionInfo
-	s.NotNil(info1, "Valid Workflow info expected.")
-	s.Equal(domainID, info1.DomainID)
-	s.Equal("delete-workflow-test", info1.WorkflowID)
-	s.Equal("4e0917f2-9361-4a14-b16f-1fafe09b287a", info1.RunID)
-	s.Equal("queue1", info1.TaskList)
-	s.Equal("wType", info1.WorkflowTypeName)
-	s.Equal(int32(13), info1.DecisionTimeoutValue)
-	s.Equal([]byte(nil), info1.ExecutionContext)
-	s.Equal(WorkflowStateCreated, info1.State)
-	s.Equal(int64(3), info1.NextEventID)
-	s.Equal(int64(0), info1.LastProcessedEvent)
-	s.Equal(true, validateTimeRange(info1.LastUpdatedTimestamp, time.Hour))
-	s.Equal(int64(2), info1.DecisionScheduleID)
-	s.Equal(common.EmptyEventID, info1.DecisionStartedID)
-	s.Equal(int32(1), info1.DecisionTimeout)
-	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
+	_, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NotNil(err3, "expected non nil error.")
+	s.IsType(&gen.EntityNotExistsError{}, err3)
 
-	err5 := s.DeleteWorkflowExecution(info1)
-	s.Nil(err5, "No error expected.")
+	err5 := s.DeleteWorkflowExecution(info0)
+	s.Nil(err5)
 }
 
 func (s *cassandraPersistenceSuite) TestGetCurrentWorkflow() {

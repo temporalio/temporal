@@ -329,9 +329,13 @@ const (
 		`and run_id = ? ` +
 		`and task_id = ? `
 
-	templateDeleteWorkflowExecutionTTLQuery = `INSERT INTO executions (` +
-		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?) USING TTL ?`
+	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and task_id = ? `
 
 	templateGetTransferTasksQuery = `SELECT transfer ` +
 		`FROM executions ` +
@@ -909,40 +913,14 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	info := request.ExecutionInfo
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 
-	query := d.session.Query(templateDeleteWorkflowExecutionTTLQuery,
+	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
-		info.DomainID,
-		info.WorkflowID,
-		info.RunID,
 		rowTypeExecution,
 		info.DomainID,
 		info.WorkflowID,
 		info.RunID,
-		info.ParentDomainID,
-		info.ParentWorkflowID,
-		info.ParentRunID,
-		info.InitiatedID,
-		info.CompletionEvent,
-		info.TaskList,
-		info.WorkflowTypeName,
-		info.DecisionTimeoutValue,
-		info.ExecutionContext,
-		info.State,
-		info.CloseStatus,
-		info.NextEventID,
-		info.LastProcessedEvent,
-		info.StartTimestamp,
-		cqlNowTimestamp,
-		info.CreateRequestID,
-		info.DecisionScheduleID,
-		info.DecisionStartedID,
-		info.DecisionRequestID,
-		info.DecisionTimeout,
-		info.NextEventID,
-		rowTypeExecutionTaskID,
-		defaultDeleteTTLSeconds)
+		rowTypeExecutionTaskID)
 
 	err := query.Exec()
 	if err != nil {
