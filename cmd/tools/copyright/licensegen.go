@@ -53,7 +53,7 @@ const licenseHeaderPrefix = "// Copyright (c)"
 
 var (
 	// directories to be excluded
-	dirBlacklist = []string{"vendor/", "go-build/"}
+	dirBlacklist = []string{"vendor/"}
 	// default perms for the newly created files
 	defaultFilePerms = os.FileMode(0644)
 )

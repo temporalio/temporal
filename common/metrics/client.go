@@ -28,7 +28,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-// ClientImpl is for m3 emits within inputhost
+// ClientImpl is used for reporting metrics by various Cadence services
 type ClientImpl struct {
 	//parentReporter is the parent scope for the metrics
 	parentScope tally.Scope
@@ -78,14 +78,14 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 }
 
 // IncCounter increments one for a counter and emits
-// to m3 backend
+// to metrics backend
 func (m *ClientImpl) IncCounter(scopeIdx int, counterIdx int) {
 	name := string(m.metricDefs[counterIdx].metricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(1)
 }
 
 // AddCounter adds delta to the counter and
-// emits to the m3 backend
+// emits to the metrics backend
 func (m *ClientImpl) AddCounter(scopeIdx int, counterIdx int, delta int64) {
 	name := string(m.metricDefs[counterIdx].metricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(delta)
@@ -105,7 +105,7 @@ func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 	m.childScopes[scopeIdx].Timer(name).Record(d)
 }
 
-// UpdateGauge reports Gauge type metric to M3
+// UpdateGauge reports Gauge type metric
 func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta float64) {
 	name := string(m.metricDefs[gaugeIdx].metricName)
 	m.childScopes[scopeIdx].Gauge(name).Update(delta)

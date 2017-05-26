@@ -27,28 +27,28 @@ import (
 
 type (
 	shardPersistenceClient struct {
-		m3Client    metrics.Client
-		persistence ShardManager
+		metricClient metrics.Client
+		persistence  ShardManager
 	}
 
 	workflowExecutionPersistenceClient struct {
-		m3Client    metrics.Client
-		persistence ExecutionManager
+		metricClient metrics.Client
+		persistence  ExecutionManager
 	}
 
 	taskPersistenceClient struct {
-		m3Client    metrics.Client
-		persistence TaskManager
+		metricClient metrics.Client
+		persistence  TaskManager
 	}
 
 	historyPersistenceClient struct {
-		m3Client    metrics.Client
-		persistence HistoryManager
+		metricClient metrics.Client
+		persistence  HistoryManager
 	}
 
 	metadataPersistenceClient struct {
-		m3Client    metrics.Client
-		persistence MetadataManager
+		metricClient metrics.Client
+		persistence  MetadataManager
 	}
 )
 
@@ -59,57 +59,57 @@ var _ HistoryManager = (*historyPersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 
 // NewShardPersistenceClient creates a client to manage shards
-func NewShardPersistenceClient(persistence ShardManager, m3Client metrics.Client) ShardManager {
+func NewShardPersistenceClient(persistence ShardManager, metricClient metrics.Client) ShardManager {
 	return &shardPersistenceClient{
-		persistence: persistence,
-		m3Client:    m3Client,
+		persistence:  persistence,
+		metricClient: metricClient,
 	}
 }
 
 // NewWorkflowExecutionPersistenceClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceClient(persistence ExecutionManager, m3Client metrics.Client) ExecutionManager {
+func NewWorkflowExecutionPersistenceClient(persistence ExecutionManager, metricClient metrics.Client) ExecutionManager {
 	return &workflowExecutionPersistenceClient{
-		persistence: persistence,
-		m3Client:    m3Client,
+		persistence:  persistence,
+		metricClient: metricClient,
 	}
 }
 
 // NewTaskPersistenceClient creates a client to manage tasks
-func NewTaskPersistenceClient(persistence TaskManager, m3Client metrics.Client) TaskManager {
+func NewTaskPersistenceClient(persistence TaskManager, metricClient metrics.Client) TaskManager {
 	return &taskPersistenceClient{
-		persistence: persistence,
-		m3Client:    m3Client,
+		persistence:  persistence,
+		metricClient: metricClient,
 	}
 }
 
 // NewHistoryPersistenceClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryPersistenceClient(persistence HistoryManager, m3Client metrics.Client) HistoryManager {
+func NewHistoryPersistenceClient(persistence HistoryManager, metricClient metrics.Client) HistoryManager {
 	return &historyPersistenceClient{
-		persistence: persistence,
-		m3Client:    m3Client,
+		persistence:  persistence,
+		metricClient: metricClient,
 	}
 }
 
 // NewMetadataPersistenceClient creates a HistoryManager client to manage workflow execution history
-func NewMetadataPersistenceClient(persistence MetadataManager, m3Client metrics.Client) MetadataManager {
+func NewMetadataPersistenceClient(persistence MetadataManager, metricClient metrics.Client) MetadataManager {
 	return &metadataPersistenceClient{
-		persistence: persistence,
-		m3Client:    m3Client,
+		persistence:  persistence,
+		metricClient: metricClient,
 	}
 }
 
 func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCreateShardScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateShardScope, metrics.PersistenceLatency)
 	err := p.persistence.CreateShard(request)
 	sw.Stop()
 
 	if err != nil {
 		if _, ok := err.(*ShardAlreadyExistError); ok {
-			p.m3Client.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceErrShardExistsCounter)
+			p.metricClient.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceErrShardExistsCounter)
 		} else {
-			p.m3Client.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceFailures)
+			p.metricClient.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceFailures)
 		}
 	}
 
@@ -118,18 +118,18 @@ func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error 
 
 func (p *shardPersistenceClient) GetShard(
 	request *GetShardRequest) (*GetShardResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetShardScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetShardScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetShardScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetShardScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetShard(request)
 	sw.Stop()
 
 	if err != nil {
 		switch err.(type) {
 		case *workflow.EntityNotExistsError:
-			p.m3Client.IncCounter(metrics.PersistenceGetShardScope, metrics.CadenceErrEntityNotExistsCounter)
+			p.metricClient.IncCounter(metrics.PersistenceGetShardScope, metrics.CadenceErrEntityNotExistsCounter)
 		default:
-			p.m3Client.IncCounter(metrics.PersistenceGetShardScope, metrics.PersistenceFailures)
+			p.metricClient.IncCounter(metrics.PersistenceGetShardScope, metrics.PersistenceFailures)
 		}
 	}
 
@@ -137,17 +137,17 @@ func (p *shardPersistenceClient) GetShard(
 }
 
 func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceUpdateShardScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateShardScope, metrics.PersistenceLatency)
 	err := p.persistence.UpdateShard(request)
 	sw.Stop()
 
 	if err != nil {
 		if _, ok := err.(*ShardOwnershipLostError); ok {
-			p.m3Client.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceErrShardOwnershipLostCounter)
+			p.metricClient.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceErrShardOwnershipLostCounter)
 		} else {
-			p.m3Client.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceFailures)
+			p.metricClient.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceFailures)
 		}
 	}
 
@@ -155,9 +155,9 @@ func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error 
 }
 
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceLatency)
 	response, err := p.persistence.CreateWorkflowExecution(request)
 	sw.Stop()
 
@@ -169,9 +169,9 @@ func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *Cr
 }
 
 func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetWorkflowExecution(request)
 	sw.Stop()
 
@@ -183,9 +183,9 @@ func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *GetWo
 }
 
 func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceLatency)
 	err := p.persistence.UpdateWorkflowExecution(request)
 	sw.Stop()
 
@@ -197,9 +197,9 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *Up
 }
 
 func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceLatency)
 	err := p.persistence.DeleteWorkflowExecution(request)
 	sw.Stop()
 
@@ -211,9 +211,9 @@ func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *De
 }
 
 func (p *workflowExecutionPersistenceClient) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetCurrentExecution(request)
 	sw.Stop()
 
@@ -225,9 +225,9 @@ func (p *workflowExecutionPersistenceClient) GetCurrentExecution(request *GetCur
 }
 
 func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetTransferTasks(request)
 	sw.Stop()
 
@@ -239,9 +239,9 @@ func (p *workflowExecutionPersistenceClient) GetTransferTasks(request *GetTransf
 }
 
 func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceLatency)
 	err := p.persistence.CompleteTransferTask(request)
 	sw.Stop()
 
@@ -253,9 +253,9 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *Compl
 }
 
 func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceLatency)
 	resonse, err := p.persistence.GetTimerIndexTasks(request)
 	sw.Stop()
 
@@ -267,9 +267,9 @@ func (p *workflowExecutionPersistenceClient) GetTimerIndexTasks(request *GetTime
 }
 
 func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceLatency)
 	err := p.persistence.CompleteTimerTask(request)
 	sw.Stop()
 
@@ -283,23 +283,23 @@ func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *Complete
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *workflow.WorkflowExecutionAlreadyStartedError:
-		p.m3Client.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+		p.metricClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
 	case *ShardOwnershipLostError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
 	case *ConditionFailedError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }
 
 func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceCreateTaskScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCreateTaskScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCreateTaskScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateTaskScope, metrics.PersistenceLatency)
 	response, err := p.persistence.CreateTasks(request)
 	sw.Stop()
 
@@ -311,9 +311,9 @@ func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*Creat
 }
 
 func (p *taskPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetTasksScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetTasksScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetTasksScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTasksScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetTasks(request)
 	sw.Stop()
 
@@ -325,9 +325,9 @@ func (p *taskPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksRes
 }
 
 func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceCompleteTaskScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCompleteTaskScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCompleteTaskScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTaskScope, metrics.PersistenceLatency)
 	err := p.persistence.CompleteTask(request)
 	sw.Stop()
 
@@ -339,9 +339,9 @@ func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error
 }
 
 func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceLeaseTaskListScope, metrics.PersistenceLatency)
 	response, err := p.persistence.LeaseTaskList(request)
 	sw.Stop()
 
@@ -353,9 +353,9 @@ func (p *taskPersistenceClient) LeaseTaskList(request *LeaseTaskListRequest) (*L
 }
 
 func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskListScope, metrics.PersistenceLatency)
 	response, err := p.persistence.UpdateTaskList(request)
 	sw.Stop()
 
@@ -369,19 +369,19 @@ func (p *taskPersistenceClient) UpdateTaskList(request *UpdateTaskListRequest) (
 func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *ConditionFailedError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }
 
 func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceLatency)
 	err := p.persistence.AppendHistoryEvents(request)
 	sw.Stop()
 
@@ -394,9 +394,9 @@ func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEve
 
 func (p *historyPersistenceClient) GetWorkflowExecutionHistory(
 	request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetWorkflowExecutionHistory(request)
 	sw.Stop()
 
@@ -409,9 +409,9 @@ func (p *historyPersistenceClient) GetWorkflowExecutionHistory(
 
 func (p *historyPersistenceClient) DeleteWorkflowExecutionHistory(
 	request *DeleteWorkflowExecutionHistoryRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceDeleteWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceDeleteWorkflowExecutionHistoryScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteWorkflowExecutionHistoryScope, metrics.PersistenceLatency)
 	err := p.persistence.DeleteWorkflowExecutionHistory(request)
 	sw.Stop()
 
@@ -425,21 +425,21 @@ func (p *historyPersistenceClient) DeleteWorkflowExecutionHistory(
 func (p *historyPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *workflow.EntityNotExistsError:
-		p.m3Client.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+		p.metricClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 	case *ConditionFailedError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
-		p.m3Client.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }
 
 func (p *metadataPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceCreateDomainScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceCreateDomainScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceCreateDomainScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateDomainScope, metrics.PersistenceLatency)
 	response, err := p.persistence.CreateDomain(request)
 	sw.Stop()
 
@@ -451,9 +451,9 @@ func (p *metadataPersistenceClient) CreateDomain(request *CreateDomainRequest) (
 }
 
 func (p *metadataPersistenceClient) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
-	p.m3Client.IncCounter(metrics.PersistenceGetDomainScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceGetDomainScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceGetDomainScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetDomainScope, metrics.PersistenceLatency)
 	response, err := p.persistence.GetDomain(request)
 	sw.Stop()
 
@@ -465,9 +465,9 @@ func (p *metadataPersistenceClient) GetDomain(request *GetDomainRequest) (*GetDo
 }
 
 func (p *metadataPersistenceClient) UpdateDomain(request *UpdateDomainRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceUpdateDomainScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceUpdateDomainScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceUpdateDomainScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateDomainScope, metrics.PersistenceLatency)
 	err := p.persistence.UpdateDomain(request)
 	sw.Stop()
 
@@ -479,9 +479,9 @@ func (p *metadataPersistenceClient) UpdateDomain(request *UpdateDomainRequest) e
 }
 
 func (p *metadataPersistenceClient) DeleteDomain(request *DeleteDomainRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceDeleteDomainScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceDeleteDomainScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceDeleteDomainScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteDomainScope, metrics.PersistenceLatency)
 	err := p.persistence.DeleteDomain(request)
 	sw.Stop()
 
@@ -493,9 +493,9 @@ func (p *metadataPersistenceClient) DeleteDomain(request *DeleteDomainRequest) e
 }
 
 func (p *metadataPersistenceClient) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
-	p.m3Client.IncCounter(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceRequests)
+	p.metricClient.IncCounter(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceRequests)
 
-	sw := p.m3Client.StartTimer(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceLatency)
+	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteDomainByNameScope, metrics.PersistenceLatency)
 	err := p.persistence.DeleteDomainByName(request)
 	sw.Stop()
 
@@ -509,12 +509,12 @@ func (p *metadataPersistenceClient) DeleteDomainByName(request *DeleteDomainByNa
 func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
 	case *workflow.DomainAlreadyExistsError:
-		p.m3Client.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
+		p.metricClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
 	case *workflow.EntityNotExistsError:
-		p.m3Client.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+		p.metricClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 	case *workflow.BadRequestError:
-		p.m3Client.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+		p.metricClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 	default:
-		p.m3Client.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }
