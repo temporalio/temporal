@@ -260,11 +260,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}, nil
 }
 
-// GetWorkflowExecutionHistory retrieves the history for given workflow execution
-func (e *historyEngineImpl) GetWorkflowExecutionHistory(
-	getHistoryRequest *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
-	domainID := getHistoryRequest.GetDomainUUID()
-	request := getHistoryRequest.GetGetRequest()
+// GetWorkflowExecutionNextEventID retrieves the nextEventId of the workflow execution history
+func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
+	request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
+	domainID := request.GetDomainUUID()
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(request.GetExecution().GetWorkflowId()),
 		RunId:      common.StringPtr(request.GetExecution().GetRunId()),
@@ -281,13 +280,9 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 		return nil, err1
 	}
 
-	executionHistory, err2 := e.getHistory(domainID, msBuilder)
-	if err2 != nil {
-		return nil, err2
-	}
-
-	result := workflow.NewGetWorkflowExecutionHistoryResponse()
-	result.History = executionHistory
+	result := h.NewGetWorkflowExecutionNextEventIDResponse()
+	result.EventId = common.Int64Ptr(msBuilder.GetNextEventID())
+	result.RunId = context.workflowExecution.RunId
 
 	return result, nil
 }
@@ -1377,51 +1372,6 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 	response.StartedEventId = common.Int64Ptr(startedEventID)
 
 	return response
-}
-
-// There is a duplicate helper in the frontend that is almost identical to this
-// TODO: remove this helper when GetWorkflowExecutionHistory is served from the FE
-func (e *historyEngineImpl) getHistory(domainID string, msBuilder *mutableStateBuilder) (*workflow.History, error) {
-	execution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
-		RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
-	}
-	nextPageToken := []byte{}
-	historyEvents := []*workflow.HistoryEvent{}
-Pagination_Loop:
-	for {
-		response, err := e.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID:      domainID,
-			Execution:     execution,
-			NextEventID:   msBuilder.GetNextEventID(),
-			PageSize:      100,
-			NextPageToken: nextPageToken,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		for _, event := range response.Events {
-			setSerializedHistoryDefaults(&event)
-			s, _ := e.hSerializerFactory.Get(event.EncodingType)
-			history, err1 := s.Deserialize(&event)
-			if err1 != nil {
-				return nil, err1
-			}
-			historyEvents = append(historyEvents, history.Events...)
-		}
-
-		if len(response.NextPageToken) == 0 {
-			break Pagination_Loop
-		}
-
-		nextPageToken = response.NextPageToken
-	}
-
-	executionHistory := workflow.NewHistory()
-	executionHistory.Events = historyEvents
-	return executionHistory, nil
 }
 
 // sets the version and encoding types to defaults if they

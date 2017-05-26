@@ -57,16 +57,16 @@ func (c *metricClient) StartWorkflowExecution(context thrift.Context,
 	return resp, err
 }
 
-func (c *metricClient) GetWorkflowExecutionHistory(context thrift.Context,
-	request *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionHistoryScope, metrics.CadenceRequests)
+func (c *metricClient) GetWorkflowExecutionNextEventID(context thrift.Context,
+	request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetWorkflowExecutionHistoryScope, metrics.CadenceLatency)
-	resp, err := c.client.GetWorkflowExecutionHistory(context, request)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceLatency)
+	resp, err := c.client.GetWorkflowExecutionNextEventID(context, request)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionHistoryScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceFailures)
 	}
 
 	return resp, err

@@ -500,6 +500,22 @@ retry:
 			p.logger.Fatalf("History Events are empty: %v", events)
 		}
 
+		nextPageToken := response.GetNextPageToken()
+		for nextPageToken != nil {
+			resp, err2 := p.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+				Domain:        common.StringPtr(p.domain),
+				Execution:     response.GetWorkflowExecution(),
+				NextPageToken: nextPageToken,
+			})
+
+			if err2 != nil {
+				return err2
+			}
+
+			events = append(events, resp.GetHistory().GetEvents()...)
+			nextPageToken = resp.GetNextPageToken()
+		}
+
 		if dropTask {
 			p.logger.Info("Dropping Decision task: ")
 			return nil
@@ -2434,11 +2450,23 @@ func (s *integrationSuite) setupShards() {
 
 func (s *integrationSuite) printWorkflowHistory(domain string, execution *workflow.WorkflowExecution) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
-		Domain:    common.StringPtr(domain),
-		Execution: execution,
+		Domain:          common.StringPtr(domain),
+		Execution:       execution,
+		MaximumPageSize: common.Int32Ptr(10),
 	})
 	s.Nil(err)
 
 	history := historyResponse.GetHistory()
+	events := historyResponse.GetHistory().GetEvents()
+	for historyResponse.GetNextPageToken() != nil {
+		historyResponse, err = s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain:        common.StringPtr(domain),
+			Execution:     execution,
+			NextPageToken: historyResponse.GetNextPageToken(),
+		})
+		s.Nil(err)
+		events = append(events, historyResponse.GetHistory().GetEvents()...)
+	}
+	history.Events = events
 	common.PrettyPrintHistory(history, s.logger)
 }

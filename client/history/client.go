@@ -84,18 +84,18 @@ func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
 	return response, nil
 }
 
-func (c *clientImpl) GetWorkflowExecutionHistory(context thrift.Context,
-	request *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error) {
-	client, err := c.getHostForRequest(request.GetGetRequest().GetExecution().GetWorkflowId())
+func (c *clientImpl) GetWorkflowExecutionNextEventID(context thrift.Context,
+	request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
+	client, err := c.getHostForRequest(request.GetExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	var response *workflow.GetWorkflowExecutionHistoryResponse
+	var response *h.GetWorkflowExecutionNextEventIDResponse
 	op := func(context thrift.Context, client h.TChanHistoryService) error {
 		var err error
 		ctx, cancel := c.createContext(context)
 		defer cancel()
-		response, err = client.GetWorkflowExecutionHistory(ctx, request)
+		response, err = client.GetWorkflowExecutionNextEventID(ctx, request)
 		return err
 	}
 	err = c.executeWithRedirect(context, client, op)

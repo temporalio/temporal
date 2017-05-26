@@ -33,8 +33,8 @@ type (
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse,
 			error)
-		GetWorkflowExecutionHistory(
-			request *h.GetWorkflowExecutionHistoryRequest) (*workflow.GetWorkflowExecutionHistoryResponse, error)
+		GetWorkflowExecutionNextEventID(
+			request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error)
 		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
 		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
 		RespondDecisionTaskCompleted(request *h.RespondDecisionTaskCompletedRequest) error

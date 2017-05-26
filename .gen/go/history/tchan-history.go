@@ -38,7 +38,7 @@ var _ = shared.GoUnusedProtection__
 
 // TChanHistoryService is the interface that defines the server handler and client interface.
 type TChanHistoryService interface {
-	GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error)
+	GetWorkflowExecutionNextEventID(ctx thrift.Context, getRequest *GetWorkflowExecutionNextEventIDRequest) (*GetWorkflowExecutionNextEventIDResponse, error)
 	RecordActivityTaskHeartbeat(ctx thrift.Context, heartbeatRequest *RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error)
 	RecordActivityTaskStarted(ctx thrift.Context, addRequest *RecordActivityTaskStartedRequest) (*RecordActivityTaskStartedResponse, error)
 	RecordChildExecutionCompleted(ctx thrift.Context, completionRequest *RecordChildExecutionCompletedRequest) error
@@ -73,12 +73,12 @@ func NewTChanHistoryServiceClient(client thrift.TChanClient) TChanHistoryService
 	return NewTChanHistoryServiceInheritedClient("HistoryService", client)
 }
 
-func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
-	var resp HistoryServiceGetWorkflowExecutionHistoryResult
-	args := HistoryServiceGetWorkflowExecutionHistoryArgs{
+func (c *tchanHistoryServiceClient) GetWorkflowExecutionNextEventID(ctx thrift.Context, getRequest *GetWorkflowExecutionNextEventIDRequest) (*GetWorkflowExecutionNextEventIDResponse, error) {
+	var resp HistoryServiceGetWorkflowExecutionNextEventIDResult
+	args := HistoryServiceGetWorkflowExecutionNextEventIDArgs{
 		GetRequest: getRequest,
 	}
-	success, err := c.client.Call(ctx, c.thriftService, "GetWorkflowExecutionHistory", &args, &resp)
+	success, err := c.client.Call(ctx, c.thriftService, "GetWorkflowExecutionNextEventID", &args, &resp)
 	if err == nil && !success {
 		switch {
 		case resp.BadRequestError != nil:
@@ -90,7 +90,7 @@ func (c *tchanHistoryServiceClient) GetWorkflowExecutionHistory(ctx thrift.Conte
 		case resp.ShardOwnershipLostError != nil:
 			err = resp.ShardOwnershipLostError
 		default:
-			err = fmt.Errorf("received no result or unknown exception for GetWorkflowExecutionHistory")
+			err = fmt.Errorf("received no result or unknown exception for GetWorkflowExecutionNextEventID")
 		}
 	}
 
@@ -431,7 +431,7 @@ func (s *tchanHistoryServiceServer) Service() string {
 
 func (s *tchanHistoryServiceServer) Methods() []string {
 	return []string{
-		"GetWorkflowExecutionHistory",
+		"GetWorkflowExecutionNextEventID",
 		"RecordActivityTaskHeartbeat",
 		"RecordActivityTaskStarted",
 		"RecordChildExecutionCompleted",
@@ -450,8 +450,8 @@ func (s *tchanHistoryServiceServer) Methods() []string {
 
 func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
 	switch methodName {
-	case "GetWorkflowExecutionHistory":
-		return s.handleGetWorkflowExecutionHistory(ctx, protocol)
+	case "GetWorkflowExecutionNextEventID":
+		return s.handleGetWorkflowExecutionNextEventID(ctx, protocol)
 	case "RecordActivityTaskHeartbeat":
 		return s.handleRecordActivityTaskHeartbeat(ctx, protocol)
 	case "RecordActivityTaskStarted":
@@ -484,16 +484,16 @@ func (s *tchanHistoryServiceServer) Handle(ctx thrift.Context, methodName string
 	}
 }
 
-func (s *tchanHistoryServiceServer) handleGetWorkflowExecutionHistory(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
-	var req HistoryServiceGetWorkflowExecutionHistoryArgs
-	var res HistoryServiceGetWorkflowExecutionHistoryResult
+func (s *tchanHistoryServiceServer) handleGetWorkflowExecutionNextEventID(ctx thrift.Context, protocol athrift.TProtocol) (bool, athrift.TStruct, error) {
+	var req HistoryServiceGetWorkflowExecutionNextEventIDArgs
+	var res HistoryServiceGetWorkflowExecutionNextEventIDResult
 
 	if err := req.Read(protocol); err != nil {
 		return false, nil, err
 	}
 
 	r, err :=
-		s.handler.GetWorkflowExecutionHistory(ctx, req.GetRequest)
+		s.handler.GetWorkflowExecutionNextEventID(ctx, req.GetRequest)
 
 	if err != nil {
 		switch v := err.(type) {

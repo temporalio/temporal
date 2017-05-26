@@ -17396,6 +17396,7 @@ func (p *PollForDecisionTaskRequest) String() string {
 //  - PreviousStartedEventId
 //  - StartedEventId
 //  - History
+//  - NextPageToken
 type PollForDecisionTaskResponse struct {
   // unused fields # 1 to 9
   TaskToken []byte `thrift:"taskToken,10" db:"taskToken" json:"taskToken,omitempty"`
@@ -17409,6 +17410,8 @@ type PollForDecisionTaskResponse struct {
   StartedEventId *int64 `thrift:"startedEventId,50" db:"startedEventId" json:"startedEventId,omitempty"`
   // unused fields # 51 to 59
   History *History `thrift:"history,60" db:"history" json:"history,omitempty"`
+  // unused fields # 61 to 69
+  NextPageToken []byte `thrift:"nextPageToken,70" db:"nextPageToken" json:"nextPageToken,omitempty"`
 }
 
 func NewPollForDecisionTaskResponse() *PollForDecisionTaskResponse {
@@ -17455,6 +17458,11 @@ func (p *PollForDecisionTaskResponse) GetHistory() *History {
   }
 return p.History
 }
+var PollForDecisionTaskResponse_NextPageToken_DEFAULT []byte
+
+func (p *PollForDecisionTaskResponse) GetNextPageToken() []byte {
+  return p.NextPageToken
+}
 func (p *PollForDecisionTaskResponse) IsSetTaskToken() bool {
   return p.TaskToken != nil
 }
@@ -17477,6 +17485,10 @@ func (p *PollForDecisionTaskResponse) IsSetStartedEventId() bool {
 
 func (p *PollForDecisionTaskResponse) IsSetHistory() bool {
   return p.History != nil
+}
+
+func (p *PollForDecisionTaskResponse) IsSetNextPageToken() bool {
+  return p.NextPageToken != nil
 }
 
 func (p *PollForDecisionTaskResponse) Read(iprot thrift.TProtocol) error {
@@ -17514,6 +17526,10 @@ func (p *PollForDecisionTaskResponse) Read(iprot thrift.TProtocol) error {
       }
     case 60:
       if err := p.ReadField60(iprot); err != nil {
+        return err
+      }
+    case 70:
+      if err := p.ReadField70(iprot); err != nil {
         return err
       }
     default:
@@ -17582,6 +17598,15 @@ func (p *PollForDecisionTaskResponse)  ReadField60(iprot thrift.TProtocol) error
   return nil
 }
 
+func (p *PollForDecisionTaskResponse)  ReadField70(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 70: ", err)
+} else {
+  p.NextPageToken = v
+}
+  return nil
+}
+
 func (p *PollForDecisionTaskResponse) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("PollForDecisionTaskResponse"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -17592,6 +17617,7 @@ func (p *PollForDecisionTaskResponse) Write(oprot thrift.TProtocol) error {
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField50(oprot); err != nil { return err }
     if err := p.writeField60(oprot); err != nil { return err }
+    if err := p.writeField70(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -17671,6 +17697,18 @@ func (p *PollForDecisionTaskResponse) writeField60(oprot thrift.TProtocol) (err 
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 60:history: ", p), err) }
+  }
+  return err
+}
+
+func (p *PollForDecisionTaskResponse) writeField70(oprot thrift.TProtocol) (err error) {
+  if p.IsSetNextPageToken() {
+    if err := oprot.WriteFieldBegin("nextPageToken", thrift.STRING, 70); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 70:nextPageToken: ", p), err) }
+    if err := oprot.WriteBinary(p.NextPageToken); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.nextPageToken (70) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 70:nextPageToken: ", p), err) }
   }
   return err
 }
@@ -19574,11 +19612,17 @@ func (p *RequestCancelWorkflowExecutionRequest) String() string {
 // Attributes:
 //  - Domain
 //  - Execution
+//  - MaximumPageSize
+//  - NextPageToken
 type GetWorkflowExecutionHistoryRequest struct {
   // unused fields # 1 to 9
   Domain *string `thrift:"domain,10" db:"domain" json:"domain,omitempty"`
   // unused fields # 11 to 19
   Execution *WorkflowExecution `thrift:"execution,20" db:"execution" json:"execution,omitempty"`
+  // unused fields # 21 to 29
+  MaximumPageSize *int32 `thrift:"maximumPageSize,30" db:"maximumPageSize" json:"maximumPageSize,omitempty"`
+  // unused fields # 31 to 39
+  NextPageToken []byte `thrift:"nextPageToken,40" db:"nextPageToken" json:"nextPageToken,omitempty"`
 }
 
 func NewGetWorkflowExecutionHistoryRequest() *GetWorkflowExecutionHistoryRequest {
@@ -19599,6 +19643,18 @@ func (p *GetWorkflowExecutionHistoryRequest) GetExecution() *WorkflowExecution {
   }
 return p.Execution
 }
+var GetWorkflowExecutionHistoryRequest_MaximumPageSize_DEFAULT int32
+func (p *GetWorkflowExecutionHistoryRequest) GetMaximumPageSize() int32 {
+  if !p.IsSetMaximumPageSize() {
+    return GetWorkflowExecutionHistoryRequest_MaximumPageSize_DEFAULT
+  }
+return *p.MaximumPageSize
+}
+var GetWorkflowExecutionHistoryRequest_NextPageToken_DEFAULT []byte
+
+func (p *GetWorkflowExecutionHistoryRequest) GetNextPageToken() []byte {
+  return p.NextPageToken
+}
 func (p *GetWorkflowExecutionHistoryRequest) IsSetDomain() bool {
   return p.Domain != nil
 }
@@ -19607,7 +19663,200 @@ func (p *GetWorkflowExecutionHistoryRequest) IsSetExecution() bool {
   return p.Execution != nil
 }
 
+func (p *GetWorkflowExecutionHistoryRequest) IsSetMaximumPageSize() bool {
+  return p.MaximumPageSize != nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) IsSetNextPageToken() bool {
+  return p.NextPageToken != nil
+}
+
 func (p *GetWorkflowExecutionHistoryRequest) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    case 30:
+      if err := p.ReadField30(iprot); err != nil {
+        return err
+      }
+    case 40:
+      if err := p.ReadField40(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.Domain = &v
+}
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest)  ReadField20(iprot thrift.TProtocol) error {
+  p.Execution = &WorkflowExecution{}
+  if err := p.Execution.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Execution), err)
+  }
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest)  ReadField30(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI32(); err != nil {
+  return thrift.PrependError("error reading field 30: ", err)
+} else {
+  p.MaximumPageSize = &v
+}
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest)  ReadField40(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 40: ", err)
+} else {
+  p.NextPageToken = v
+}
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryRequest"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+    if err := p.writeField30(oprot); err != nil { return err }
+    if err := p.writeField40(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetDomain() {
+    if err := oprot.WriteFieldBegin("domain", thrift.STRING, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:domain: ", p), err) }
+    if err := oprot.WriteString(string(*p.Domain)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.domain (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:domain: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetExecution() {
+    if err := oprot.WriteFieldBegin("execution", thrift.STRUCT, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:execution: ", p), err) }
+    if err := p.Execution.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Execution), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:execution: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) writeField30(oprot thrift.TProtocol) (err error) {
+  if p.IsSetMaximumPageSize() {
+    if err := oprot.WriteFieldBegin("maximumPageSize", thrift.I32, 30); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 30:maximumPageSize: ", p), err) }
+    if err := oprot.WriteI32(int32(*p.MaximumPageSize)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.maximumPageSize (30) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 30:maximumPageSize: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) writeField40(oprot thrift.TProtocol) (err error) {
+  if p.IsSetNextPageToken() {
+    if err := oprot.WriteFieldBegin("nextPageToken", thrift.STRING, 40); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 40:nextPageToken: ", p), err) }
+    if err := oprot.WriteBinary(p.NextPageToken); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.nextPageToken (40) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 40:nextPageToken: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionHistoryRequest) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("GetWorkflowExecutionHistoryRequest(%+v)", *p)
+}
+
+// Attributes:
+//  - History
+//  - NextPageToken
+type GetWorkflowExecutionHistoryResponse struct {
+  // unused fields # 1 to 9
+  History *History `thrift:"history,10" db:"history" json:"history,omitempty"`
+  // unused fields # 11 to 19
+  NextPageToken []byte `thrift:"nextPageToken,20" db:"nextPageToken" json:"nextPageToken,omitempty"`
+}
+
+func NewGetWorkflowExecutionHistoryResponse() *GetWorkflowExecutionHistoryResponse {
+  return &GetWorkflowExecutionHistoryResponse{}
+}
+
+var GetWorkflowExecutionHistoryResponse_History_DEFAULT *History
+func (p *GetWorkflowExecutionHistoryResponse) GetHistory() *History {
+  if !p.IsSetHistory() {
+    return GetWorkflowExecutionHistoryResponse_History_DEFAULT
+  }
+return p.History
+}
+var GetWorkflowExecutionHistoryResponse_NextPageToken_DEFAULT []byte
+
+func (p *GetWorkflowExecutionHistoryResponse) GetNextPageToken() []byte {
+  return p.NextPageToken
+}
+func (p *GetWorkflowExecutionHistoryResponse) IsSetHistory() bool {
+  return p.History != nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) IsSetNextPageToken() bool {
+  return p.NextPageToken != nil
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) Read(iprot thrift.TProtocol) error {
   if _, err := iprot.ReadStructBegin(); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
   }
@@ -19643,123 +19892,6 @@ func (p *GetWorkflowExecutionHistoryRequest) Read(iprot thrift.TProtocol) error 
   return nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest)  ReadField10(iprot thrift.TProtocol) error {
-  if v, err := iprot.ReadString(); err != nil {
-  return thrift.PrependError("error reading field 10: ", err)
-} else {
-  p.Domain = &v
-}
-  return nil
-}
-
-func (p *GetWorkflowExecutionHistoryRequest)  ReadField20(iprot thrift.TProtocol) error {
-  p.Execution = &WorkflowExecution{}
-  if err := p.Execution.Read(iprot); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Execution), err)
-  }
-  return nil
-}
-
-func (p *GetWorkflowExecutionHistoryRequest) Write(oprot thrift.TProtocol) error {
-  if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryRequest"); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
-  if p != nil {
-    if err := p.writeField10(oprot); err != nil { return err }
-    if err := p.writeField20(oprot); err != nil { return err }
-  }
-  if err := oprot.WriteFieldStop(); err != nil {
-    return thrift.PrependError("write field stop error: ", err) }
-  if err := oprot.WriteStructEnd(); err != nil {
-    return thrift.PrependError("write struct stop error: ", err) }
-  return nil
-}
-
-func (p *GetWorkflowExecutionHistoryRequest) writeField10(oprot thrift.TProtocol) (err error) {
-  if p.IsSetDomain() {
-    if err := oprot.WriteFieldBegin("domain", thrift.STRING, 10); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:domain: ", p), err) }
-    if err := oprot.WriteString(string(*p.Domain)); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T.domain (10) field write error: ", p), err) }
-    if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:domain: ", p), err) }
-  }
-  return err
-}
-
-func (p *GetWorkflowExecutionHistoryRequest) writeField20(oprot thrift.TProtocol) (err error) {
-  if p.IsSetExecution() {
-    if err := oprot.WriteFieldBegin("execution", thrift.STRUCT, 20); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:execution: ", p), err) }
-    if err := p.Execution.Write(oprot); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Execution), err)
-    }
-    if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:execution: ", p), err) }
-  }
-  return err
-}
-
-func (p *GetWorkflowExecutionHistoryRequest) String() string {
-  if p == nil {
-    return "<nil>"
-  }
-  return fmt.Sprintf("GetWorkflowExecutionHistoryRequest(%+v)", *p)
-}
-
-// Attributes:
-//  - History
-type GetWorkflowExecutionHistoryResponse struct {
-  // unused fields # 1 to 9
-  History *History `thrift:"history,10" db:"history" json:"history,omitempty"`
-}
-
-func NewGetWorkflowExecutionHistoryResponse() *GetWorkflowExecutionHistoryResponse {
-  return &GetWorkflowExecutionHistoryResponse{}
-}
-
-var GetWorkflowExecutionHistoryResponse_History_DEFAULT *History
-func (p *GetWorkflowExecutionHistoryResponse) GetHistory() *History {
-  if !p.IsSetHistory() {
-    return GetWorkflowExecutionHistoryResponse_History_DEFAULT
-  }
-return p.History
-}
-func (p *GetWorkflowExecutionHistoryResponse) IsSetHistory() bool {
-  return p.History != nil
-}
-
-func (p *GetWorkflowExecutionHistoryResponse) Read(iprot thrift.TProtocol) error {
-  if _, err := iprot.ReadStructBegin(); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
-  }
-
-
-  for {
-    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
-    if err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
-    }
-    if fieldTypeId == thrift.STOP { break; }
-    switch fieldId {
-    case 10:
-      if err := p.ReadField10(iprot); err != nil {
-        return err
-      }
-    default:
-      if err := iprot.Skip(fieldTypeId); err != nil {
-        return err
-      }
-    }
-    if err := iprot.ReadFieldEnd(); err != nil {
-      return err
-    }
-  }
-  if err := iprot.ReadStructEnd(); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
-  }
-  return nil
-}
-
 func (p *GetWorkflowExecutionHistoryResponse)  ReadField10(iprot thrift.TProtocol) error {
   p.History = &History{}
   if err := p.History.Read(iprot); err != nil {
@@ -19768,11 +19900,21 @@ func (p *GetWorkflowExecutionHistoryResponse)  ReadField10(iprot thrift.TProtoco
   return nil
 }
 
+func (p *GetWorkflowExecutionHistoryResponse)  ReadField20(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadBinary(); err != nil {
+  return thrift.PrependError("error reading field 20: ", err)
+} else {
+  p.NextPageToken = v
+}
+  return nil
+}
+
 func (p *GetWorkflowExecutionHistoryResponse) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryResponse"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -19790,6 +19932,18 @@ func (p *GetWorkflowExecutionHistoryResponse) writeField10(oprot thrift.TProtoco
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 10:history: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionHistoryResponse) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetNextPageToken() {
+    if err := oprot.WriteFieldBegin("nextPageToken", thrift.STRING, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:nextPageToken: ", p), err) }
+    if err := oprot.WriteBinary(p.NextPageToken); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.nextPageToken (20) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:nextPageToken: ", p), err) }
   }
   return err
 }

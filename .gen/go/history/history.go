@@ -622,41 +622,41 @@ func (p *StartWorkflowExecutionRequest) String() string {
 
 // Attributes:
 //  - DomainUUID
-//  - GetRequest
-type GetWorkflowExecutionHistoryRequest struct {
+//  - Execution
+type GetWorkflowExecutionNextEventIDRequest struct {
   // unused fields # 1 to 9
   DomainUUID *string `thrift:"domainUUID,10" db:"domainUUID" json:"domainUUID,omitempty"`
   // unused fields # 11 to 19
-  GetRequest *shared.GetWorkflowExecutionHistoryRequest `thrift:"getRequest,20" db:"getRequest" json:"getRequest,omitempty"`
+  Execution *shared.WorkflowExecution `thrift:"execution,20" db:"execution" json:"execution,omitempty"`
 }
 
-func NewGetWorkflowExecutionHistoryRequest() *GetWorkflowExecutionHistoryRequest {
-  return &GetWorkflowExecutionHistoryRequest{}
+func NewGetWorkflowExecutionNextEventIDRequest() *GetWorkflowExecutionNextEventIDRequest {
+  return &GetWorkflowExecutionNextEventIDRequest{}
 }
 
-var GetWorkflowExecutionHistoryRequest_DomainUUID_DEFAULT string
-func (p *GetWorkflowExecutionHistoryRequest) GetDomainUUID() string {
+var GetWorkflowExecutionNextEventIDRequest_DomainUUID_DEFAULT string
+func (p *GetWorkflowExecutionNextEventIDRequest) GetDomainUUID() string {
   if !p.IsSetDomainUUID() {
-    return GetWorkflowExecutionHistoryRequest_DomainUUID_DEFAULT
+    return GetWorkflowExecutionNextEventIDRequest_DomainUUID_DEFAULT
   }
 return *p.DomainUUID
 }
-var GetWorkflowExecutionHistoryRequest_GetRequest_DEFAULT *shared.GetWorkflowExecutionHistoryRequest
-func (p *GetWorkflowExecutionHistoryRequest) GetGetRequest() *shared.GetWorkflowExecutionHistoryRequest {
-  if !p.IsSetGetRequest() {
-    return GetWorkflowExecutionHistoryRequest_GetRequest_DEFAULT
+var GetWorkflowExecutionNextEventIDRequest_Execution_DEFAULT *shared.WorkflowExecution
+func (p *GetWorkflowExecutionNextEventIDRequest) GetExecution() *shared.WorkflowExecution {
+  if !p.IsSetExecution() {
+    return GetWorkflowExecutionNextEventIDRequest_Execution_DEFAULT
   }
-return p.GetRequest
+return p.Execution
 }
-func (p *GetWorkflowExecutionHistoryRequest) IsSetDomainUUID() bool {
+func (p *GetWorkflowExecutionNextEventIDRequest) IsSetDomainUUID() bool {
   return p.DomainUUID != nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) IsSetGetRequest() bool {
-  return p.GetRequest != nil
+func (p *GetWorkflowExecutionNextEventIDRequest) IsSetExecution() bool {
+  return p.Execution != nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) Read(iprot thrift.TProtocol) error {
+func (p *GetWorkflowExecutionNextEventIDRequest) Read(iprot thrift.TProtocol) error {
   if _, err := iprot.ReadStructBegin(); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
   }
@@ -692,7 +692,7 @@ func (p *GetWorkflowExecutionHistoryRequest) Read(iprot thrift.TProtocol) error 
   return nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest)  ReadField10(iprot thrift.TProtocol) error {
+func (p *GetWorkflowExecutionNextEventIDRequest)  ReadField10(iprot thrift.TProtocol) error {
   if v, err := iprot.ReadString(); err != nil {
   return thrift.PrependError("error reading field 10: ", err)
 } else {
@@ -701,16 +701,16 @@ func (p *GetWorkflowExecutionHistoryRequest)  ReadField10(iprot thrift.TProtocol
   return nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest)  ReadField20(iprot thrift.TProtocol) error {
-  p.GetRequest = &shared.GetWorkflowExecutionHistoryRequest{}
-  if err := p.GetRequest.Read(iprot); err != nil {
-    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.GetRequest), err)
+func (p *GetWorkflowExecutionNextEventIDRequest)  ReadField20(iprot thrift.TProtocol) error {
+  p.Execution = &shared.WorkflowExecution{}
+  if err := p.Execution.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Execution), err)
   }
   return nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) Write(oprot thrift.TProtocol) error {
-  if err := oprot.WriteStructBegin("GetWorkflowExecutionHistoryRequest"); err != nil {
+func (p *GetWorkflowExecutionNextEventIDRequest) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("GetWorkflowExecutionNextEventIDRequest"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField10(oprot); err != nil { return err }
@@ -723,7 +723,7 @@ func (p *GetWorkflowExecutionHistoryRequest) Write(oprot thrift.TProtocol) error
   return nil
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) writeField10(oprot thrift.TProtocol) (err error) {
+func (p *GetWorkflowExecutionNextEventIDRequest) writeField10(oprot thrift.TProtocol) (err error) {
   if p.IsSetDomainUUID() {
     if err := oprot.WriteFieldBegin("domainUUID", thrift.STRING, 10); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:domainUUID: ", p), err) }
@@ -735,24 +735,159 @@ func (p *GetWorkflowExecutionHistoryRequest) writeField10(oprot thrift.TProtocol
   return err
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) writeField20(oprot thrift.TProtocol) (err error) {
-  if p.IsSetGetRequest() {
-    if err := oprot.WriteFieldBegin("getRequest", thrift.STRUCT, 20); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:getRequest: ", p), err) }
-    if err := p.GetRequest.Write(oprot); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.GetRequest), err)
+func (p *GetWorkflowExecutionNextEventIDRequest) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetExecution() {
+    if err := oprot.WriteFieldBegin("execution", thrift.STRUCT, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:execution: ", p), err) }
+    if err := p.Execution.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.Execution), err)
     }
     if err := oprot.WriteFieldEnd(); err != nil {
-      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:getRequest: ", p), err) }
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:execution: ", p), err) }
   }
   return err
 }
 
-func (p *GetWorkflowExecutionHistoryRequest) String() string {
+func (p *GetWorkflowExecutionNextEventIDRequest) String() string {
   if p == nil {
     return "<nil>"
   }
-  return fmt.Sprintf("GetWorkflowExecutionHistoryRequest(%+v)", *p)
+  return fmt.Sprintf("GetWorkflowExecutionNextEventIDRequest(%+v)", *p)
+}
+
+// Attributes:
+//  - EventId
+//  - RunId
+type GetWorkflowExecutionNextEventIDResponse struct {
+  // unused fields # 1 to 9
+  EventId *int64 `thrift:"eventId,10" db:"eventId" json:"eventId,omitempty"`
+  // unused fields # 11 to 19
+  RunId *string `thrift:"runId,20" db:"runId" json:"runId,omitempty"`
+}
+
+func NewGetWorkflowExecutionNextEventIDResponse() *GetWorkflowExecutionNextEventIDResponse {
+  return &GetWorkflowExecutionNextEventIDResponse{}
+}
+
+var GetWorkflowExecutionNextEventIDResponse_EventId_DEFAULT int64
+func (p *GetWorkflowExecutionNextEventIDResponse) GetEventId() int64 {
+  if !p.IsSetEventId() {
+    return GetWorkflowExecutionNextEventIDResponse_EventId_DEFAULT
+  }
+return *p.EventId
+}
+var GetWorkflowExecutionNextEventIDResponse_RunId_DEFAULT string
+func (p *GetWorkflowExecutionNextEventIDResponse) GetRunId() string {
+  if !p.IsSetRunId() {
+    return GetWorkflowExecutionNextEventIDResponse_RunId_DEFAULT
+  }
+return *p.RunId
+}
+func (p *GetWorkflowExecutionNextEventIDResponse) IsSetEventId() bool {
+  return p.EventId != nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) IsSetRunId() bool {
+  return p.RunId != nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) Read(iprot thrift.TProtocol) error {
+  if _, err := iprot.ReadStructBegin(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
+  }
+
+
+  for {
+    _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin()
+    if err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T field %d read error: ", p, fieldId), err)
+    }
+    if fieldTypeId == thrift.STOP { break; }
+    switch fieldId {
+    case 10:
+      if err := p.ReadField10(iprot); err != nil {
+        return err
+      }
+    case 20:
+      if err := p.ReadField20(iprot); err != nil {
+        return err
+      }
+    default:
+      if err := iprot.Skip(fieldTypeId); err != nil {
+        return err
+      }
+    }
+    if err := iprot.ReadFieldEnd(); err != nil {
+      return err
+    }
+  }
+  if err := iprot.ReadStructEnd(); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+  }
+  return nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse)  ReadField10(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI64(); err != nil {
+  return thrift.PrependError("error reading field 10: ", err)
+} else {
+  p.EventId = &v
+}
+  return nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse)  ReadField20(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadString(); err != nil {
+  return thrift.PrependError("error reading field 20: ", err)
+} else {
+  p.RunId = &v
+}
+  return nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("GetWorkflowExecutionNextEventIDResponse"); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
+  if p != nil {
+    if err := p.writeField10(oprot); err != nil { return err }
+    if err := p.writeField20(oprot); err != nil { return err }
+  }
+  if err := oprot.WriteFieldStop(); err != nil {
+    return thrift.PrependError("write field stop error: ", err) }
+  if err := oprot.WriteStructEnd(); err != nil {
+    return thrift.PrependError("write struct stop error: ", err) }
+  return nil
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) writeField10(oprot thrift.TProtocol) (err error) {
+  if p.IsSetEventId() {
+    if err := oprot.WriteFieldBegin("eventId", thrift.I64, 10); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 10:eventId: ", p), err) }
+    if err := oprot.WriteI64(int64(*p.EventId)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.eventId (10) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 10:eventId: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) writeField20(oprot thrift.TProtocol) (err error) {
+  if p.IsSetRunId() {
+    if err := oprot.WriteFieldBegin("runId", thrift.STRING, 20); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 20:runId: ", p), err) }
+    if err := oprot.WriteString(string(*p.RunId)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.runId (20) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 20:runId: ", p), err) }
+  }
+  return err
+}
+
+func (p *GetWorkflowExecutionNextEventIDResponse) String() string {
+  if p == nil {
+    return "<nil>"
+  }
+  return fmt.Sprintf("GetWorkflowExecutionNextEventIDResponse(%+v)", *p)
 }
 
 // Attributes:
@@ -3225,13 +3360,14 @@ type HistoryService interface {  //HistoryService provides API to start a new lo
   // Parameters:
   //  - StartRequest
   StartWorkflowExecution(startRequest *StartWorkflowExecutionRequest) (r *shared.StartWorkflowExecutionResponse, err error)
-  // Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-  // execution in unknown to the service.
+  // Returns the nextEventID of the history of workflow execution. Only events in the history with Ids below the returned Id are
+  // guaranteed to be valid, so the first step of reading an execution's history is to retrieve this event Id.
+  // It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
   // 
   // 
   // Parameters:
   //  - GetRequest
-  GetWorkflowExecutionHistory(getRequest *GetWorkflowExecutionHistoryRequest) (r *shared.GetWorkflowExecutionHistoryResponse, err error)
+  GetWorkflowExecutionNextEventID(getRequest *GetWorkflowExecutionNextEventIDRequest) (r *GetWorkflowExecutionNextEventIDResponse, err error)
   // RecordDecisionTaskStarted is called by the Matchingservice before it hands a decision task to the application worker in response to
   // a PollForDecisionTask call. It records in the history the event that the decision task has started. It will return 'EventAlreadyStartedError',
   // if the workflow's execution history already includes a record of the event starting.
@@ -3463,28 +3599,29 @@ func (p *HistoryServiceClient) recvStartWorkflowExecution() (value *shared.Start
   return
 }
 
-// Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-// execution in unknown to the service.
+// Returns the nextEventID of the history of workflow execution. Only events in the history with Ids below the returned Id are
+// guaranteed to be valid, so the first step of reading an execution's history is to retrieve this event Id.
+// It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
 // 
 // 
 // Parameters:
 //  - GetRequest
-func (p *HistoryServiceClient) GetWorkflowExecutionHistory(getRequest *GetWorkflowExecutionHistoryRequest) (r *shared.GetWorkflowExecutionHistoryResponse, err error) {
-  if err = p.sendGetWorkflowExecutionHistory(getRequest); err != nil { return }
-  return p.recvGetWorkflowExecutionHistory()
+func (p *HistoryServiceClient) GetWorkflowExecutionNextEventID(getRequest *GetWorkflowExecutionNextEventIDRequest) (r *GetWorkflowExecutionNextEventIDResponse, err error) {
+  if err = p.sendGetWorkflowExecutionNextEventID(getRequest); err != nil { return }
+  return p.recvGetWorkflowExecutionNextEventID()
 }
 
-func (p *HistoryServiceClient) sendGetWorkflowExecutionHistory(getRequest *GetWorkflowExecutionHistoryRequest)(err error) {
+func (p *HistoryServiceClient) sendGetWorkflowExecutionNextEventID(getRequest *GetWorkflowExecutionNextEventIDRequest)(err error) {
   oprot := p.OutputProtocol
   if oprot == nil {
     oprot = p.ProtocolFactory.GetProtocol(p.Transport)
     p.OutputProtocol = oprot
   }
   p.SeqId++
-  if err = oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.CALL, p.SeqId); err != nil {
+  if err = oprot.WriteMessageBegin("GetWorkflowExecutionNextEventID", thrift.CALL, p.SeqId); err != nil {
       return
   }
-  args := HistoryServiceGetWorkflowExecutionHistoryArgs{
+  args := HistoryServiceGetWorkflowExecutionNextEventIDArgs{
   GetRequest : getRequest,
   }
   if err = args.Write(oprot); err != nil {
@@ -3497,7 +3634,7 @@ func (p *HistoryServiceClient) sendGetWorkflowExecutionHistory(getRequest *GetWo
 }
 
 
-func (p *HistoryServiceClient) recvGetWorkflowExecutionHistory() (value *shared.GetWorkflowExecutionHistoryResponse, err error) {
+func (p *HistoryServiceClient) recvGetWorkflowExecutionNextEventID() (value *GetWorkflowExecutionNextEventIDResponse, err error) {
   iprot := p.InputProtocol
   if iprot == nil {
     iprot = p.ProtocolFactory.GetProtocol(p.Transport)
@@ -3507,12 +3644,12 @@ func (p *HistoryServiceClient) recvGetWorkflowExecutionHistory() (value *shared.
   if err != nil {
     return
   }
-  if method != "GetWorkflowExecutionHistory" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "GetWorkflowExecutionHistory failed: wrong method name")
+  if method != "GetWorkflowExecutionNextEventID" {
+    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "GetWorkflowExecutionNextEventID failed: wrong method name")
     return
   }
   if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "GetWorkflowExecutionHistory failed: out of sequence response")
+    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "GetWorkflowExecutionNextEventID failed: out of sequence response")
     return
   }
   if mTypeId == thrift.EXCEPTION {
@@ -3529,10 +3666,10 @@ func (p *HistoryServiceClient) recvGetWorkflowExecutionHistory() (value *shared.
     return
   }
   if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "GetWorkflowExecutionHistory failed: invalid message type")
+    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "GetWorkflowExecutionNextEventID failed: invalid message type")
     return
   }
-  result := HistoryServiceGetWorkflowExecutionHistoryResult{}
+  result := HistoryServiceGetWorkflowExecutionNextEventIDResult{}
   if err = result.Read(iprot); err != nil {
     return
   }
@@ -4713,7 +4850,7 @@ func NewHistoryServiceProcessor(handler HistoryService) *HistoryServiceProcessor
 
   self28 := &HistoryServiceProcessor{handler:handler, processorMap:make(map[string]thrift.TProcessorFunction)}
   self28.processorMap["StartWorkflowExecution"] = &historyServiceProcessorStartWorkflowExecution{handler:handler}
-  self28.processorMap["GetWorkflowExecutionHistory"] = &historyServiceProcessorGetWorkflowExecutionHistory{handler:handler}
+  self28.processorMap["GetWorkflowExecutionNextEventID"] = &historyServiceProcessorGetWorkflowExecutionNextEventID{handler:handler}
   self28.processorMap["RecordDecisionTaskStarted"] = &historyServiceProcessorRecordDecisionTaskStarted{handler:handler}
   self28.processorMap["RecordActivityTaskStarted"] = &historyServiceProcessorRecordActivityTaskStarted{handler:handler}
   self28.processorMap["RespondDecisionTaskCompleted"] = &historyServiceProcessorRespondDecisionTaskCompleted{handler:handler}
@@ -4805,16 +4942,16 @@ var retval *shared.StartWorkflowExecutionResponse
   return true, err
 }
 
-type historyServiceProcessorGetWorkflowExecutionHistory struct {
+type historyServiceProcessorGetWorkflowExecutionNextEventID struct {
   handler HistoryService
 }
 
-func (p *historyServiceProcessorGetWorkflowExecutionHistory) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
-  args := HistoryServiceGetWorkflowExecutionHistoryArgs{}
+func (p *historyServiceProcessorGetWorkflowExecutionNextEventID) Process(seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+  args := HistoryServiceGetWorkflowExecutionNextEventIDArgs{}
   if err = args.Read(iprot); err != nil {
     iprot.ReadMessageEnd()
     x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
-    oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.EXCEPTION, seqId)
+    oprot.WriteMessageBegin("GetWorkflowExecutionNextEventID", thrift.EXCEPTION, seqId)
     x.Write(oprot)
     oprot.WriteMessageEnd()
     oprot.Flush()
@@ -4822,10 +4959,10 @@ func (p *historyServiceProcessorGetWorkflowExecutionHistory) Process(seqId int32
   }
 
   iprot.ReadMessageEnd()
-  result := HistoryServiceGetWorkflowExecutionHistoryResult{}
-var retval *shared.GetWorkflowExecutionHistoryResponse
+  result := HistoryServiceGetWorkflowExecutionNextEventIDResult{}
+var retval *GetWorkflowExecutionNextEventIDResponse
   var err2 error
-  if retval, err2 = p.handler.GetWorkflowExecutionHistory(args.GetRequest); err2 != nil {
+  if retval, err2 = p.handler.GetWorkflowExecutionNextEventID(args.GetRequest); err2 != nil {
   switch v := err2.(type) {
     case *shared.BadRequestError:
   result.BadRequestError = v
@@ -4836,8 +4973,8 @@ var retval *shared.GetWorkflowExecutionHistoryResponse
     case *ShardOwnershipLostError:
   result.ShardOwnershipLostError = v
     default:
-    x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing GetWorkflowExecutionHistory: " + err2.Error())
-    oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.EXCEPTION, seqId)
+    x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing GetWorkflowExecutionNextEventID: " + err2.Error())
+    oprot.WriteMessageBegin("GetWorkflowExecutionNextEventID", thrift.EXCEPTION, seqId)
     x.Write(oprot)
     oprot.WriteMessageEnd()
     oprot.Flush()
@@ -4846,7 +4983,7 @@ var retval *shared.GetWorkflowExecutionHistoryResponse
   } else {
     result.Success = retval
 }
-  if err2 = oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.REPLY, seqId); err2 != nil {
+  if err2 = oprot.WriteMessageBegin("GetWorkflowExecutionNextEventID", thrift.REPLY, seqId); err2 != nil {
     err = err2
   }
   if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -5896,26 +6033,26 @@ func (p *HistoryServiceStartWorkflowExecutionResult) String() string {
 
 // Attributes:
 //  - GetRequest
-type HistoryServiceGetWorkflowExecutionHistoryArgs struct {
-  GetRequest *GetWorkflowExecutionHistoryRequest `thrift:"getRequest,1" db:"getRequest" json:"getRequest"`
+type HistoryServiceGetWorkflowExecutionNextEventIDArgs struct {
+  GetRequest *GetWorkflowExecutionNextEventIDRequest `thrift:"getRequest,1" db:"getRequest" json:"getRequest"`
 }
 
-func NewHistoryServiceGetWorkflowExecutionHistoryArgs() *HistoryServiceGetWorkflowExecutionHistoryArgs {
-  return &HistoryServiceGetWorkflowExecutionHistoryArgs{}
+func NewHistoryServiceGetWorkflowExecutionNextEventIDArgs() *HistoryServiceGetWorkflowExecutionNextEventIDArgs {
+  return &HistoryServiceGetWorkflowExecutionNextEventIDArgs{}
 }
 
-var HistoryServiceGetWorkflowExecutionHistoryArgs_GetRequest_DEFAULT *GetWorkflowExecutionHistoryRequest
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) GetGetRequest() *GetWorkflowExecutionHistoryRequest {
+var HistoryServiceGetWorkflowExecutionNextEventIDArgs_GetRequest_DEFAULT *GetWorkflowExecutionNextEventIDRequest
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) GetGetRequest() *GetWorkflowExecutionNextEventIDRequest {
   if !p.IsSetGetRequest() {
-    return HistoryServiceGetWorkflowExecutionHistoryArgs_GetRequest_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDArgs_GetRequest_DEFAULT
   }
 return p.GetRequest
 }
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) IsSetGetRequest() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) IsSetGetRequest() bool {
   return p.GetRequest != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) Read(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) Read(iprot thrift.TProtocol) error {
   if _, err := iprot.ReadStructBegin(); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
   }
@@ -5947,16 +6084,16 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) Read(iprot thrift.TProto
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs)  ReadField1(iprot thrift.TProtocol) error {
-  p.GetRequest = &GetWorkflowExecutionHistoryRequest{}
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs)  ReadField1(iprot thrift.TProtocol) error {
+  p.GetRequest = &GetWorkflowExecutionNextEventIDRequest{}
   if err := p.GetRequest.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.GetRequest), err)
   }
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) Write(oprot thrift.TProtocol) error {
-  if err := oprot.WriteStructBegin("GetWorkflowExecutionHistory_args"); err != nil {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("GetWorkflowExecutionNextEventID_args"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField1(oprot); err != nil { return err }
@@ -5968,7 +6105,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) Write(oprot thrift.TProt
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) writeField1(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) writeField1(oprot thrift.TProtocol) (err error) {
   if err := oprot.WriteFieldBegin("getRequest", thrift.STRUCT, 1); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:getRequest: ", p), err) }
   if err := p.GetRequest.Write(oprot); err != nil {
@@ -5979,11 +6116,11 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) writeField1(oprot thrift
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) String() string {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDArgs) String() string {
   if p == nil {
     return "<nil>"
   }
-  return fmt.Sprintf("HistoryServiceGetWorkflowExecutionHistoryArgs(%+v)", *p)
+  return fmt.Sprintf("HistoryServiceGetWorkflowExecutionNextEventIDArgs(%+v)", *p)
 }
 
 // Attributes:
@@ -5992,74 +6129,74 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryArgs) String() string {
 //  - InternalServiceError
 //  - EntityNotExistError
 //  - ShardOwnershipLostError
-type HistoryServiceGetWorkflowExecutionHistoryResult struct {
-  Success *shared.GetWorkflowExecutionHistoryResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
+type HistoryServiceGetWorkflowExecutionNextEventIDResult struct {
+  Success *GetWorkflowExecutionNextEventIDResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
   ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
 }
 
-func NewHistoryServiceGetWorkflowExecutionHistoryResult() *HistoryServiceGetWorkflowExecutionHistoryResult {
-  return &HistoryServiceGetWorkflowExecutionHistoryResult{}
+func NewHistoryServiceGetWorkflowExecutionNextEventIDResult() *HistoryServiceGetWorkflowExecutionNextEventIDResult {
+  return &HistoryServiceGetWorkflowExecutionNextEventIDResult{}
 }
 
-var HistoryServiceGetWorkflowExecutionHistoryResult_Success_DEFAULT *shared.GetWorkflowExecutionHistoryResponse
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetSuccess() *shared.GetWorkflowExecutionHistoryResponse {
+var HistoryServiceGetWorkflowExecutionNextEventIDResult_Success_DEFAULT *GetWorkflowExecutionNextEventIDResponse
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) GetSuccess() *GetWorkflowExecutionNextEventIDResponse {
   if !p.IsSetSuccess() {
-    return HistoryServiceGetWorkflowExecutionHistoryResult_Success_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDResult_Success_DEFAULT
   }
 return p.Success
 }
-var HistoryServiceGetWorkflowExecutionHistoryResult_BadRequestError_DEFAULT *shared.BadRequestError
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetBadRequestError() *shared.BadRequestError {
+var HistoryServiceGetWorkflowExecutionNextEventIDResult_BadRequestError_DEFAULT *shared.BadRequestError
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) GetBadRequestError() *shared.BadRequestError {
   if !p.IsSetBadRequestError() {
-    return HistoryServiceGetWorkflowExecutionHistoryResult_BadRequestError_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDResult_BadRequestError_DEFAULT
   }
 return p.BadRequestError
 }
-var HistoryServiceGetWorkflowExecutionHistoryResult_InternalServiceError_DEFAULT *shared.InternalServiceError
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetInternalServiceError() *shared.InternalServiceError {
+var HistoryServiceGetWorkflowExecutionNextEventIDResult_InternalServiceError_DEFAULT *shared.InternalServiceError
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) GetInternalServiceError() *shared.InternalServiceError {
   if !p.IsSetInternalServiceError() {
-    return HistoryServiceGetWorkflowExecutionHistoryResult_InternalServiceError_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDResult_InternalServiceError_DEFAULT
   }
 return p.InternalServiceError
 }
-var HistoryServiceGetWorkflowExecutionHistoryResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetEntityNotExistError() *shared.EntityNotExistsError {
+var HistoryServiceGetWorkflowExecutionNextEventIDResult_EntityNotExistError_DEFAULT *shared.EntityNotExistsError
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) GetEntityNotExistError() *shared.EntityNotExistsError {
   if !p.IsSetEntityNotExistError() {
-    return HistoryServiceGetWorkflowExecutionHistoryResult_EntityNotExistError_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDResult_EntityNotExistError_DEFAULT
   }
 return p.EntityNotExistError
 }
-var HistoryServiceGetWorkflowExecutionHistoryResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
+var HistoryServiceGetWorkflowExecutionNextEventIDResult_ShardOwnershipLostError_DEFAULT *ShardOwnershipLostError
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) GetShardOwnershipLostError() *ShardOwnershipLostError {
   if !p.IsSetShardOwnershipLostError() {
-    return HistoryServiceGetWorkflowExecutionHistoryResult_ShardOwnershipLostError_DEFAULT
+    return HistoryServiceGetWorkflowExecutionNextEventIDResult_ShardOwnershipLostError_DEFAULT
   }
 return p.ShardOwnershipLostError
 }
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetSuccess() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) IsSetSuccess() bool {
   return p.Success != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetBadRequestError() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetInternalServiceError() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetEntityNotExistError() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) IsSetShardOwnershipLostError() bool {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) IsSetShardOwnershipLostError() bool {
   return p.ShardOwnershipLostError != nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) Read(iprot thrift.TProtocol) error {
   if _, err := iprot.ReadStructBegin(); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
   }
@@ -6107,15 +6244,15 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TPro
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField0(iprot thrift.TProtocol) error {
-  p.Success = &shared.GetWorkflowExecutionHistoryResponse{}
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult)  ReadField0(iprot thrift.TProtocol) error {
+  p.Success = &GetWorkflowExecutionNextEventIDResponse{}
   if err := p.Success.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.Success), err)
   }
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField1(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult)  ReadField1(iprot thrift.TProtocol) error {
   p.BadRequestError = &shared.BadRequestError{}
   if err := p.BadRequestError.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.BadRequestError), err)
@@ -6123,7 +6260,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField1(iprot thri
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField2(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult)  ReadField2(iprot thrift.TProtocol) error {
   p.InternalServiceError = &shared.InternalServiceError{}
   if err := p.InternalServiceError.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.InternalServiceError), err)
@@ -6131,7 +6268,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField2(iprot thri
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField3(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult)  ReadField3(iprot thrift.TProtocol) error {
   p.EntityNotExistError = &shared.EntityNotExistsError{}
   if err := p.EntityNotExistError.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.EntityNotExistError), err)
@@ -6139,7 +6276,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField3(iprot thri
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField4(iprot thrift.TProtocol) error {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult)  ReadField4(iprot thrift.TProtocol) error {
   p.ShardOwnershipLostError = &ShardOwnershipLostError{}
   if err := p.ShardOwnershipLostError.Read(iprot); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ShardOwnershipLostError), err)
@@ -6147,8 +6284,8 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult)  ReadField4(iprot thri
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TProtocol) error {
-  if err := oprot.WriteStructBegin("GetWorkflowExecutionHistory_result"); err != nil {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) Write(oprot thrift.TProtocol) error {
+  if err := oprot.WriteStructBegin("GetWorkflowExecutionNextEventID_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
   if p != nil {
     if err := p.writeField0(oprot); err != nil { return err }
@@ -6164,7 +6301,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TPr
   return nil
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField0(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) writeField0(oprot thrift.TProtocol) (err error) {
   if p.IsSetSuccess() {
     if err := oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 0:success: ", p), err) }
@@ -6177,7 +6314,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField0(oprot thri
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField1(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) writeField1(oprot thrift.TProtocol) (err error) {
   if p.IsSetBadRequestError() {
     if err := oprot.WriteFieldBegin("badRequestError", thrift.STRUCT, 1); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 1:badRequestError: ", p), err) }
@@ -6190,7 +6327,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField1(oprot thri
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField2(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) writeField2(oprot thrift.TProtocol) (err error) {
   if p.IsSetInternalServiceError() {
     if err := oprot.WriteFieldBegin("internalServiceError", thrift.STRUCT, 2); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 2:internalServiceError: ", p), err) }
@@ -6203,7 +6340,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField2(oprot thri
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField3(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) writeField3(oprot thrift.TProtocol) (err error) {
   if p.IsSetEntityNotExistError() {
     if err := oprot.WriteFieldBegin("entityNotExistError", thrift.STRUCT, 3); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:entityNotExistError: ", p), err) }
@@ -6216,7 +6353,7 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField3(oprot thri
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField4(oprot thrift.TProtocol) (err error) {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) writeField4(oprot thrift.TProtocol) (err error) {
   if p.IsSetShardOwnershipLostError() {
     if err := oprot.WriteFieldBegin("shardOwnershipLostError", thrift.STRUCT, 4); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:shardOwnershipLostError: ", p), err) }
@@ -6229,11 +6366,11 @@ func (p *HistoryServiceGetWorkflowExecutionHistoryResult) writeField4(oprot thri
   return err
 }
 
-func (p *HistoryServiceGetWorkflowExecutionHistoryResult) String() string {
+func (p *HistoryServiceGetWorkflowExecutionNextEventIDResult) String() string {
   if p == nil {
     return "<nil>"
   }
-  return fmt.Sprintf("HistoryServiceGetWorkflowExecutionHistoryResult(%+v)", *p)
+  return fmt.Sprintf("HistoryServiceGetWorkflowExecutionNextEventIDResult(%+v)", *p)
 }
 
 // Attributes:

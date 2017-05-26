@@ -62,21 +62,21 @@ func (_m *MockHistoryEngine) StartWorkflowExecution(request *gohistory.StartWork
 	return r0, r1
 }
 
-// GetWorkflowExecutionHistory is mock implementation for GetWorkflowExecutionHistory of HistoryEngine
-func (_m *MockHistoryEngine) GetWorkflowExecutionHistory(request *gohistory.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
+// GetWorkflowExecutionNextEventID is mock implementation for GetWorkflowExecutionNextEventID of HistoryEngine
+func (_m *MockHistoryEngine) GetWorkflowExecutionNextEventID(request *gohistory.GetWorkflowExecutionNextEventIDRequest) (*gohistory.GetWorkflowExecutionNextEventIDResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *shared.GetWorkflowExecutionHistoryResponse
-	if rf, ok := ret.Get(0).(func(*gohistory.GetWorkflowExecutionHistoryRequest) *shared.GetWorkflowExecutionHistoryResponse); ok {
+	var r0 *gohistory.GetWorkflowExecutionNextEventIDResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.GetWorkflowExecutionNextEventIDRequest) *gohistory.GetWorkflowExecutionNextEventIDResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*shared.GetWorkflowExecutionHistoryResponse)
+			r0 = ret.Get(0).(*gohistory.GetWorkflowExecutionNextEventIDResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*gohistory.GetWorkflowExecutionHistoryRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*gohistory.GetWorkflowExecutionNextEventIDRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

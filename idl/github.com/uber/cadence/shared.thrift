@@ -677,6 +677,7 @@ struct PollForDecisionTaskResponse {
   40: optional i64 (js.type = "Long") previousStartedEventId
   50: optional i64 (js.type = "Long") startedEventId
   60: optional History history
+  70: optional binary nextPageToken
 }
 
 struct RespondDecisionTaskCompletedRequest {
@@ -744,10 +745,13 @@ struct RequestCancelWorkflowExecutionRequest {
 struct GetWorkflowExecutionHistoryRequest {
   10: optional string domain
   20: optional WorkflowExecution execution
+  30: optional i32 maximumPageSize
+  40: optional binary nextPageToken
 }
 
 struct GetWorkflowExecutionHistoryResponse {
   10: optional History history
+  20: optional binary nextPageToken
 }
 
 struct SignalWorkflowExecutionRequest {

@@ -43,9 +43,14 @@ struct StartWorkflowExecutionRequest {
   30: optional ParentExecutionInfo parentExecutionInfo
 }
 
-struct GetWorkflowExecutionHistoryRequest {
+struct GetWorkflowExecutionNextEventIDRequest {
   10: optional string domainUUID
-  20: optional shared.GetWorkflowExecutionHistoryRequest getRequest
+  20: optional shared.WorkflowExecution execution
+}
+
+struct GetWorkflowExecutionNextEventIDResponse {
+  10: optional i64 (js.type = "Long") eventId
+  20: optional string runId
 }
 
 struct RespondDecisionTaskCompletedRequest {
@@ -159,10 +164,11 @@ service HistoryService {
     )
 
   /**
-  * Returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
-  * execution in unknown to the service.
+  * Returns the nextEventID of the history of workflow execution. Only events in the history with Ids below the returned Id are
+  * guaranteed to be valid, so the first step of reading an execution's history is to retrieve this event Id.
+  * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
   **/
-  shared.GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistory(1: GetWorkflowExecutionHistoryRequest getRequest)
+  GetWorkflowExecutionNextEventIDResponse GetWorkflowExecutionNextEventID(1: GetWorkflowExecutionNextEventIDRequest getRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

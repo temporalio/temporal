@@ -30,21 +30,21 @@ type HistoryClient struct {
 	mock.Mock
 }
 
-// GetWorkflowExecutionHistory provides a mock function with given fields: ctx, getRequest
-func (_m *HistoryClient) GetWorkflowExecutionHistory(ctx thrift.Context, getRequest *history.GetWorkflowExecutionHistoryRequest) (*shared.GetWorkflowExecutionHistoryResponse, error) {
+// GetWorkflowExecutionNextEventID provides a mock function with given fields: ctx, getRequest
+func (_m *HistoryClient) GetWorkflowExecutionNextEventID(ctx thrift.Context, getRequest *history.GetWorkflowExecutionNextEventIDRequest) (*history.GetWorkflowExecutionNextEventIDResponse, error) {
 	ret := _m.Called(ctx, getRequest)
 
-	var r0 *shared.GetWorkflowExecutionHistoryResponse
-	if rf, ok := ret.Get(0).(func(thrift.Context, *history.GetWorkflowExecutionHistoryRequest) *shared.GetWorkflowExecutionHistoryResponse); ok {
+	var r0 *history.GetWorkflowExecutionNextEventIDResponse
+	if rf, ok := ret.Get(0).(func(thrift.Context, *history.GetWorkflowExecutionNextEventIDRequest) *history.GetWorkflowExecutionNextEventIDResponse); ok {
 		r0 = rf(ctx, getRequest)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*shared.GetWorkflowExecutionHistoryResponse)
+			r0 = ret.Get(0).(*history.GetWorkflowExecutionNextEventIDResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(thrift.Context, *history.GetWorkflowExecutionHistoryRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(thrift.Context, *history.GetWorkflowExecutionNextEventIDRequest) error); ok {
 		r1 = rf(ctx, getRequest)
 	} else {
 		r1 = ret.Error(1)

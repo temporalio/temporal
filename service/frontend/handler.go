@@ -21,6 +21,7 @@
 package frontend
 
 import (
+	"encoding/json"
 	"log"
 	"sync"
 
@@ -42,32 +43,42 @@ import (
 
 var _ cadence.TChanWorkflowService = (*WorkflowHandler)(nil)
 
-// WorkflowHandler - Thrift handler inteface for workflow service
-type WorkflowHandler struct {
-	domainCache        cache.DomainCache
-	metadataMgr        persistence.MetadataManager
-	historyMgr         persistence.HistoryManager
-	visibitiltyMgr     persistence.VisibilityManager
-	history            history.Client
-	matching           matching.Client
-	tokenSerializer    common.TaskTokenSerializer
-	hSerializerFactory persistence.HistorySerializerFactory
-	startWG            sync.WaitGroup
-	service.Service
-}
+type (
+	// WorkflowHandler - Thrift handler inteface for workflow service
+	WorkflowHandler struct {
+		domainCache        cache.DomainCache
+		metadataMgr        persistence.MetadataManager
+		historyMgr         persistence.HistoryManager
+		visibitiltyMgr     persistence.VisibilityManager
+		history            history.Client
+		matching           matching.Client
+		tokenSerializer    common.TaskTokenSerializer
+		hSerializerFactory persistence.HistorySerializerFactory
+		startWG            sync.WaitGroup
+		service.Service
+	}
+
+	getHistoryContinuationToken struct {
+		runID            string
+		nextEventID      int64
+		persistenceToken []byte
+	}
+)
 
 const (
-	defaultHistoryMaxPageSize = 1000
+	defaultVisibilityMaxPageSize = 1000
+	defaultHistoryMaxPageSize    = 1000
 )
 
 var (
-	errDomainNotSet     = &gen.BadRequestError{Message: "Domain not set on request."}
-	errTaskTokenNotSet  = &gen.BadRequestError{Message: "Task token not set on request."}
-	errTaskListNotSet   = &gen.BadRequestError{Message: "TaskList is not set on request."}
-	errExecutionNotSet  = &gen.BadRequestError{Message: "Execution is not set on request."}
-	errWorkflowIDNotSet = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
-	errRunIDNotSet      = &gen.BadRequestError{Message: "RunId is not set on request."}
-	errInvalidRunID     = &gen.BadRequestError{Message: "Invalid RunId."}
+	errDomainNotSet         = &gen.BadRequestError{Message: "Domain not set on request."}
+	errTaskTokenNotSet      = &gen.BadRequestError{Message: "Task token not set on request."}
+	errTaskListNotSet       = &gen.BadRequestError{Message: "TaskList is not set on request."}
+	errExecutionNotSet      = &gen.BadRequestError{Message: "Execution is not set on request."}
+	errWorkflowIDNotSet     = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
+	errRunIDNotSet          = &gen.BadRequestError{Message: "RunId is not set on request."}
+	errInvalidRunID         = &gen.BadRequestError{Message: "Invalid RunId."}
+	errInvalidNextPageToken = &gen.BadRequestError{Message: "Invalid NextPageToken."}
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
@@ -319,14 +330,23 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	}
 
 	var history *gen.History
+	var persistenceToken []byte
 	if matchingResp.IsSetWorkflowExecution() {
 		// Non-empty response. Get the history
-		history, err = wh.getHistory(info.ID, *matchingResp.GetWorkflowExecution(), matchingResp.GetStartedEventId()+1)
+		history, persistenceToken, err = wh.getHistory(
+			info.ID, *matchingResp.GetWorkflowExecution(), matchingResp.GetStartedEventId()+1, defaultHistoryMaxPageSize, nil)
 		if err != nil {
 			return nil, wrapError(err)
 		}
 	}
-	return createPollForDecisionTaskResponse(matchingResp, history), nil
+
+	continuation, err :=
+		getSerializedGetHistoryToken(persistenceToken, matchingResp.GetWorkflowExecution().GetRunId(), history, matchingResp.GetStartedEventId()+1)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	return createPollForDecisionTaskResponse(matchingResp, history, continuation), nil
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -545,21 +565,50 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, errInvalidRunID
 	}
 
+	if !getRequest.IsSetMaximumPageSize() || getRequest.GetMaximumPageSize() == 0 {
+		getRequest.MaximumPageSize = common.Int32Ptr(defaultHistoryMaxPageSize)
+	}
+
 	domainName := getRequest.GetDomain()
 	info, _, err := wh.domainCache.GetDomain(domainName)
 	if err != nil {
 		return nil, wrapError(err)
 	}
 
-	response, err := wh.history.GetWorkflowExecutionHistory(ctx, &h.GetWorkflowExecutionHistoryRequest{
-		DomainUUID: common.StringPtr(info.ID),
-		GetRequest: getRequest,
-	})
+	token := &getHistoryContinuationToken{}
+	if getRequest.IsSetNextPageToken() {
+		token, err = deserializeGetHistoryToken(getRequest.GetNextPageToken())
+		if err != nil {
+			return nil, errInvalidNextPageToken
+		}
+	} else {
+		response, err := wh.history.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
+			DomainUUID: common.StringPtr(info.ID),
+			Execution:  getRequest.GetExecution(),
+		})
+		if err != nil {
+			return nil, wrapError(err)
+		}
+		token.nextEventID = response.GetEventId()
+		token.runID = response.GetRunId()
+	}
+
+	we := gen.WorkflowExecution{
+		WorkflowId: getRequest.GetExecution().WorkflowId,
+		RunId:      common.StringPtr(token.runID),
+	}
+	history, persistenceToken, err :=
+		wh.getHistory(info.ID, we, token.nextEventID, getRequest.GetMaximumPageSize(), getRequest.GetNextPageToken())
 	if err != nil {
 		return nil, wrapError(err)
 	}
 
-	return response, nil
+	nextToken, err := getSerializedGetHistoryToken(persistenceToken, token.runID, history, token.nextEventID)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	return createGetWorkflowExecutionHistoryResponse(history, token.nextEventID, nextToken), nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
@@ -713,7 +762,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx thrift.Context,
 	}
 
 	if !listRequest.IsSetMaximumPageSize() || listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(defaultHistoryMaxPageSize)
+		listRequest.MaximumPageSize = common.Int32Ptr(defaultVisibilityMaxPageSize)
 	}
 
 	domainName := listRequest.GetDomain()
@@ -799,7 +848,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 	}
 
 	if !listRequest.IsSetMaximumPageSize() || listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(defaultHistoryMaxPageSize)
+		listRequest.MaximumPageSize = common.Int32Ptr(defaultVisibilityMaxPageSize)
 	}
 
 	domainName := listRequest.GetDomain()
@@ -847,45 +896,41 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 	return resp, nil
 }
 
-func (wh *WorkflowHandler) getHistory(
-	domainID string, execution gen.WorkflowExecution, nextEventID int64) (*gen.History, error) {
+func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
+	nextEventID int64, pageSize int32, nextPageToken []byte) (*gen.History, []byte, error) {
 
-	nextPageToken := []byte{}
-	historyEvents := []*gen.HistoryEvent{}
-Pagination_Loop:
-	for {
-		response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID:      domainID,
-			Execution:     execution,
-			NextEventID:   nextEventID,
-			PageSize:      100,
-			NextPageToken: nextPageToken,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		for _, e := range response.Events {
-			setSerializedHistoryDefaults(&e)
-			s, _ := wh.hSerializerFactory.Get(e.EncodingType)
-			history, err1 := s.Deserialize(&e)
-			if err1 != nil {
-				return nil, err1
-			}
-			historyEvents = append(historyEvents, history.Events...)
-		}
-
-		if len(response.NextPageToken) == 0 {
-			break Pagination_Loop
-		}
-
-		nextPageToken = response.NextPageToken
+	if nextPageToken == nil {
+		nextPageToken = []byte{}
 	}
+	historyEvents := []*gen.HistoryEvent{}
+
+	response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
+		DomainID:      domainID,
+		Execution:     execution,
+		NextEventID:   nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+	})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, e := range response.Events {
+		setSerializedHistoryDefaults(&e)
+		s, _ := wh.hSerializerFactory.Get(e.EncodingType)
+		history, err1 := s.Deserialize(&e)
+		if err1 != nil {
+			return nil, nil, err1
+		}
+		historyEvents = append(historyEvents, history.Events...)
+	}
+
+	nextPageToken = response.NextPageToken
 
 	executionHistory := gen.NewHistory()
 	executionHistory.Events = historyEvents
-	return executionHistory, nil
+	return executionHistory, nextPageToken, nil
 }
 
 // sets the version and encoding types to defaults if they
@@ -967,13 +1012,50 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 }
 
 func createPollForDecisionTaskResponse(
-	matchingResponse *m.PollForDecisionTaskResponse, history *gen.History) *gen.PollForDecisionTaskResponse {
+	matchingResponse *m.PollForDecisionTaskResponse, history *gen.History, nextPageToken []byte) *gen.PollForDecisionTaskResponse {
 	resp := gen.NewPollForDecisionTaskResponse()
-	resp.TaskToken = matchingResponse.TaskToken
-	resp.WorkflowExecution = matchingResponse.WorkflowExecution
-	resp.WorkflowType = matchingResponse.WorkflowType
-	resp.PreviousStartedEventId = matchingResponse.PreviousStartedEventId
-	resp.StartedEventId = matchingResponse.StartedEventId
+	if matchingResponse != nil {
+		resp.TaskToken = matchingResponse.TaskToken
+		resp.WorkflowExecution = matchingResponse.WorkflowExecution
+		resp.WorkflowType = matchingResponse.WorkflowType
+		resp.PreviousStartedEventId = matchingResponse.PreviousStartedEventId
+		resp.StartedEventId = matchingResponse.StartedEventId
+	}
 	resp.History = history
+	resp.NextPageToken = nextPageToken
 	return resp
+}
+
+func createGetWorkflowExecutionHistoryResponse(
+	history *gen.History, nextEventID int64, nextPageToken []byte) *gen.GetWorkflowExecutionHistoryResponse {
+	resp := gen.NewGetWorkflowExecutionHistoryResponse()
+	resp.History = history
+	resp.NextPageToken = nextPageToken
+	return resp
+}
+
+func deserializeGetHistoryToken(data []byte) (*getHistoryContinuationToken, error) {
+	var token getHistoryContinuationToken
+	err := json.Unmarshal(data, &token)
+
+	return &token, err
+}
+
+func getSerializedGetHistoryToken(persistenceToken []byte, runID string, history *gen.History, nextEventID int64) ([]byte, error) {
+	// create token if there are more events to read
+	if history == nil {
+		return nil, nil
+	}
+	events := history.GetEvents()
+	if len(persistenceToken) > 0 && len(events) > 0 && events[len(events)-1].GetEventId() < nextEventID-1 {
+		token := &getHistoryContinuationToken{
+			runID:            runID,
+			nextEventID:      nextEventID,
+			persistenceToken: persistenceToken,
+		}
+		data, err := json.Marshal(token)
+
+		return data, err
+	}
+	return nil, nil
 }

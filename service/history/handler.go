@@ -408,30 +408,29 @@ func (h *Handler) StartWorkflowExecution(ctx thrift.Context,
 	return response, nil
 }
 
-// GetWorkflowExecutionHistory - returns the complete history of a workflow execution
-func (h *Handler) GetWorkflowExecutionHistory(ctx thrift.Context,
-	wrappedRequest *hist.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {
+// GetWorkflowExecutionNextEventID - returns the id of the next event in the execution's history
+func (h *Handler) GetWorkflowExecutionNextEventID(ctx thrift.Context,
+	getRequest *hist.GetWorkflowExecutionNextEventIDRequest) (*hist.GetWorkflowExecutionNextEventIDResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryGetWorkflowExecutionHistoryScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryGetWorkflowExecutionHistoryScope, metrics.CadenceLatency)
+	h.metricsClient.IncCounter(metrics.HistoryGetWorkflowExecutionNextEventIDScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryGetWorkflowExecutionNextEventIDScope, metrics.CadenceLatency)
 	defer sw.Stop()
 
-	if !wrappedRequest.IsSetDomainUUID() {
+	if !getRequest.IsSetDomainUUID() {
 		return nil, errDomainNotSet
 	}
 
-	getRequest := wrappedRequest.GetGetRequest()
 	workflowExecution := getRequest.GetExecution()
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionHistoryScope, err1)
+		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionNextEventIDScope, err1)
 		return nil, err1
 	}
 
-	resp, err2 := engine.GetWorkflowExecutionHistory(wrappedRequest)
+	resp, err2 := engine.GetWorkflowExecutionNextEventID(getRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionHistoryScope, h.convertError(err2))
+		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionNextEventIDScope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 	return resp, nil
