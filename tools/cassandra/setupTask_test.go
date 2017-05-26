@@ -79,13 +79,19 @@ func (s *SetupSchemaTestSuite) TearDownSuite() {
 	s.client.Close()
 }
 
+func (s *SetupSchemaTestSuite) TestCreateKeyspace() {
+	RunTool([]string{"./tool", "create", "-k", "foobar123", "--rf", "1"})
+	err := s.client.DropKeyspace("foobar123")
+	s.Nil(err)
+}
+
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
 
 	client, err := newCQLClient("127.0.0.1", s.keyspace)
 	s.Nil(err)
 
 	// test command fails without required arguments
-	RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema"})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema"})
 	tables, err := client.ListTables()
 	s.Nil(err)
 	s.Equal(0, len(tables))
@@ -101,7 +107,7 @@ func (s *SetupSchemaTestSuite) TestSetupSchema() {
 	cqlFile.WriteString(createTestCQLFileContent())
 
 	// make sure command doesn't succeed without version or disable-version
-	RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name()})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name()})
 	tables, err = client.ListTables()
 	s.Nil(err)
 	s.Equal(0, len(tables))
@@ -113,9 +119,9 @@ func (s *SetupSchemaTestSuite) TestSetupSchema() {
 
 		// test overwrite with versioning works
 		if versioningEnabled {
-			RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name(), "-version", ver, "-o"})
+			RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name(), "-version", ver, "-o"})
 		} else {
-			RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-f", cqlFile.Name(), "-d", "-o"})
+			RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-f", cqlFile.Name(), "-d", "-o"})
 		}
 
 		expectedTables := getExpectedTables(versioningEnabled)

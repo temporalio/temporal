@@ -112,6 +112,15 @@ func (s *HandlerTestSuite) TestValidateUpdateSchemaConfig() {
 	s.Equal("1.2", config.TargetVersion)
 }
 
+func (s *HandlerTestSuite) TestValidateCreateKeyspaceConfig() {
+	config := new(CreateKeyspaceConfig)
+	s.NotNil(validateCreateKeyspaceConfig(config))
+	config.CassHosts = "127.0.0.1"
+	s.NotNil(validateCreateKeyspaceConfig(config))
+	config.CassKeyspace = "foobar"
+	s.Nil(validateCreateKeyspaceConfig(config))
+}
+
 func (s *HandlerTestSuite) assertValidateSetupSucceeds(input *SetupSchemaConfig) {
 	err := validateSetupSchemaConfig(input)
 	s.Nil(err)

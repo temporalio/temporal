@@ -90,8 +90,8 @@ func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 
 	s.makeSchemaVersionDirs(tmpDir)
 
-	RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-v", "0.0"})
-	RunTool([]string{"./tool", "-k", s.keyspace, "update-schema", "-d", tmpDir, "-v", "2.0"})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-v", "0.0"})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "update-schema", "-d", tmpDir, "-v", "2.0"})
 
 	expected := getExpectedTables(true)
 	expected["domains"] = struct{}{}
@@ -122,8 +122,8 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	defer client.Close()
 
 	dir := "../../schema/cadence/versioned"
-	RunTool([]string{"./tool", "-k", s.keyspace, "setup-schema", "-v", "0.0"})
-	RunTool([]string{"./tool", "-k", s.keyspace, "update-schema", "-d", dir})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-v", "0.0"})
+	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "update-schema", "-d", dir})
 
 	ver, err := client.ReadSchemaVersion()
 	s.Nil(err)

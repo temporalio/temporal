@@ -53,6 +53,14 @@ type (
 		DisableVersioning bool // do not use schema versioning
 	}
 
+	// CreateKeyspaceConfig holds the config
+	// params needed to create a cassandra
+	// keyspace
+	CreateKeyspaceConfig struct {
+		BaseConfig
+		ReplicationFactor int
+	}
+
 	// ConfigError is an error type that
 	// represents a problem with the config
 	ConfigError struct {
@@ -70,6 +78,8 @@ const (
 	cliOptTargetVersion     = "version"
 	cliOptDryrun            = "dryrun"
 	cliOptSchemaDir         = "schema-dir"
+	cliOptReplicationFactor = "replication-factor"
+	cliOptQuiet             = "quiet"
 
 	cliFlagEndpoint          = cliOptEndpoint + ", ep"
 	cliFlagKeyspace          = cliOptKeyspace + ", k"
@@ -80,6 +90,8 @@ const (
 	cliFlagTargetVersion     = cliOptTargetVersion + ", v"
 	cliFlagDryrun            = cliOptDryrun + ", y"
 	cliFlagSchemaDir         = cliOptSchemaDir + ", d"
+	cliFlagReplicationFactor = cliOptReplicationFactor + ", rf"
+	cliFlagQuiet             = cliOptQuiet + ", q"
 )
 
 var rmspaceRegex = regexp.MustCompile("\\s+")

@@ -65,6 +65,9 @@ func (c *Metrics) newM3Scope() tally.Scope {
 // a default reporting interval of a second
 func (c *Metrics) newStatsdScope() tally.Scope {
 	config := c.Statsd
+	if len(config.HostPort) == 0 {
+		return tally.NoopScope
+	}
 	statter, err := statsd.NewBufferedClient(config.HostPort, config.Prefix, config.FlushInterval, config.FlushBytes)
 	if err != nil {
 		log.Fatalf("error creating statsd client, err=%v", err)

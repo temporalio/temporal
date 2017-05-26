@@ -116,7 +116,7 @@ cover_ci: cover_profile
 	goveralls -coverprofile=$(BUILD)/cover.out -service=travis-ci || echo -e "\x1b[31mCoveralls failed\x1b[m"; \
 
 lint: vendor/glide.updated
-	@echo $(ALL_SRC)
+	@echo Running linter
 	@lintFail=0; for file in $(ALL_SRC); do \
 		golint "$$file"; \
 		if [ $$? -eq 1 ]; then lintFail=1; fi; \

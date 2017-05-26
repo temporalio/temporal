@@ -1,0 +1,26 @@
+version: '3'
+services:
+  cassandra:
+    image: cassandra:3.9
+    ports:
+      - "9042:9042"
+  statsd:
+    image: hopsoft/graphite-statsd
+    ports:
+      - "8080:80"
+      - "2003:2003"
+      - "8125:8125"
+      - "8126:8126"
+  cadence:
+    build: .
+    image: uber/cadence:master
+    ports:
+     - "7933:7933"
+     - "7934:7934"
+     - "7935:7935"
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "STATSD_ENDPOINT=statsd:8125"
+    depends_on:
+      - cassandra
+      - statsd

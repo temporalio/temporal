@@ -22,6 +22,7 @@ package cassandra
 
 import (
 	"github.com/urfave/cli"
+	"os"
 )
 
 // RunTool runs the cadence-cassandra-tool command line tool
@@ -36,6 +37,15 @@ func SetupSchema(config *SetupSchemaConfig) error {
 		return err
 	}
 	return handleSetupSchema(config)
+}
+
+// root handler for all cli commands
+func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
+	quiet := c.GlobalBool(cliOptQuiet)
+	err := handler(c)
+	if err != nil && !quiet {
+		os.Exit(1)
+	}
 }
 
 func buildCLIOptions() *cli.App {
@@ -57,6 +67,10 @@ func buildCLIOptions() *cli.App {
 			Value:  "cadence",
 			Usage:  "name of the cassandra keyspace",
 			EnvVar: "CASSANDRA_KEYSPACE",
+		},
+		cli.BoolFlag{
+			Name:  cliFlagQuiet,
+			Usage: "Don't set exit status to 1 on error",
 		},
 	}
 
@@ -84,7 +98,7 @@ func buildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				setupSchema(c)
+				cliHandler(c, setupSchema)
 			},
 		},
 		{
@@ -106,7 +120,26 @@ func buildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				updateSchema(c)
+				cliHandler(c, updateSchema)
+			},
+		},
+		{
+			Name:    "create-keyspace",
+			Aliases: []string{"create"},
+			Usage:   "creates a keyspace with simple strategy",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  cliFlagKeyspace,
+					Usage: "name of the keyspace",
+				},
+				cli.IntFlag{
+					Name:  cliFlagReplicationFactor,
+					Value: 1,
+					Usage: "replication factor for the keyspace",
+				},
+			},
+			Action: func(c *cli.Context) {
+				cliHandler(c, createKeyspace)
 			},
 		},
 	}

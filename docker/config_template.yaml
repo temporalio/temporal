@@ -1,0 +1,39 @@
+cassandra:
+  hosts: "${CASSANDRA_SEEDS}"
+  keyspace: "${KEYSPACE}"
+  consistency: "${CASSANDRA_CONSISTENCY}"
+  numHistoryShards: ${NUM_HISTORY_SHARDS}
+
+ringpop:
+  name: cadence
+  bootstrapMode: hosts
+  bootstrapHosts: ["${RINGPOP_SEEDS}"]
+  maxJoinDuration: 30s
+
+services:
+  frontend:
+    tchannel:
+      port: 7933
+      bindOnLocalHost: ${BIND_ON_LOCALHOST}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence"
+
+  matching:
+    tchannel:
+      port: 7935
+      bindOnLocalHost: ${BIND_ON_LOCALHOST}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence"
+
+  history:
+    tchannel:
+      port: 7934
+      bindOnLocalHost: ${BIND_ON_LOCALHOST}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence"

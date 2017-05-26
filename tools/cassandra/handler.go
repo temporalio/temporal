@@ -32,13 +32,10 @@ import (
 func setupSchema(cli *cli.Context) error {
 	config, err := newSetupSchemaConfig(cli)
 	if err != nil {
-		err = newConfigError(err.Error())
-		log.Println(err)
-		return err
+		return handleErr(newConfigError(err.Error()))
 	}
 	if err := handleSetupSchema(config); err != nil {
-		log.Println(err)
-		return err
+		return handleErr(err)
 	}
 	return nil
 }
@@ -48,13 +45,27 @@ func setupSchema(cli *cli.Context) error {
 func updateSchema(cli *cli.Context) error {
 	config, err := newUpdateSchemaConfig(cli)
 	if err != nil {
-		err = newConfigError(err.Error())
-		log.Println(err)
-		return err
+		return handleErr(newConfigError(err.Error()))
 	}
 	if err := handleUpdateSchema(config); err != nil {
-		log.Println(err)
-		return err
+		return handleErr(err)
+	}
+	return nil
+}
+
+// createKeyspace creates a cassandra keyspace
+func createKeyspace(cli *cli.Context) error {
+	config, err := newCreateKeyspaceConfig(cli)
+	if err != nil {
+		return handleErr(err)
+	}
+	client, err := newCQLClient(config.CassHosts, "system")
+	if err != nil {
+		return handleErr(fmt.Errorf("error creating cql client:%v", err))
+	}
+	err = client.CreateKeyspace(config.CassKeyspace, config.ReplicationFactor)
+	if err != nil {
+		return handleErr(fmt.Errorf("error creating keyspace:%v", err))
 	}
 	return nil
 }
@@ -160,6 +171,33 @@ func newUpdateSchemaConfig(cli *cli.Context) (*UpdateSchemaConfig, error) {
 	return config, nil
 }
 
+func newCreateKeyspaceConfig(cli *cli.Context) (*CreateKeyspaceConfig, error) {
+	config := new(CreateKeyspaceConfig)
+	config.CassHosts = cli.GlobalString(cliOptEndpoint)
+	config.CassKeyspace = cli.String(cliOptKeyspace)
+	config.ReplicationFactor = cli.Int(cliOptReplicationFactor)
+
+	if err := validateCreateKeyspaceConfig(config); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func validateCreateKeyspaceConfig(config *CreateKeyspaceConfig) error {
+	if len(config.CassHosts) == 0 {
+		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
+	}
+	if len(config.CassKeyspace) == 0 {
+		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
+	}
+	return nil
+}
+
 func flag(opt string) string {
 	return "(-" + opt + ")"
+}
+
+func handleErr(err error) error {
+	log.Println(err)
+	return err
 }
