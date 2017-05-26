@@ -147,7 +147,10 @@ CREATE TABLE executions (
   timer_map            map<text, frozen<timer_info>>,
   child_executions_map map<bigint, frozen<child_execution_info>>,
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, task_id)
-);
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 CREATE TABLE events (
   domain_id      uuid,
@@ -162,7 +165,10 @@ CREATE TABLE events (
   data_encoding  text, -- Protocol used for history serialization
   data_version   int,  -- history blob version
   PRIMARY KEY ((domain_id, workflow_id, run_id), first_event_id)
-);
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
@@ -175,21 +181,30 @@ CREATE TABLE tasks (
   task             frozen<task>,
   task_list        frozen<task_list>,
   PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
-);
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 CREATE TABLE domains (
   id     uuid,
   domain frozen<domain>,
   config frozen<domain_config>,
   PRIMARY KEY (id)
-);
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 CREATE TABLE domains_by_name (
   name   text,
   domain frozen<domain>,
   config frozen<domain_config>,
   PRIMARY KEY (name)
-);
+)  WITH COMPACTION = {
+     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+   }
+   AND GC_GRACE_SECONDS = 172800;
 
 CREATE TABLE open_executions (
   domain_id            uuid,
@@ -199,7 +214,11 @@ CREATE TABLE open_executions (
   start_time           timestamp,
   workflow_type_name   text,
   PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
-) WITH CLUSTERING ORDER BY (start_time DESC);
+) WITH CLUSTERING ORDER BY (start_time DESC)
+  AND COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 
 CREATE INDEX open_by_workflow_id ON open_executions (workflow_id);
@@ -215,7 +234,11 @@ CREATE TABLE closed_executions (
   status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,
   PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
-) WITH CLUSTERING ORDER BY (start_time DESC);
+) WITH CLUSTERING ORDER BY (start_time DESC)
+  AND COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  }
+  AND GC_GRACE_SECONDS = 172800;
 
 CREATE INDEX closed_by_workflow_id ON closed_executions (workflow_id);
 CREATE INDEX closed_by_close_time ON closed_executions (close_time);
