@@ -1,27 +1,46 @@
-cadence 
-==============
-[Cadence](https://eng.uber.com/) is awesome!
+# Cadence 
 
-Developing
-----------
+Cadence is a distributed, scalable, durable, and highly available orchestration engine we developed at Uber Engineering to execute asynchronous long-running business logic in a scalable and resilient way.
 
-Prerequisite:
-* Make certain that `thrift` is in your path. (OSX: `brew install thrift`) 
-* `thrift-gen` is needed (`go get github.com/uber/tchannel-go/thrift/thrift-gen`)
-* `cassandra` 3.9 is needed to run tests (OSX: `brew install cassandra`)
+Business logic is modeled as workflows and activities. Workflows are the implementation of coordination logic. Its sole purpose is to orchestrate activity executions. Activities are the implementation of a particular task in the business logic. The workflow and activity implementation are hosted and executed in worker processes. These workers long-poll the Cadence server for tasks, execute the tasks by invoking either a workflow or activity implementation, and return the results of the task back to the Cadence server. Furthermore, the workers can be implemented as completely stateless services which in turn allows for unlimited horizontal scaling.
 
-After starting cassandra, run `make` to build
+The Cadence server brokers and persists tasks and events generated during workflow execution, which provides certain scalability and realiability guarantees for workflow executions. An individual activity execution is not fault tolerant as it can fail for various reasons. But the workflow that defines in which order and how (location, input parameters, timeouts, etc.) activities are executed is guaranteed to continue execution under various failure conditions.
 
-Contributing
-------------
-We'd love your help in making Cadence great. If you need new API(s) to be added to our thrift files, open an issue and we will respond as fast as we can. If you want to propose new feature(s) along with the appropriate APIs yourself, open a pull request to start a discussion and we will merge it after review.
+This repo contains the source code of the Cadence server. The client lib you can use to implement workflows, activities and worker can be found [here](https://github.com/uber-go/cadence-client).
 
-**Note:** All contributors also need to fill out the [Uber Contributor License Agreement](http://t.uber.com/cla) before we can merge in any of your changes
+## Running
 
-Documentation
---------------
-Interested in learning more about Cadence? TODO:
+### Locally
 
-License
--------
+* Build the required binaries following the instructions [here](CONTRIBUTING.md).
+
+* Install and run `cassandra` locally:
+```bash
+# for OS X
+brew install cassandra
+
+# start cassandra
+/usr/local/bin/cassandra
+```
+
+* Setup the cassandra schema:
+```bash
+./cadence-cassandra-tool --ep 127.0.0.1 create -k "cadence" --rf 1
+./cadence-cassandra-tool --ep 127.0.0.1 -k "cadence" setup-schema -d -f ./schema/cadence/schema.cql
+```
+
+* Start the service:
+```bash
+./cadence
+```
+
+### Using Docker
+
+You can also [build and run](docker/README.md) the service using Docker. 
+
+## Contributing
+We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
+
+## License
+
 MIT License, please see [LICENSE](https://github.com/uber/cadence/blob/master/LICENSE) for details.
