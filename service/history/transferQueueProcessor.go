@@ -221,9 +221,11 @@ func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persis
 		tasksCh <- tsk
 	}
 
-	// There might be more task
-	// We return now to yield, but enqueue an event to poll later
-	t.NotifyNewTask()
+	if len(tasks) == transferTaskBatchSize {
+		// There might be more task
+		// We return now to yield, but enqueue an event to poll later
+		t.NotifyNewTask()
+	}
 	return
 }
 
