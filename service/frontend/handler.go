@@ -331,6 +331,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 
 	var history *gen.History
 	var persistenceToken []byte
+	var continuation []byte
 	if matchingResp.IsSetWorkflowExecution() {
 		// Non-empty response. Get the history
 		history, persistenceToken, err = wh.getHistory(
@@ -338,12 +339,12 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		if err != nil {
 			return nil, wrapError(err)
 		}
-	}
 
-	continuation, err :=
-		getSerializedGetHistoryToken(persistenceToken, matchingResp.GetWorkflowExecution().GetRunId(), history, matchingResp.GetStartedEventId()+1)
-	if err != nil {
-		return nil, wrapError(err)
+		continuation, err =
+			getSerializedGetHistoryToken(persistenceToken, matchingResp.GetWorkflowExecution().GetRunId(), history, matchingResp.GetStartedEventId()+1)
+		if err != nil {
+			return nil, wrapError(err)
+		}
 	}
 
 	return createPollForDecisionTaskResponse(matchingResp, history, continuation), nil
