@@ -87,7 +87,7 @@ func (s *Service) Start() {
 
 	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
+		p.CassandraConfig.VisibilityKeyspace,
 		p.Logger)
 
 	if err != nil {

@@ -800,6 +800,7 @@ func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bo
 	s.createCluster(testWorkflowClusterHosts, testDatacenter, gocql.Consistency(1), keySpace)
 	s.createKeyspace(1, dropKeySpace)
 	s.loadSchema([]string{"schema.cql"}, schemaDir)
+	s.loadVisibilitySchema([]string{"schema.cql"}, schemaDir)
 }
 
 func (s *CassandraTestCluster) tearDownTestCluster() {
@@ -842,7 +843,19 @@ func (s *CassandraTestCluster) loadSchema(fileNames []string, schemaDir string) 
 		workflowSchemaDir = schemaDir + "/schema/cadence"
 	}
 
-	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace)
+	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace, true)
+	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
+		log.Fatal(err)
+	}
+}
+
+func (s *CassandraTestCluster) loadVisibilitySchema(fileNames []string, schemaDir string) {
+	workflowSchemaDir := "./schema/visibility"
+	if schemaDir != "" {
+		workflowSchemaDir = schemaDir + "/schema/visibility"
+	}
+
+	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace, false)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}

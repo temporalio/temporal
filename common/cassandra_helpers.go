@@ -26,11 +26,12 @@ import (
 
 	"github.com/uber/cadence/common/logging"
 
+	"io/ioutil"
+	"os"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 	"github.com/uber/cadence/tools/cassandra"
-	"io/ioutil"
-	"os"
 )
 
 // NewCassandraCluster creates a cassandra cluster given comma separated list of clusterHosts
@@ -79,7 +80,7 @@ func DropCassandraKeyspace(s *gocql.Session, keyspace string) (err error) {
 }
 
 // LoadCassandraSchema loads the schema from the given .cql files on this keyspace
-func LoadCassandraSchema(dir string, fileNames []string, keyspace string) (err error) {
+func LoadCassandraSchema(dir string, fileNames []string, keyspace string, override bool) (err error) {
 
 	tmpFile, err := ioutil.TempFile("", "_cadence_")
 	if err != nil {
@@ -104,7 +105,7 @@ func LoadCassandraSchema(dir string, fileNames []string, keyspace string) (err e
 			CassKeyspace: keyspace,
 		},
 		SchemaFilePath:    tmpFile.Name(),
-		Overwrite:         true,
+		Overwrite:         override,
 		DisableVersioning: true,
 	}
 

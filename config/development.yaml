@@ -1,6 +1,7 @@
 cassandra:
   hosts: "127.0.0.1"
   keyspace: "cadence"
+  visibilityKeyspace: "cadence_visibility"
   consistency: "One"
   numHistoryShards: 4
 

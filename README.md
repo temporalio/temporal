@@ -1,4 +1,4 @@
-# Cadence 
+# Cadence
 
 Cadence is a distributed, scalable, durable, and highly available orchestration engine we developed at Uber Engineering to execute asynchronous long-running business logic in a scalable and resilient way.
 
@@ -27,6 +27,8 @@ brew install cassandra
 ```bash
 ./cadence-cassandra-tool --ep 127.0.0.1 create -k "cadence" --rf 1
 ./cadence-cassandra-tool --ep 127.0.0.1 -k "cadence" setup-schema -d -f ./schema/cadence/schema.cql
+./cadence-cassandra-tool --ep 127.0.0.1 create -k "cadence_visibility" --rf 1
+./cadence-cassandra-tool --ep 127.0.0.1 -k "cadence_visibility" setup-schema -d -f ./schema/visibility/schema.cql
 ```
 
 * Start the service:
@@ -36,7 +38,7 @@ brew install cassandra
 
 ### Using Docker
 
-You can also [build and run](docker/README.md) the service using Docker. 
+You can also [build and run](docker/README.md) the service using Docker.
 
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).

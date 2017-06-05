@@ -82,6 +82,8 @@ type (
 		Hosts string `yaml:"hosts" validate:"nonzero"`
 		// Keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
+		// VisibilityKeyspace is the cassandra keyspace for visibility store
+		VisibilityKeyspace string `yaml:"visibilityKeyspace" validate:"nonzero"`
 		// Consistency is the default cassandra consistency level
 		Consistency string `yaml:"consistency"`
 		// Datacenter is the data center filter arg for cassandra
