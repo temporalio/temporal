@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/ringpop-go/discovery/statichosts"
 	"gopkg.in/yaml.v2"
 	"testing"
 	"time"
@@ -73,6 +74,20 @@ func (s *RingpopSuite) TestFileMode() {
 	s.NotNil(f)
 }
 
+func (s *RingpopSuite) TestCustomMode() {
+	var cfg Ringpop
+	err := yaml.Unmarshal([]byte(getCustomConfig()), &cfg)
+	s.Nil(err)
+	s.Equal("test", cfg.Name)
+	s.Equal(BootstrapModeCustom, cfg.BootstrapMode)
+	s.NotNil(cfg.validate())
+	cfg.DiscoveryProvider = statichosts.New("127.0.0.1")
+	s.Nil(cfg.validate())
+	f, err := cfg.NewFactory()
+	s.Nil(err)
+	s.NotNil(f)
+}
+
 func (s *RingpopSuite) TestInvalidConfig() {
 	var cfg Ringpop
 	s.NotNil(cfg.validate())
@@ -95,5 +110,11 @@ func getHostsConfig() string {
 	return `name: "test"
 bootstrapMode: "hosts"
 bootstrapHosts: ["127.0.0.1:1111"]
+maxJoinDuration: 30s`
+}
+
+func getCustomConfig() string {
+	return `name: "test"
+bootstrapMode: "custom"
 maxJoinDuration: 30s`
 }

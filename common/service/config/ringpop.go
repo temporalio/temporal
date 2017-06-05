@@ -40,6 +40,8 @@ const (
 	BootstrapModeFile
 	// BootstrapModeHosts represents a list of hosts passed in the configuration
 	BootstrapModeHosts
+	// BootstrapModeCustom represents a custom bootstrap mode
+	BootstrapModeCustom
 )
 
 const (
@@ -86,6 +88,8 @@ func parseBootstrapMode(s string) (BootstrapMode, error) {
 		return BootstrapModeHosts, nil
 	case "file":
 		return BootstrapModeFile, nil
+	case "custom":
+		return BootstrapModeCustom, nil
 	}
 	return BootstrapModeNone, errors.New("invalid or no ringpop bootstrap mode")
 }
@@ -99,6 +103,10 @@ func validateBootstrapMode(rpConfig *Ringpop) error {
 	case BootstrapModeHosts:
 		if len(rpConfig.BootstrapHosts) == 0 {
 			return fmt.Errorf("ringpop config missing boostrap hosts param")
+		}
+	case BootstrapModeCustom:
+		if rpConfig.DiscoveryProvider == nil {
+			return fmt.Errorf("ringpop bootstrapMode is set to custom but discoveryProvider is nil")
 		}
 	default:
 		return fmt.Errorf("ringpop config with unknown boostrap mode")
@@ -142,6 +150,12 @@ func (factory *RingpopFactory) CreateRingpop(ch *tchannel.Channel) (*ringpop.Rin
 }
 
 func newDiscoveryProvider(cfg *Ringpop) (discovery.DiscoverProvider, error) {
+
+	if cfg.DiscoveryProvider != nil {
+		// custom discovery provider takes first precedence
+		return cfg.DiscoveryProvider, nil
+	}
+
 	switch cfg.BootstrapMode {
 	case BootstrapModeHosts:
 		return statichosts.New(cfg.BootstrapHosts...), nil
