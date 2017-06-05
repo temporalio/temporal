@@ -108,14 +108,15 @@ func (s *engineSuite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache)
+	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
+	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache, domainCache)
 	h := &historyEngineImpl{
 		shard:              mockShard,
 		executionManager:   s.mockExecutionMgr,
 		historyMgr:         s.mockHistoryMgr,
 		txProcessor:        txProcessor,
 		historyCache:       historyCache,
-		domainCache:        cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		domainCache:        domainCache,
 		logger:             s.logger,
 		metricsClient:      metrics.NewClient(tally.NewTestScope("", nil), metrics.History),
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),

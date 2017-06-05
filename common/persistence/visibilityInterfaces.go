@@ -47,6 +47,7 @@ type (
 		StartTimestamp   int64
 		CloseTimestamp   int64
 		Status           s.WorkflowExecutionCloseStatus
+		RetentionSeconds int64
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a domain

@@ -89,7 +89,8 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(historyCacheMaxSize, shard, logger)
-	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyClient, historyCache)
+	domainCache := cache.NewDomainCache(metadataMgr, logger)
+	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyClient, historyCache, domainCache)
 	historyEngImpl := &historyEngineImpl{
 		shard:              shard,
 		metadataMgr:        metadataMgr,
@@ -99,7 +100,7 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		historyCache:       historyCache,
-		domainCache:        cache.NewDomainCache(metadataMgr, logger),
+		domainCache:        domainCache,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
 		}),

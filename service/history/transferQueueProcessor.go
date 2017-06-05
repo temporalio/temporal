@@ -33,6 +33,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -55,6 +56,7 @@ type (
 		matchingClient    matching.Client
 		historyClient     hc.Client
 		cache             *historyCache
+		domainCache       cache.DomainCache
 		rateLimiter       common.TokenBucket // Read rate limiter
 		appendCh          chan struct{}
 		isStarted         int32
@@ -83,8 +85,8 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.VisibilityManager,
-	matching matching.Client, historyClient hc.Client, cache *historyCache) transferQueueProcessor {
+func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.VisibilityManager, matching matching.Client,
+	historyClient hc.Client, cache *historyCache, domainCache cache.DomainCache) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
 	processor := &transferQueueProcessorImpl{
@@ -94,6 +96,7 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 		historyClient:     historyClient,
 		visibilityManager: visibilityMgr,
 		cache:             cache,
+		domainCache:       domainCache,
 		rateLimiter:       common.NewTokenBucket(transferProcessorMaxPollRPS, common.NewRealTimeSource()),
 		appendCh:          make(chan struct{}, 1),
 		shutdownCh:        make(chan struct{}),
@@ -404,6 +407,18 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		return err
 	}
 
+	// Record closing in visibility store
+	retention := int64(0)
+	_, domainConfig, err := t.domainCache.GetDomainByID(task.DomainID)
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+		// it is possible that the domain got deleted. Use default retention.
+	} else {
+		retention = int64(domainConfig.Retention)
+	}
+
 	err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       task.DomainID,
 		Execution:        execution,
@@ -411,6 +426,7 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
 		CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
 		Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
+		RetentionSeconds: retention,
 	})
 	if err != nil {
 		return err
