@@ -37,12 +37,12 @@ wait_for_cassandra() {
 
 init_env() {
 
-    export HOST_IP="127.0.0.1" # default to localhost binding
+    export HOST_IP=`hostname --ip-address`
 
-    if [ "$BIND_ON_LOCALHOST" == false ]; then
-            export HOST_IP=`hostname --ip-address`
+    if [ "$BIND_ON_LOCALHOST" == true ]; then
+            export HOST_IP="127.0.0.1"
     else
-        export BIND_ON_LOCALHOST=true
+        export BIND_ON_LOCALHOST=false
     fi
 
     if [ -z "$KEYSPACE" ]; then
@@ -58,7 +58,7 @@ init_env() {
     fi
 
     if [ -z "$RINGPOP_SEEDS" ]; then
-        export RINGPOP_SEEDS=$HOST_IP:7933,$HOST_IP:7934,$HOST_IP:7935
+        export RINGPOP_SEEDS=$HOST_IP:7933
     fi
 
     if [ -z "$NUM_HISTORY_SHARDS" ]; then

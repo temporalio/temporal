@@ -1,6 +1,8 @@
 Quickstart
 ==========
 
+Install docker: https://docs.docker.com/engine/installation/
+
 Following steps will bring up the docker container running cadence server
 along with all its dependencies (cassandra, statsd, graphite). Exposes cadence
 frontend on port 7933 and grafana metrics frontend on port 8080.

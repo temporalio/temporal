@@ -1,6 +1,7 @@
 cassandra:
   hosts: "${CASSANDRA_SEEDS}"
   keyspace: "${KEYSPACE}"
+  visibilityKeyspace: "${KEYSPACE}"
   consistency: "${CASSANDRA_CONSISTENCY}"
   numHistoryShards: ${NUM_HISTORY_SHARDS}
 
