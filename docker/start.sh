@@ -24,6 +24,9 @@ setup_schema() {
     SCHEMA_FILE=$CADENCE_HOME/schema/cadence/schema.cql
     $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
     $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -d -f $SCHEMA_FILE
+    VISIBILITY_SCHEMA_FILE=$CADENCE_HOME/schema/visibility/schema.cql
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -d -f $VISIBILITY_SCHEMA_FILE
 }
 
 wait_for_cassandra() {
@@ -47,6 +50,10 @@ init_env() {
 
     if [ -z "$KEYSPACE" ]; then
         export KEYSPACE="cadence"
+    fi
+
+    if [ -z "$VISIBILITY_KEYSPACE" ]; then
+        export VISIBILITY_KEYSPACE="cadence_visibility"
     fi
 
     if [ -z "$CASSANDRA_SEEDS" ]; then

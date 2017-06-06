@@ -13,7 +13,7 @@ services:
       - "8126:8126"
   cadence:
     build: .
-    image: uber/cadence:master
+    image: ubercadence/server:master
     ports:
      - "7933:7933"
      - "7934:7934"
