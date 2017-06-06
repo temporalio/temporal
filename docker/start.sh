@@ -85,7 +85,10 @@ fi
 
 init_env
 wait_for_cassandra
-setup_schema
+
+if [ "$SKIP_SCHEMA_SETUP" != true ]; then
+    setup_schema
+fi
 
 # fix up config
 envsubst < config/docker_template.yaml > config/docker.yaml
