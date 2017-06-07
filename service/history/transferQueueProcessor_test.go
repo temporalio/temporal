@@ -386,6 +386,33 @@ workerPump:
 	s.mockHistoryClient.AssertExpectations(s.T())
 }
 
+func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
+	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
+	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("complete-task-execution-deleted-test"),
+		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+	taskList := "complete-task-execution-deleted-queue"
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			if task.ScheduleID == firstEventID+1 {
+				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(&workflow.EntityNotExistsError{})
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+
+	s.mockVisibilityMgr.AssertExpectations(s.T())
+}
+
 func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStartTimeout int32) interface{} {
 	var res interface{}
 	domainID := task.DomainID

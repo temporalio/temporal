@@ -305,6 +305,10 @@ func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.Trans
 	timeout := int32(0)
 	if err != nil {
 		release()
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
 		return err
 	}
 
@@ -339,6 +343,10 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	}
 
 	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
 		return err
 	}
 
@@ -454,6 +462,10 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	// Load workflow execution.
 	_, err = context.loadWorkflowExecution()
 	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
 		return err
 	}
 
@@ -500,6 +512,10 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
 	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
 		return err
 	}
 
