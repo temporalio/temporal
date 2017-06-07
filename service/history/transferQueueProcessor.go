@@ -416,7 +416,7 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 	}
 
 	// Record closing in visibility store
-	retention := int64(0)
+	retentionSeconds := int64(0)
 	_, domainConfig, err := t.domainCache.GetDomainByID(task.DomainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
@@ -424,7 +424,8 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		}
 		// it is possible that the domain got deleted. Use default retention.
 	} else {
-		retention = int64(domainConfig.Retention)
+		// retention in domain config is in days, convert to seconds
+		retentionSeconds = int64(domainConfig.Retention) * 24 * 60 * 60
 	}
 
 	err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
@@ -434,7 +435,7 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
 		CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
 		Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
-		RetentionSeconds: retention,
+		RetentionSeconds: retentionSeconds,
 	})
 	if err != nil {
 		return err

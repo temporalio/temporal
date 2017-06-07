@@ -207,7 +207,7 @@ workerPump:
 			} else if task.TaskType == persistence.TransferTaskTypeDeleteExecution {
 				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(&persistence.GetDomainResponse{
 					Config: &persistence.DomainConfig{
-						Retention: 3600,
+						Retention: 1,
 					},
 				}, nil)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
