@@ -47,6 +47,7 @@ type (
 		StartTimestamp   int64
 		CloseTimestamp   int64
 		Status           s.WorkflowExecutionCloseStatus
+		HistoryLength    int64
 		RetentionSeconds int64
 	}
 
@@ -91,6 +92,17 @@ type (
 		Status s.WorkflowExecutionCloseStatus
 	}
 
+	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
+	GetClosedWorkflowExecutionRequest struct {
+		DomainUUID string
+		Execution  s.WorkflowExecution
+	}
+
+	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
+	GetClosedWorkflowExecutionResponse struct {
+		Execution *s.WorkflowExecutionInfo
+	}
+
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
@@ -102,5 +114,6 @@ type (
 		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
+		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
 	}
 )

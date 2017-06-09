@@ -25,6 +25,7 @@ CREATE TABLE closed_executions (
   close_time           timestamp,
   status               int,  -- enum WorkflowExecutionCloseStatus {COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   workflow_type_name   text,
+  history_length       bigint,
   PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {

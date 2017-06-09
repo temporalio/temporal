@@ -1768,6 +1768,7 @@ func (p *WorkflowExecution) String() string {
 //  - StartTime
 //  - CloseTime
 //  - CloseStatus
+//  - HistoryLength
 type WorkflowExecutionInfo struct {
   // unused fields # 1 to 9
   Execution *WorkflowExecution `thrift:"execution,10" db:"execution" json:"execution,omitempty"`
@@ -1779,6 +1780,8 @@ type WorkflowExecutionInfo struct {
   CloseTime *int64 `thrift:"closeTime,40" db:"closeTime" json:"closeTime,omitempty"`
   // unused fields # 41 to 49
   CloseStatus *WorkflowExecutionCloseStatus `thrift:"closeStatus,50" db:"closeStatus" json:"closeStatus,omitempty"`
+  // unused fields # 51 to 59
+  HistoryLength *int64 `thrift:"historyLength,60" db:"historyLength" json:"historyLength,omitempty"`
 }
 
 func NewWorkflowExecutionInfo() *WorkflowExecutionInfo {
@@ -1820,6 +1823,13 @@ func (p *WorkflowExecutionInfo) GetCloseStatus() WorkflowExecutionCloseStatus {
   }
 return *p.CloseStatus
 }
+var WorkflowExecutionInfo_HistoryLength_DEFAULT int64
+func (p *WorkflowExecutionInfo) GetHistoryLength() int64 {
+  if !p.IsSetHistoryLength() {
+    return WorkflowExecutionInfo_HistoryLength_DEFAULT
+  }
+return *p.HistoryLength
+}
 func (p *WorkflowExecutionInfo) IsSetExecution() bool {
   return p.Execution != nil
 }
@@ -1838,6 +1848,10 @@ func (p *WorkflowExecutionInfo) IsSetCloseTime() bool {
 
 func (p *WorkflowExecutionInfo) IsSetCloseStatus() bool {
   return p.CloseStatus != nil
+}
+
+func (p *WorkflowExecutionInfo) IsSetHistoryLength() bool {
+  return p.HistoryLength != nil
 }
 
 func (p *WorkflowExecutionInfo) Read(iprot thrift.TProtocol) error {
@@ -1871,6 +1885,10 @@ func (p *WorkflowExecutionInfo) Read(iprot thrift.TProtocol) error {
       }
     case 50:
       if err := p.ReadField50(iprot); err != nil {
+        return err
+      }
+    case 60:
+      if err := p.ReadField60(iprot); err != nil {
         return err
       }
     default:
@@ -1932,6 +1950,15 @@ func (p *WorkflowExecutionInfo)  ReadField50(iprot thrift.TProtocol) error {
   return nil
 }
 
+func (p *WorkflowExecutionInfo)  ReadField60(iprot thrift.TProtocol) error {
+  if v, err := iprot.ReadI64(); err != nil {
+  return thrift.PrependError("error reading field 60: ", err)
+} else {
+  p.HistoryLength = &v
+}
+  return nil
+}
+
 func (p *WorkflowExecutionInfo) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("WorkflowExecutionInfo"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -1941,6 +1968,7 @@ func (p *WorkflowExecutionInfo) Write(oprot thrift.TProtocol) error {
     if err := p.writeField30(oprot); err != nil { return err }
     if err := p.writeField40(oprot); err != nil { return err }
     if err := p.writeField50(oprot); err != nil { return err }
+    if err := p.writeField60(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -2007,6 +2035,18 @@ func (p *WorkflowExecutionInfo) writeField50(oprot thrift.TProtocol) (err error)
     return thrift.PrependError(fmt.Sprintf("%T.closeStatus (50) field write error: ", p), err) }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 50:closeStatus: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowExecutionInfo) writeField60(oprot thrift.TProtocol) (err error) {
+  if p.IsSetHistoryLength() {
+    if err := oprot.WriteFieldBegin("historyLength", thrift.I64, 60); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 60:historyLength: ", p), err) }
+    if err := oprot.WriteI64(int64(*p.HistoryLength)); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T.historyLength (60) field write error: ", p), err) }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 60:historyLength: ", p), err) }
   }
   return err
 }

@@ -404,3 +404,45 @@ func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
 	s.Equal(1, len(resp.Executions))
 	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
 }
+
+func (s *visibilityPersistenceSuite) TestGetClosedExecution() {
+	testDomainUUID := uuid.New()
+
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("visibility-workflow-test"),
+		RunId:      common.StringPtr("a3dbc7bf-deb1-4946-b57c-cf0615ea553f"),
+	}
+
+	startTime := time.Now().Add(time.Second * -5).UnixNano()
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&RecordWorkflowExecutionStartedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+	})
+	s.Nil(err0)
+
+	_, err1 := s.VisibilityMgr.GetClosedWorkflowExecution(&GetClosedWorkflowExecutionRequest{
+		DomainUUID: testDomainUUID,
+		Execution:  workflowExecution,
+	})
+	s.NotNil(err1)
+
+	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
+		DomainUUID:       testDomainUUID,
+		Execution:        workflowExecution,
+		WorkflowTypeName: "visibility-workflow",
+		StartTimestamp:   startTime,
+		CloseTimestamp:   time.Now().UnixNano(),
+		HistoryLength:    3,
+	})
+	s.Nil(err2)
+
+	resp, err3 := s.VisibilityMgr.GetClosedWorkflowExecution(&GetClosedWorkflowExecutionRequest{
+		DomainUUID: testDomainUUID,
+		Execution:  workflowExecution,
+	})
+	s.Nil(err3)
+	s.Equal(workflowExecution.GetWorkflowId(), resp.Execution.GetExecution().GetWorkflowId())
+	s.Equal(int64(3), resp.Execution.GetHistoryLength())
+}

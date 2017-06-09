@@ -28,6 +28,29 @@ type VisibilityManager struct {
 	mock.Mock
 }
 
+// GetClosedWorkflowExecution provides a mock function with given fields: request
+func (_m *VisibilityManager) GetClosedWorkflowExecution(request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.GetClosedWorkflowExecutionResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetClosedWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetClosedWorkflowExecutionRequest) *persistence.GetClosedWorkflowExecutionResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetClosedWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetClosedWorkflowExecutionRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ListClosedWorkflowExecutions provides a mock function with given fields: request
 func (_m *VisibilityManager) ListClosedWorkflowExecutions(request *persistence.ListWorkflowExecutionsRequest) (*persistence.ListWorkflowExecutionsResponse, error) {
 	ret := _m.Called(request)

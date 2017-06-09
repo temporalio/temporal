@@ -435,6 +435,7 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
 		CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
 		Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
+		HistoryLength:    mb.GetNextEventID(),
 		RetentionSeconds: retentionSeconds,
 	})
 	if err != nil {

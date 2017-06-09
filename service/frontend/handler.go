@@ -558,11 +558,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, errWorkflowIDNotSet
 	}
 
-	if !getRequest.GetExecution().IsSetRunId() {
-		return nil, errRunIDNotSet
-	}
-
-	if uuid.Parse(getRequest.GetExecution().GetRunId()) == nil {
+	if getRequest.GetExecution().IsSetRunId() && uuid.Parse(getRequest.GetExecution().GetRunId()) == nil {
 		return nil, errInvalidRunID
 	}
 
@@ -587,11 +583,25 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			DomainUUID: common.StringPtr(info.ID),
 			Execution:  getRequest.GetExecution(),
 		})
-		if err != nil {
-			return nil, wrapError(err)
+		if err == nil {
+			token.nextEventID = response.GetEventId()
+			token.runID = response.GetRunId()
+		} else {
+			if _, ok := err.(*gen.EntityNotExistsError); !ok || !getRequest.GetExecution().IsSetRunId() {
+				return nil, wrapError(err)
+			}
+			// It is possible that we still have the events in the table even though the mutable state is gone
+			// Get the nextEventID from visibility store if we still have it.
+			visibilityResp, err := wh.visibitiltyMgr.GetClosedWorkflowExecution(&persistence.GetClosedWorkflowExecutionRequest{
+				DomainUUID: info.ID,
+				Execution:  *getRequest.GetExecution(),
+			})
+			if err != nil {
+				return nil, wrapError(err)
+			}
+			token.nextEventID = visibilityResp.Execution.GetHistoryLength()
+			token.runID = visibilityResp.Execution.GetExecution().GetRunId()
 		}
-		token.nextEventID = response.GetEventId()
-		token.runID = response.GetRunId()
 	}
 
 	we := gen.WorkflowExecution{
