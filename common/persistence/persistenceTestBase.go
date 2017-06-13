@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -65,7 +66,7 @@ type (
 		MetadataManager     MetadataManager
 		VisibilityMgr       VisibilityManager
 		ShardInfo           *ShardInfo
-		ShardContext        *testShardContext
+		ShardContext        *TestShardContext
 		readLevel           int64
 		CassandraTestCluster
 	}
@@ -77,10 +78,12 @@ type (
 		session  *gocql.Session
 	}
 
-	testShardContext struct {
+	// TestShardContext shard context for testing.
+	// TODO: Cleanup, move this out of persistence
+	TestShardContext struct {
+		sync.RWMutex
 		shardInfo              *ShardInfo
 		transferSequenceNumber int64
-		timerSequeceNumber     int64
 		historyMgr             HistoryManager
 		executionMgr           ExecutionManager
 		logger                 bark.Logger
@@ -95,8 +98,8 @@ type (
 )
 
 func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, historyMgr HistoryManager,
-	executionMgr ExecutionManager, logger bark.Logger) *testShardContext {
-	return &testShardContext{
+	executionMgr ExecutionManager, logger bark.Logger) *TestShardContext {
+	return &TestShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
 		historyMgr:             historyMgr,
@@ -106,66 +109,102 @@ func newTestShardContext(shardInfo *ShardInfo, transferSequenceNumber int64, his
 	}
 }
 
-func (s *testShardContext) GetExecutionManager() ExecutionManager {
+// GetExecutionManager test implementation
+func (s *TestShardContext) GetExecutionManager() ExecutionManager {
 	return s.executionMgr
 }
 
-func (s *testShardContext) GetHistoryManager() HistoryManager {
+// GetHistoryManager test implementation
+func (s *TestShardContext) GetHistoryManager() HistoryManager {
 	return s.historyMgr
 }
 
-func (s *testShardContext) GetNextTransferTaskID() (int64, error) {
+// GetNextTransferTaskID test implementation
+func (s *TestShardContext) GetNextTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&s.transferSequenceNumber, 1), nil
 }
 
-func (s *testShardContext) GetTransferMaxReadLevel() int64 {
+// GetTransferMaxReadLevel test implementation
+func (s *TestShardContext) GetTransferMaxReadLevel() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
-func (s *testShardContext) GetTransferAckLevel() int64 {
+// GetTransferAckLevel test implementation
+func (s *TestShardContext) GetTransferAckLevel() int64 {
 	return atomic.LoadInt64(&s.shardInfo.TransferAckLevel)
 }
 
-func (s *testShardContext) GetTimerSequenceNumber() int64 {
-	return atomic.AddInt64(&s.timerSequeceNumber, 1)
-}
-
-func (s *testShardContext) UpdateAckLevel(ackLevel int64) error {
+// UpdateTransferAckLevel test implementation
+func (s *TestShardContext) UpdateTransferAckLevel(ackLevel int64) error {
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, ackLevel)
 	return nil
 }
 
-func (s *testShardContext) GetTransferSequenceNumber() int64 {
+// GetTransferSequenceNumber test implementation
+func (s *TestShardContext) GetTransferSequenceNumber() int64 {
 	return atomic.LoadInt64(&s.transferSequenceNumber)
 }
 
-func (s *testShardContext) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (
+// GetTimerAckLevel test implementation
+func (s *TestShardContext) GetTimerAckLevel() time.Time {
+	s.RLock()
+	defer s.RLock()
+	return s.shardInfo.TimerAckLevel
+}
+
+// UpdateTimerAckLevel test implementation
+func (s *TestShardContext) UpdateTimerAckLevel(ackLevel time.Time) error {
+	s.Lock()
+	defer s.Unlock()
+	s.shardInfo.TimerAckLevel = ackLevel
+	return nil
+}
+
+// CreateWorkflowExecution test implementation
+func (s *TestShardContext) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (
 	*CreateWorkflowExecutionResponse, error) {
 	return s.executionMgr.CreateWorkflowExecution(request)
 }
 
-func (s *testShardContext) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
+// UpdateWorkflowExecution test implementation
+func (s *TestShardContext) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
+	// assign IDs for the timer tasks. They need to be assigned under shard lock.
+	// TODO: This needs to be moved out of persistence.
+	for _, task := range request.TimerTasks {
+		seqID, err := s.GetNextTransferTaskID()
+		if err != nil {
+			panic(err)
+		}
+		task.SetTaskID(seqID)
+		s.logger.Infof("%v: TestShardContext: Assigning timer (timestamp: %v, seq: %v)",
+			time.Now().UTC(), GetVisibilityTSFrom(task).UTC(), task.GetTaskID())
+	}
 	return s.executionMgr.UpdateWorkflowExecution(request)
 }
 
-func (s *testShardContext) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
+// AppendHistoryEvents test implementation
+func (s *TestShardContext) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
 	return s.historyMgr.AppendHistoryEvents(request)
 }
 
-func (s *testShardContext) GetLogger() bark.Logger {
+// GetLogger test implementation
+func (s *TestShardContext) GetLogger() bark.Logger {
 	return s.logger
 }
 
-func (s *testShardContext) GetMetricsClient() metrics.Client {
+// GetMetricsClient test implementation
+func (s *TestShardContext) GetMetricsClient() metrics.Client {
 	return s.metricsClient
 }
 
-func (s *testShardContext) Reset() {
+// Reset test implementation
+func (s *TestShardContext) Reset() {
 	atomic.StoreInt64(&s.shardInfo.RangeID, 0)
 	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, 0)
 }
 
-func (s *testShardContext) GetRangeID() int64 {
+// GetRangeID test implementation
+func (s *TestShardContext) GetRangeID() int64 {
 	return atomic.LoadInt64(&s.shardInfo.RangeID)
 }
 
@@ -598,15 +637,25 @@ func (s *TestBase) CompleteTransferTask(taskID int64) error {
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks(minKey int64, maxKey int64) ([]*TimerTaskInfo, error) {
+func (s *TestBase) GetTimerIndexTasks() ([]*TimerTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
-		MinKey: minKey, MaxKey: maxKey, BatchSize: 10})
+		MinTimestamp: time.Time{},
+		MaxTimestamp: time.Unix(0, math.MaxInt64),
+		BatchSize:    10})
 
 	if err != nil {
 		return nil, err
 	}
 
 	return response.Timers, nil
+}
+
+// CompleteTimerTask is a utility method to complete a timer task
+func (s *TestBase) CompleteTimerTask(ts time.Time, taskID int64) error {
+	return s.WorkflowMgr.CompleteTimerTask(&CompleteTimerTaskRequest{
+		VisibilityTimestamp: ts,
+		TaskID:              taskID,
+	})
 }
 
 // CreateDecisionTask is a utility method to create a task
@@ -623,7 +672,7 @@ func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflo
 
 	taskID := s.GetNextSequenceNumber()
 	tasks := []*CreateTaskInfo{
-		&CreateTaskInfo{
+		{
 			TaskID:    taskID,
 			Execution: workflowExecution,
 			Data: &TaskInfo{
@@ -667,7 +716,7 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 		}
 		taskID := s.GetNextSequenceNumber()
 		tasks := []*CreateTaskInfo{
-			&CreateTaskInfo{
+			{
 				TaskID:    taskID,
 				Execution: workflowExecution,
 				Data: &TaskInfo{

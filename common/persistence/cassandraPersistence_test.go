@@ -21,7 +21,6 @@
 package persistence
 
 import (
-	"math"
 	"os"
 	"testing"
 	"time"
@@ -641,18 +640,19 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	tasks := []Task{&DecisionTimeoutTask{1, 2}}
+	tasks := []Task{&DecisionTimeoutTask{time.Now(), 1, 2}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks, err1 := s.GetTimerIndexTasks(-1, math.MaxInt64)
+	timerTasks, err1 := s.GetTimerIndexTasks()
 	s.Nil(err1, "No error expected.")
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, &DecisionTimeoutTask{TaskID: timerTasks[0].TaskID}, nil, nil, nil, nil)
+	deleteTimerTask := &DecisionTimeoutTask{VisibilityTimestamp: timerTasks[0].VisibilityTimestamp, TaskID: timerTasks[0].TaskID}
+	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, deleteTimerTask, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks2, err2 := s.GetTimerIndexTasks(-1, math.MaxInt64)
+	timerTasks2, err2 := s.GetTimerIndexTasks()
 	s.Nil(err2, "No error expected.")
 	s.Empty(timerTasks2, "expected empty task list.")
 }

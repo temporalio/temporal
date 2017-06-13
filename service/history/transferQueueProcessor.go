@@ -782,7 +782,7 @@ MoveAckLevelLoop:
 	a.Unlock()
 
 	// Always update ackLevel to detect if the shared is stolen
-	if err := a.shard.UpdateAckLevel(updatedAckLevel); err != nil {
+	if err := a.shard.UpdateTransferAckLevel(updatedAckLevel); err != nil {
 		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 	}
 

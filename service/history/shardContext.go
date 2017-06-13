@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/logging"
@@ -46,28 +47,28 @@ type (
 		GetTransferSequenceNumber() int64
 		GetTransferMaxReadLevel() int64
 		GetTransferAckLevel() int64
-		UpdateAckLevel(ackLevel int64) error
-		GetTimerSequenceNumber() int64
+		UpdateTransferAckLevel(ackLevel int64) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
+		GetTimerAckLevel() time.Time
+		UpdateTimerAckLevel(ackLevel time.Time) error
 	}
 
 	shardContextImpl struct {
-		shardID             int
-		rangeID             int64
-		shardManager        persistence.ShardManager
-		historyMgr          persistence.HistoryManager
-		executionManager    persistence.ExecutionManager
-		timerSequenceNumber int64
-		rangeSize           uint
-		closeCh             chan<- int
-		isClosed            bool
-		logger              bark.Logger
-		metricsClient       metrics.Client
+		shardID          int
+		rangeID          int64
+		shardManager     persistence.ShardManager
+		historyMgr       persistence.HistoryManager
+		executionManager persistence.ExecutionManager
+		rangeSize        uint
+		closeCh          chan<- int
+		isClosed         bool
+		logger           bark.Logger
+		metricsClient    metrics.Client
 
 		sync.RWMutex
 		shardInfo                 *persistence.ShardInfo
@@ -114,30 +115,27 @@ func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {
 	return s.transferMaxReadLevel
 }
 
-func (s *shardContextImpl) UpdateAckLevel(ackLevel int64) error {
+func (s *shardContextImpl) UpdateTransferAckLevel(ackLevel int64) error {
 	s.Lock()
 	defer s.Unlock()
 	s.shardInfo.TransferAckLevel = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
-	updatedShardInfo := copyShardInfo(s.shardInfo)
-
-	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
-		PreviousRangeID: s.shardInfo.RangeID,
-	})
-
-	if err != nil {
-		// Shard is stolen, trigger history engine shutdown
-		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
-			s.closeShard()
-		}
-	}
-
-	return err
+	return s.updateShardInfoLocked()
 }
 
-func (s *shardContextImpl) GetTimerSequenceNumber() int64 {
-	return atomic.AddInt64(&s.timerSequenceNumber, 1)
+func (s *shardContextImpl) GetTimerAckLevel() time.Time {
+	s.RLock()
+	defer s.RUnlock()
+	return s.shardInfo.TimerAckLevel
+}
+
+func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TimerAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
 }
 
 func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
@@ -159,6 +157,8 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 		transferMaxReadLevel = id
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	s.allocateTimerIDsLocked(request.TimerTasks)
 
 Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -232,6 +232,8 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		}
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
+
+	s.allocateTimerIDsLocked(request.TimerTasks)
 
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -380,6 +382,48 @@ func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 	}
 }
 
+func (s *shardContextImpl) updateShardInfoLocked() error {
+	updatedShardInfo := copyShardInfo(s.shardInfo)
+
+	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
+		ShardInfo:       updatedShardInfo,
+		PreviousRangeID: s.shardInfo.RangeID,
+	})
+
+	if err != nil {
+		// Shard is stolen, trigger history engine shutdown
+		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
+			s.closeShard()
+		}
+	}
+
+	return err
+}
+
+func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {
+	// assign IDs for the timer tasks. They need to be assigned under shard lock.
+	for _, task := range timerTasks {
+		ts := persistence.GetVisibilityTSFrom(task)
+		if ts.Before(s.shardInfo.TimerAckLevel) {
+			// This is not a common scenario, the shard can move and new host might have a time SKU.
+			// We generate a new timer ID that is above the ack level with an offset.
+			s.logger.Warn("%v: New timer generated is less than ack level. timestamp: %v, ackLevel: %v",
+				time.Now(), ts, s.shardInfo.TimerAckLevel)
+			newTimestamp := s.shardInfo.TimerAckLevel
+			persistence.SetVisibilityTSFrom(task, newTimestamp.Add(time.Second))
+		}
+
+		seqNum, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return err
+		}
+		task.SetTaskID(seqNum)
+		s.logger.Debugf("%v: Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
+			persistence.GetVisibilityTSFrom(task), task.GetTaskID(), s.shardInfo.TimerAckLevel)
+	}
+	return nil
+}
+
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, logger bark.Logger,
@@ -424,6 +468,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 		RangeID:          shardInfo.RangeID,
 		StolenSinceRenew: shardInfo.StolenSinceRenew,
 		TransferAckLevel: atomic.LoadInt64(&shardInfo.TransferAckLevel),
+		TimerAckLevel:    shardInfo.TimerAckLevel,
 	}
 
 	return shardInfoCopy

@@ -24,6 +24,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -66,6 +67,6 @@ type (
 
 	timerQueueProcessor interface {
 		common.Daemon
-		NotifyNewTimer(taskID int64)
+		NotifyNewTimer(timerTask []persistence.Task)
 	}
 )

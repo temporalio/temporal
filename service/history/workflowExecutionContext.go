@@ -62,7 +62,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
 		logging.TagWorkflowRunID:       execution.GetRunId(),
 	})
-	tBuilder := newTimerBuilder(&shardSeqNumGenerator{context: shard}, lg)
+	tBuilder := newTimerBuilder(lg, common.NewRealTimeSource())
 
 	return &workflowExecutionContext{
 		domainID:          domainID,
@@ -344,5 +344,5 @@ func (c *workflowExecutionContext) requestExternalCancelWorkflowExecutionWithRet
 
 func (c *workflowExecutionContext) clear() {
 	c.msBuilder = nil
-	c.tBuilder = newTimerBuilder(&shardSeqNumGenerator{context: c.shard}, c.logger)
+	c.tBuilder = newTimerBuilder(c.logger, common.NewRealTimeSource())
 }

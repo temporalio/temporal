@@ -105,6 +105,7 @@ type (
 		StolenSinceRenew int
 		UpdatedAt        time.Time
 		TransferAckLevel int64
+		TimerAckLevel    time.Time
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
@@ -150,13 +151,14 @@ type (
 
 	// TimerTaskInfo describes a timer task.
 	TimerTaskInfo struct {
-		DomainID    string
-		WorkflowID  string
-		RunID       string
-		TaskID      int64
-		TaskType    int
-		TimeoutType int
-		EventID     int64
+		DomainID            string
+		WorkflowID          string
+		RunID               string
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		TaskType            int
+		TimeoutType         int
+		EventID             int64
 	}
 
 	// TaskListInfo describes a state of a task list implementation.
@@ -208,8 +210,9 @@ type (
 
 	// DecisionTimeoutTask identifies a timeout task.
 	DecisionTimeoutTask struct {
-		TaskID  int64
-		EventID int64
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		EventID             int64
 	}
 
 	// CancelExecutionTask identifies a transfer task for cancel of execution
@@ -231,15 +234,17 @@ type (
 
 	// ActivityTimeoutTask identifies a timeout task.
 	ActivityTimeoutTask struct {
-		TaskID      int64
-		TimeoutType int
-		EventID     int64
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		TimeoutType         int
+		EventID             int64
 	}
 
 	// UserTimerTask identifies a timeout task.
 	UserTimerTask struct {
-		TaskID  int64
-		EventID int64
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		EventID             int64
 	}
 
 	// WorkflowMutableState indicates workflow related state
@@ -400,7 +405,8 @@ type (
 
 	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
 	CompleteTimerTaskRequest struct {
-		TaskID int64
+		VisibilityTimestamp time.Time
+		TaskID              int64
 	}
 
 	// LeaseTaskListRequest is used to request lease of a task list
@@ -469,9 +475,9 @@ type (
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
 	// TODO: replace this with an iterator that can configure min and max index.
 	GetTimerIndexTasksRequest struct {
-		MinKey    int64
-		MaxKey    int64
-		BatchSize int
+		MinTimestamp time.Time
+		MaxTimestamp time.Time
+		BatchSize    int
 	}
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
@@ -719,6 +725,16 @@ func (d *DecisionTimeoutTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
+// GetVisibilityTimestamp gets the visibility time stamp
+func (d *DecisionTimeoutTask) GetVisibilityTimestamp() time.Time {
+	return d.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (d *DecisionTimeoutTask) SetVisibilityTimestamp(t time.Time) {
+	d.VisibilityTimestamp = t
+}
+
 // GetType returns the type of the timer task
 func (a *ActivityTimeoutTask) GetType() int {
 	return TaskTypeActivityTimeout
@@ -734,6 +750,16 @@ func (a *ActivityTimeoutTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
+// GetVisibilityTimestamp gets the visibility time stamp
+func (a *ActivityTimeoutTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (a *ActivityTimeoutTask) SetVisibilityTimestamp(t time.Time) {
+	a.VisibilityTimestamp = t
+}
+
 // GetType returns the type of the timer task
 func (u *UserTimerTask) GetType() int {
 	return TaskTypeUserTimer
@@ -747,6 +773,16 @@ func (u *UserTimerTask) GetTaskID() int64 {
 // SetTaskID sets the sequence ID of the timer task.
 func (u *UserTimerTask) SetTaskID(id int64) {
 	u.TaskID = id
+}
+
+// GetVisibilityTimestamp gets the visibility time stamp
+func (u *UserTimerTask) GetVisibilityTimestamp() time.Time {
+	return u.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
+	u.VisibilityTimestamp = t
 }
 
 // GetType returns the type of the cancel transfer task
