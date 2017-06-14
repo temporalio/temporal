@@ -592,8 +592,8 @@ Update_History_Loop:
 
 				// If the decision has more than one completion event than just pick the first one
 				if isComplete {
-					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
-						metrics.MultipleCompletionDecisionsCounter, 1)
+					e.metricsClient.IncCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter)
 					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
@@ -614,8 +614,8 @@ Update_History_Loop:
 
 				// If the decision has more than one completion event than just pick the first one
 				if isComplete {
-					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
-						metrics.MultipleCompletionDecisionsCounter, 1)
+					e.metricsClient.IncCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter)
 					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
@@ -638,8 +638,8 @@ Update_History_Loop:
 
 				// If the decision has more than one completion event than just pick the first one
 				if isComplete {
-					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
-						metrics.MultipleCompletionDecisionsCounter, 1)
+					e.metricsClient.IncCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter)
 					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
@@ -745,8 +745,8 @@ Update_History_Loop:
 
 				// If the decision has more than one completion event than just pick the first one
 				if isComplete {
-					e.metricsClient.AddCounter(metrics.HistoryMultipleCompletionDecisionsScope,
-						metrics.MultipleCompletionDecisionsCounter, 1)
+					e.metricsClient.IncCounter(metrics.HistoryMultipleCompletionDecisionsScope,
+						metrics.MultipleCompletionDecisionsCounter)
 					logging.LogMultipleCompletionDecisionsEvent(e.logger, d.GetDecisionType())
 					continue Process_Decision_Loop
 				}
@@ -792,7 +792,7 @@ Update_History_Loop:
 
 		if failDecision {
 			e.logger.Info("failing the decision")
-			e.metricsClient.AddCounter(metrics.RespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter, 1)
+			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
 			var err1 error
 			msBuilder, err1 = e.failDecision(context, scheduleID, startedID, failCause, request)
 			if err1 != nil {

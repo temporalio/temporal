@@ -410,20 +410,6 @@ func createEmptyGetTasksRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
-func isLongPollRetryableError(err error) bool {
-	if err == ErrNoTasks {
-		return true
-	}
-
-	// Any errors from history service that can be retriable as well.
-	switch err.(type) {
-	case *workflow.EntityNotExistsError:
-		return true
-	}
-
-	return false
-}
-
 func workflowExecutionPtr(execution workflow.WorkflowExecution) *workflow.WorkflowExecution {
 	return &execution
 }

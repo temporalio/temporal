@@ -200,22 +200,42 @@ const (
 
 // -- Operation scopes for Frontend service --
 const (
-	// StartWorkflowExecutionScope tracks StartWorkflowExecution API calls received by service
-	StartWorkflowExecutionScope = iota + NumCommonScopes
-	// PollForDecisionTaskScope tracks PollForDecisionTask API calls received by service
-	PollForDecisionTaskScope
-	// PollForActivityTaskScope tracks PollForActivityTask API calls received by service
-	PollForActivityTaskScope
-	// RecordActivityTaskHeartbeatScope tracks RecordActivityTaskHeartbeat API calls received by service
-	RecordActivityTaskHeartbeatScope
-	// RespondDecisionTaskCompletedScope tracks RespondDecisionTaskCompleted API calls received by service
-	RespondDecisionTaskCompletedScope
-	// RespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
-	RespondActivityTaskCompletedScope
-	// RespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
-	RespondActivityTaskFailedScope
-	// GetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory API calls received by service
-	GetWorkflowExecutionHistoryScope
+	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
+	FrontendStartWorkflowExecutionScope = iota + NumCommonScopes
+	// PollForDecisionTaskScope is the metric scope for frontend.PollForDecisionTask
+	FrontendPollForDecisionTaskScope
+	// FrontendPollForActivityTaskScope is the metric scope for frontend.PollForActivityTask
+	FrontendPollForActivityTaskScope
+	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
+	FrontendRecordActivityTaskHeartbeatScope
+	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
+	FrontendRespondDecisionTaskCompletedScope
+	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompleted
+	FrontendRespondActivityTaskCompletedScope
+	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailed
+	FrontendRespondActivityTaskFailedScope
+	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
+	FrontendRespondActivityTaskCanceledScope
+	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for frontend.GetWorkflowExecutionHistory
+	FrontendGetWorkflowExecutionHistoryScope
+	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
+	FrontendSignalWorkflowExecutionScope
+	// FrontendTerminateWorkflowExecutionScope is the metric scope for frontend.TerminateWorkflowExecution
+	FrontendTerminateWorkflowExecutionScope
+	// FrontendRequestCancelWorkflowExecutionScope is the metric scope for frontend.RequestCancelWorkflowExecution
+	FrontendRequestCancelWorkflowExecutionScope
+	// FrontendListOpenWorkflowExecutionsScope is the metric scope for frontend.ListOpenWorkflowExecutions
+	FrontendListOpenWorkflowExecutionsScope
+	// FrontendListClosedWorkflowExecutionsScope is the metric scope for frontend.ListClosedWorkflowExecutions
+	FrontendListClosedWorkflowExecutionsScope
+	// FrontendRegisterDomainScope is the metric scope for frontend.RegisterDomain
+	FrontendRegisterDomainScope
+	// FrontendDescribeDomainScope is the metric scope for frontend.DescribeDomain
+	FrontendDescribeDomainScope
+	// FrontendUpdateDomainScope is the metric scope for frontend.DescribeDomain
+	FrontendUpdateDomainScope
+	// FrontendDeprecateDomainScope is the metric scope for frontend.DeprecateDomain
+	FrontendDeprecateDomainScope
 
 	NumFrontendScopes
 )
@@ -323,14 +343,24 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
-		StartWorkflowExecutionScope:       {operation: "StartWorkflowExecution"},
-		PollForDecisionTaskScope:          {operation: "PollForDecisionTask"},
-		PollForActivityTaskScope:          {operation: "PollForActivityTask"},
-		RecordActivityTaskHeartbeatScope:  {operation: "RecordActivityTaskHeartbeat"},
-		RespondDecisionTaskCompletedScope: {operation: "RespondDecisionTaskCompleted"},
-		RespondActivityTaskCompletedScope: {operation: "RespondActivityTaskCompleted"},
-		RespondActivityTaskFailedScope:    {operation: "RespondActivityTaskFailed"},
-		GetWorkflowExecutionHistoryScope:  {operation: "GetWorkflowExecutionHistory"},
+		FrontendStartWorkflowExecutionScope:         {operation: "StartWorkflowExecution"},
+		FrontendPollForDecisionTaskScope:            {operation: "PollForDecisionTask"},
+		FrontendPollForActivityTaskScope:            {operation: "PollForActivityTask"},
+		FrontendRecordActivityTaskHeartbeatScope:    {operation: "RecordActivityTaskHeartbeat"},
+		FrontendRespondDecisionTaskCompletedScope:   {operation: "RespondDecisionTaskCompleted"},
+		FrontendRespondActivityTaskCompletedScope:   {operation: "RespondActivityTaskCompleted"},
+		FrontendRespondActivityTaskFailedScope:      {operation: "RespondActivityTaskFailed"},
+		FrontendRespondActivityTaskCanceledScope:    {operation: "RespondActivityTaskCanceled"},
+		FrontendGetWorkflowExecutionHistoryScope:    {operation: "GetWorkflowExecutionHistory"},
+		FrontendSignalWorkflowExecutionScope:        {operation: "SignalWorkflowExecution"},
+		FrontendTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
+		FrontendRequestCancelWorkflowExecutionScope: {operation: "RequestCancelWorkflowExecution"},
+		FrontendListOpenWorkflowExecutionsScope:     {operation: "ListOpenWorkflowExecutions"},
+		FrontendListClosedWorkflowExecutionsScope:   {operation: "ListClosedWorkflowExecutions"},
+		FrontendRegisterDomainScope:                 {operation: "RegisterDomain"},
+		FrontendDescribeDomainScope:                 {operation: "DescribeDomain"},
+		FrontendUpdateDomainScope:                   {operation: "UpdateDomain"},
+		FrontendDeprecateDomainScope:                {operation: "DeprecateDomain"},
 	},
 	// History Scope Names
 	History: {

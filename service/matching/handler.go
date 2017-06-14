@@ -23,8 +23,10 @@ package matching
 import (
 	"sync"
 
+	"github.com/uber-go/tally"
 	m "github.com/uber/cadence/.gen/go/matching"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/tchannel-go/thrift"
@@ -36,6 +38,7 @@ var _ m.TChanMatchingService = (*Handler)(nil)
 type Handler struct {
 	taskPersistence persistence.TaskManager
 	engine          Engine
+	metricsClient   metrics.Client
 	startWG         sync.WaitGroup
 	service.Service
 }
@@ -58,6 +61,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 	if err != nil {
 		return err
 	}
+	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(h.taskPersistence, history, h.Service.GetLogger())
 	h.startWG.Done()
 	return nil
@@ -74,37 +78,82 @@ func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
 	return true, nil
 }
 
+// startRequestProfile initiates recording of request metrics
+func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
+	h.startWG.Wait()
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	h.Service.GetLogger().WithField("api", api).Debug("Received new request")
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	return sw
+}
+
 // AddActivityTask - adds an activity task.
 func (h *Handler) AddActivityTask(ctx thrift.Context, addRequest *m.AddActivityTaskRequest) error {
-	h.Service.GetLogger().Debug("Engine Received AddActivityTask")
-	h.startWG.Wait()
-	return h.engine.AddActivityTask(addRequest)
+	scope := metrics.MatchingAddActivityTaskScope
+	sw := h.startRequestProfile("AddActivityTask", scope)
+	defer sw.Stop()
+	return h.handleErr(h.engine.AddActivityTask(addRequest), scope)
 }
 
 // AddDecisionTask - adds a decision task.
 func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionTaskRequest) error {
-	h.Service.GetLogger().Debug("Engine Received AddDecisionTask")
-	h.startWG.Wait()
-	return h.engine.AddDecisionTask(addRequest)
+	scope := metrics.MatchingAddDecisionTaskScope
+	sw := h.startRequestProfile("AddDecisionTask", scope)
+	defer sw.Stop()
+	return h.handleErr(h.engine.AddDecisionTask(addRequest), scope)
 }
 
 // PollForActivityTask - long poll for an activity task.
 func (h *Handler) PollForActivityTask(ctx thrift.Context,
 	pollRequest *m.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
-	h.Service.GetLogger().Debug("Engine Received PollForActivityTask")
-	h.startWG.Wait()
+
+	scope := metrics.MatchingPollForActivityTaskScope
+	sw := h.startRequestProfile("PollForActivityTask", scope)
+	defer sw.Stop()
+
 	response, error := h.engine.PollForActivityTask(ctx, pollRequest)
 	h.Service.GetLogger().Debug("Engine returned from PollForActivityTask")
-	return response, error
+	return response, h.handleErr(error, scope)
 
 }
 
 // PollForDecisionTask - long poll for a decision task.
 func (h *Handler) PollForDecisionTask(ctx thrift.Context,
 	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
-	h.Service.GetLogger().Debug("Engine Received PollForDecisionTask")
-	h.startWG.Wait()
+
+	scope := metrics.MatchingPollForDecisionTaskScope
+	sw := h.startRequestProfile("PollForDecisionTask", scope)
+	defer sw.Stop()
+
 	response, error := h.engine.PollForDecisionTask(ctx, pollRequest)
 	h.Service.GetLogger().Debug("Engine returned from PollForDecisionTask")
-	return response, error
+	return response, h.handleErr(error, scope)
+}
+
+func (h *Handler) handleErr(err error, scope int) error {
+
+	if err == nil {
+		return nil
+	}
+
+	switch err.(type) {
+	case *gen.InternalServiceError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+		return err
+	case *gen.BadRequestError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+		return err
+	case *gen.EntityNotExistsError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+		return err
+	case *gen.WorkflowExecutionAlreadyStartedError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+		return err
+	case *gen.DomainAlreadyExistsError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
+		return err
+	default:
+		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+		return &gen.InternalServiceError{Message: err.Error()}
+	}
 }
