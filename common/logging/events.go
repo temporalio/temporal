@@ -22,6 +22,8 @@ package logging
 
 // Events
 const (
+	// Global Events
+
 	// HistoryBuilder events
 	InvalidHistoryActionEventID = 1000
 
@@ -35,6 +37,7 @@ const (
 	DuplicateTaskEventID               = 2030
 	MultipleCompletionDecisionsEventID = 2040
 	DuplicateTransferTaskEventID       = 2050
+	DecisionFailedEventID              = 2060
 
 	// Transfer Queue Processor events
 	TransferQueueProcessorStarting         = 2100
@@ -65,4 +68,5 @@ const (
 
 	// General purpose events
 	OperationFailed = 9000
+	OperationPanic  = 9001
 )

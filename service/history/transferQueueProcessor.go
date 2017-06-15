@@ -27,6 +27,7 @@ import (
 
 	"github.com/uber-common/bark"
 
+	"fmt"
 	"github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -72,10 +73,11 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	ackManager struct {
-		processor    transferQueueProcessor
-		shard        ShardContext
-		executionMgr persistence.ExecutionManager
-		logger       bark.Logger
+		processor     transferQueueProcessor
+		shard         ShardContext
+		executionMgr  persistence.ExecutionManager
+		logger        bark.Logger
+		metricsClient metrics.Client
 
 		sync.RWMutex
 		outstandingTasks map[int64]bool
@@ -105,13 +107,13 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 		}),
 		metricsClient: shard.GetMetricsClient(),
 	}
-	processor.ackMgr = newAckManager(processor, shard, executionManager, logger)
+	processor.ackMgr = newAckManager(processor, shard, executionManager, logger, shard.GetMetricsClient())
 
 	return processor
 }
 
 func newAckManager(processor transferQueueProcessor, shard ShardContext, executionMgr persistence.ExecutionManager,
-	logger bark.Logger) *ackManager {
+	logger bark.Logger, metricsClient metrics.Client) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
 		processor:        processor,
@@ -121,6 +123,7 @@ func newAckManager(processor transferQueueProcessor, shard ShardContext, executi
 		readLevel:        ackLevel,
 		ackLevel:         ackLevel,
 		logger:           logger,
+		metricsClient:    metricsClient,
 	}
 }
 
@@ -248,7 +251,6 @@ func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.Tran
 
 func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TransferTaskInfo) {
 	t.logger.Debugf("Processing transfer task: %v, type: %v", task.TaskID, task.TaskType)
-	t.metricsClient.AddCounter(metrics.HistoryProcessTransferTasksScope, metrics.TransferTasksProcessedCounter, 1)
 ProcessRetryLoop:
 	for retryCount := 1; retryCount <= 100; retryCount++ {
 		select {
@@ -256,21 +258,28 @@ ProcessRetryLoop:
 			return
 		default:
 			var err error
+			scope := metrics.TransferQueueProcessorScope
 			switch task.TaskType {
 			case persistence.TransferTaskTypeActivityTask:
+				scope = metrics.TransferTaskActivityScope
 				err = t.processActivityTask(task)
 			case persistence.TransferTaskTypeDecisionTask:
+				scope = metrics.TransferTaskDecisionScope
 				err = t.processDecisionTask(task)
 			case persistence.TransferTaskTypeDeleteExecution:
+				scope = metrics.TransferTaskDeleteExecutionScope
 				err = t.processDeleteExecution(task)
 			case persistence.TransferTaskTypeCancelExecution:
+				scope = metrics.TransferTaskCancelExecutionScope
 				err = t.processCancelExecution(task)
 			case persistence.TransferTaskTypeStartChildExecution:
+				scope = metrics.TransferTaskStartChildExecutionScope
 				err = t.processStartChildExecution(task)
 			}
 
 			if err != nil {
-				t.logger.WithField("error", err).Warn("Processor failed to create task")
+				logging.LogOperationFailedEvent(t.logger, "Processor failed to create task", err)
+				t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 				backoff := time.Duration(retryCount * 100)
 				time.Sleep(backoff * time.Millisecond)
 				continue ProcessRetryLoop
@@ -282,15 +291,21 @@ ProcessRetryLoop:
 	}
 
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	t.logger.Fatalf("Retry count exceeded for transfer taskID: %v", task.TaskID)
+	logging.LogOperationPanicEvent(t.logger,
+		fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.TaskID), nil)
 }
 
 func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskActivityScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskActivityScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 	var err error
 	domainID := task.DomainID
 	targetDomainID := task.TargetDomainID
-	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId: common.StringPtr(task.RunID)}
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID)}
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
@@ -329,14 +344,21 @@ func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.Trans
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(timeout),
 		})
 	}
+
 	return err
 }
 
 func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskDecisionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskDecisionScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 	var err error
 	domainID := task.DomainID
-	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId: common.StringPtr(task.RunID)}
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
 
 	if task.ScheduleID == firstEventID+1 {
 		err = t.recordWorkflowExecutionStarted(execution, task)
@@ -364,6 +386,10 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 }
 
 func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskDeleteExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskDeleteExecutionScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 	var err error
 	domainID := task.DomainID
 	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
@@ -448,6 +474,10 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 }
 
 func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskCancelExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskCancelExecutionScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 	var err error
 	domainID := task.DomainID
 	targetDomainID := task.TargetDomainID
@@ -496,6 +526,10 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 }
 
 func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskStartChildExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskStartChildExecutionScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 	var err error
 	domainID := task.DomainID
 	targetDomainID := task.TargetDomainID
@@ -758,6 +792,7 @@ func (a *ackManager) completeTask(taskID int64) {
 }
 
 func (a *ackManager) updateAckLevel() {
+	a.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AckLevelUpdateCounter)
 	updatedAckLevel := a.ackLevel
 	a.Lock()
 MoveAckLevelLoop:
@@ -783,6 +818,7 @@ MoveAckLevelLoop:
 
 	// Always update ackLevel to detect if the shared is stolen
 	if err := a.shard.UpdateTransferAckLevel(updatedAckLevel); err != nil {
+		a.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
 		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 	}
 

@@ -105,6 +105,7 @@ func (s *engineSuite) SetupTest() {
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
 		logger:                    s.logger,
+		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
@@ -118,7 +119,7 @@ func (s *engineSuite) SetupTest() {
 		historyCache:       historyCache,
 		domainCache:        domainCache,
 		logger:             s.logger,
-		metricsClient:      metrics.NewClient(tally.NewTestScope("", nil), metrics.History),
+		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}

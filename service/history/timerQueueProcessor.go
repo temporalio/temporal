@@ -33,6 +33,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -62,6 +63,7 @@ type (
 		shutdownCh       chan struct{}
 		newTimerCh       chan struct{}
 		logger           bark.Logger
+		metricsClient    metrics.Client
 		timerFiredCount  uint64
 		lock             sync.Mutex // Used to synchronize pending timers.
 		ackMgr           *timerAckMgr
@@ -164,6 +166,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		shutdownCh:       make(chan struct{}),
 		newTimerCh:       make(chan struct{}, 1),
 		logger:           l,
+		metricsClient:    historyService.metricsClient,
 	}
 	tp.ackMgr = newTimerAckMgr(tp, shard, executionManager, l)
 	return tp
@@ -529,6 +532,7 @@ Update_History_Loop:
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
 		if scheduleID >= msBuilder.GetNextEventID() {
+			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 			t.logger.Debugf("processActivityTimeout: scheduleID mismatch. MS NextEventID: %v, scheduleID: %v",
 				msBuilder.GetNextEventID(), scheduleID)
 			// Reload workflow execution history
@@ -640,6 +644,7 @@ Update_History_Loop:
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
 		if scheduleID >= msBuilder.GetNextEventID() {
+			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 			// Reload workflow execution history
 			context.clear()
 			continue Update_History_Loop

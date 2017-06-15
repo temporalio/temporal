@@ -34,10 +34,12 @@ const (
 	TagWorkflowErr          = "wf-error"
 	TagHistoryBuilderAction = "history-builder-action"
 	TagStoreOperation       = "store-operation"
+	TagDomainID             = "domain-id"
 	TagWorkflowExecutionID  = "execution-id"
 	TagWorkflowRunID        = "run-id"
 	TagHistoryShardID       = "shard-id"
 	TagDecisionType         = "decision-type"
+	TagDecisionFailCause    = "decision-fail-cause"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

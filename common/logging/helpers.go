@@ -42,7 +42,16 @@ func LogPersistantStoreErrorEvent(logger bark.Logger, operation string, err erro
 func LogOperationFailedEvent(logger bark.Logger, msg string, err error) {
 	logger.WithFields(bark.Fields{
 		TagWorkflowEventID: OperationFailed,
+		TagWorkflowErr:     err,
 	}).Warnf("%v.  Error: %v", msg, err)
+}
+
+// LogOperationPanicEvent is used to log fatal errors by application to cause panic
+func LogOperationPanicEvent(logger bark.Logger, msg string, err error) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: OperationPanic,
+		TagWorkflowErr:     err,
+	}).Fatalf("%v.  Error: %v", msg, err)
 }
 
 //
@@ -253,4 +262,16 @@ func LogMultipleCompletionDecisionsEvent(lg bark.Logger, decisionType shared.Dec
 		TagWorkflowEventID: MultipleCompletionDecisionsEventID,
 		TagDecisionType:    decisionType,
 	}).Warnf("Multiple completion decisions.  DecisionType: %v", decisionType)
+}
+
+// LogDecisionFailedEvent is used to log decision failures by RespondDecisionTaskCompleted handler
+func LogDecisionFailedEvent(lg bark.Logger, domainID, workflowID, runID string,
+	failCause shared.DecisionTaskFailedCause) {
+	lg.WithFields(bark.Fields{
+		TagWorkflowEventID:     DecisionFailedEventID,
+		TagDomainID:            domainID,
+		TagWorkflowExecutionID: workflowID,
+		TagWorkflowRunID:       runID,
+		TagDecisionFailCause:   failCause,
+	}).Info("Failing the decision.")
 }

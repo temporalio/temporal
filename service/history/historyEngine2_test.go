@@ -32,10 +32,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"github.com/uber-go/tally"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -103,6 +105,7 @@ func (s *engine2Suite) SetupTest() {
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
 		logger:                    s.logger,
+		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
 	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
@@ -116,6 +119,7 @@ func (s *engine2Suite) SetupTest() {
 		historyCache:       historyCache,
 		domainCache:        domainCache,
 		logger:             s.logger,
+		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
@@ -215,7 +219,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	})
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&h.EventAlreadyStartedError{}, err)
 	s.logger.Errorf("RecordDecisionTaskStarted failed with: %v", err)
 }
 
@@ -379,7 +383,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 
 	s.Nil(response)
 	s.NotNil(err)
-	s.IsType(&workflow.EntityNotExistsError{}, err)
+	s.IsType(&h.EventAlreadyStartedError{}, err)
 	s.logger.Infof("Failed with error: %v", err)
 }
 
