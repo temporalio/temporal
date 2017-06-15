@@ -28,6 +28,11 @@ type HistoryManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *HistoryManager) Close() {
+	_m.Called()
+}
+
 // AppendHistoryEvents provides a mock function with given fields: request
 func (_m *HistoryManager) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error {
 	ret := _m.Called(request)

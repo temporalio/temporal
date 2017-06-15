@@ -77,6 +77,13 @@ func NewCassandraHistoryPersistence(hosts string, dc string, keyspace string, lo
 	return &cassandraHistoryPersistence{session: session, logger: logger}, nil
 }
 
+// Close gracefully releases the resources held by this object
+func (h *cassandraHistoryPersistence) Close() {
+	if h.session != nil {
+		h.session.Close()
+	}
+}
+
 func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
 	var query *gocql.Query
 	if request.Overwrite {

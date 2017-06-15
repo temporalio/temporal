@@ -140,6 +140,13 @@ func NewCassandraVisibilityPersistence(
 	return &cassandraVisibilityPersistence{session: session, lowConslevel: gocql.One, logger: logger}, nil
 }
 
+// Close releases the resources held by this object
+func (v *cassandraVisibilityPersistence) Close() {
+	if v.session != nil {
+		v.session.Close()
+	}
+}
+
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *RecordWorkflowExecutionStartedRequest) error {
 	query := v.session.Query(templateCreateWorkflowExecutionStarted,

@@ -69,6 +69,8 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 
 // Stop stops the handler
 func (h *Handler) Stop() {
+	h.engine.Stop()
+	h.taskPersistence.Close()
 	h.Service.Stop()
 }
 

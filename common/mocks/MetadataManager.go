@@ -28,6 +28,11 @@ type MetadataManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *MetadataManager) Close() {
+	_m.Called()
+}
+
 // CreateDomain provides a mock function with given fields: request
 func (_m *MetadataManager) CreateDomain(request *persistence.CreateDomainRequest) (*persistence.CreateDomainResponse, error) {
 	ret := _m.Called(request)

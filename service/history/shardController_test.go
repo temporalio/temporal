@@ -440,6 +440,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *MockHistoryEngine, currentRangeID,
 	newRangeID int64) {
 	mockExecutionMgr := &mmocks.ExecutionManager{}
+	mockExecutionMgr.On("Close").Return()
 	s.mockExecutionMgrFactory.On("CreateExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
 	mockEngine.On("Start").Return().Once()
 	s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()

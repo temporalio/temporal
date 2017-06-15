@@ -105,6 +105,7 @@ type (
 
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
+		Closeable
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)

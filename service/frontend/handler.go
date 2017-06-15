@@ -121,6 +121,9 @@ func (wh *WorkflowHandler) Start(thriftService []thrift.TChanServer) error {
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
+	wh.metadataMgr.Close()
+	wh.visibitiltyMgr.Close()
+	wh.historyMgr.Close()
 	wh.Service.Stop()
 }
 

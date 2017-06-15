@@ -29,6 +29,7 @@ import (
 type (
 	// Engine exposes interfaces for clients to poll for activity and decision tasks.
 	Engine interface {
+		Stop()
 		AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error
 		AddActivityTask(addRequest *m.AddActivityTaskRequest) error
 		PollForDecisionTask(ctx thrift.Context, request *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error)

@@ -517,6 +517,13 @@ func NewCassandraTaskPersistence(hosts string, dc string, keyspace string, logge
 	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One, logger: logger}, nil
 }
 
+// Close releases the underlying resources held by this object
+func (d *cassandraPersistence) Close() {
+	if d.session != nil {
+		d.session.Close()
+	}
+}
+
 func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo

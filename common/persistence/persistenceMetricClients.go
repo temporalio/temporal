@@ -154,6 +154,10 @@ func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error 
 	return err
 }
 
+func (p *shardPersistenceClient) Close() {
+	p.persistence.Close()
+}
+
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
@@ -296,6 +300,10 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	}
 }
 
+func (p *workflowExecutionPersistenceClient) Close() {
+	p.persistence.Close()
+}
+
 func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateTaskScope, metrics.PersistenceRequests)
 
@@ -378,6 +386,10 @@ func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
 	}
 }
 
+func (p *taskPersistenceClient) Close() {
+	p.persistence.Close()
+}
+
 func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceRequests)
 
@@ -434,6 +446,10 @@ func (p *historyPersistenceClient) updateErrorMetric(scope int, err error) {
 	default:
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
+}
+
+func (p *historyPersistenceClient) Close() {
+	p.persistence.Close()
 }
 
 func (p *metadataPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
@@ -504,6 +520,10 @@ func (p *metadataPersistenceClient) DeleteDomainByName(request *DeleteDomainByNa
 	}
 
 	return err
+}
+
+func (p *metadataPersistenceClient) Close() {
+	p.persistence.Close()
 }
 
 func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {

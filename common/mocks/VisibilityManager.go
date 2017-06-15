@@ -28,6 +28,11 @@ type VisibilityManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *VisibilityManager) Close() {
+	_m.Called()
+}
+
 // GetClosedWorkflowExecution provides a mock function with given fields: request
 func (_m *VisibilityManager) GetClosedWorkflowExecution(request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.GetClosedWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)

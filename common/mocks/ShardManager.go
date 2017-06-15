@@ -28,6 +28,11 @@ type ShardManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *ShardManager) Close() {
+	_m.Called()
+}
+
 // CreateShard provides a mock function with given fields: request
 func (_m *ShardManager) CreateShard(request *persistence.CreateShardRequest) error {
 	ret := _m.Called(request)

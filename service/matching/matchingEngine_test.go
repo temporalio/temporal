@@ -1136,6 +1136,10 @@ func newTestTaskManager(logger bark.Logger) *testTaskManager {
 	return &testTaskManager{taskLists: make(map[taskListID]*testTaskListManager), logger: logger}
 }
 
+func (m *testTaskManager) Close() {
+	return
+}
+
 func (m *testTaskManager) getTaskListManager(id *taskListID) *testTaskListManager {
 	m.Lock()
 	defer m.Unlock()

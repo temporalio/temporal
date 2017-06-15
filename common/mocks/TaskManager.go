@@ -28,6 +28,11 @@ type TaskManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *TaskManager) Close() {
+	_m.Called()
+}
+
 // LeaseTaskList provides a mock function with given fields: request
 func (_m *TaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
 	ret := _m.Called(request)

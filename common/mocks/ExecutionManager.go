@@ -28,6 +28,11 @@ type ExecutionManager struct {
 	mock.Mock
 }
 
+// Close provides a mock function with given fields:
+func (_m *ExecutionManager) Close() {
+	_m.Called()
+}
+
 // CompleteTimerTask provides a mock function with given fields: request
 func (_m *ExecutionManager) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
 	ret := _m.Called(request)

@@ -105,6 +105,13 @@ func NewCassandraMetadataPersistence(hosts string, dc string, keyspace string, l
 	return &cassandraMetadataPersistence{session: session, logger: logger}, nil
 }
 
+// Close releases the resources held by this object
+func (m *cassandraMetadataPersistence) Close() {
+	if m.session != nil {
+		m.session.Close()
+	}
+}
+
 // Cassandra does not support conditional updates across multiple tables.  For this reason we have to first insert into
 // 'Domains' table and then do a conditional insert into domains_by_name table.  If the conditional write fails we
 // delete the orphaned entry from domains table.  There is a chance delete entry could fail and we never delete the
