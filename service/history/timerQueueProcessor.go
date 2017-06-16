@@ -86,6 +86,7 @@ type (
 		outstandingTasks map[SequenceID]bool
 		readLevel        SequenceID
 		ackLevel         time.Time
+		metricsClient    metrics.Client
 	}
 )
 
@@ -201,6 +202,8 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimer - Notify the processor about the new timer arrival.
 func (t *timerQueueProcessorImpl) NotifyNewTimer(timerTasks []persistence.Task) {
+	t.metricsClient.AddCounter(metrics.TimerQueueProcessorScope, metrics.NewTimerCounter, int64(len(timerTasks)))
+
 	updatedMinTimer := false
 	t.lock.Lock()
 	for _, task := range timerTasks {
@@ -208,6 +211,15 @@ func (t *timerQueueProcessorImpl) NotifyNewTimer(timerTasks []persistence.Task) 
 		if t.minPendingTimer.IsZero() || ts.Before(t.minPendingTimer) {
 			t.minPendingTimer = ts
 			updatedMinTimer = true
+		}
+
+		switch task.GetType() {
+		case persistence.TaskTypeDecisionTimeout:
+			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.NewTimerCounter)
+		case persistence.TaskTypeActivityTimeout:
+			t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.NewTimerCounter)
+		case persistence.TaskTypeUserTimer:
+			t.metricsClient.IncCounter(metrics.TimerTaskUserTimerScope, metrics.NewTimerCounter)
 		}
 	}
 	t.lock.Unlock()
@@ -292,6 +304,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- *persistence.
 		}
 
 		if isWokeByNewTimer {
+			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.NewTimerNotifyCounter)
 			t.logger.Debugf("Woke up by the timer")
 
 			t.lock.Lock()
@@ -422,12 +435,16 @@ func (t *timerQueueProcessorImpl) processTimerTask(timerTask *persistence.TimerT
 	defer release()
 
 	var err error
+	scope := metrics.TimerQueueProcessorScope
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
+		scope = metrics.TimerTaskUserTimerScope
 		err = t.processExpiredUserTimer(context, timerTask)
 	case persistence.TaskTypeActivityTimeout:
+		scope = metrics.TimerTaskActivityTimeoutScope
 		err = t.processActivityTimeout(context, timerTask)
 	case persistence.TaskTypeDecisionTimeout:
+		scope = metrics.TimerTaskDecisionTimeoutScope
 		err = t.processDecisionTimeout(context, timerTask)
 	}
 
@@ -436,6 +453,9 @@ func (t *timerQueueProcessorImpl) processTimerTask(timerTask *persistence.TimerT
 			// Timer could fire after the execution is deleted.
 			// In which case just ignore the error so we can complete the timer task.
 			err = nil
+		}
+		if err != nil {
+			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 		}
 	}
 
@@ -456,6 +476,10 @@ func (t *timerQueueProcessorImpl) processTimerTask(timerTask *persistence.TimerT
 
 func (t *timerQueueProcessorImpl) processExpiredUserTimer(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerTaskUserTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerTaskUserTimerScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		msBuilder, err1 := context.loadWorkflowExecution()
@@ -521,6 +545,10 @@ Update_History_Loop:
 
 func (t *timerQueueProcessorImpl) processActivityTimeout(
 	context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerTaskActivityTimeoutScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		msBuilder, err1 := context.loadWorkflowExecution()
@@ -552,6 +580,7 @@ Update_History_Loop:
 			switch timeoutType {
 			case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
 				{
+					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
 					if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
 						return errFailedToAddTimeoutEvent
 					}
@@ -562,6 +591,7 @@ Update_History_Loop:
 
 			case workflow.TimeoutType_START_TO_CLOSE:
 				{
+					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 					if ai.StartedID != emptyEventID {
 						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
@@ -574,6 +604,7 @@ Update_History_Loop:
 
 			case workflow.TimeoutType_HEARTBEAT:
 				{
+					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 					lastHeartbeat := ai.LastHeartBeatUpdatedTime.Add(
 						time.Duration(ai.HeartbeatTimeout) * time.Second)
 
@@ -599,6 +630,7 @@ Update_History_Loop:
 
 			case workflow.TimeoutType_SCHEDULE_TO_START:
 				{
+					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 					if ai.StartedID == emptyEventID {
 						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
@@ -632,6 +664,10 @@ Update_History_Loop:
 
 func (t *timerQueueProcessorImpl) processDecisionTimeout(
 	context *workflowExecutionContext, task *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskLatency)
+	defer sw.Stop()
+
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		msBuilder, err1 := context.loadWorkflowExecution()
@@ -750,6 +786,7 @@ func newTimerAckMgr(processor *timerQueueProcessorImpl, shard ShardContext, exec
 		outstandingTasks: make(map[SequenceID]bool),
 		readLevel:        SequenceID{VisibilityTimestamp: ackLevel},
 		ackLevel:         ackLevel,
+		metricsClient:    processor.metricsClient,
 		logger:           logger,
 	}
 }
@@ -808,6 +845,7 @@ func (t *timerAckMgr) completeTimerTask(taskID SequenceID) {
 }
 
 func (t *timerAckMgr) updateAckLevel() {
+	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateCounter)
 	updatedAckLevel := t.ackLevel
 	t.Lock()
 
@@ -837,6 +875,7 @@ MoveAckLevelLoop:
 
 	// Always update ackLevel to detect if the shared is stolen
 	if err := t.shard.UpdateTimerAckLevel(updatedAckLevel); err != nil {
+		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
 		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
 	}
 }

@@ -284,6 +284,12 @@ const (
 	TransferTaskStartChildExecutionScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerQueueProcessorScope
+	// TimerTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
+	TimerTaskActivityTimeoutScope
+	// TimerTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
+	TimerTaskDecisionTimeoutScope
+	// TimerTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
+	TimerTaskUserTimerScope
 
 	NumHistoryScopes
 )
@@ -397,6 +403,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferTaskCancelExecutionScope:            {operation: "TransferTaskCancelExecution"},
 		TransferTaskStartChildExecutionScope:        {operation: "TransferTaskStartChildExecution"},
 		TimerQueueProcessorScope:                    {operation: "TimerQueueProcessor"},
+		TimerTaskActivityTimeoutScope:               {operation: "TimerTaskActivityTimeout"},
+		TimerTaskDecisionTimeoutScope:               {operation: "TimerTaskDecisionTimeout"},
+		TimerTaskUserTimerScope:                     {operation: "TimerTaskUserTimer"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -452,6 +461,12 @@ const (
 	ConcurrencyUpdateFailureCounter
 	CadenceErrEventAlreadyStartedCounter
 	CadenceErrShardOwnershipLostCounter
+	HeartbeatTimeoutCounter
+	ScheduleToStartTimeoutCounter
+	StartToCloseTimeoutCounter
+	ScheduleToCloseTimeoutCounter
+	NewTimerCounter
+	NewTimerNotifyCounter
 )
 
 // Matching metrics enum
@@ -507,6 +522,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ConcurrencyUpdateFailureCounter:           {metricName: "concurrency-update-failure", metricType: Counter},
 		CadenceErrShardOwnershipLostCounter:       {metricName: "cadence.errors.shard-ownership-lost", metricType: Counter},
 		CadenceErrEventAlreadyStartedCounter:      {metricName: "cadence.errors.event-already-started", metricType: Counter},
+		HeartbeatTimeoutCounter:                   {metricName: "heartbeat-tiemout", metricType: Counter},
+		ScheduleToStartTimeoutCounter:             {metricName: "schedule-to-start-timeout", metricType: Counter},
+		StartToCloseTimeoutCounter:                {metricName: "start-to-close-timeout", metricType: Counter},
+		ScheduleToCloseTimeoutCounter:             {metricName: "schedule-to-close-timeout", metricType: Counter},
+		NewTimerCounter:                           {metricName: "new-timer", metricType: Counter},
+		NewTimerNotifyCounter:                     {metricName: "new-timer-notifications", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:          {metricName: "poll.success"},

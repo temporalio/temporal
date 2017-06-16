@@ -25,7 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 
@@ -82,6 +84,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 }
 

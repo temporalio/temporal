@@ -108,6 +108,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		metricsClient:      s.mockShard.GetMetricsClient(),
 	}
 	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
