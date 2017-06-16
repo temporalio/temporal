@@ -455,7 +455,8 @@ const (
 )
 
 var (
-	defaultVisibilityTimestamp = time.Time{} // The zero value of type Time is January 1, year 1, 00:00:00.000000000 UTC
+	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	defaultVisibilityTimestamp = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
 )
 
 type (

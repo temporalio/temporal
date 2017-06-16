@@ -67,12 +67,18 @@ func (s *Service) Start() {
 	// Hack to create shards for bootstrap purposes
 	// TODO: properly pre-create all shards before deployment.
 	for shardID := 0; shardID < p.CassandraConfig.NumHistoryShards; shardID++ {
-		shardMgr.CreateShard(&persistence.CreateShardRequest{
+		err := shardMgr.CreateShard(&persistence.CreateShardRequest{
 			ShardInfo: &persistence.ShardInfo{
 				ShardID:          shardID,
 				RangeID:          0,
 				TransferAckLevel: 0,
 			}})
+
+		if err != nil {
+			if _, ok := err.(*persistence.ShardAlreadyExistError); !ok {
+				log.Fatalf("failed to create shard for ShardId: %v, with error: %v", shardID, err)
+			}
+		}
 	}
 
 	metadata, err := persistence.NewCassandraMetadataPersistence(p.CassandraConfig.Hosts,
