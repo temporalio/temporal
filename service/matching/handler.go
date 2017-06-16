@@ -62,7 +62,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 		return err
 	}
 	h.metricsClient = h.Service.GetMetricsClient()
-	h.engine = NewEngine(h.taskPersistence, history, h.Service.GetLogger())
+	h.engine = NewEngine(h.taskPersistence, history, h.Service.GetLogger(), h.Service.GetMetricsClient())
 	h.startWG.Done()
 	return nil
 }

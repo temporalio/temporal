@@ -298,6 +298,8 @@ const (
 	MatchingAddActivityTaskScope
 	// MatchingAddDecisionTaskScope tracks AddDecisionTask API calls received by service
 	MatchingAddDecisionTaskScope
+	// MatchingTaskListMgrScope is the metrics scope for matching.TaskListManager component
+	MatchingTaskListMgrScope
 
 	NumMatchingScopes
 )
@@ -402,6 +404,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingPollForActivityTaskScope: {operation: "PollForActivityTask"},
 		MatchingAddActivityTaskScope:     {operation: "AddActivityTask"},
 		MatchingAddDecisionTaskScope:     {operation: "AddDecisionTask"},
+		MatchingTaskListMgrScope:         {operation: "TaskListMgr"},
 	},
 }
 
@@ -451,6 +454,17 @@ const (
 	CadenceErrShardOwnershipLostCounter
 )
 
+// Matching metrics enum
+const (
+	PollSuccessCounter = iota + NumCommonMetrics
+	PollTimeoutCounter
+	PollErrorsCounter
+	PollSuccessWithSyncCounter
+	LeaseRequestCounter
+	LeaseFailureCounter
+	ConditionFailedErrorCounter
+)
+
 // MetricDefs record the metrics for all services
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
@@ -494,7 +508,15 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrShardOwnershipLostCounter:       {metricName: "cadence.errors.shard-ownership-lost", metricType: Counter},
 		CadenceErrEventAlreadyStartedCounter:      {metricName: "cadence.errors.event-already-started", metricType: Counter},
 	},
-	Matching: {},
+	Matching: {
+		PollSuccessCounter:          {metricName: "poll.success"},
+		PollTimeoutCounter:          {metricName: "poll.timeouts"},
+		PollErrorsCounter:           {metricName: "poll.errors"},
+		PollSuccessWithSyncCounter:  {metricName: "poll.success.sync"},
+		LeaseRequestCounter:         {metricName: "lease.requests"},
+		LeaseFailureCounter:         {metricName: "lease.failures"},
+		ConditionFailedErrorCounter: {metricName: "condition-failed-errors"},
+	},
 }
 
 // ErrorClass is an enum to help with classifying SLA vs. non-SLA errors (SLA = "service level agreement")

@@ -36,10 +36,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"github.com/uber-go/tally"
 	gohistory "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
@@ -109,6 +111,7 @@ func (s *matchingEngineSuite) newMatchingEngine(rangeSize int64) *matchingEngine
 		historyService:             s.historyClient,
 		taskLists:                  make(map[taskListID]taskListManager),
 		logger:                     s.logger,
+		metricsClient:              metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer:            common.NewJSONTaskTokenSerializer(),
 		longPollExpirationInterval: 100 * time.Second, //time.Millisecond,
 		rangeSize:                  rangeSize,

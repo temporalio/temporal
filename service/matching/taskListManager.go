@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
 	"golang.org/x/net/context"
@@ -66,6 +67,7 @@ func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListMan
 			logging.TagTaskListType: taskList.taskType,
 			logging.TagTaskListName: taskList.taskListName,
 		}),
+		metricsClient:  e.metricsClient,
 		taskAckManager: newAckManager(e.logger),
 		syncMatch:      make(chan *getTaskResult),
 	}
@@ -83,11 +85,12 @@ type taskContext struct {
 
 // Single task list in memory state
 type taskListManagerImpl struct {
-	taskListID *taskListID
-	logger     bark.Logger
-	engine     *matchingEngineImpl
-	taskWriter *taskWriter
-	taskBuffer chan *persistence.TaskInfo // tasks loaded from persistence
+	taskListID    *taskListID
+	logger        bark.Logger
+	metricsClient metrics.Client
+	engine        *matchingEngineImpl
+	taskWriter    *taskWriter
+	taskBuffer    chan *persistence.TaskInfo // tasks loaded from persistence
 	// Sync channel used to perform sync matching.
 	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
 	// only if there is waiting poll that consumes from it.
@@ -243,23 +246,30 @@ func (c *taskListManagerImpl) completeTaskPoll(taskID int64) (ackLevel int64) {
 
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
 func (c *taskListManagerImpl) getTask(ctx thrift.Context) (*getTaskResult, error) {
+	scope := metrics.MatchingTaskListMgrScope
 	timer := time.NewTimer(c.engine.longPollExpirationInterval)
 	defer timer.Stop()
 	select {
 	case task, ok := <-c.taskBuffer:
 		if !ok { // Task list getTasks pump is shutdown
+			c.metricsClient.IncCounter(scope, metrics.PollErrorsCounter)
 			return nil, errPumpClosed
 		}
+		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
 		return &getTaskResult{task: task}, nil
 	case resultFromSyncMatch := <-c.syncMatch:
+		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
+		c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
 		return resultFromSyncMatch, nil
 	case <-timer.C:
+		c.metricsClient.IncCounter(scope, metrics.PollTimeoutCounter)
 		return nil, ErrNoTasks
 	case <-ctx.Done():
 		err := ctx.Err()
 		if err == context.DeadlineExceeded {
 			err = ErrNoTasks
 		}
+		c.metricsClient.IncCounter(scope, metrics.PollTimeoutCounter)
 		return nil, err
 	}
 }
@@ -307,9 +317,12 @@ func (c *taskListManagerImpl) updateRangeIfNeededLocked(e *matchingEngineImpl) e
 		})
 		return
 	}
+
+	c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.LeaseRequestCounter)
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 
 	if err != nil {
+		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.LeaseFailureCounter)
 		c.engine.unloadTaskList(c.taskListID)
 		return err
 	}
@@ -453,6 +466,7 @@ func (c *taskListManagerImpl) executeWithRetry(
 	})
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
+		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.ConditionFailedErrorCounter)
 		c.logger.Debugf("Stopping task list due to persistence condition failure. Err: %v", err)
 		c.Stop()
 	}

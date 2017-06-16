@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -50,6 +51,7 @@ type matchingEngineImpl struct {
 	tokenSerializer            common.TaskTokenSerializer
 	rangeSize                  int64
 	logger                     bark.Logger
+	metricsClient              metrics.Client
 	longPollExpirationInterval time.Duration
 	taskListsLock              sync.RWMutex                   // locks mutation of taskLists
 	taskLists                  map[taskListID]taskListManager // Convert to LRU cache
@@ -96,7 +98,11 @@ func (t *taskListID) String() string {
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
 // NewEngine creates an instance of matching engine
-func NewEngine(taskManager persistence.TaskManager, historyService history.Client, logger bark.Logger) Engine {
+func NewEngine(taskManager persistence.TaskManager,
+	historyService history.Client,
+	logger bark.Logger,
+	metricsClient metrics.Client) Engine {
+
 	return &matchingEngineImpl{
 		taskManager:                taskManager,
 		historyService:             historyService,
@@ -107,6 +113,7 @@ func NewEngine(taskManager persistence.TaskManager, historyService history.Clien
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueMatchingEngineComponent,
 		}),
+		metricsClient: metricsClient,
 	}
 }
 
