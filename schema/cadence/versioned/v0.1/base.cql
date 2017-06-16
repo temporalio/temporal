@@ -13,7 +13,7 @@ CREATE TYPE shard (
   stolen_since_renew  int,
   updated_at          timestamp,
   transfer_ack_level  bigint,
-  timer_ack_level     bigint,
+  timer_ack_level     timestamp,
 );
 
 --- Workflow execution and mutable state ---
