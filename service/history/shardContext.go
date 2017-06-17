@@ -449,7 +449,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 		logging.TagHistoryShardID: shardID,
 	})
 	tags := map[string]string{
-		metrics.ShardTagName: string(shardID),
+		metrics.ShardTagName: metrics.AllShardsTagValue,
 	}
 	context.metricsClient = reporter.Tagged(tags)
 
