@@ -8,6 +8,8 @@ The Cadence server brokers and persists tasks and events generated during workfl
 
 This repo contains the source code of the Cadence server. The client lib you can use to implement workflows, activities and worker can be found [here](https://github.com/uber-go/cadence-client).
 
+See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Cadence.
+
 ## Running
 
 ### Locally
