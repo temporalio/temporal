@@ -56,5 +56,8 @@ func (factory *executionMgrFactory) CreateExecutionManager(shardID int) (persist
 		shardID,
 		factory.logger)
 
-	return persistence.NewWorkflowExecutionPersistenceClient(mgr, factory.metricsClient), err
+	if err != nil {
+		return nil, err
+	}
+	return persistence.NewWorkflowExecutionPersistenceClient(mgr, factory.metricsClient), nil
 }
