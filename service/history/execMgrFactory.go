@@ -59,9 +59,5 @@ func (factory *executionMgrFactory) CreateExecutionManager(shardID int) (persist
 	if err != nil {
 		return nil, err
 	}
-
-	tags := map[string]string{
-		metrics.ShardTagName: metrics.AllShardsTagValue,
-	}
-	return persistence.NewWorkflowExecutionPersistenceClient(mgr, factory.metricsClient.Tagged(tags)), nil
+	return persistence.NewWorkflowExecutionPersistenceClient(mgr, factory.metricsClient), nil
 }

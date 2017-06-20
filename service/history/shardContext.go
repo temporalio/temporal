@@ -427,7 +427,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, logger bark.Logger,
-	reporter metrics.Client) (ShardContext, error) {
+	metricsClient metrics.Client) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -444,14 +444,11 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 		shardInfo:        updatedShardInfo,
 		rangeSize:        defaultRangeSize,
 		closeCh:          closeCh,
+		metricsClient:    metricsClient,
 	}
 	context.logger = logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardID,
 	})
-	tags := map[string]string{
-		metrics.ShardTagName: metrics.AllShardsTagValue,
-	}
-	context.metricsClient = reporter.Tagged(tags)
 
 	err1 := context.renewRangeLocked(true)
 	if err1 != nil {
