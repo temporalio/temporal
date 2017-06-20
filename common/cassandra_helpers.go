@@ -29,8 +29,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	log "github.com/sirupsen/logrus"
 	"github.com/uber/cadence/tools/cassandra"
 )
 

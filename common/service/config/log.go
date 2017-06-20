@@ -21,7 +21,7 @@
 package config
 
 import (
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"io"
 	"io/ioutil"

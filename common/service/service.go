@@ -32,7 +32,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	ringpop "github.com/uber/ringpop-go"

@@ -28,9 +28,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
+	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 
 	"github.com/uber-go/tally"

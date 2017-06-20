@@ -22,8 +22,8 @@ package cassandra
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"

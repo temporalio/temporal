@@ -23,7 +23,7 @@ package history
 import (
 	"testing"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
