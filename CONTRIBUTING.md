@@ -7,8 +7,10 @@ This doc is intended for contributors to `cadence` server (hopefully that's you!
 ## Development Environment
 
 * Go. Install on OS X with `brew install go`.
-* `thrift`. Install on OS X with `brew install thrift`)
+* `thrift`. Install on OS X with `brew install thrift`
 * `thrift-gen`. Install with `go get github.com/uber/tchannel-go/thrift/thrift-gen`
+
+Note: `thrift` should be >= 0.10.0. Run `brew upgrade thrift` if you're on an older version.
 
 ## Checking out the code
 
@@ -41,7 +43,7 @@ commit messages. Read it, follow it, learn it, love it.
 
 ## Building
 
-You can compile the `cadence` service and helper tools without running test: 
+You can compile the `cadence` service and helper tools without running test:
 
 ```bash
 make bins
@@ -57,7 +59,7 @@ brew install cassandra
 
 # start cassandra
 /usr/local/bin/cassandra
-``` 
+```
 
 Run all the tests:
 
