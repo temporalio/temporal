@@ -10,9 +10,9 @@ This repo contains the source code of the Cadence server. The client lib you can
 
 See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Cadence.
 
-## Running
+## Getting Started
 
-### Locally
+### Start the cadence-server locally
 
 * Build the required binaries following the instructions [here](CONTRIBUTING.md).
 
@@ -41,6 +41,10 @@ brew install cassandra
 ### Using Docker
 
 You can also [build and run](docker/README.md) the service using Docker.
+
+### Run the Samples
+
+Try out the sample recipes [here](https://github.com/samarabbas/cadence-samples) to get started.
 
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
