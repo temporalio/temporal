@@ -1,8 +1,3 @@
-CREATE TABLE shards (
-  shard_id           int,
-  PRIMARY KEY (shard_id)
-);
-
 CREATE TYPE shard (
   shard_id            int,
   owner               text, -- Host identifier processing the shard
