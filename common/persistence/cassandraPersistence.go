@@ -1842,6 +1842,9 @@ func GetVisibilityTSFrom(task Task) time.Time {
 
 	case TaskTypeUserTimer:
 		return task.(*UserTimerTask).VisibilityTimestamp
+
+	case TaskTypeDeleteHistoryEvent:
+		return task.(*DeleteHistoryEventTask).VisibilityTimestamp
 	}
 	return time.Time{}
 }
@@ -1857,5 +1860,8 @@ func SetVisibilityTSFrom(task Task, t time.Time) {
 
 	case TaskTypeUserTimer:
 		task.(*UserTimerTask).VisibilityTimestamp = t
+
+	case TaskTypeDeleteHistoryEvent:
+		task.(*DeleteHistoryEventTask).VisibilityTimestamp = t
 	}
 }

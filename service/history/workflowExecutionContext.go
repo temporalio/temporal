@@ -193,7 +193,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 }
 
 func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte, newStateBuilder *mutableStateBuilder,
-	transferTasks []persistence.Task, transactionID int64) error {
+	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
 
 	domainID := newStateBuilder.executionInfo.DomainID
 	newExecution := workflow.WorkflowExecution{
@@ -224,7 +224,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 		return err1
 	}
 
-	err2 := c.updateWorkflowExecutionWithContext(context, transferTasks, nil, transactionID)
+	err2 := c.updateWorkflowExecutionWithContext(context, transferTasks, timerTasks, transactionID)
 
 	if err2 != nil {
 		// TODO: Delete new execution if update fails due to conflict or shard being lost
@@ -238,7 +238,6 @@ func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 		ExecutionInfo: c.msBuilder.executionInfo,
 	})
 	if err != nil {
-		// TODO: We will be needing a background job to delete all leaking workflow executions due to failed delete
 		// We cannot return an error back to client at this stage.  For now just log and move on.
 		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationDeleteWorkflowExecution, err,
 			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))

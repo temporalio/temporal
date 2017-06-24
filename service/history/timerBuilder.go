@@ -210,6 +210,13 @@ func (tb *timerBuilder) IsTimerExpired(td *timerDetails, referenceTime time.Time
 	return expiry <= referenceTime.Unix()
 }
 
+func (tb *timerBuilder) createDeleteHistoryEventTimerTask(d time.Duration) *persistence.DeleteHistoryEventTask {
+	expiryTime := tb.timeSource.Now().Add(d)
+	return &persistence.DeleteHistoryEventTask{
+		VisibilityTimestamp: expiryTime,
+	}
+}
+
 // createDecisionTimeoutTask - Creates a decision timeout task.
 func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
 	expiryTime := tb.timeSource.Now().Add(time.Duration(fireTimeOut) * time.Second)

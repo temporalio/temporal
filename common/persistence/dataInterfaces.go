@@ -73,6 +73,7 @@ const (
 	TaskTypeDecisionTimeout = iota
 	TaskTypeActivityTimeout
 	TaskTypeUserTimer
+	TaskTypeDeleteHistoryEvent
 )
 
 type (
@@ -206,6 +207,12 @@ type (
 	// DeleteExecutionTask identifies a transfer task for deletion of execution
 	DeleteExecutionTask struct {
 		TaskID int64
+	}
+
+	// DeleteHistoryEventTask identifies a timer task for deletion of history events of completed execution.
+	DeleteHistoryEventTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
 	}
 
 	// DecisionTimeoutTask identifies a timeout task.
@@ -717,6 +724,21 @@ func (a *DeleteExecutionTask) GetTaskID() int64 {
 
 // SetTaskID sets the sequence ID of the delete execution task
 func (a *DeleteExecutionTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetType returns the type of the delete execution task
+func (a *DeleteHistoryEventTask) GetType() int {
+	return TaskTypeDeleteHistoryEvent
+}
+
+// GetTaskID returns the sequence ID of the delete execution task
+func (a *DeleteHistoryEventTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the delete execution task
+func (a *DeleteHistoryEventTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
