@@ -628,6 +628,8 @@ func (h *Handler) updateErrorMetric(scope int, err error) {
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 	case *gen.EntityNotExistsError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+	case *gen.CancellationAlreadyRequestedError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrCancellationAlreadyRequestedCounter)
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 	}

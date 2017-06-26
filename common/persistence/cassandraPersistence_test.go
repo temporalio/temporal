@@ -238,7 +238,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo2 := copyWorkflowExecutionInfo(info1)
 	failedUpdatedInfo2.NextEventID = int64(6)
 	failedUpdatedInfo2.LastProcessedEvent = int64(3)
-	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil)
+	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.NotNil(err5, "expected non nil error.")
 	s.IsType(&ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -827,6 +827,53 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_ChildExecutions() {
 	s.Nil(err2, "No error expected.")
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ChildExecutionInfos))
+}
+
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_RequestCancel() {
+	domainID := "568b8d19-cf64-4aac-be1b-f8a3edbc1fa9"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-mutable-request-cancel-test"),
+		RunId:      common.StringPtr("87f96253-b925-426e-90db-aa4ee89b5aca"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	cancelRequestID := uuid.New()
+	requestCancelInfos := []*RequestCancelInfo{
+		{
+			InitiatedID:     1,
+			CancelRequestID: cancelRequestID,
+		}}
+	err2 := s.UpsertRequestCancelState(updatedInfo, int64(3), requestCancelInfos)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(1, len(state.RequestCancelInfos))
+	ri, ok := state.RequestCancelInfos[1]
+	s.True(ok)
+	s.NotNil(ri)
+	s.Equal(int64(1), ri.InitiatedID)
+	s.Equal(cancelRequestID, ri.CancelRequestID)
+
+	err2 = s.DeleteCancelState(updatedInfo, int64(5), int64(1))
+	s.Nil(err2, "No error expected.")
+
+	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(0, len(state.RequestCancelInfos))
 }
 
 func (s *cassandraPersistenceSuite) TestWorkflowMutableStateInfo() {

@@ -514,7 +514,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
 		s.ShardContext.GetRangeID(), condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfo,
-		upsertTimerInfos, deleteTimerInfos, nil, nil)
+		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil)
 }
 
 // UpdateWorkflowExecutionAndDelete is a utility method to update workflow execution
@@ -541,7 +541,15 @@ func (s *TestBase) UpsertChildExecutionsState(updatedInfo *WorkflowExecutionInfo
 	upsertChildInfos []*ChildExecutionInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
-		nil, nil, upsertChildInfos, nil)
+		nil, nil, upsertChildInfos, nil, nil, nil)
+}
+
+// UpsertRequestCancelState is a utility method to update mutable state of workflow execution
+func (s *TestBase) UpsertRequestCancelState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	upsertCancelInfos []*RequestCancelInfo) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, upsertCancelInfos, nil)
 }
 
 // DeleteChildExecutionsState is a utility method to delete child execution from mutable state
@@ -549,14 +557,23 @@ func (s *TestBase) DeleteChildExecutionsState(updatedInfo *WorkflowExecutionInfo
 	deleteChildInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
-		nil, nil, nil, &deleteChildInfo)
+		nil, nil, nil, &deleteChildInfo, nil, nil)
+}
+
+// DeleteCancelState is a utility method to delete request cancel state from mutable state
+func (s *TestBase) DeleteCancelState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	deleteCancelInfo int64) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardContext.GetRangeID(), condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, &deleteCancelInfo)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
 	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo,
-	deleteTimerInfos []string, upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64) error {
+	deleteTimerInfos []string, upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64,
+	upsertCancelInfos []*RequestCancelInfo, deleteCancelInfo *int64) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{
@@ -587,6 +604,8 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 		DeleteTimerInfos:          deleteTimerInfos,
 		UpsertChildExecutionInfos: upsertChildInfos,
 		DeleteChildExecutionInfo:  deleteChildInfo,
+		UpsertRequestCancelInfos:  upsertCancelInfos,
+		DeleteRequestCancelInfo:   deleteCancelInfo,
 	})
 }
 
@@ -599,6 +618,19 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 		Condition:           condition,
 		UpsertActivityInfos: upsertActivityInfo,
 		RangeID:             s.ShardContext.GetRangeID(),
+	})
+}
+
+// UpdateWorkflowExecutionForRequestCancel is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
+	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task,
+	upsertRequestCancelInfo []*RequestCancelInfo) error {
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:            updatedInfo,
+		TransferTasks:            transferTasks,
+		Condition:                condition,
+		UpsertRequestCancelInfos: upsertRequestCancelInfo,
+		RangeID:                  s.ShardContext.GetRangeID(),
 	})
 }
 

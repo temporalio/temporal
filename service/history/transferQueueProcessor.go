@@ -34,6 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
@@ -491,14 +492,23 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	if err != nil {
 		return err
 	}
-	// Load workflow execution.
-	_, err = context.loadWorkflowExecution()
+
+	// First load the execution to validate if there is pending request cancellation for this transfer task
+	var msBuilder *mutableStateBuilder
+	msBuilder, err = context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
 		}
 		return err
+	}
+
+	initiatedEventID := task.ScheduleID
+	ri, isPending := msBuilder.GetRequestCancelInfo(initiatedEventID)
+	if !isPending {
+		// No pending request cancellation for this initiatedID, complete this transfer task
+		return nil
 	}
 
 	cancelRequest := &history.RequestCancelWorkflowExecutionRequest{
@@ -509,6 +519,8 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 				RunId:      common.StringPtr(task.TargetRunID),
 			},
 			Identity: common.StringPtr("history-service"),
+			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
+			RequestId: common.StringPtr(ri.CancelRequestID),
 		},
 		ExternalInitiatedEventId: common.Int64Ptr(task.ScheduleID),
 		ExternalWorkflowExecution: &workflow.WorkflowExecution{
@@ -517,12 +529,27 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 		},
 	}
 
-	err = context.requestExternalCancelWorkflowExecutionWithRetry(
-		t.historyClient,
-		cancelRequest,
-		task.ScheduleID)
+	op := func() error {
+		return t.historyClient.RequestCancelWorkflowExecution(nil, cancelRequest)
+	}
 
-	return err
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		t.logger.Debugf("Failed to cancel external workflow execution. Error: %v", err)
+
+		// Check to see if the error is non-transient, in which case add RequestCancelFailed
+		// event and complete transfer task by setting the err = nil
+		if common.IsServiceNonRetryableError(err) {
+			err = t.requestCancelFailed(task, context, cancelRequest)
+		}
+		return err
+	}
+
+	t.logger.Debugf("RequestCancel successfully recorded to external workflow execution.  WorkflowID: %v, RunID: %v",
+		task.TargetWorkflowID, task.TargetRunID)
+
+	// Record ExternalWorkflowExecutionCancelRequested in source execution
+	return t.requestCancelCompleted(task, context, cancelRequest)
 }
 
 func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) error {
@@ -697,6 +724,60 @@ func (t *transferQueueProcessorImpl) recordStartChildExecutionFailed(task *persi
 
 			msBuilder.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
 				workflow.ChildWorkflowExecutionFailedCause_WORKFLOW_ALREADY_RUNNING, initiatedAttributes)
+
+			return nil
+		})
+}
+
+func (t *transferQueueProcessorImpl) requestCancelCompleted(task *persistence.TransferTaskInfo,
+	context *workflowExecutionContext,
+	request *history.RequestCancelWorkflowExecutionRequest) error {
+
+	return t.updateWorkflowExecution(task.DomainID, context, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			initiatedEventID := task.ScheduleID
+			_, isPending := msBuilder.GetRequestCancelInfo(initiatedEventID)
+			if !isPending {
+				return &workflow.EntityNotExistsError{Message: "Pending request cancellation not found."}
+			}
+
+			msBuilder.AddExternalWorkflowExecutionCancelRequested(
+				initiatedEventID,
+				request.GetDomainUUID(),
+				request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId(),
+				request.GetCancelRequest().GetWorkflowExecution().GetRunId())
+
+			return nil
+		})
+}
+
+func (t *transferQueueProcessorImpl) requestCancelFailed(task *persistence.TransferTaskInfo,
+	context *workflowExecutionContext,
+	request *history.RequestCancelWorkflowExecutionRequest) error {
+
+	return t.updateWorkflowExecution(task.DomainID, context, true,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			initiatedEventID := task.ScheduleID
+			_, isPending := msBuilder.GetRequestCancelInfo(initiatedEventID)
+			if !isPending {
+				return &workflow.EntityNotExistsError{Message: "Pending request cancellation not found."}
+			}
+
+			msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
+				emptyEventID,
+				initiatedEventID,
+				request.GetDomainUUID(),
+				request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId(),
+				request.GetCancelRequest().GetWorkflowExecution().GetRunId(),
+				workflow.CancelExternalWorkflowExecutionFailedCause_UNKNOWN_EXTERNAL_WORKFLOW_EXECUTION)
 
 			return nil
 		})

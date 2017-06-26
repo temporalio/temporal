@@ -748,8 +748,9 @@ Update_History_Loop:
 							attributes.GetDomain())}
 				}
 
-				wfCancelReqEvent := msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
-					completedID, attributes)
+				cancelRequestID := uuid.New()
+				wfCancelReqEvent, _ := msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(completedID,
+					cancelRequestID, attributes)
 				if wfCancelReqEvent == nil {
 					return &workflow.InternalServiceError{Message: "Unable to add external cancel workflow request."}
 				}
@@ -1222,12 +1223,7 @@ Update_History_Loop:
 	return &workflow.RecordActivityTaskHeartbeatResponse{}, ErrMaxAttemptsExceeded
 }
 
-// RequestCancelWorkflowExecution
-// https://github.com/uber/cadence/issues/145
-// TODO: (1) Each external request can result in one cancel requested event. it would be nice
-//	 to have dedupe on the server side.
-//	(2) if there are multiple calls if one request goes through then can we respond to the other ones with
-//       cancellation in progress instead of success.
+// RequestCancelWorkflowExecution records request cancellation event for workflow execution
 func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	req *h.RequestCancelWorkflowExecutionRequest) error {
 	domainID := req.GetDomainUUID()
@@ -1242,6 +1238,24 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		func(msBuilder *mutableStateBuilder) error {
 			if !msBuilder.isWorkflowExecutionRunning() {
 				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			isCancelRequested, cancelRequestID := msBuilder.isCancelRequested()
+			e.logger.Errorf("****isCancelRequested: %v, CancelRequestID: %v", isCancelRequested, cancelRequestID)
+			if isCancelRequested {
+				cancelRequest := req.GetCancelRequest()
+				e.logger.Errorf("****CancelRequestSet: %v", cancelRequest.IsSetRequestId())
+				if cancelRequest.IsSetRequestId() {
+					requestID := cancelRequest.GetRequestId()
+					if requestID != "" && cancelRequestID == requestID {
+						return nil
+					}
+				}
+
+				e.logger.Error("***Return Cancellation error.")
+				return &workflow.CancellationAlreadyRequestedError{
+					Message: "Cancellation already requested for this workflow execution.",
+				}
 			}
 
 			if msBuilder.AddWorkflowExecutionCancelRequestedEvent("", req) == nil {

@@ -285,6 +285,8 @@ func (c *tchanWorkflowServiceClient) RequestCancelWorkflowExecution(ctx thrift.C
 			err = resp.InternalServiceError
 		case resp.EntityNotExistError != nil:
 			err = resp.EntityNotExistError
+		case resp.CancellationAlreadyRequestedError != nil:
+			err = resp.CancellationAlreadyRequestedError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for RequestCancelWorkflowExecution")
 		}
@@ -910,6 +912,11 @@ func (s *tchanWorkflowServiceServer) handleRequestCancelWorkflowExecution(ctx th
 				return false, nil, fmt.Errorf("Handler for entityNotExistError returned non-nil error type *shared.EntityNotExistsError but nil value")
 			}
 			res.EntityNotExistError = v
+		case *shared.CancellationAlreadyRequestedError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for cancellationAlreadyRequestedError returned non-nil error type *shared.CancellationAlreadyRequestedError but nil value")
+			}
+			res.CancellationAlreadyRequestedError = v
 		default:
 			return false, nil, err
 		}

@@ -213,6 +213,8 @@ func (c *tchanHistoryServiceClient) RequestCancelWorkflowExecution(ctx thrift.Co
 			err = resp.EntityNotExistError
 		case resp.ShardOwnershipLostError != nil:
 			err = resp.ShardOwnershipLostError
+		case resp.CancellationAlreadyRequestedError != nil:
+			err = resp.CancellationAlreadyRequestedError
 		default:
 			err = fmt.Errorf("received no result or unknown exception for RequestCancelWorkflowExecution")
 		}
@@ -741,6 +743,11 @@ func (s *tchanHistoryServiceServer) handleRequestCancelWorkflowExecution(ctx thr
 				return false, nil, fmt.Errorf("Handler for shardOwnershipLostError returned non-nil error type *ShardOwnershipLostError but nil value")
 			}
 			res.ShardOwnershipLostError = v
+		case *shared.CancellationAlreadyRequestedError:
+			if v == nil {
+				return false, nil, fmt.Errorf("Handler for cancellationAlreadyRequestedError returned non-nil error type *shared.CancellationAlreadyRequestedError but nil value")
+			}
+			res.CancellationAlreadyRequestedError = v
 		default:
 			return false, nil, err
 		}

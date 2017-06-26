@@ -54,6 +54,10 @@ type (
 		updateChildExecutionInfos    []*persistence.ChildExecutionInfo         // Modified ChildExecution Infos since last update
 		deleteChildExecutionInfo     *int64                                    // Deleted ChildExecution Info since last update
 
+		pendingRequestCancelInfoIDs map[int64]*persistence.RequestCancelInfo // Initiated Event ID -> RequestCancelInfo
+		updateRequestCancelInfos    []*persistence.RequestCancelInfo         // Modified RequestCancel Infos since last update
+		deleteRequestCancelInfo     *int64                                   // Deleted RequestCancel Info since last update
+
 		executionInfo   *persistence.WorkflowExecutionInfo // Workflow mutable state info.
 		continueAsNew   *persistence.CreateWorkflowExecutionRequest
 		hBuilder        *historyBuilder
@@ -91,6 +95,8 @@ func newMutableStateBuilder(logger bark.Logger) *mutableStateBuilder {
 		deleteTimerInfos:                []string{},
 		updateChildExecutionInfos:       []*persistence.ChildExecutionInfo{},
 		pendingChildExecutionInfoIDs:    make(map[int64]*persistence.ChildExecutionInfo),
+		updateRequestCancelInfos:        []*persistence.RequestCancelInfo{},
+		pendingRequestCancelInfoIDs:     make(map[int64]*persistence.RequestCancelInfo),
 		eventSerializer:                 newJSONHistoryEventSerializer(),
 		logger:                          logger,
 	}
@@ -109,6 +115,7 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.pendingActivityInfoIDs = state.ActivitInfos
 	e.pendingTimerInfoIDs = state.TimerInfos
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
+	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
 	e.executionInfo = state.ExecutionInfo
 	for _, ai := range state.ActivitInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
@@ -135,6 +142,8 @@ func (e *mutableStateBuilder) CloseUpdateSession() *mutableStateSessionUpdates {
 	e.deleteTimerInfos = []string{}
 	e.updateChildExecutionInfos = []*persistence.ChildExecutionInfo{}
 	e.deleteChildExecutionInfo = nil
+	e.updateRequestCancelInfos = []*persistence.RequestCancelInfo{}
+	e.deleteRequestCancelInfo = nil
 	e.continueAsNew = nil
 
 	return updates
@@ -226,6 +235,12 @@ func (e *mutableStateBuilder) GetChildExecutionStartedEvent(initiatedEventID int
 	return e.getHistoryEvent(ci.StartedEvent)
 }
 
+// GetRequestCancelInfo gives details about a request cancellation that is currently in progress.
+func (e *mutableStateBuilder) GetRequestCancelInfo(initiatedEventID int64) (*persistence.RequestCancelInfo, bool) {
+	ri, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]
+	return ri, ok
+}
+
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, bool) {
 	serializedEvent := e.executionInfo.CompletionEvent
@@ -236,7 +251,7 @@ func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, bool
 	return e.getHistoryEvent(serializedEvent)
 }
 
-// DeleteActivity deletes details about an activity.
+// DeletePendingChildExecution deletes details about a ChildExecutionInfo.
 func (e *mutableStateBuilder) DeletePendingChildExecution(initiatedEventID int64) error {
 	_, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]
 	if !ok {
@@ -248,6 +263,21 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(initiatedEventID int64
 	delete(e.pendingChildExecutionInfoIDs, initiatedEventID)
 
 	e.deleteChildExecutionInfo = common.Int64Ptr(initiatedEventID)
+	return nil
+}
+
+// DeletePendingRequestCancel deletes details about a RequestCancelInfo.
+func (e *mutableStateBuilder) DeletePendingRequestCancel(initiatedEventID int64) error {
+	_, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]
+	if !ok {
+		errorMsg := fmt.Sprintf("Unable to find request cancellation with initiated event id: %v in mutable state",
+			initiatedEventID)
+		logging.LogMutableStateInvalidAction(e.logger, errorMsg)
+		return errors.New(errorMsg)
+	}
+	delete(e.pendingRequestCancelInfoIDs, initiatedEventID)
+
+	e.deleteRequestCancelInfo = common.Int64Ptr(initiatedEventID)
 	return nil
 }
 
@@ -374,6 +404,14 @@ func (e *mutableStateBuilder) GetNextEventID() int64 {
 
 func (e *mutableStateBuilder) isWorkflowExecutionRunning() bool {
 	return e.executionInfo.State != persistence.WorkflowStateCompleted
+}
+
+func (e *mutableStateBuilder) isCancelRequested() (bool, string) {
+	if e.executionInfo.CancelRequested {
+		return e.executionInfo.CancelRequested, e.executionInfo.CancelRequestID
+	}
+
+	return false, ""
 }
 
 func (e *mutableStateBuilder) getHistoryEvent(serializedEvent []byte) (*workflow.HistoryEvent, bool) {
@@ -742,6 +780,19 @@ func (e *mutableStateBuilder) AddFailWorkflowEvent(decisionCompletedEventID int6
 
 func (e *mutableStateBuilder) AddWorkflowExecutionCancelRequestedEvent(cause string,
 	request *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent {
+	if e.executionInfo.State == persistence.WorkflowStateCompleted || e.executionInfo.CancelRequested {
+		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionRequestCancelWorkflow, e.GetNextEventID(),
+			fmt.Sprintf("{State: %v, CancelRequested: %v, RequestID: %v}", e.executionInfo.State,
+				e.executionInfo.CancelRequested, e.executionInfo.CancelRequestID))
+
+		return nil
+	}
+
+	e.executionInfo.CancelRequested = true
+	if request.GetCancelRequest().IsSetRequestId() {
+		e.executionInfo.CancelRequestID = request.GetCancelRequest().GetRequestId()
+	}
+
 	return e.hBuilder.AddWorkflowExecutionCancelRequestedEvent(cause, request)
 }
 
@@ -761,21 +812,56 @@ func (e *mutableStateBuilder) AddWorkflowExecutionCanceledEvent(decisionTaskComp
 }
 
 func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,
-	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	return e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
-		decisionCompletedEventID, request)
+	cancelRequestID string,
+	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent,
+	*persistence.RequestCancelInfo) {
+	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
+	if event == nil {
+		return nil, nil
+	}
+
+	initiatedEventID := event.GetEventId()
+	ri := &persistence.RequestCancelInfo{
+		InitiatedID:     initiatedEventID,
+		CancelRequestID: cancelRequestID,
+	}
+
+	e.pendingRequestCancelInfoIDs[initiatedEventID] = ri
+	e.updateRequestCancelInfos = append(e.updateRequestCancelInfos, ri)
+
+	return event, ri
+}
+
+func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(initiatedID int64,
+	domain, workflowID, runID string) *workflow.HistoryEvent {
+	_, ok := e.GetRequestCancelInfo(initiatedID)
+	if !ok {
+		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionWorkflowCancelRequested, e.GetNextEventID(),
+			fmt.Sprintf("{InitiatedID: %v, Exist: %v}", initiatedID, ok))
+	}
+
+	if e.DeletePendingRequestCancel(initiatedID) == nil {
+		return e.hBuilder.AddExternalWorkflowExecutionCancelRequested(initiatedID, domain, workflowID, runID)
+	}
+
+	return nil
 }
 
 func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
-	decisionTaskCompletedEventID, initiatedEventID int64,
+	decisionTaskCompletedEventID, initiatedID int64,
 	domain, workflowID, runID string, cause workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
-	return e.hBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
-		decisionTaskCompletedEventID, initiatedEventID, domain, workflowID, runID, cause)
-}
+	_, ok := e.GetRequestCancelInfo(initiatedID)
+	if !ok {
+		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionWorkflowCancelFailed, e.GetNextEventID(),
+			fmt.Sprintf("{InitiatedID: %v, Exist: %v}", initiatedID, ok))
+	}
 
-func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(initiatedEventID int64,
-	domain, workflowID, runID string) *workflow.HistoryEvent {
-	return e.hBuilder.AddExternalWorkflowExecutionCancelRequested(initiatedEventID, domain, workflowID, runID)
+	if e.DeletePendingRequestCancel(initiatedID) == nil {
+		return e.hBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedID,
+			domain, workflowID, runID, cause)
+	}
+
+	return nil
 }
 
 func (e *mutableStateBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,

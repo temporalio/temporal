@@ -1503,6 +1503,9 @@ func (p *WorkflowServiceClient) recvRequestCancelWorkflowExecution() (err error)
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.CancellationAlreadyRequestedError != nil {
+    err = result.CancellationAlreadyRequestedError
+    return 
   }
   return
 }
@@ -2669,6 +2672,8 @@ func (p *workflowServiceProcessorRequestCancelWorkflowExecution) Process(seqId i
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.CancellationAlreadyRequestedError:
+  result.CancellationAlreadyRequestedError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RequestCancelWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("RequestCancelWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -6644,10 +6649,12 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - CancellationAlreadyRequestedError
 type WorkflowServiceRequestCancelWorkflowExecutionResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  CancellationAlreadyRequestedError *shared.CancellationAlreadyRequestedError `thrift:"cancellationAlreadyRequestedError,4" db:"cancellationAlreadyRequestedError" json:"cancellationAlreadyRequestedError,omitempty"`
 }
 
 func NewWorkflowServiceRequestCancelWorkflowExecutionResult() *WorkflowServiceRequestCancelWorkflowExecutionResult {
@@ -6675,6 +6682,13 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) GetEntityNotExistE
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceRequestCancelWorkflowExecutionResult_CancellationAlreadyRequestedError_DEFAULT *shared.CancellationAlreadyRequestedError
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) GetCancellationAlreadyRequestedError() *shared.CancellationAlreadyRequestedError {
+  if !p.IsSetCancellationAlreadyRequestedError() {
+    return WorkflowServiceRequestCancelWorkflowExecutionResult_CancellationAlreadyRequestedError_DEFAULT
+  }
+return p.CancellationAlreadyRequestedError
+}
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -6685,6 +6699,10 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetInternalServi
 
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetCancellationAlreadyRequestedError() bool {
+  return p.CancellationAlreadyRequestedError != nil
 }
 
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -6710,6 +6728,10 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -6751,6 +6773,14 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult)  ReadField3(iprot 
   return nil
 }
 
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.CancellationAlreadyRequestedError = &shared.CancellationAlreadyRequestedError{}
+  if err := p.CancellationAlreadyRequestedError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.CancellationAlreadyRequestedError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RequestCancelWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -6758,6 +6788,7 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -6801,6 +6832,19 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) writeField3(oprot 
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetCancellationAlreadyRequestedError() {
+    if err := oprot.WriteFieldBegin("cancellationAlreadyRequestedError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:cancellationAlreadyRequestedError: ", p), err) }
+    if err := p.CancellationAlreadyRequestedError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.CancellationAlreadyRequestedError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:cancellationAlreadyRequestedError: ", p), err) }
   }
   return err
 }

@@ -1579,6 +1579,16 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.Nil(err)
 
+	err = s.engine.RequestCancelWorkflowExecution(&workflow.RequestCancelWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.CancellationAlreadyRequestedError{}, err)
+
 	err = poller.pollAndProcessDecisionTask(true, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
@@ -1781,9 +1791,9 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.GetHistory()
 		common.PrettyPrintHistory(history, s.logger)
 
-		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		lastEvent := history.GetEvents()[len(history.GetEvents())-2]
 		if lastEvent.GetEventType() != workflow.EventType_ExternalWorkflowExecutionCancelRequested {
-			s.logger.Info("Cancellaton has been sent.")
+			s.logger.Info("Cancellaton still not sent.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -1950,9 +1960,9 @@ CheckHistoryLoopForCancelSent:
 		history := historyResponse.GetHistory()
 		common.PrettyPrintHistory(history, s.logger)
 
-		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		lastEvent := history.GetEvents()[len(history.GetEvents())-2]
 		if lastEvent.GetEventType() != workflow.EventType_RequestCancelExternalWorkflowExecutionFailed {
-			s.logger.Info("Cancellaton has been sent.")
+			s.logger.Info("Cancellaton not cancelled yet.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}

@@ -4637,6 +4637,9 @@ func (p *HistoryServiceClient) recvRequestCancelWorkflowExecution() (err error) 
   } else   if result.ShardOwnershipLostError != nil {
     err = result.ShardOwnershipLostError
     return 
+  } else   if result.CancellationAlreadyRequestedError != nil {
+    err = result.CancellationAlreadyRequestedError
+    return 
   }
   return
 }
@@ -5547,6 +5550,8 @@ func (p *historyServiceProcessorRequestCancelWorkflowExecution) Process(seqId in
   result.EntityNotExistError = v
     case *ShardOwnershipLostError:
   result.ShardOwnershipLostError = v
+    case *shared.CancellationAlreadyRequestedError:
+  result.CancellationAlreadyRequestedError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RequestCancelWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("RequestCancelWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -9392,11 +9397,13 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionArgs) String() string {
 //  - InternalServiceError
 //  - EntityNotExistError
 //  - ShardOwnershipLostError
+//  - CancellationAlreadyRequestedError
 type HistoryServiceRequestCancelWorkflowExecutionResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
   ShardOwnershipLostError *ShardOwnershipLostError `thrift:"shardOwnershipLostError,4" db:"shardOwnershipLostError" json:"shardOwnershipLostError,omitempty"`
+  CancellationAlreadyRequestedError *shared.CancellationAlreadyRequestedError `thrift:"cancellationAlreadyRequestedError,5" db:"cancellationAlreadyRequestedError" json:"cancellationAlreadyRequestedError,omitempty"`
 }
 
 func NewHistoryServiceRequestCancelWorkflowExecutionResult() *HistoryServiceRequestCancelWorkflowExecutionResult {
@@ -9431,6 +9438,13 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult) GetShardOwnershipLo
   }
 return p.ShardOwnershipLostError
 }
+var HistoryServiceRequestCancelWorkflowExecutionResult_CancellationAlreadyRequestedError_DEFAULT *shared.CancellationAlreadyRequestedError
+func (p *HistoryServiceRequestCancelWorkflowExecutionResult) GetCancellationAlreadyRequestedError() *shared.CancellationAlreadyRequestedError {
+  if !p.IsSetCancellationAlreadyRequestedError() {
+    return HistoryServiceRequestCancelWorkflowExecutionResult_CancellationAlreadyRequestedError_DEFAULT
+  }
+return p.CancellationAlreadyRequestedError
+}
 func (p *HistoryServiceRequestCancelWorkflowExecutionResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -9445,6 +9459,10 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult) IsSetEntityNotExist
 
 func (p *HistoryServiceRequestCancelWorkflowExecutionResult) IsSetShardOwnershipLostError() bool {
   return p.ShardOwnershipLostError != nil
+}
+
+func (p *HistoryServiceRequestCancelWorkflowExecutionResult) IsSetCancellationAlreadyRequestedError() bool {
+  return p.CancellationAlreadyRequestedError != nil
 }
 
 func (p *HistoryServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -9474,6 +9492,10 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.T
       }
     case 4:
       if err := p.ReadField4(iprot); err != nil {
+        return err
+      }
+    case 5:
+      if err := p.ReadField5(iprot); err != nil {
         return err
       }
     default:
@@ -9523,6 +9545,14 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult)  ReadField4(iprot t
   return nil
 }
 
+func (p *HistoryServiceRequestCancelWorkflowExecutionResult)  ReadField5(iprot thrift.TProtocol) error {
+  p.CancellationAlreadyRequestedError = &shared.CancellationAlreadyRequestedError{}
+  if err := p.CancellationAlreadyRequestedError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.CancellationAlreadyRequestedError), err)
+  }
+  return nil
+}
+
 func (p *HistoryServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RequestCancelWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -9531,6 +9561,7 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift.
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
     if err := p.writeField4(oprot); err != nil { return err }
+    if err := p.writeField5(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -9587,6 +9618,19 @@ func (p *HistoryServiceRequestCancelWorkflowExecutionResult) writeField4(oprot t
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 4:shardOwnershipLostError: ", p), err) }
+  }
+  return err
+}
+
+func (p *HistoryServiceRequestCancelWorkflowExecutionResult) writeField5(oprot thrift.TProtocol) (err error) {
+  if p.IsSetCancellationAlreadyRequestedError() {
+    if err := oprot.WriteFieldBegin("cancellationAlreadyRequestedError", thrift.STRUCT, 5); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 5:cancellationAlreadyRequestedError: ", p), err) }
+    if err := p.CancellationAlreadyRequestedError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.CancellationAlreadyRequestedError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 5:cancellationAlreadyRequestedError: ", p), err) }
   }
   return err
 }

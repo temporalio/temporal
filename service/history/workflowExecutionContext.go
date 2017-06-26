@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -33,7 +32,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
-	hc "github.com/uber/cadence/client/history"
 )
 
 type (
@@ -280,65 +278,6 @@ func (c *workflowExecutionContext) deleteWorkflowExecutionWithRetry(
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-// Few problems with this approach.
-//   https://github.com/uber/cadence/issues/145
-//  (1) On the target workflow we can generate more than one cancel request if we end up retrying because of intermittent
-//	errors. We might want to have deduping logic internally to avoid that.
-//  (2) For single cancel transfer task we can generate more than one ExternalWorkflowExecutionCancelRequested event in the
-//	history if we fail to delete transfer task and retry again. We need some logic to look back at the event
-//      state in mutable state when we are processing this transfer task.
-//      This means for one single ExternalWorkflowExecutionCancelInitiated we can see a
-//      ExternalWorkflowExecutionCancelRequested and RequestCancelExternalWorkflowExecutionFailedEvent.
-func (c *workflowExecutionContext) requestExternalCancelWorkflowExecutionWithRetry(
-	historyClient hc.Client,
-	request *history.RequestCancelWorkflowExecutionRequest,
-	initiatedEventID int64) error {
-	op := func() error {
-		return historyClient.RequestCancelWorkflowExecution(nil, request)
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err == nil {
-		// We succeeded in request to cancel workflow.
-		if c.msBuilder.AddExternalWorkflowExecutionCancelRequested(
-			initiatedEventID,
-			request.GetDomainUUID(),
-			request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId(),
-			request.GetCancelRequest().GetWorkflowExecution().GetRunId()) == nil {
-			return &workflow.InternalServiceError{
-				Message: "Unable to write event to complete request of external cancel workflow execution."}
-		}
-
-		// Generate a transaction ID for appending events to history
-		transactionID, err := c.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		return c.updateWorkflowExecution(nil, nil, transactionID)
-
-	} else if err != nil && common.IsServiceNonRetryableError(err) {
-		// We failed in request to cancel workflow.
-		if c.msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
-			emptyEventID,
-			initiatedEventID,
-			request.GetDomainUUID(),
-			request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId(),
-			request.GetCancelRequest().GetWorkflowExecution().GetRunId(),
-			workflow.CancelExternalWorkflowExecutionFailedCause_UNKNOWN_EXTERNAL_WORKFLOW_EXECUTION) == nil {
-			return &workflow.InternalServiceError{
-				Message: "Unable to write failure event of external cancel workflow execution."}
-		}
-
-		// Generate a transaction ID for appending events to history
-		transactionID, err := c.shard.GetNextTransferTaskID()
-		if err != nil {
-			return err
-		}
-		return c.updateWorkflowExecution(nil, nil, transactionID)
-	}
-	return err
 }
 
 func (c *workflowExecutionContext) clear() {

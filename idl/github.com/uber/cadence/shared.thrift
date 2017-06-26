@@ -46,6 +46,10 @@ exception ServiceBusyError {
   1: required string message
 }
 
+exception CancellationAlreadyRequestedError {
+  1: required string message
+}
+
 enum DomainStatus {
   REGISTERED,
   DEPRECATED,
@@ -741,6 +745,7 @@ struct RequestCancelWorkflowExecutionRequest {
   10: optional string domain
   20: optional WorkflowExecution workflowExecution
   30: optional string identity
+  40: optional string requestId
 }
 
 struct GetWorkflowExecutionHistoryRequest {

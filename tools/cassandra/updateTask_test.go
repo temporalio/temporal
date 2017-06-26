@@ -128,7 +128,8 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	ver, err := client.ReadSchemaVersion()
 	s.Nil(err)
 	// update the version to the latest
-	s.Equal(0, cmpVersion(ver, "0.1"))
+	s.log.Infof("Ver: %v", ver)
+	s.Equal(0, cmpVersion(ver, "0.2"))
 
 	dropAllTablesTypes(client)
 }

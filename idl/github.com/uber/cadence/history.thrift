@@ -315,6 +315,7 @@ service HistoryService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
+      5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,
     )
 
   /**

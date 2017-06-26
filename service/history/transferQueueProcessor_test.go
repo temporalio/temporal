@@ -63,24 +63,33 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	logger := log.New()
 	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
-
 	s.SetupWorkflowStore()
-	s.mockMatching = &mocks.MatchingClient{}
-	s.mockHistoryClient = &mocks.HistoryClient{}
-	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
-	historyCache := newHistoryCache(historyCacheMaxSize, s.ShardContext, s.logger)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
-	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient, historyCache, domainCache).(*transferQueueProcessorImpl)
 }
 
 func (s *transferQueueProcessorSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
+func (s *transferQueueProcessorSuite) TearDownTest() {
+	s.mockMatching.AssertExpectations(s.T())
+	s.mockHistoryClient.AssertExpectations(s.T())
+	s.mockMetadataMgr.AssertExpectations(s.T())
+	s.mockVisibilityMgr.AssertExpectations(s.T())
+}
+
 func (s *transferQueueProcessorSuite) SetupTest() {
 	// First cleanup transfer tasks from other tests and reset shard context
 	s.ClearTransferQueue()
+
+	s.mockMatching = &mocks.MatchingClient{}
+	s.mockHistoryClient = &mocks.HistoryClient{}
+	s.mockVisibilityMgr = &mocks.VisibilityManager{}
+	s.mockMetadataMgr = &mocks.MetadataManager{}
+
+	historyCache := newHistoryCache(historyCacheMaxSize, s.ShardContext, s.logger)
+	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
+	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient,
+		historyCache, domainCache).(*transferQueueProcessorImpl)
 }
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
@@ -107,9 +116,6 @@ workerPump:
 			break workerPump
 		}
 	}
-
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
@@ -160,9 +166,6 @@ workerPump:
 			break workerPump
 		}
 	}
-
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
@@ -221,8 +224,6 @@ workerPump:
 	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotExist() {
@@ -277,8 +278,6 @@ workerPump:
 	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
@@ -287,6 +286,10 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 		WorkflowId: common.StringPtr("cancel-transfer-test"),
 		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "cancel-transfer-queue"
+	identity := "cancel-remote-execution-test"
+	targetDomain := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetWorkflowID := "target-workflow_id"
+	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
@@ -294,17 +297,21 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 	builder := newMutableStateBuilder(s.logger)
 	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info)
-	addDecisionTaskStartedEvent(builder, int64(2), taskList, "identity")
+	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
+	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, int64(2), startedEvent.GetEventId(), nil, identity)
+	initiatedEvent := addRequestCancelInitiatedEvent(builder, completeDecisionEvent.GetEventId(), "request-id",
+		targetDomain, targetWorkflowID, targetRunID)
 
 	transferTasks := []persistence.Task{&persistence.CancelExecutionTask{
 		TaskID:           s.GetNextSequenceNumber(),
-		TargetDomainID:   "f2bfaab6-7e8b-4fac-9a62-17da8d37becb",
-		TargetWorkflowID: "target-workflow_id",
-		TargetRunID:      "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6",
-		ScheduleID:       1,
+		TargetDomainID:   targetDomain,
+		TargetWorkflowID: targetWorkflowID,
+		TargetRunID:      targetRunID,
+		ScheduleID:       initiatedEvent.GetEventId(),
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
+	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,
+		builder.updateRequestCancelInfos)
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
@@ -320,6 +327,8 @@ workerPump:
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
 			} else if task.TaskType == persistence.TransferTaskTypeCancelExecution {
+				s.logger.Infof("TransferTaskTypeCancelExecution. TargetDomain: %v, TargetWorkflowID: %v, TargetRunID: %v",
+					task.TargetDomainID, task.TargetWorkflowID, task.TargetRunID)
 				s.mockHistoryClient.On("RequestCancelWorkflowExecution", mock.Anything, mock.Anything).Return(nil).Once()
 			}
 			s.processor.processTransferTask(task)
@@ -327,10 +336,6 @@ workerPump:
 			break workerPump
 		}
 	}
-
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_RequestFail() {
@@ -339,6 +344,11 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 		WorkflowId: common.StringPtr("cancel-transfer-fail-test"),
 		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "cancel-transfer-fail-queue"
+	identity := "cancel-transfer-fail-test"
+	targetDomain := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetWorkflowID := "target-workflow_id"
+	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
+
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
@@ -346,17 +356,21 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 	builder := newMutableStateBuilder(s.logger)
 	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info)
-	addDecisionTaskStartedEvent(builder, int64(2), taskList, "identity")
+	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
+	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, int64(2), startedEvent.GetEventId(), nil, identity)
+	initiatedEvent := addRequestCancelInitiatedEvent(builder, completeDecisionEvent.GetEventId(), "request-id",
+		targetDomain, targetWorkflowID, targetRunID)
 
 	transferTasks := []persistence.Task{&persistence.CancelExecutionTask{
 		TaskID:           s.GetNextSequenceNumber(),
-		TargetDomainID:   "f2bfaab6-7e8b-4fac-9a62-17da8d37becb",
-		TargetWorkflowID: "target-workflow_id",
-		TargetRunID:      "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6",
-		ScheduleID:       1,
+		TargetDomainID:   targetDomain,
+		TargetWorkflowID: targetWorkflowID,
+		TargetRunID:      targetRunID,
+		ScheduleID:       initiatedEvent.GetEventId(),
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
+	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,
+		builder.updateRequestCancelInfos)
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
@@ -365,7 +379,8 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
+			s.logger.Infof("Processing transfer task type: %v, TaskID: %v, Task.ScheduleID: %v", task.TaskType,
+				task.TaskID, task.ScheduleID)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
@@ -380,10 +395,6 @@ workerPump:
 			break workerPump
 		}
 	}
-
-	s.mockMatching.AssertExpectations(s.T())
-	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mockHistoryClient.AssertExpectations(s.T())
 }
 
 func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
@@ -409,8 +420,6 @@ workerPump:
 			break workerPump
 		}
 	}
-
-	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
 func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStartTimeout int32) interface{} {

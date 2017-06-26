@@ -2403,6 +2403,18 @@ func addTimerStartedEvent(builder *mutableStateBuilder, decisionCompletedEventID
 		})
 }
 
+func addRequestCancelInitiatedEvent(builder *mutableStateBuilder, decisionCompletedEventID int64,
+	cancelRequestID, domain, workflowID, runID string) *workflow.HistoryEvent {
+	event, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID,
+		cancelRequestID, &workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+			Domain:     common.StringPtr(domain),
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		})
+
+	return event
+}
+
 func addCompleteWorkflowEvent(builder *mutableStateBuilder, decisionCompletedEventID int64,
 	result []byte) *workflow.HistoryEvent {
 	e := builder.AddCompletedWorkflowEvent(decisionCompletedEventID, &workflow.CompleteWorkflowExecutionDecisionAttributes{
