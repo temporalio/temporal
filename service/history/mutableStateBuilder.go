@@ -838,6 +838,8 @@ func (e *mutableStateBuilder) AddExternalWorkflowExecutionCancelRequested(initia
 	if !ok {
 		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionWorkflowCancelRequested, e.GetNextEventID(),
 			fmt.Sprintf("{InitiatedID: %v, Exist: %v}", initiatedID, ok))
+
+		return nil
 	}
 
 	if e.DeletePendingRequestCancel(initiatedID) == nil {
@@ -854,6 +856,8 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionFailedEve
 	if !ok {
 		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionWorkflowCancelFailed, e.GetNextEventID(),
 			fmt.Sprintf("{InitiatedID: %v, Exist: %v}", initiatedID, ok))
+
+		return nil
 	}
 
 	if e.DeletePendingRequestCancel(initiatedID) == nil {
