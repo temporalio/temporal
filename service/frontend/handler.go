@@ -819,7 +819,6 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 		DomainUUID:    common.StringPtr(info.ID),
 		CancelRequest: cancelRequest,
 	})
-	wh.GetLogger().Errorf("***Error: %v", err)
 	if err != nil {
 		return wh.error(err, scope)
 	}

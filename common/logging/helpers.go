@@ -38,6 +38,16 @@ func LogPersistantStoreErrorEvent(logger bark.Logger, operation string, err erro
 	}).Errorf("Persistent store operation failure. Operation Details: %v", details)
 }
 
+// LogTransferTaskProcessingFailedEvent is used to log failures from transfer task processing.
+func LogTransferTaskProcessingFailedEvent(logger bark.Logger, taskID int64, taskType int, err error) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferTaskProcessingFailed,
+		TagTaskID:          taskID,
+		TagTaskType:        taskType,
+		TagWorkflowErr:     err,
+	}).Errorf("Processor failed to process transfer task: %v, type: %v.  Error: %v", taskID, taskType, err)
+}
+
 // LogOperationFailedEvent is used to log generic operation failures.
 func LogOperationFailedEvent(logger bark.Logger, msg string, err error) {
 	logger.WithFields(bark.Fields{

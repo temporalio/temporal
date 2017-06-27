@@ -40,6 +40,8 @@ const (
 	TagHistoryShardID       = "shard-id"
 	TagDecisionType         = "decision-type"
 	TagDecisionFailCause    = "decision-fail-cause"
+	TagTaskID               = "task-id"
+	TagTaskType             = "task-type"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

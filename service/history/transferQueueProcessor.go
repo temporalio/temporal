@@ -279,7 +279,7 @@ ProcessRetryLoop:
 			}
 
 			if err != nil {
-				logging.LogOperationFailedEvent(t.logger, "Processor failed to create task", err)
+				logging.LogTransferTaskProcessingFailedEvent(t.logger, task.TaskID, task.TaskType, err)
 				t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 				backoff := time.Duration(retryCount * 100)
 				time.Sleep(backoff * time.Millisecond)
@@ -541,6 +541,10 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 		// event and complete transfer task by setting the err = nil
 		if common.IsServiceNonRetryableError(err) {
 			err = t.requestCancelFailed(task, context, cancelRequest)
+			if _, ok := err.(*workflow.EntityNotExistsError); ok {
+				// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+				return nil
+			}
 		}
 		return err
 	}
@@ -549,7 +553,13 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 		task.TargetWorkflowID, task.TargetRunID)
 
 	// Record ExternalWorkflowExecutionCancelRequested in source execution
-	return t.requestCancelCompleted(task, context, cancelRequest)
+	err = t.requestCancelCompleted(task, context, cancelRequest)
+	if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+		return nil
+	}
+
+	return err
 }
 
 func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) error {

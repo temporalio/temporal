@@ -45,6 +45,7 @@ const (
 	TransferQueueProcessorShuttingDown     = 2102
 	TransferQueueProcessorShutdown         = 2103
 	TransferQueueProcessorShutdownTimedout = 2104
+	TransferTaskProcessingFailed           = 2105
 
 	// Shard context events
 	ShardRangeUpdatedEventID = 3000
