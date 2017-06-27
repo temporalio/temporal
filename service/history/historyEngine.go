@@ -23,6 +23,7 @@ package history
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -35,7 +36,6 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"time"
 )
 
 const (
@@ -138,6 +138,14 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	domainID := startRequest.GetDomainUUID()
 	request := startRequest.GetStartRequest()
 	executionID := request.GetWorkflowId()
+
+	if request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		return nil, &workflow.BadRequestError{Message: "Missing or invalid ExecutionStartToCloseTimeoutSeconds."}
+	}
+	if request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+		return nil, &workflow.BadRequestError{Message: "Missing or invalid TaskStartToCloseTimeoutSeconds."}
+	}
+
 	// We generate a new workflow execution run_id on each StartWorkflowExecution call.  This generated run_id is
 	// returned back to the caller as the response to StartWorkflowExecution.
 	runID := uuid.New()
@@ -183,6 +191,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		decisionTimeout = di.DecisionTimeout
 	}
 
+	duration := time.Duration(request.GetExecutionStartToCloseTimeoutSeconds()) * time.Second
+	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
+		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
+	}}
 	// Serialize the history
 	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
 	if serializedError != nil {
@@ -222,6 +234,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		DecisionStartedID:           decisionStartID,
 		DecisionStartToCloseTimeout: decisionTimeout,
 		ContinueAsNew:               false,
+		TimerTasks:                  timerTasks,
 	})
 
 	if err != nil {
@@ -256,6 +269,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			fmt.Sprintf("{WorkflowID: %v, RunID: %v}", executionID, runID))
 		return nil, err
 	}
+
+	e.timerProcessor.NotifyNewTimer(timerTasks)
 
 	return &workflow.StartWorkflowExecutionResponse{
 		RunId: workflowExecution.RunId,
@@ -615,7 +630,9 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCause_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES
 					break Process_Decision_Loop
 				}
-				msBuilder.AddCompletedWorkflowEvent(completedID, attributes)
+				if e := msBuilder.AddCompletedWorkflowEvent(completedID, attributes); e == nil {
+					return &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
+				}
 				isComplete = true
 			case workflow.DecisionType_FailWorkflowExecution:
 				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
@@ -639,7 +656,9 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCause_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES
 					break Process_Decision_Loop
 				}
-				msBuilder.AddFailWorkflowEvent(completedID, attributes)
+				if e := msBuilder.AddFailWorkflowEvent(completedID, attributes); e == nil {
+					return &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+				}
 				isComplete = true
 			case workflow.DecisionType_CancelWorkflowExecution:
 				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,

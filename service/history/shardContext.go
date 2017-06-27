@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common"
 )
 
 const (
@@ -56,6 +57,7 @@ type (
 		GetMetricsClient() metrics.Client
 		GetTimerAckLevel() time.Time
 		UpdateTimerAckLevel(ackLevel time.Time) error
+		GetTimeSource() common.TimeSource
 	}
 
 	shardContextImpl struct {
@@ -422,6 +424,10 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 			persistence.GetVisibilityTSFrom(task), task.GetTaskID(), s.shardInfo.TimerAckLevel)
 	}
 	return nil
+}
+
+func (s *shardContextImpl) GetTimeSource() common.TimeSource {
+	return common.NewRealTimeSource()
 }
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.

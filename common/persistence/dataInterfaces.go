@@ -73,6 +73,7 @@ const (
 	TaskTypeDecisionTimeout = iota
 	TaskTypeActivityTimeout
 	TaskTypeUserTimer
+	TaskTypeWorkflowTimeout
 	TaskTypeDeleteHistoryEvent
 )
 
@@ -222,6 +223,12 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+	}
+
+	// WorkflowTimeoutTask identifies a timeout task.
+	WorkflowTimeoutTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
 	}
 
 	// CancelExecutionTask identifies a transfer task for cancel of execution
@@ -825,6 +832,31 @@ func (u *UserTimerTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp gets the visibility time stamp
 func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
+	u.VisibilityTimestamp = t
+}
+
+// GetType returns the type of the timeout task.
+func (u *WorkflowTimeoutTask) GetType() int {
+	return TaskTypeWorkflowTimeout
+}
+
+// GetTaskID returns the sequence ID of the cancel transfer task.
+func (u *WorkflowTimeoutTask) GetTaskID() int64 {
+	return u.TaskID
+}
+
+// SetTaskID sets the sequence ID of the cancel transfer task.
+func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
+	u.TaskID = id
+}
+
+// GetVisibilityTimestamp gets the visibility time stamp
+func (u *WorkflowTimeoutTask) GetVisibilityTimestamp() time.Time {
+	return u.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (u *WorkflowTimeoutTask) SetVisibilityTimestamp(t time.Time) {
 	u.VisibilityTimestamp = t
 }
 

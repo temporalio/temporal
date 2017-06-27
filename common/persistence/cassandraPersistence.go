@@ -1940,6 +1940,9 @@ func GetVisibilityTSFrom(task Task) time.Time {
 	case TaskTypeUserTimer:
 		return task.(*UserTimerTask).VisibilityTimestamp
 
+	case TaskTypeWorkflowTimeout:
+		return task.(*WorkflowTimeoutTask).VisibilityTimestamp
+
 	case TaskTypeDeleteHistoryEvent:
 		return task.(*DeleteHistoryEventTask).VisibilityTimestamp
 	}
@@ -1957,6 +1960,9 @@ func SetVisibilityTSFrom(task Task, t time.Time) {
 
 	case TaskTypeUserTimer:
 		task.(*UserTimerTask).VisibilityTimestamp = t
+
+	case TaskTypeWorkflowTimeout:
+		task.(*WorkflowTimeoutTask).VisibilityTimestamp = t
 
 	case TaskTypeDeleteHistoryEvent:
 		task.(*DeleteHistoryEventTask).VisibilityTimestamp = t

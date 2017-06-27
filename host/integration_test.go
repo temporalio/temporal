@@ -2448,6 +2448,65 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		startedEvent.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution())
 }
 
+func (s *integrationSuite) TestWorkflowTimeout() {
+	id := "integration-workflow-timeout-test"
+	wt := "integration-workflow-timeout-type"
+	tl := "integration-workflow-timeout-tasklist"
+	identity := "worker1"
+
+	workflowType := workflow.NewWorkflowType()
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+
+GetHistoryLoop:
+	for i := 0; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.GetHistory()
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
+		if lastEvent.GetEventType() != workflow.EventType_WorkflowExecutionTimedOut {
+			s.logger.Warnf("Execution not timedout yet.")
+			time.Sleep(200 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		timeoutEventAttributes := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		s.Equal(workflow.TimeoutType_START_TO_CLOSE, timeoutEventAttributes.GetTimeoutType())
+		workflowComplete = true
+		break GetHistoryLoop
+	}
+	s.True(workflowComplete)
+}
+
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {

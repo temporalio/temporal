@@ -185,3 +185,55 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	<-waitCh
 	processor.Stop()
 }
+
+func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
+	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
+		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+	taskList := "task-workflow-times-out"
+
+	builder := newMutableStateBuilder(s.logger)
+	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
+		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
+		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+	})
+
+	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), taskList, uuid.New())
+
+	waitCh := make(chan struct{})
+
+	mockTS := &mockTimeSource{currTime: time.Now()}
+
+	taskID := int64(100)
+	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
+		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		VisibilityTimestamp: mockTS.Now(),
+		EventID:             decisionScheduledEvent.GetEventId()}
+	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
+
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
+
+	ms := createMutableState(builder)
+	wfResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
+
+	s.mockExecutionMgr.On("CompleteTimerTask", mock.Anything).Return(nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Run(func(arguments mock.Arguments) {
+		// Done.
+		waitCh <- struct{}{}
+	}).Once()
+
+	// Start timer Processor.
+	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
+	processor.Start()
+
+	processor.NotifyNewTimer([]persistence.Task{&persistence.WorkflowTimeoutTask{
+		VisibilityTimestamp: timerTask.VisibilityTimestamp,
+	}})
+
+	<-waitCh
+	processor.Stop()
+}
