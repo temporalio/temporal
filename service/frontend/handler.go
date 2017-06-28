@@ -348,8 +348,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, wh.error(err, scope)
 	}
 
-	wh.Service.GetLogger().Infof("Poll for decision domain name: %v", domainName)
-	wh.Service.GetLogger().Infof("Poll for decision request domainID: %v", info.ID)
+	wh.Service.GetLogger().Debugf("Poll for decision. DomainName: %v, DomainID: %v", domainName, info.ID)
 
 	matchingResp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
 		DomainUUID:  common.StringPtr(info.ID),
@@ -585,13 +584,13 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	domainName := startRequest.GetDomain()
-	wh.Service.GetLogger().Infof("Start workflow execution request domain: %v", domainName)
+	wh.Service.GetLogger().Debugf("Start workflow execution request domain: %v", domainName)
 	info, _, err := wh.domainCache.GetDomain(domainName)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	wh.Service.GetLogger().Infof("Start workflow execution request domainID: %v", info.ID)
+	wh.Service.GetLogger().Debugf("Start workflow execution request domainID: %v", info.ID)
 
 	resp, err := wh.history.StartWorkflowExecution(ctx, &h.StartWorkflowExecutionRequest{
 		DomainUUID:   common.StringPtr(info.ID),
