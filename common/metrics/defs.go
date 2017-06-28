@@ -64,11 +64,14 @@ const (
 const (
 	HostnameTagName  = "hostname"
 	OperationTagName = "operation"
+	// ShardTagName is temporary until we can get all metric data removed for the service
+	ShardTagName = "shard"
 )
 
 // This package should hold all the metrics and tags for cadence
 const (
 	UnknownDirectoryTagValue = "Unknown"
+	AllShardsTagValue        = "ALL"
 )
 
 // Common service base metrics

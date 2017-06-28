@@ -442,6 +442,9 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 	shardInfo := response.ShardInfo
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.Owner = owner
+	tags := map[string]string{
+		metrics.ShardTagName: metrics.AllShardsTagValue,
+	}
 	context := &shardContextImpl{
 		shardID:          shardID,
 		shardManager:     shardManager,
@@ -450,7 +453,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 		shardInfo:        updatedShardInfo,
 		rangeSize:        defaultRangeSize,
 		closeCh:          closeCh,
-		metricsClient:    metricsClient,
+		metricsClient:    metricsClient.Tagged(tags),
 	}
 	context.logger = logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardID,
