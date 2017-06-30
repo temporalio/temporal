@@ -540,7 +540,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, timerTasks, nil)
+		err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -667,7 +667,7 @@ Update_History_Loop:
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
 			defer t.NotifyNewTimer(timerTasks)
-			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, timerTasks, nil)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -744,7 +744,7 @@ Update_History_Loop:
 		if scheduleNewDecision {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, nil, nil)
+			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, nil, nil)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
@@ -789,7 +789,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		err := t.updateWorkflowExecution(context, msBuilder, false, nil, nil)
+		err := t.updateWorkflowExecution(context, msBuilder, false, true, nil, nil)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -800,9 +800,14 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecutionContext,
-	msBuilder *mutableStateBuilder, scheduleNewDecision bool, timerTasks []persistence.Task,
-	clearTimerTask persistence.Task) error {
+func (t *timerQueueProcessorImpl) updateWorkflowExecution(
+	context *workflowExecutionContext,
+	msBuilder *mutableStateBuilder,
+	scheduleNewDecision bool,
+	createDeletionTask bool,
+	timerTasks []persistence.Task,
+	clearTimerTask persistence.Task,
+) error {
 	var transferTasks []persistence.Task
 	if scheduleNewDecision {
 		// Schedule a new decision.
@@ -812,6 +817,15 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(context *workflowExecu
 			TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
 			ScheduleID: newDecisionEvent.GetEventId(),
 		}}
+	}
+
+	if createDeletionTask {
+		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(msBuilder.executionInfo.DomainID, context)
+		if err != nil {
+			return nil
+		}
+		transferTasks = append(transferTasks, tranT)
+		timerTasks = append(timerTasks, timerT)
 	}
 
 	// Generate a transaction ID for appending events to history

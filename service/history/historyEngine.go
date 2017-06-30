@@ -863,21 +863,12 @@ Update_History_Loop:
 		}
 
 		if isComplete {
-			// Generate a transfer task to delete workflow execution
-			transferTasks = append(transferTasks, &persistence.DeleteExecutionTask{})
-
-			// Generate a timer task to cleanup history events for this workflow execution
-			var retentionInDays int32
-			_, domainConfig, err := e.domainCache.GetDomainByID(domainID)
+			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, context)
 			if err != nil {
-				if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-					return err
-				}
-			} else {
-				retentionInDays = domainConfig.Retention
+				return err
 			}
-			cleanupTask := context.tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
-			timerTasks = append(timerTasks, cleanupTask)
+			transferTasks = append(transferTasks, tranT)
+			timerTasks = append(timerTasks, timerT)
 		}
 
 		// Generate a transaction ID for appending events to history
@@ -1406,14 +1397,19 @@ Update_History_Loop:
 			return err1
 		}
 
-		var transferTasks []persistence.Task
 		if err := action(msBuilder); err != nil {
 			return err
 		}
 
+		var transferTasks []persistence.Task
+		var timerTasks []persistence.Task
 		if createDeletionTask {
-			// Create a transfer task to delete workflow execution
-			transferTasks = append(transferTasks, &persistence.DeleteExecutionTask{})
+			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, context)
+			if err != nil {
+				return err
+			}
+			transferTasks = append(transferTasks, tranT)
+			timerTasks = append(timerTasks, timerT)
 		}
 
 		if createDecisionTask {
@@ -1436,7 +1432,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks, nil, transactionID); err != nil {
+		if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
@@ -1445,6 +1441,29 @@ Update_History_Loop:
 		return nil
 	}
 	return ErrMaxAttemptsExceeded
+}
+
+func (e *historyEngineImpl) getDeleteWorkflowTasks(
+	domainID string,
+	context *workflowExecutionContext,
+) (persistence.Task, persistence.Task, error) {
+
+	// Create a transfer task to delete workflow execution
+	deleteTask := &persistence.DeleteExecutionTask{}
+
+	// Generate a timer task to cleanup history events for this workflow execution
+	var retentionInDays int32
+	_, domainConfig, err := e.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return nil, nil, err
+		}
+	} else {
+		retentionInDays = domainConfig.Retention
+	}
+	cleanupTask := context.tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
+
+	return deleteTask, cleanupTask, nil
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder *mutableStateBuilder,
