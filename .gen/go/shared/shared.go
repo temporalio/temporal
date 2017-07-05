@@ -405,6 +405,7 @@ const (
   DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 8
   DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES DecisionTaskFailedCause = 9
   DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES DecisionTaskFailedCause = 10
+  DecisionTaskFailedCause_START_TIMER_DUPLICATE_ID DecisionTaskFailedCause = 11
 )
 
 func (p DecisionTaskFailedCause) String() string {
@@ -420,6 +421,7 @@ func (p DecisionTaskFailedCause) String() string {
   case DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES"
   case DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES: return "BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES"
   case DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES: return "BAD_CONTINUE_AS_NEW_ATTRIBUTES"
+  case DecisionTaskFailedCause_START_TIMER_DUPLICATE_ID: return "START_TIMER_DUPLICATE_ID"
   }
   return "<UNSET>"
 }
@@ -437,6 +439,7 @@ func DecisionTaskFailedCauseFromString(s string) (DecisionTaskFailedCause, error
   case "BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
   case "BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES": return DecisionTaskFailedCause_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES, nil 
   case "BAD_CONTINUE_AS_NEW_ATTRIBUTES": return DecisionTaskFailedCause_BAD_CONTINUE_AS_NEW_ATTRIBUTES, nil 
+  case "START_TIMER_DUPLICATE_ID": return DecisionTaskFailedCause_START_TIMER_DUPLICATE_ID, nil 
   }
   return DecisionTaskFailedCause(0), fmt.Errorf("not a valid DecisionTaskFailedCause string")
 }

@@ -134,17 +134,21 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	timerInfos := []*persistence.TimerInfo{}
 	decisionCompletedID := int64(4)
 	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+
+	tBuilder.LoadUserTimers(builder)
+
 	for _, timeOut := range timeOuts {
 		_, ti := builder.AddTimerStartedEvent(decisionCompletedID,
 			&workflow.StartTimerDecisionAttributes{
 				TimerId:                   common.StringPtr(uuid.New()),
 				StartToFireTimeoutSeconds: common.Int64Ptr(int64(timeOut)),
 			})
-
 		timerInfos = append(timerInfos, ti)
-		if t := tBuilder.AddUserTimer(ti, builder); t != nil {
-			timerTasks = append(timerTasks, t)
-		}
+		tBuilder.AddUserTimer(ti)
+	}
+
+	if t := tBuilder.GetUserTimerTaskIfNeeded(builder); t != nil {
+		timerTasks = append(timerTasks, t)
 	}
 
 	s.updateTimerSeqNumbers(timerTasks)
@@ -184,9 +188,11 @@ func (s *timerQueueProcessorSuite) addUserTimer(domainID string, we workflow.Wor
 	condition := state.ExecutionInfo.NextEventID
 
 	// create a user timer
+	tb.LoadUserTimers(builder)
 	_, ti := builder.AddTimerStartedEvent(emptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr(timerID), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
-	t := tb.AddUserTimer(ti, builder)
+	tb.AddUserTimer(ti)
+	t := tb.GetUserTimerTaskIfNeeded(builder)
 	s.NotNil(t)
 	timerTasks := []persistence.Task{t}
 
@@ -736,22 +742,21 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	builder.Load(state)
 	condition := state.ExecutionInfo.NextEventID
 
+	// load any timers.
+	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now().Add(-1 * time.Second)})
+	timerTasks := []persistence.Task{}
+	tBuilder.LoadUserTimers(builder)
+
 	// create two user timers.
 	_, ti := builder.AddTimerStartedEvent(emptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid1"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 	_, ti2 := builder.AddTimerStartedEvent(emptyEventID,
 		&workflow.StartTimerDecisionAttributes{TimerId: common.StringPtr("tid2"), StartToFireTimeoutSeconds: common.Int64Ptr(1)})
 
-	tBuilder := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now().Add(-1 * time.Second)})
-	timerTasks := []persistence.Task{}
-	t1 := tBuilder.AddUserTimer(ti, builder)
-	if t1 != nil {
-		timerTasks = append(timerTasks, t1)
-	}
-	t2 := tBuilder.AddUserTimer(ti2, builder)
-	if t2 != nil {
-		timerTasks = append(timerTasks, t2)
-	}
+	tBuilder.AddUserTimer(ti)
+	tBuilder.AddUserTimer(ti2)
+	t := tBuilder.GetUserTimerTaskIfNeeded(builder)
+	timerTasks = append(timerTasks, t)
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
 	p.NotifyNewTimer(timerTasks)

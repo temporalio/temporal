@@ -2141,6 +2141,101 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	s.True(executionBuilder.HasPendingDecisionTask())
 }
 
+func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: we.GetWorkflowId(),
+		RunID:      we.GetRunId(),
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	timerID := "t1"
+
+	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	decisions := []*workflow.Decision{{
+		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_StartTimer),
+		StartTimerDecisionAttributes: &workflow.StartTimerDecisionAttributes{
+			TimerId:                   common.StringPtr(timerID),
+			StartToFireTimeoutSeconds: common.Int64Ptr(1),
+		},
+	}}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(&history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: []byte("context"),
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err)
+
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+
+	// Try to add the same timer ID again.
+	decisionScheduledEvent2, _ := addDecisionTaskScheduledEvent(executionBuilder)
+	addDecisionTaskStartedEvent(executionBuilder, decisionScheduledEvent2.GetEventId(), tl, identity)
+	taskToken2, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: we.GetWorkflowId(),
+		RunID:      we.GetRunId(),
+		ScheduleID: decisionScheduledEvent2.GetEventId(),
+	})
+
+	ms2 := createMutableState(executionBuilder)
+	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
+
+	decisionFailedEvent := false
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Run(func(arguments mock.Arguments) {
+		req := arguments.Get(0).(*persistence.AppendHistoryEventsRequest)
+		hs := persistence.NewJSONHistorySerializer()
+		h, err := hs.Deserialize(req.Events)
+		if err != nil {
+			panic(err)
+		}
+		decTaskIndex := len(h.Events) - 2
+		if decTaskIndex >= 0 && h.Events[decTaskIndex].GetEventType() == workflow.EventType_DecisionTaskFailed {
+			decisionFailedEvent = true
+		}
+	}).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.RespondDecisionTaskCompleted(&history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken2,
+			Decisions:        decisions,
+			ExecutionContext: []byte("context"),
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err)
+
+	s.True(decisionFailedEvent)
+	executionBuilder = s.getBuilder(domainID, we)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+	s.True(executionBuilder.HasPendingDecisionTask())
+}
+
 func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	domainID := "domainId"
 	we := workflow.WorkflowExecution{

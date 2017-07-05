@@ -508,7 +508,7 @@ Update_History_Loop:
 
 	ExpireUserTimers:
 		for _, td := range context.tBuilder.AllTimers() {
-			hasTimer, ti := context.tBuilder.UserTimer(td.SequenceID)
+			hasTimer, ti := context.tBuilder.UserTimer(td.TimerID)
 			if !hasTimer {
 				t.logger.Debugf("Failed to find in memory user timer for: %s", td.SequenceID)
 				return fmt.Errorf("failed to find user timer")

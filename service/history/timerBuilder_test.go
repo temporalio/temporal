@@ -82,18 +82,22 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 		TimerId:                   common.StringPtr("tid1"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(1),
 	})
-	t1 := tb.AddUserTimer(ti1, msb)
+
+	tb.LoadUserTimers(msb)
+	tb.AddUserTimer(ti1)
+	t1 := tb.GetUserTimerTaskIfNeeded(msb)
+
 	s.NotNil(t1)
 	s.Equal(int64(201), t1.(*persistence.UserTimerTask).EventID)
-	s.Equal(t1.GetTaskID(), t1.(*persistence.UserTimerTask).TaskID)
+	s.Equal(ti1.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
 
 	isRunning, ti := msb.GetUserTimer("tid1")
 	s.True(isRunning)
 	s.NotNil(ti)
 	s.Equal(int64(201), ti.StartedID)
-	s.Equal(t1.GetTaskID(), ti.TaskID)
+	s.Equal(int64(1), ti.TaskID)
 	s.Equal("tid1", ti.TimerID)
-	s.False(ti.ExpiryTime.IsZero())
+	s.Equal(ti1.ExpiryTime.Unix(), ti.ExpiryTime.Unix())
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
@@ -107,27 +111,27 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(202)},
 		TimerInfos:    timerInfos,
 	})
-	_, ti1 := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+
+	tb.LoadUserTimers(msb)
+
+	_, tiBefore := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-before"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(1),
 	})
-	t1 := tb.AddUserTimer(ti1, msb)
-	s.NotNil(t1)
+	tb.AddUserTimer(tiBefore)
 
-	timerInfos = map[string]*persistence.TimerInfo{"tid1": tp}
-	msb = newMutableStateBuilder(s.logger)
-	msb.Load(&persistence.WorkflowMutableState{
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
-		TimerInfos:    timerInfos,
-	})
-	_, ti2 := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+	_, tiAfter := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
-	t1 = tb.AddUserTimer(ti2, msb)
-	s.Nil(t1) // we don't get any timer since there is one in progress.
+	tb.AddUserTimer(tiAfter)
 
-	// -- timer wth out a timer task.
+	t1 := tb.GetUserTimerTaskIfNeeded(msb)
+	s.NotNil(t1)
+	s.Equal(tiBefore.StartedID, t1.(*persistence.UserTimerTask).EventID)
+	s.Equal(tiBefore.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
+
+	// Mutable state with out a timer task.
 	tp2 := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: emptyTimerID, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos = map[string]*persistence.TimerInfo{"tid1": tp2}
 	msb = newMutableStateBuilder(s.logger)
@@ -135,14 +139,19 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
 	})
+
+	tb.LoadUserTimers(msb)
+
 	_, ti3 := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
 		TimerId:                   common.StringPtr("tid-after"),
 		StartToFireTimeoutSeconds: common.Int64Ptr(15),
 	})
-	t1 = tb.AddUserTimer(ti3, msb)
+	tb.AddUserTimer(ti3)
+
+	t1 = tb.GetUserTimerTaskIfNeeded(msb)
 	s.NotNil(t1)
 	s.Equal(int64(201), t1.(*persistence.UserTimerTask).EventID)
-	s.Equal(t1.GetTaskID(), t1.(*persistence.UserTimerTask).TaskID)
+	s.Equal(tp2.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
 
 	isRunning, ti := msb.GetUserTimer("tid-after")
 	s.True(isRunning)
@@ -152,20 +161,20 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
-	tb := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
 	tp := &persistence.TimerInfo{TimerID: "tid-exist", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid-exist": tp}
 	msb := newMutableStateBuilder(s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
-		TimerInfos: timerInfos,
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
+		TimerInfos:    timerInfos,
 	})
-	ti1 := &persistence.TimerInfo{
-		TimerID:    "tid-exist",
-		ExpiryTime: time.Now().Add(time.Second),
-		StartedID:  int64(202),
-	}
-	t1 := tb.AddUserTimer(ti1, msb)
-	s.Nil(t1)
+
+	_, ti := msb.AddTimerStartedEvent(int64(3), &workflow.StartTimerDecisionAttributes{
+		TimerId:                   common.StringPtr("tid-exist"),
+		StartToFireTimeoutSeconds: common.Int64Ptr(15),
+	})
+
+	s.Nil(ti)
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
