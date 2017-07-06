@@ -1455,6 +1455,7 @@ func (s *integrationSuite) TestVisibility() {
 	startFilter.LatestTime = common.Int64Ptr(time.Now().UnixNano())
 
 	closedCount := 0
+	openCount := 0
 
 ListClosedLoop:
 	for i := 0; i < 10; i++ {
@@ -1474,13 +1475,23 @@ ListClosedLoop:
 	}
 	s.Equal(1, closedCount)
 
-	resp, err4 := s.engine.ListOpenWorkflowExecutions(&workflow.ListOpenWorkflowExecutionsRequest{
-		Domain:          common.StringPtr(s.domainName),
-		MaximumPageSize: common.Int32Ptr(100),
-		StartTimeFilter: startFilter,
-	})
-	s.Nil(err4)
-	s.Equal(1, len(resp.Executions))
+ListOpenLoop:
+	for i := 0; i < 10; i++ {
+		resp, err4 := s.engine.ListOpenWorkflowExecutions(&workflow.ListOpenWorkflowExecutionsRequest{
+			Domain:          common.StringPtr(s.domainName),
+			MaximumPageSize: common.Int32Ptr(100),
+			StartTimeFilter: startFilter,
+		})
+		s.Nil(err4)
+		openCount = len(resp.Executions)
+		if openCount == 0 {
+			s.logger.Info("Open WorkflowExecution is not yet visibile")
+			time.Sleep(100 * time.Millisecond)
+			continue ListOpenLoop
+		}
+		break ListOpenLoop
+	}
+	s.Equal(1, openCount)
 }
 
 func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {

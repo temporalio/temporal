@@ -28,6 +28,7 @@ import (
 	"github.com/uber-common/bark"
 
 	"fmt"
+
 	"github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -361,18 +362,6 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 		RunId:      common.StringPtr(task.RunID),
 	}
 
-	if task.ScheduleID == firstEventID+1 {
-		err = t.recordWorkflowExecutionStarted(execution, task)
-	}
-
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil
-		}
-		return err
-	}
-
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
@@ -383,6 +372,20 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 		ScheduleId: &task.ScheduleID,
 	})
 
+	if err != nil {
+		return err
+	}
+
+	if task.ScheduleID == firstEventID+1 {
+		err = t.recordWorkflowExecutionStarted(execution, task)
+	}
+
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
+	}
 	return err
 }
 
@@ -455,12 +458,19 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		retentionSeconds = int64(domainConfig.Retention) * 24 * 60 * 60
 	}
 
+	closeTimestamp := mb.executionInfo.LastUpdatedTimestamp.UnixNano()
+	if mb.executionInfo.StartTimestamp.UnixNano() >= closeTimestamp {
+		// This could happen due to clock skews
+		// ensure that the used CloseTimestamp is always greater than the StartTimestamp
+		closeTimestamp = mb.executionInfo.StartTimestamp.UnixNano() + 1
+	}
+
 	err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       task.DomainID,
 		Execution:        execution,
 		WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
 		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
-		CloseTimestamp:   mb.executionInfo.LastUpdatedTimestamp.UnixNano(),
+		CloseTimestamp:   closeTimestamp,
 		Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
 		HistoryLength:    mb.GetNextEventID(),
 		RetentionSeconds: retentionSeconds,

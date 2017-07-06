@@ -413,6 +413,7 @@ workerPump:
 		select {
 		case task := <-tasksCh:
 			if task.ScheduleID == firstEventID+1 {
+				s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(&workflow.EntityNotExistsError{})
 			}
 			s.processor.processTransferTask(task)
