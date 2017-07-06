@@ -161,6 +161,7 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID) (taskListM
 		return result, nil
 	}
 	e.taskListsLock.RUnlock()
+	logging.LogTaskListLoadingEvent(e.logger, taskList.taskListName, taskList.taskType)
 	mgr := newTaskListManager(e, taskList)
 	e.taskListsLock.Lock()
 	if result, ok := e.taskLists[*taskList]; ok {
@@ -174,7 +175,7 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID) (taskListM
 	if err != nil {
 		return nil, err
 	}
-	e.logger.Infof("Loaded %v", taskList)
+	logging.LogTaskListLoadedEvent(e.logger, taskList.taskListName, taskList.taskType)
 	return mgr, nil
 }
 

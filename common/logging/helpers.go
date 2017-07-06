@@ -285,3 +285,39 @@ func LogDecisionFailedEvent(lg bark.Logger, domainID, workflowID, runID string,
 		TagDecisionFailCause:   failCause,
 	}).Info("Failing the decision.")
 }
+
+//
+// Matching service logging methods
+//
+
+// LogTaskListLoadingEvent is used to log starting of a new task list loading
+func LogTaskListLoadingEvent(logger bark.Logger, taskListName string, taskListType int) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TaskListLoading,
+		TagTaskListName:    taskListName,
+		TagTaskListType:    taskListType,
+	}).Info("Loading TaskList.")
+}
+
+// LogTaskListLoadedEvent is used to log completion of a new task list loading
+func LogTaskListLoadedEvent(logger bark.Logger, taskListName string, taskListType int) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TaskListLoaded,
+		TagTaskListName:    taskListName,
+		TagTaskListType:    taskListType,
+	}).Info("Loaded TaskList.")
+}
+
+// LogTaskListUnloadingEvent is used to log starting of a task list unloading
+func LogTaskListUnloadingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TaskListUnloading,
+	}).Info("Unloading TaskList.")
+}
+
+// LogTaskListUnloadedEvent is used to log completion of a task list unloading
+func LogTaskListUnloadedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TaskListUnloaded,
+	}).Info("Unloaded TaskList.")
+}

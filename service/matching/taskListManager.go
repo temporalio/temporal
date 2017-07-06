@@ -137,9 +137,10 @@ func (c *taskListManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
 		return
 	}
-	c.logger.Infof("Unloaded %v", c.taskListID)
+	logging.LogTaskListUnloadingEvent(c.logger)
 	close(c.shutdownCh)
 	c.engine.removeTaskListManager(c.taskListID)
+	logging.LogTaskListUnloadedEvent(c.logger)
 }
 
 func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error {
@@ -191,7 +192,6 @@ func (c *taskListManagerImpl) isEqualRangeID(rangeID int64) bool {
 	return c.rangeID == rangeID
 }
 
-// TODO: Update ackLevel on time based interval instead of on each GetTasks call
 func (c *taskListManagerImpl) persistAckLevel() error {
 	c.Lock()
 	updateTaskListRequest := &persistence.UpdateTaskListRequest{
@@ -420,9 +420,12 @@ getTasksPumpLoop:
 				err := c.persistAckLevel()
 				//var err error
 				if err != nil {
-					logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err,
-						fmt.Sprintf("{taskType: %v, taskList: %v}",
-							c.taskListID.taskType, c.taskListID.taskListName))
+					if _, ok := err.(*persistence.ConditionFailedError); ok {
+						// This indicates the task list may have moved to another host.
+						c.Stop()
+					} else {
+						logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err, "Persist AckLevel failed")
+					}
 					// keep going as saving ack is not critical
 				}
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
