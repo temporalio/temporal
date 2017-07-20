@@ -141,8 +141,10 @@ const (
 	templateActivityInfoType = `{` +
 		`schedule_id: ?, ` +
 		`scheduled_event: ?, ` +
+		`scheduled_time: ?, ` +
 		`started_id: ?, ` +
 		`started_event: ?, ` +
+		`started_time: ?, ` +
 		`activity_id: ?, ` +
 		`request_id: ?, ` +
 		`details: ?, ` +
@@ -152,7 +154,8 @@ const (
 		`heart_beat_timeout: ?, ` +
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
-		`last_hb_updated_time: ?` +
+		`last_hb_updated_time: ?, ` +
+		`timer_task_status: ?` +
 		`}`
 
 	templateTimerInfoType = `{` +
@@ -1523,8 +1526,10 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.ScheduleID,
 			a.ScheduleID,
 			a.ScheduledEvent,
+			a.ScheduledTime,
 			a.StartedID,
 			a.StartedEvent,
+			a.StartedTime,
 			a.ActivityID,
 			a.RequestID,
 			a.Details,
@@ -1535,6 +1540,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.CancelRequested,
 			a.CancelRequestID,
 			a.LastHeartBeatUpdatedTime,
+			a.TimerTaskStatus,
 			d.shardID,
 			rowTypeExecution,
 			domainID,
@@ -1792,10 +1798,14 @@ func createActivityInfo(result map[string]interface{}) *ActivityInfo {
 			info.ScheduleID = v.(int64)
 		case "scheduled_event":
 			info.ScheduledEvent = v.([]byte)
+		case "scheduled_time":
+			info.ScheduledTime = v.(time.Time)
 		case "started_id":
 			info.StartedID = v.(int64)
 		case "started_event":
 			info.StartedEvent = v.([]byte)
+		case "started_time":
+			info.StartedTime = v.(time.Time)
 		case "activity_id":
 			info.ActivityID = v.(string)
 		case "request_id":
@@ -1816,6 +1826,8 @@ func createActivityInfo(result map[string]interface{}) *ActivityInfo {
 			info.CancelRequestID = v.(int64)
 		case "last_hb_updated_time":
 			info.LastHeartBeatUpdatedTime = v.(time.Time)
+		case "timer_task_status":
+			info.TimerTaskStatus = int32(v.(int))
 		}
 	}
 

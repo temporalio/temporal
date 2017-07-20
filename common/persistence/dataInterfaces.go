@@ -276,8 +276,10 @@ type (
 	ActivityInfo struct {
 		ScheduleID               int64
 		ScheduledEvent           []byte
+		ScheduledTime            time.Time
 		StartedID                int64
 		StartedEvent             []byte
+		StartedTime              time.Time
 		ActivityID               string
 		RequestID                string
 		Details                  []byte
@@ -288,6 +290,7 @@ type (
 		CancelRequested          bool
 		CancelRequestID          int64
 		LastHeartBeatUpdatedTime time.Time
+		TimerTaskStatus          int32
 	}
 
 	// TimerInfo details - metadata about user timer info.

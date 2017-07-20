@@ -312,6 +312,16 @@ func (e *mutableStateBuilder) updateActivityProgress(ai *persistence.ActivityInf
 	e.updateActivityInfos = append(e.updateActivityInfos, ai)
 }
 
+// UpdateActivity updates an activity
+func (e *mutableStateBuilder) UpdateActivity(ai *persistence.ActivityInfo) error {
+	_, ok := e.pendingActivityInfoIDs[ai.ScheduleID]
+	if !ok {
+		return fmt.Errorf("Unable to find activity with schedule event id: %v in mutable state", ai.ScheduleID)
+	}
+	e.updateActivityInfos = append(e.updateActivityInfos, ai)
+	return nil
+}
+
 // DeleteActivity deletes details about an activity.
 func (e *mutableStateBuilder) DeleteActivity(scheduleEventID int64) error {
 	a, ok := e.pendingActivityInfoIDs[scheduleEventID]
@@ -614,7 +624,9 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEve
 	ai := &persistence.ActivityInfo{
 		ScheduleID:               scheduleEventID,
 		ScheduledEvent:           scheduleEvent,
+		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
 		StartedID:                emptyEventID,
+		StartedTime:              time.Time{},
 		ActivityID:               attributes.GetActivityId(),
 		ScheduleToStartTimeout:   scheduleToStartTimeout,
 		ScheduleToCloseTimeout:   scheduleToCloseTimeout,
@@ -623,6 +635,7 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEve
 		CancelRequested:          false,
 		CancelRequestID:          emptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
+		TimerTaskStatus:          TimerTaskStatusNone,
 	}
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
@@ -644,6 +657,7 @@ func (e *mutableStateBuilder) AddActivityTaskStartedEvent(ai *persistence.Activi
 
 	ai.StartedID = event.GetEventId()
 	ai.RequestID = requestID
+	ai.StartedTime = time.Unix(0, event.GetTimestamp())
 	e.updateActivityInfos = append(e.updateActivityInfos, ai)
 
 	return event
@@ -904,7 +918,7 @@ func (e *mutableStateBuilder) AddTimerStartedEvent(decisionCompletedEventID int6
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
 		StartedID:  event.GetEventId(),
-		TaskID:     emptyTimerID,
+		TaskID:     TimerTaskStatusNone,
 	}
 
 	e.pendingTimerInfoIDs[timerID] = ti

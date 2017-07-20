@@ -44,7 +44,6 @@ type (
 
 		sync.Mutex
 		msBuilder       *mutableStateBuilder
-		tBuilder        *timerBuilder
 		updateCondition int64
 		deleteTimerTask persistence.Task
 	}
@@ -60,14 +59,12 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
 		logging.TagWorkflowRunID:       execution.GetRunId(),
 	})
-	tBuilder := newTimerBuilder(lg, common.NewRealTimeSource())
 
 	return &workflowExecutionContext{
 		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
 		executionManager:  executionManager,
-		tBuilder:          tBuilder,
 		logger:            lg,
 	}
 }
@@ -282,5 +279,4 @@ func (c *workflowExecutionContext) deleteWorkflowExecutionWithRetry(
 
 func (c *workflowExecutionContext) clear() {
 	c.msBuilder = nil
-	c.tBuilder = newTimerBuilder(c.logger, common.NewRealTimeSource())
 }

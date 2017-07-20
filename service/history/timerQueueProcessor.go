@@ -494,27 +494,25 @@ Update_History_Loop:
 		if err1 != nil {
 			return err1
 		}
+		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 
 		if !msBuilder.isWorkflowExecutionRunning() {
 			// Workflow is completed.
 			return nil
 		}
 
-		context.tBuilder.LoadUserTimers(msBuilder)
-
 		var timerTasks []persistence.Task
-
 		scheduleNewDecision := false
 
 	ExpireUserTimers:
-		for _, td := range context.tBuilder.AllTimers() {
-			hasTimer, ti := context.tBuilder.UserTimer(td.TimerID)
+		for _, td := range tBuilder.GetUserTimers(msBuilder) {
+			hasTimer, ti := tBuilder.GetUserTimer(td.TimerID)
 			if !hasTimer {
-				t.logger.Debugf("Failed to find in memory user timer for: %s", td.SequenceID)
-				return fmt.Errorf("failed to find user timer")
+				t.logger.Debugf("Failed to find in memory user timer: %s", td.TimerID)
+				return fmt.Errorf("Failed to find in memory user timer: %s", td.TimerID)
 			}
 
-			if isExpired := context.tBuilder.IsTimerExpired(td, task.VisibilityTimestamp); isExpired {
+			if isExpired := tBuilder.IsTimerExpired(td, task.VisibilityTimestamp); isExpired {
 				// Add TimerFired event to history.
 				if msBuilder.AddTimerFiredEvent(ti.StartedID, ti.TimerID) == nil {
 					return errFailedToAddTimerFiredEvent
@@ -524,7 +522,7 @@ Update_History_Loop:
 			} else {
 				// See if we have next timer in list to be created.
 				if !td.TaskCreated {
-					nextTask := context.tBuilder.createNewTask(td)
+					nextTask := tBuilder.createNewTask(td)
 					timerTasks = []persistence.Task{nextTask}
 
 					// Update the task ID tracking the corresponding timer task.
@@ -575,6 +573,7 @@ Update_History_Loop:
 		if err1 != nil {
 			return err1
 		}
+		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 
 		scheduleID := timerTask.EventID
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -588,96 +587,105 @@ Update_History_Loop:
 			continue Update_History_Loop
 		}
 
+		if !msBuilder.isWorkflowExecutionRunning() {
+			// Workflow is completed.
+			return nil
+		}
+
 		var timerTasks []persistence.Task
 		scheduleNewDecision := false
 		updateHistory := false
 
-		if ai, isRunning := msBuilder.GetActivityInfo(scheduleID); isRunning && msBuilder.isWorkflowExecutionRunning() {
-			timeoutType := workflow.TimeoutType(timerTask.TimeoutType)
-			t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
-				timeoutType, scheduleID, ai.StartedID)
+	ExpireActivityTimers:
+		for _, td := range tBuilder.GetActivityTimers(msBuilder) {
+			ai, isRunning := msBuilder.GetActivityInfo(td.ActivityID)
+			if !isRunning {
+				//  We might have time out this activity already.
+				continue ExpireActivityTimers
+			}
 
-			switch timeoutType {
-			case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
-				{
-					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
-					if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
-						return errFailedToAddTimeoutEvent
-					}
+			if isExpired := tBuilder.IsTimerExpired(td, timerTask.VisibilityTimestamp); isExpired {
+				timeoutType := td.TimeoutType
+				t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
+					timeoutType, ai.ScheduleID, ai.StartedID)
 
-					updateHistory = true
-					scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
-				}
-
-			case workflow.TimeoutType_START_TO_CLOSE:
-				{
-					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
-					if ai.StartedID != emptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+				switch timeoutType {
+				case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
+					{
+						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
+						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
 						}
-
 						updateHistory = true
-						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 					}
-				}
 
-			case workflow.TimeoutType_HEARTBEAT:
-				{
-					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
-					lastHeartbeat := ai.LastHeartBeatUpdatedTime.Add(
-						time.Duration(ai.HeartbeatTimeout) * time.Second)
+				case workflow.TimeoutType_START_TO_CLOSE:
+					{
+						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
+						if ai.StartedID != emptyEventID {
+							if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+								return errFailedToAddTimeoutEvent
+							}
+							updateHistory = true
+						}
+					}
 
-					if timerTask.VisibilityTimestamp.After(lastHeartbeat) {
+				case workflow.TimeoutType_HEARTBEAT:
+					{
+						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 						t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
-						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
+
+						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
 						}
-
 						updateHistory = true
-						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
-					} else {
-						// Re-Schedule next heartbeat.
-						hbTimeoutTask, err := context.tBuilder.AddHeartBeatActivityTimeout(ai)
-						if err != nil {
-							return err
-						}
-						if hbTimeoutTask != nil {
-							timerTasks = append(timerTasks, hbTimeoutTask)
+					}
+
+				case workflow.TimeoutType_SCHEDULE_TO_START:
+					{
+						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+						if ai.StartedID == emptyEventID {
+							if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+								return errFailedToAddTimeoutEvent
+							}
+							updateHistory = true
 						}
 					}
 				}
+			} else {
+				// See if we have next timer in list to be created.
+				if !td.TaskCreated || td.ActivityID == scheduleID {
+					nextTask := tBuilder.createNewTask(td)
+					timerTasks = []persistence.Task{nextTask}
 
-			case workflow.TimeoutType_SCHEDULE_TO_START:
-				{
-					t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
-					if ai.StartedID == emptyEventID {
-						if msBuilder.AddActivityTaskTimedOutEvent(scheduleID, ai.StartedID, timeoutType, nil) == nil {
-							return errFailedToAddTimeoutEvent
-						}
-
-						updateHistory = true
-						scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
-					}
+					ai.TimerTaskStatus = TimerTaskStatusCreated
+					msBuilder.UpdateActivity(ai)
+					at := nextTask.(*persistence.ActivityTimeoutTask)
+					t.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
+						time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID)
 				}
+
+				// Done!
+				break ExpireActivityTimers
 			}
 		}
 
 		if updateHistory {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			defer t.NotifyNewTimer(timerTasks)
+			scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
 			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
 			if err != nil {
 				if err == ErrConflict {
 					continue Update_History_Loop
 				}
 			}
-			return err
+
+			t.NotifyNewTimer(timerTasks)
+			return nil
 		}
 
 		return nil
-
 	}
 	return ErrMaxAttemptsExceeded
 }
@@ -820,7 +828,8 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 	}
 
 	if createDeletionTask {
-		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(msBuilder.executionInfo.DomainID, context)
+		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
+		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(msBuilder.executionInfo.DomainID, tBuilder)
 		if err != nil {
 			return nil
 		}

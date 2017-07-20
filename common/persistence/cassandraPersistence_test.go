@@ -690,13 +690,16 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 		{
 			ScheduleID:               1,
 			ScheduledEvent:           []byte("scheduled_event_1"),
+			ScheduledTime:            currentTime,
 			StartedID:                2,
 			StartedEvent:             []byte("started_event_1"),
+			StartedTime:              currentTime,
 			ScheduleToCloseTimeout:   1,
 			ScheduleToStartTimeout:   2,
 			StartToCloseTimeout:      3,
 			HeartbeatTimeout:         4,
 			LastHeartBeatUpdatedTime: currentTime,
+			TimerTaskStatus:          1,
 		}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
@@ -710,13 +713,16 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
 	s.NotNil(ai)
 	s.Equal(int64(1), ai.ScheduleID)
 	s.Equal([]byte("scheduled_event_1"), ai.ScheduledEvent)
+	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
 	s.Equal(int64(2), ai.StartedID)
 	s.Equal([]byte("started_event_1"), ai.StartedEvent)
+	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
 	s.Equal(int32(3), ai.StartToCloseTimeout)
 	s.Equal(int32(4), ai.HeartbeatTimeout)
 	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.Equal(int32(1), ai.TimerTaskStatus)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, common.Int64Ptr(1), nil, nil)
 	s.Nil(err2, "No error expected.")
