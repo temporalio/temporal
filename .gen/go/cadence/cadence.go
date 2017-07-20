@@ -678,6 +678,9 @@ func (p *WorkflowServiceClient) recvStartWorkflowExecution() (value *shared.Star
   } else   if result.SessionAlreadyExistError != nil {
     err = result.SessionAlreadyExistError
     return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
+    return 
   }
   value = result.GetSuccess()
   return
@@ -768,6 +771,9 @@ func (p *WorkflowServiceClient) recvGetWorkflowExecutionHistory() (value *shared
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
+    return 
   }
   value = result.GetSuccess()
   return
@@ -857,6 +863,9 @@ func (p *WorkflowServiceClient) recvPollForDecisionTask() (value *shared.PollFor
     return 
   } else   if result.InternalServiceError != nil {
     err = result.InternalServiceError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   value = result.GetSuccess()
@@ -1041,6 +1050,9 @@ func (p *WorkflowServiceClient) recvPollForActivityTask() (value *shared.PollFor
     return 
   } else   if result.InternalServiceError != nil {
     err = result.InternalServiceError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   value = result.GetSuccess()
@@ -1506,6 +1518,9 @@ func (p *WorkflowServiceClient) recvRequestCancelWorkflowExecution() (err error)
   } else   if result.CancellationAlreadyRequestedError != nil {
     err = result.CancellationAlreadyRequestedError
     return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
+    return 
   }
   return
 }
@@ -1594,6 +1609,9 @@ func (p *WorkflowServiceClient) recvSignalWorkflowExecution() (err error) {
     return 
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   return
@@ -1684,6 +1702,9 @@ func (p *WorkflowServiceClient) recvTerminateWorkflowExecution() (err error) {
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
     return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
+    return 
   }
   return
 }
@@ -1771,6 +1792,9 @@ func (p *WorkflowServiceClient) recvListOpenWorkflowExecutions() (value *shared.
     return 
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   value = result.GetSuccess()
@@ -1860,6 +1884,9 @@ func (p *WorkflowServiceClient) recvListClosedWorkflowExecutions() (value *share
     return 
   } else   if result.EntityNotExistError != nil {
     err = result.EntityNotExistError
+    return 
+  } else   if result.ServiceBusyError != nil {
+    err = result.ServiceBusyError
     return 
   }
   value = result.GetSuccess()
@@ -2176,6 +2203,8 @@ var retval *shared.StartWorkflowExecutionResponse
   result.InternalServiceError = v
     case *shared.WorkflowExecutionAlreadyStartedError:
   result.SessionAlreadyExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing StartWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("StartWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -2233,6 +2262,8 @@ var retval *shared.GetWorkflowExecutionHistoryResponse
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing GetWorkflowExecutionHistory: " + err2.Error())
     oprot.WriteMessageBegin("GetWorkflowExecutionHistory", thrift.EXCEPTION, seqId)
@@ -2288,6 +2319,8 @@ var retval *shared.PollForDecisionTaskResponse
   result.BadRequestError = v
     case *shared.InternalServiceError:
   result.InternalServiceError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing PollForDecisionTask: " + err2.Error())
     oprot.WriteMessageBegin("PollForDecisionTask", thrift.EXCEPTION, seqId)
@@ -2397,6 +2430,8 @@ var retval *shared.PollForActivityTaskResponse
   result.BadRequestError = v
     case *shared.InternalServiceError:
   result.InternalServiceError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing PollForActivityTask: " + err2.Error())
     oprot.WriteMessageBegin("PollForActivityTask", thrift.EXCEPTION, seqId)
@@ -2674,6 +2709,8 @@ func (p *workflowServiceProcessorRequestCancelWorkflowExecution) Process(seqId i
   result.EntityNotExistError = v
     case *shared.CancellationAlreadyRequestedError:
   result.CancellationAlreadyRequestedError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RequestCancelWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("RequestCancelWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -2728,6 +2765,8 @@ func (p *workflowServiceProcessorSignalWorkflowExecution) Process(seqId int32, i
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing SignalWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("SignalWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -2782,6 +2821,8 @@ func (p *workflowServiceProcessorTerminateWorkflowExecution) Process(seqId int32
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing TerminateWorkflowExecution: " + err2.Error())
     oprot.WriteMessageBegin("TerminateWorkflowExecution", thrift.EXCEPTION, seqId)
@@ -2837,6 +2878,8 @@ var retval *shared.ListOpenWorkflowExecutionsResponse
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ListOpenWorkflowExecutions: " + err2.Error())
     oprot.WriteMessageBegin("ListOpenWorkflowExecutions", thrift.EXCEPTION, seqId)
@@ -2894,6 +2937,8 @@ var retval *shared.ListClosedWorkflowExecutionsResponse
   result.InternalServiceError = v
     case *shared.EntityNotExistsError:
   result.EntityNotExistError = v
+    case *shared.ServiceBusyError:
+  result.ServiceBusyError = v
     default:
     x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ListClosedWorkflowExecutions: " + err2.Error())
     oprot.WriteMessageBegin("ListClosedWorkflowExecutions", thrift.EXCEPTION, seqId)
@@ -4157,11 +4202,13 @@ func (p *WorkflowServiceStartWorkflowExecutionArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - SessionAlreadyExistError
+//  - ServiceBusyError
 type WorkflowServiceStartWorkflowExecutionResult struct {
   Success *shared.StartWorkflowExecutionResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   SessionAlreadyExistError *shared.WorkflowExecutionAlreadyStartedError `thrift:"sessionAlreadyExistError,3" db:"sessionAlreadyExistError" json:"sessionAlreadyExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceStartWorkflowExecutionResult() *WorkflowServiceStartWorkflowExecutionResult {
@@ -4196,6 +4243,13 @@ func (p *WorkflowServiceStartWorkflowExecutionResult) GetSessionAlreadyExistErro
   }
 return p.SessionAlreadyExistError
 }
+var WorkflowServiceStartWorkflowExecutionResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceStartWorkflowExecutionResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceStartWorkflowExecutionResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceStartWorkflowExecutionResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -4210,6 +4264,10 @@ func (p *WorkflowServiceStartWorkflowExecutionResult) IsSetInternalServiceError(
 
 func (p *WorkflowServiceStartWorkflowExecutionResult) IsSetSessionAlreadyExistError() bool {
   return p.SessionAlreadyExistError != nil
+}
+
+func (p *WorkflowServiceStartWorkflowExecutionResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceStartWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -4239,6 +4297,10 @@ func (p *WorkflowServiceStartWorkflowExecutionResult) Read(iprot thrift.TProtoco
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -4288,6 +4350,14 @@ func (p *WorkflowServiceStartWorkflowExecutionResult)  ReadField3(iprot thrift.T
   return nil
 }
 
+func (p *WorkflowServiceStartWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceStartWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("StartWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -4296,6 +4366,7 @@ func (p *WorkflowServiceStartWorkflowExecutionResult) Write(oprot thrift.TProtoc
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4352,6 +4423,19 @@ func (p *WorkflowServiceStartWorkflowExecutionResult) writeField3(oprot thrift.T
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:sessionAlreadyExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceStartWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -4460,11 +4544,13 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ServiceBusyError
 type WorkflowServiceGetWorkflowExecutionHistoryResult struct {
   Success *shared.GetWorkflowExecutionHistoryResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceGetWorkflowExecutionHistoryResult() *WorkflowServiceGetWorkflowExecutionHistoryResult {
@@ -4499,6 +4585,13 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) GetEntityNotExistErro
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceGetWorkflowExecutionHistoryResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceGetWorkflowExecutionHistoryResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -4513,6 +4606,10 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) IsSetInternalServiceE
 
 func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TProtocol) error {
@@ -4542,6 +4639,10 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) Read(iprot thrift.TPr
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -4591,6 +4692,14 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult)  ReadField3(iprot thr
   return nil
 }
 
+func (p *WorkflowServiceGetWorkflowExecutionHistoryResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("GetWorkflowExecutionHistory_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -4599,6 +4708,7 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) Write(oprot thrift.TP
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4655,6 +4765,19 @@ func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) writeField3(oprot thr
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceGetWorkflowExecutionHistoryResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -4762,10 +4885,12 @@ func (p *WorkflowServicePollForDecisionTaskArgs) String() string {
 //  - Success
 //  - BadRequestError
 //  - InternalServiceError
+//  - ServiceBusyError
 type WorkflowServicePollForDecisionTaskResult struct {
   Success *shared.PollForDecisionTaskResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,3" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServicePollForDecisionTaskResult() *WorkflowServicePollForDecisionTaskResult {
@@ -4793,6 +4918,13 @@ func (p *WorkflowServicePollForDecisionTaskResult) GetInternalServiceError() *sh
   }
 return p.InternalServiceError
 }
+var WorkflowServicePollForDecisionTaskResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServicePollForDecisionTaskResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServicePollForDecisionTaskResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServicePollForDecisionTaskResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -4803,6 +4935,10 @@ func (p *WorkflowServicePollForDecisionTaskResult) IsSetBadRequestError() bool {
 
 func (p *WorkflowServicePollForDecisionTaskResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
+}
+
+func (p *WorkflowServicePollForDecisionTaskResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServicePollForDecisionTaskResult) Read(iprot thrift.TProtocol) error {
@@ -4828,6 +4964,10 @@ func (p *WorkflowServicePollForDecisionTaskResult) Read(iprot thrift.TProtocol) 
       }
     case 2:
       if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
         return err
       }
     default:
@@ -4869,6 +5009,14 @@ func (p *WorkflowServicePollForDecisionTaskResult)  ReadField2(iprot thrift.TPro
   return nil
 }
 
+func (p *WorkflowServicePollForDecisionTaskResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServicePollForDecisionTaskResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("PollForDecisionTask_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -4876,6 +5024,7 @@ func (p *WorkflowServicePollForDecisionTaskResult) Write(oprot thrift.TProtocol)
     if err := p.writeField0(oprot); err != nil { return err }
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -4919,6 +5068,19 @@ func (p *WorkflowServicePollForDecisionTaskResult) writeField2(oprot thrift.TPro
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServicePollForDecisionTaskResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -5290,10 +5452,12 @@ func (p *WorkflowServicePollForActivityTaskArgs) String() string {
 //  - Success
 //  - BadRequestError
 //  - InternalServiceError
+//  - ServiceBusyError
 type WorkflowServicePollForActivityTaskResult struct {
   Success *shared.PollForActivityTaskResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,3" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServicePollForActivityTaskResult() *WorkflowServicePollForActivityTaskResult {
@@ -5321,6 +5485,13 @@ func (p *WorkflowServicePollForActivityTaskResult) GetInternalServiceError() *sh
   }
 return p.InternalServiceError
 }
+var WorkflowServicePollForActivityTaskResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServicePollForActivityTaskResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServicePollForActivityTaskResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServicePollForActivityTaskResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -5331,6 +5502,10 @@ func (p *WorkflowServicePollForActivityTaskResult) IsSetBadRequestError() bool {
 
 func (p *WorkflowServicePollForActivityTaskResult) IsSetInternalServiceError() bool {
   return p.InternalServiceError != nil
+}
+
+func (p *WorkflowServicePollForActivityTaskResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServicePollForActivityTaskResult) Read(iprot thrift.TProtocol) error {
@@ -5356,6 +5531,10 @@ func (p *WorkflowServicePollForActivityTaskResult) Read(iprot thrift.TProtocol) 
       }
     case 2:
       if err := p.ReadField2(iprot); err != nil {
+        return err
+      }
+    case 3:
+      if err := p.ReadField3(iprot); err != nil {
         return err
       }
     default:
@@ -5397,6 +5576,14 @@ func (p *WorkflowServicePollForActivityTaskResult)  ReadField2(iprot thrift.TPro
   return nil
 }
 
+func (p *WorkflowServicePollForActivityTaskResult)  ReadField3(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServicePollForActivityTaskResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("PollForActivityTask_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -5404,6 +5591,7 @@ func (p *WorkflowServicePollForActivityTaskResult) Write(oprot thrift.TProtocol)
     if err := p.writeField0(oprot); err != nil { return err }
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
+    if err := p.writeField3(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -5447,6 +5635,19 @@ func (p *WorkflowServicePollForActivityTaskResult) writeField2(oprot thrift.TPro
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 2:internalServiceError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServicePollForActivityTaskResult) writeField3(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 3); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 3:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 3:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -6650,11 +6851,13 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionArgs) String() string {
 //  - InternalServiceError
 //  - EntityNotExistError
 //  - CancellationAlreadyRequestedError
+//  - ServiceBusyError
 type WorkflowServiceRequestCancelWorkflowExecutionResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
   CancellationAlreadyRequestedError *shared.CancellationAlreadyRequestedError `thrift:"cancellationAlreadyRequestedError,4" db:"cancellationAlreadyRequestedError" json:"cancellationAlreadyRequestedError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,5" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceRequestCancelWorkflowExecutionResult() *WorkflowServiceRequestCancelWorkflowExecutionResult {
@@ -6689,6 +6892,13 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) GetCancellationAlr
   }
 return p.CancellationAlreadyRequestedError
 }
+var WorkflowServiceRequestCancelWorkflowExecutionResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceRequestCancelWorkflowExecutionResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -6703,6 +6913,10 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetEntityNotExis
 
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetCancellationAlreadyRequestedError() bool {
   return p.CancellationAlreadyRequestedError != nil
+}
+
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -6732,6 +6946,10 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Read(iprot thrift.
       }
     case 4:
       if err := p.ReadField4(iprot); err != nil {
+        return err
+      }
+    case 5:
+      if err := p.ReadField5(iprot); err != nil {
         return err
       }
     default:
@@ -6781,6 +6999,14 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult)  ReadField4(iprot 
   return nil
 }
 
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult)  ReadField5(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("RequestCancelWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -6789,6 +7015,7 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) Write(oprot thrift
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
     if err := p.writeField4(oprot); err != nil { return err }
+    if err := p.writeField5(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -6845,6 +7072,19 @@ func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) writeField4(oprot 
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 4:cancellationAlreadyRequestedError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceRequestCancelWorkflowExecutionResult) writeField5(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 5); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 5:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 5:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -6952,10 +7192,12 @@ func (p *WorkflowServiceSignalWorkflowExecutionArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ServiceBusyError
 type WorkflowServiceSignalWorkflowExecutionResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceSignalWorkflowExecutionResult() *WorkflowServiceSignalWorkflowExecutionResult {
@@ -6983,6 +7225,13 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult) GetEntityNotExistError() 
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceSignalWorkflowExecutionResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceSignalWorkflowExecutionResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceSignalWorkflowExecutionResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceSignalWorkflowExecutionResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -6993,6 +7242,10 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult) IsSetInternalServiceError
 
 func (p *WorkflowServiceSignalWorkflowExecutionResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceSignalWorkflowExecutionResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceSignalWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -7018,6 +7271,10 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult) Read(iprot thrift.TProtoc
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -7059,6 +7316,14 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult)  ReadField3(iprot thrift.
   return nil
 }
 
+func (p *WorkflowServiceSignalWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceSignalWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("SignalWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -7066,6 +7331,7 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult) Write(oprot thrift.TProto
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -7109,6 +7375,19 @@ func (p *WorkflowServiceSignalWorkflowExecutionResult) writeField3(oprot thrift.
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceSignalWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -7216,10 +7495,12 @@ func (p *WorkflowServiceTerminateWorkflowExecutionArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ServiceBusyError
 type WorkflowServiceTerminateWorkflowExecutionResult struct {
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceTerminateWorkflowExecutionResult() *WorkflowServiceTerminateWorkflowExecutionResult {
@@ -7247,6 +7528,13 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult) GetEntityNotExistError
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceTerminateWorkflowExecutionResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceTerminateWorkflowExecutionResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceTerminateWorkflowExecutionResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceTerminateWorkflowExecutionResult) IsSetBadRequestError() bool {
   return p.BadRequestError != nil
 }
@@ -7257,6 +7545,10 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult) IsSetInternalServiceEr
 
 func (p *WorkflowServiceTerminateWorkflowExecutionResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceTerminateWorkflowExecutionResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceTerminateWorkflowExecutionResult) Read(iprot thrift.TProtocol) error {
@@ -7282,6 +7574,10 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult) Read(iprot thrift.TPro
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -7323,6 +7619,14 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult)  ReadField3(iprot thri
   return nil
 }
 
+func (p *WorkflowServiceTerminateWorkflowExecutionResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceTerminateWorkflowExecutionResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("TerminateWorkflowExecution_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -7330,6 +7634,7 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult) Write(oprot thrift.TPr
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -7373,6 +7678,19 @@ func (p *WorkflowServiceTerminateWorkflowExecutionResult) writeField3(oprot thri
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceTerminateWorkflowExecutionResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -7481,11 +7799,13 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ServiceBusyError
 type WorkflowServiceListOpenWorkflowExecutionsResult struct {
   Success *shared.ListOpenWorkflowExecutionsResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceListOpenWorkflowExecutionsResult() *WorkflowServiceListOpenWorkflowExecutionsResult {
@@ -7520,6 +7840,13 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetEntityNotExistError
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceListOpenWorkflowExecutionsResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceListOpenWorkflowExecutionsResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -7534,6 +7861,10 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetInternalServiceEr
 
 func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Read(iprot thrift.TProtocol) error {
@@ -7563,6 +7894,10 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Read(iprot thrift.TPro
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -7612,6 +7947,14 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField3(iprot thri
   return nil
 }
 
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("ListOpenWorkflowExecutions_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -7620,6 +7963,7 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult) Write(oprot thrift.TPr
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -7676,6 +8020,19 @@ func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField3(oprot thri
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListOpenWorkflowExecutionsResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }
@@ -7784,11 +8141,13 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsArgs) String() string {
 //  - BadRequestError
 //  - InternalServiceError
 //  - EntityNotExistError
+//  - ServiceBusyError
 type WorkflowServiceListClosedWorkflowExecutionsResult struct {
   Success *shared.ListClosedWorkflowExecutionsResponse `thrift:"success,0" db:"success" json:"success,omitempty"`
   BadRequestError *shared.BadRequestError `thrift:"badRequestError,1" db:"badRequestError" json:"badRequestError,omitempty"`
   InternalServiceError *shared.InternalServiceError `thrift:"internalServiceError,2" db:"internalServiceError" json:"internalServiceError,omitempty"`
   EntityNotExistError *shared.EntityNotExistsError `thrift:"entityNotExistError,3" db:"entityNotExistError" json:"entityNotExistError,omitempty"`
+  ServiceBusyError *shared.ServiceBusyError `thrift:"serviceBusyError,4" db:"serviceBusyError" json:"serviceBusyError,omitempty"`
 }
 
 func NewWorkflowServiceListClosedWorkflowExecutionsResult() *WorkflowServiceListClosedWorkflowExecutionsResult {
@@ -7823,6 +8182,13 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetEntityNotExistErr
   }
 return p.EntityNotExistError
 }
+var WorkflowServiceListClosedWorkflowExecutionsResult_ServiceBusyError_DEFAULT *shared.ServiceBusyError
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) GetServiceBusyError() *shared.ServiceBusyError {
+  if !p.IsSetServiceBusyError() {
+    return WorkflowServiceListClosedWorkflowExecutionsResult_ServiceBusyError_DEFAULT
+  }
+return p.ServiceBusyError
+}
 func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetSuccess() bool {
   return p.Success != nil
 }
@@ -7837,6 +8203,10 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetInternalService
 
 func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetEntityNotExistError() bool {
   return p.EntityNotExistError != nil
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) IsSetServiceBusyError() bool {
+  return p.ServiceBusyError != nil
 }
 
 func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Read(iprot thrift.TProtocol) error {
@@ -7866,6 +8236,10 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Read(iprot thrift.TP
       }
     case 3:
       if err := p.ReadField3(iprot); err != nil {
+        return err
+      }
+    case 4:
+      if err := p.ReadField4(iprot); err != nil {
         return err
       }
     default:
@@ -7915,6 +8289,14 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField3(iprot th
   return nil
 }
 
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult)  ReadField4(iprot thrift.TProtocol) error {
+  p.ServiceBusyError = &shared.ServiceBusyError{}
+  if err := p.ServiceBusyError.Read(iprot); err != nil {
+    return thrift.PrependError(fmt.Sprintf("%T error reading struct: ", p.ServiceBusyError), err)
+  }
+  return nil
+}
+
 func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Write(oprot thrift.TProtocol) error {
   if err := oprot.WriteStructBegin("ListClosedWorkflowExecutions_result"); err != nil {
     return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err) }
@@ -7923,6 +8305,7 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult) Write(oprot thrift.T
     if err := p.writeField1(oprot); err != nil { return err }
     if err := p.writeField2(oprot); err != nil { return err }
     if err := p.writeField3(oprot); err != nil { return err }
+    if err := p.writeField4(oprot); err != nil { return err }
   }
   if err := oprot.WriteFieldStop(); err != nil {
     return thrift.PrependError("write field stop error: ", err) }
@@ -7979,6 +8362,19 @@ func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField3(oprot th
     }
     if err := oprot.WriteFieldEnd(); err != nil {
       return thrift.PrependError(fmt.Sprintf("%T write field end error 3:entityNotExistError: ", p), err) }
+  }
+  return err
+}
+
+func (p *WorkflowServiceListClosedWorkflowExecutionsResult) writeField4(oprot thrift.TProtocol) (err error) {
+  if p.IsSetServiceBusyError() {
+    if err := oprot.WriteFieldBegin("serviceBusyError", thrift.STRUCT, 4); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:serviceBusyError: ", p), err) }
+    if err := p.ServiceBusyError.Write(oprot); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T error writing struct: ", p.ServiceBusyError), err)
+    }
+    if err := oprot.WriteFieldEnd(); err != nil {
+      return thrift.PrependError(fmt.Sprintf("%T write field end error 4:serviceBusyError: ", p), err) }
   }
   return err
 }

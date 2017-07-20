@@ -58,6 +58,7 @@ type (
 		hSerializerFactory persistence.HistorySerializerFactory
 		metricsClient      metrics.Client
 		startWG            sync.WaitGroup
+		rateLimiter        common.TokenBucket
 		service.Service
 	}
 
@@ -71,6 +72,7 @@ type (
 const (
 	defaultVisibilityMaxPageSize = 1000
 	defaultHistoryMaxPageSize    = 1000
+	defaultRPS                   = 1200 // This limit is based on experimental runs.
 )
 
 var (
@@ -97,6 +99,7 @@ func NewWorkflowHandler(
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
+		rateLimiter:        common.NewTokenBucket(defaultRPS, common.NewRealTimeSource()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -296,6 +299,10 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
 	wh.Service.GetLogger().Debug("Received PollForActivityTask")
 	if !pollRequest.IsSetDomain() {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -332,6 +339,10 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	scope := metrics.FrontendPollForDecisionTaskScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
 
 	wh.Service.GetLogger().Debug("Received PollForDecisionTask")
 	if !pollRequest.IsSetDomain() {
@@ -391,6 +402,9 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
 	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
 	if !heartbeatRequest.IsSetTaskToken() {
 		return nil, wh.error(errTaskTokenNotSet, scope)
@@ -421,6 +435,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	scope := metrics.FrontendRespondActivityTaskCompletedScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
 
 	if !completeRequest.IsSetTaskToken() {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -453,6 +470,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	scope := metrics.FrontendRespondActivityTaskFailedScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
 
 	if !failedRequest.IsSetTaskToken() {
 		return wh.error(errTaskTokenNotSet, scope)
@@ -487,6 +507,9 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
 	if !cancelRequest.IsSetTaskToken() {
 		return wh.error(errTaskTokenNotSet, scope)
 	}
@@ -520,6 +543,9 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
 	if !completeRequest.IsSetTaskToken() {
 		return wh.error(errTaskTokenNotSet, scope)
 	}
@@ -551,6 +577,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	scope := metrics.FrontendStartWorkflowExecutionScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
 
 	wh.Service.GetLogger().Debugf("Received StartWorkflowExecution. WorkflowID: %v", startRequest.GetWorkflowId())
 
@@ -613,6 +643,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	scope := metrics.FrontendGetWorkflowExecutionHistoryScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
 
 	if !getRequest.IsSetDomain() {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -702,6 +736,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx thrift.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return wh.error(createServiceBusyError(), scope)
+	}
+
 	if !signalRequest.IsSetDomain() {
 		return wh.error(errDomainNotSet, scope)
 	}
@@ -749,6 +787,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx thrift.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return wh.error(createServiceBusyError(), scope)
+	}
+
 	if !terminateRequest.IsSetDomain() {
 		return wh.error(errDomainNotSet, scope)
 	}
@@ -791,6 +833,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 	scope := metrics.FrontendRequestCancelWorkflowExecutionScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return wh.error(createServiceBusyError(), scope)
+	}
 
 	if !cancelRequest.IsSetDomain() {
 		return wh.error(errDomainNotSet, scope)
@@ -836,6 +882,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx thrift.Context,
 	scope := metrics.FrontendListOpenWorkflowExecutionsScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
 
 	if !listRequest.IsSetDomain() {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -909,6 +959,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 	scope := metrics.FrontendListClosedWorkflowExecutionsScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
 
 	if !listRequest.IsSetDomain() {
 		return nil, wh.error(errDomainNotSet, scope)
@@ -1069,6 +1123,9 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 	case *gen.BadRequestError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 		return err
+	case *gen.ServiceBusyError:
+		wh.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
+		return err
 	case *gen.EntityNotExistsError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 		return err
@@ -1163,4 +1220,10 @@ func getSerializedGetHistoryToken(persistenceToken []byte, runID string, history
 		return data, err
 	}
 	return nil, nil
+}
+
+func createServiceBusyError() *gen.ServiceBusyError {
+	err := gen.NewServiceBusyError()
+	err.Message = "Too many outstanding requests to the cadence service"
+	return err
 }
