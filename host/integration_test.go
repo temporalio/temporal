@@ -2557,7 +2557,7 @@ func (s *integrationSuite) printWorkflowHistory(domain string, execution *workfl
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(&workflow.GetWorkflowExecutionHistoryRequest{
 		Domain:          common.StringPtr(domain),
 		Execution:       execution,
-		MaximumPageSize: common.Int32Ptr(10),
+		MaximumPageSize: common.Int32Ptr(5), // Use small page size to force pagination code path
 	})
 	s.Nil(err)
 
