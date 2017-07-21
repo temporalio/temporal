@@ -22,9 +22,9 @@ package history
 
 import (
 	"fmt"
-	"log"
 	"sync"
 
+	"github.com/uber/cadence/.gen/go/health"
 	hist "github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	hc "github.com/uber/cadence/client/history"
@@ -79,7 +79,7 @@ func NewHandler(sVice service.Service, shardManager persistence.ShardManager, me
 	}
 	// prevent us from trying to serve requests before shard controller is started and ready
 	handler.startWG.Add(1)
-	return handler, []thrift.TChanServer{hist.NewTChanHistoryServiceServer(handler)}
+	return handler, []thrift.TChanServer{hist.NewTChanHistoryServiceServer(handler), health.NewTChanMetaServer(handler)}
 }
 
 // Start starts the handler
@@ -125,10 +125,11 @@ func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient)
 }
 
-// IsHealthy - Health endpoint.
-func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
-	log.Println("Workflow Health endpoint reached.")
-	return true, nil
+// Health is for health check
+func (h *Handler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	h.GetLogger().Debug("History health check endpoint reached.")
+	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("history good")}
+	return hs, nil
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.

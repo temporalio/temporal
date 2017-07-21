@@ -22,11 +22,11 @@ package frontend
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/cadence"
+	"github.com/uber/cadence/.gen/go/health"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	gen "github.com/uber/cadence/.gen/go/shared"
@@ -103,7 +103,7 @@ func NewWorkflowHandler(
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
-	return handler, []thrift.TChanServer{cadence.NewTChanWorkflowServiceServer(handler)}
+	return handler, []thrift.TChanServer{cadence.NewTChanWorkflowServiceServer(handler), health.NewTChanMetaServer(handler)}
 }
 
 // Start starts the handler
@@ -131,10 +131,11 @@ func (wh *WorkflowHandler) Stop() {
 	wh.Service.Stop()
 }
 
-// IsHealthy - Health endpoint.
-func (wh *WorkflowHandler) IsHealthy(ctx thrift.Context) (bool, error) {
-	log.Println("Workflow Health endpoint reached.")
-	return true, nil
+// Health is for health check
+func (wh *WorkflowHandler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	wh.GetLogger().Debug("Frontend health check endpoint reached.")
+	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("frontend good")}
+	return hs, nil
 }
 
 // RegisterDomain creates a new domain which can be used as a container for all resources.  Domain is a top level

@@ -14,6 +14,7 @@ THRIFT_SRCS = idl/github.com/uber/cadence/cadence.thrift \
 	idl/github.com/uber/cadence/shared.thrift \
   idl/github.com/uber/cadence/history.thrift \
   idl/github.com/uber/cadence/matching.thrift \
+  idl/github.com/uber/cadence/health.thrift \
 
 PROGS = cadence
 TEST_ARG ?= -race -v -timeout 5m

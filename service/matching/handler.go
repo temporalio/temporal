@@ -24,8 +24,10 @@ import (
 	"sync"
 
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/health"
 	m "github.com/uber/cadence/.gen/go/matching"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -51,7 +53,7 @@ func NewHandler(taskPersistence persistence.TaskManager, sVice service.Service) 
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
-	return handler, []thrift.TChanServer{m.NewTChanMatchingServiceServer(handler)}
+	return handler, []thrift.TChanServer{m.NewTChanMatchingServiceServer(handler), health.NewTChanMetaServer(handler)}
 }
 
 // Start starts the handler
@@ -74,10 +76,11 @@ func (h *Handler) Stop() {
 	h.Service.Stop()
 }
 
-// IsHealthy - Health endpoint.
-func (h *Handler) IsHealthy(ctx thrift.Context) (bool, error) {
-	h.Service.GetLogger().Info("Workflow Health endpoint reached.")
-	return true, nil
+// Health is for health check
+func (h *Handler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	h.GetLogger().Debug("Matching service health check endpoint reached.")
+	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("matching good")}
+	return hs, nil
 }
 
 // startRequestProfile initiates recording of request metrics
