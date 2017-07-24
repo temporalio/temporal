@@ -89,8 +89,12 @@ type taskListManagerImpl struct {
 	logger        bark.Logger
 	metricsClient metrics.Client
 	engine        *matchingEngineImpl
-	taskWriter    *taskWriter
-	taskBuffer    chan *persistence.TaskInfo // tasks loaded from persistence
+	// serializes all writes to persistence
+	// This is needed because of a known Cassandra issue where concurrent LWT to the same partition
+	// cause timeout errors.
+	persistenceLock sync.Mutex
+	taskWriter      *taskWriter
+	taskBuffer      chan *persistence.TaskInfo // tasks loaded from persistence
 	// Sync channel used to perform sync matching.
 	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
 	// only if there is waiting poll that consumes from it.
@@ -204,6 +208,8 @@ func (c *taskListManagerImpl) persistAckLevel() error {
 		},
 	}
 	c.Unlock()
+	c.persistenceLock.Lock()
+	defer c.persistenceLock.Unlock()
 	_, err := c.engine.taskManager.UpdateTaskList(updateTaskListRequest)
 	return err
 }

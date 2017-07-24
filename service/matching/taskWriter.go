@@ -134,6 +134,7 @@ writerLoop:
 					maxReadLevel = taskIDs[i]
 				}
 
+				w.tlMgr.persistenceLock.Lock()
 				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
 					DomainID:     w.taskListID.domainID,
 					TaskList:     w.taskListID.taskListName,
@@ -143,6 +144,7 @@ writerLoop:
 					// might be out of sync. This is OK as caller can just retry.
 					RangeID: rangeID,
 				})
+				w.tlMgr.persistenceLock.Unlock()
 
 				if err != nil {
 					logging.LogPersistantStoreErrorEvent(w.logger, logging.TagValueStoreOperationCreateTask, err,
