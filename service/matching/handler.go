@@ -78,6 +78,7 @@ func (h *Handler) Stop() {
 
 // Health is for health check
 func (h *Handler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	h.startWG.Wait()
 	h.GetLogger().Debug("Matching service health check endpoint reached.")
 	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("matching good")}
 	return hs, nil

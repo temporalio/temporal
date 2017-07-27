@@ -127,6 +127,7 @@ func (h *Handler) CreateEngine(context ShardContext) Engine {
 
 // Health is for health check
 func (h *Handler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	h.startWG.Wait()
 	h.GetLogger().Debug("History health check endpoint reached.")
 	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("history good")}
 	return hs, nil

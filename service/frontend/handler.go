@@ -133,6 +133,7 @@ func (wh *WorkflowHandler) Stop() {
 
 // Health is for health check
 func (wh *WorkflowHandler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+	wh.startWG.Wait()
 	wh.GetLogger().Debug("Frontend health check endpoint reached.")
 	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("frontend good")}
 	return hs, nil
