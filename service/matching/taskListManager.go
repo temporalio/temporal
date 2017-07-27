@@ -71,7 +71,7 @@ func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListMan
 		taskAckManager: newAckManager(e.logger),
 		syncMatch:      make(chan *getTaskResult),
 	}
-	tlMgr.taskWriter = newTaskWriter(tlMgr, tlMgr.shutdownCh)
+	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	return tlMgr
 }
 
@@ -143,6 +143,7 @@ func (c *taskListManagerImpl) Stop() {
 	}
 	logging.LogTaskListUnloadingEvent(c.logger)
 	close(c.shutdownCh)
+	c.taskWriter.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
 	logging.LogTaskListUnloadedEvent(c.logger)
 }
@@ -153,7 +154,6 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 		if err != nil || r != nil {
 			return r, err
 		}
-
 		r, err = c.taskWriter.appendTask(execution, taskInfo, rangeID)
 		return r, err
 	})

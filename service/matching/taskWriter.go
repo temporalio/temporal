@@ -21,6 +21,7 @@
 package matching
 
 import (
+	"errors"
 	"fmt"
 	"sync/atomic"
 
@@ -55,17 +56,21 @@ type (
 		taskManager  persistence.TaskManager
 		appendCh     chan *writeTaskRequest
 		maxReadLevel int64
-		shutdownCh   chan struct{}
+		stopped      int64 // set to 1 if the writer is stopped or is shutting down
 		logger       bark.Logger
+		stopCh       chan struct{} // shutdown signal for all routines in this class
 	}
 )
 
-func newTaskWriter(tlMgr *taskListManagerImpl, shutdownCh chan struct{}) *taskWriter {
+// errShutdown indicates that the task list is shutting down
+var errShutdown = errors.New("task list shutting down")
+
+func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
 	return &taskWriter{
 		tlMgr:       tlMgr,
 		taskListID:  tlMgr.taskListID,
 		taskManager: tlMgr.engine.taskManager,
-		shutdownCh:  shutdownCh,
+		stopCh:      make(chan struct{}),
 		appendCh:    make(chan *writeTaskRequest, outstandingTaskAppendsThreshold),
 		logger:      tlMgr.logger,
 	}
@@ -76,8 +81,24 @@ func (w *taskWriter) Start() {
 	go w.taskWriterLoop()
 }
 
+// Stop stops the taskWriter
+func (w *taskWriter) Stop() {
+	if atomic.CompareAndSwapInt64(&w.stopped, 0, 1) {
+		close(w.stopCh)
+	}
+}
+
+func (w *taskWriter) isStopped() bool {
+	return atomic.LoadInt64(&w.stopped) == 1
+}
+
 func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 	taskInfo *persistence.TaskInfo, rangeID int64) (*persistence.CreateTasksResponse, error) {
+
+	if w.isStopped() {
+		return nil, errShutdown
+	}
+
 	ch := make(chan *writeTaskResponse)
 	req := &writeTaskRequest{
 		execution:  execution,
@@ -88,8 +109,14 @@ func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 
 	select {
 	case w.appendCh <- req:
-		r := <-ch
-		return r.persistenceResponse, r.err
+		select {
+		case r := <-ch:
+			return r.persistenceResponse, r.err
+		case <-w.stopCh:
+			// if we are shutting down, this request will never make
+			// it to cassandra, just bail out and fail this request
+			return nil, errShutdown
+		}
 	default: // channel is full, throttle
 		return nil, createServiceBusyError()
 	}
@@ -100,8 +127,6 @@ func (w *taskWriter) GetMaxReadLevel() int64 {
 }
 
 func (w *taskWriter) taskWriterLoop() {
-	defer close(w.appendCh)
-
 writerLoop:
 	for {
 		select {
@@ -159,7 +184,10 @@ writerLoop:
 
 				w.sendWriteResponse(reqs, err, r)
 			}
-		case <-w.shutdownCh:
+		case <-w.stopCh:
+			// we don't close the appendCh here
+			// because that can cause on a send on closed
+			// channel panic on the appendTask()
 			break writerLoop
 		}
 	}

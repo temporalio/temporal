@@ -269,6 +269,51 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 
 }
 
+func (s *matchingEngineSuite) TestTaskWriterShutdown() {
+	s.matchingEngine.rangeSize = 300 // override to low number for the test
+
+	domainID := "domainId"
+	tl := "makeToast"
+
+	taskList := workflow.NewTaskList()
+	taskList.Name = &tl
+
+	runID := "run1"
+	workflowID := "workflow1"
+	execution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+
+	tlID := &taskListID{
+		domainID:     domainID,
+		taskListName: tl,
+		taskType:     persistence.TaskListTypeActivity,
+	}
+
+	tlm, err := s.matchingEngine.getTaskListManager(tlID)
+	s.Nil(err)
+
+	addRequest := matching.AddActivityTaskRequest{
+		SourceDomainUUID: common.StringPtr(domainID),
+		DomainUUID:       common.StringPtr(domainID),
+		Execution:        &execution,
+		TaskList:         taskList}
+
+	// stop the task writer explicitly
+	tlmImpl := tlm.(*taskListManagerImpl)
+	tlmImpl.taskWriter.Stop()
+
+	// now attempt to add a task
+	scheduleID := int64(5)
+	addRequest.ScheduleId = &scheduleID
+	err = s.matchingEngine.AddActivityTask(&addRequest)
+	s.Error(err)
+
+	// test race
+	tlmImpl.taskWriter.stopped = 0
+	err = s.matchingEngine.AddActivityTask(&addRequest)
+	s.Error(err)
+	tlmImpl.taskWriter.stopped = 1 // reset it back to old value
+}
+
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.matchingEngine.longPollExpirationInterval = 10 * time.Millisecond
 
