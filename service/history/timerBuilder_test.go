@@ -32,6 +32,7 @@ import (
 
 	"encoding/json"
 
+	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
@@ -171,6 +172,30 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 	})
 
 	s.Nil(ti)
+}
+
+func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
+	// ScheduleToStart being more than HB.
+	builder := newMutableStateBuilder(s.logger)
+	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
+			StartToCloseTimeoutSeconds:    common.Int32Ptr(2),
+			HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+		})
+	// create a schedule to start timeout
+	tb := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tt := tb.GetActivityTimerTaskIfNeeded(builder)
+	s.NotNil(tt)
+	s.Equal(workflow.TimeoutType_SCHEDULE_TO_START, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
+
+	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+
+	// create a heart beat timeout
+	tb = newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tt = tb.GetActivityTimerTaskIfNeeded(builder)
+	s.NotNil(tt)
+	s.Equal(workflow.TimeoutType_HEARTBEAT, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
