@@ -409,7 +409,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 		if ts.Before(s.shardInfo.TimerAckLevel) {
 			// This is not a common scenario, the shard can move and new host might have a time SKU.
 			// We generate a new timer ID that is above the ack level with an offset.
-			s.logger.Warn("%v: New timer generated is less than ack level. timestamp: %v, ackLevel: %v",
+			s.logger.Warnf("%v: New timer generated is less than ack level. timestamp: %v, ackLevel: %v",
 				time.Now(), ts, s.shardInfo.TimerAckLevel)
 			newTimestamp := s.shardInfo.TimerAckLevel
 			persistence.SetVisibilityTSFrom(task, newTimestamp.Add(time.Second))
