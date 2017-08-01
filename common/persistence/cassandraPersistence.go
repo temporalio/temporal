@@ -71,8 +71,8 @@ const (
 )
 
 const (
-	taskListTaskID = -12345 // for debugging
-	initialRangeID = 1      // Id of the first range of a new task list
+	taskListTaskID = -12345
+	initialRangeID = 1 // Id of the first range of a new task list
 )
 
 const (
@@ -476,13 +476,6 @@ const (
 		`and task_list_type = ? ` +
 		`and type = ? ` +
 		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateUpdateTaskListRangeOnlyQuery = `UPDATE tasks SET ` +
-		`range_id = ? ` +
-		`WHERE domain_id = ? ` +
-		`and task_list_name = ? ` +
-		`and task_list_type = ? ` +
 		`IF range_id = ?`
 )
 
@@ -1196,7 +1189,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 			Msg: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
 		}
 	}
-	tli := &TaskListInfo{Name: request.TaskList, TaskType: request.TaskType, RangeID: rangeID + 1, AckLevel: ackLevel}
+	tli := &TaskListInfo{DomainID: request.DomainID, Name: request.TaskList, TaskType: request.TaskType, RangeID: rangeID + 1, AckLevel: ackLevel}
 	return &LeaseTaskListResponse{TaskListInfo: tli}, nil
 }
 
@@ -1244,9 +1237,10 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 // From TaskManager interface
 func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	domainID := request.DomainID
-	taskList := request.TaskList
-	taskListType := request.TaskListType
+	domainID := request.TaskListInfo.DomainID
+	taskList := request.TaskListInfo.Name
+	taskListType := request.TaskListInfo.TaskType
+	ackLevel := request.TaskListInfo.AckLevel
 
 	for _, task := range request.Tasks {
 		scheduleID := task.Data.ScheduleID
@@ -1277,13 +1271,20 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	batch.Query(templateUpdateTaskListRangeOnlyQuery,
-		request.RangeID,
+	batch.Query(templateUpdateTaskListQuery,
+		request.TaskListInfo.RangeID,
 		domainID,
 		taskList,
 		taskListType,
-		request.RangeID,
+		ackLevel,
+		domainID,
+		taskList,
+		taskListType,
+		rowTypeTaskList,
+		taskListTaskID,
+		request.TaskListInfo.RangeID,
 	)
+
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
@@ -1295,7 +1296,7 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 		rangeID := previous["range_id"]
 		return nil, &ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskList: %v, taskListType: %v, rangeID: %v, db rangeID: %v",
-				taskList, taskListType, request.RangeID, rangeID),
+				taskList, taskListType, request.TaskListInfo.RangeID, rangeID),
 		}
 	}
 

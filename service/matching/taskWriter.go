@@ -159,15 +159,20 @@ writerLoop:
 					maxReadLevel = taskIDs[i]
 				}
 
-				w.tlMgr.persistenceLock.Lock()
-				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
-					DomainID:     w.taskListID.domainID,
-					TaskList:     w.taskListID.taskListName,
-					TaskListType: w.taskListID.taskType,
-					Tasks:        tasks,
+				tlInfo := &persistence.TaskListInfo{
+					DomainID: w.taskListID.domainID,
+					Name:     w.taskListID.taskListName,
+					TaskType: w.taskListID.taskType,
 					// Note that newTaskID could increment range, so rangeID parameter
 					// might be out of sync. This is OK as caller can just retry.
-					RangeID: rangeID,
+					RangeID:  rangeID,
+					AckLevel: w.tlMgr.getAckLevel(),
+				}
+
+				w.tlMgr.persistenceLock.Lock()
+				r, err := w.taskManager.CreateTasks(&persistence.CreateTasksRequest{
+					TaskListInfo: tlInfo,
+					Tasks:        tasks,
 				})
 				w.tlMgr.persistenceLock.Unlock()
 

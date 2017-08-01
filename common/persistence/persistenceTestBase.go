@@ -723,11 +723,8 @@ func (s *TestBase) CreateDecisionTask(domainID string, workflowExecution workflo
 	}
 
 	_, err = s.TaskMgr.CreateTasks(&CreateTasksRequest{
-		DomainID:     domainID,
-		TaskList:     taskList,
-		TaskListType: TaskListTypeDecision,
+		TaskListInfo: leaseResponse.TaskListInfo,
 		Tasks:        tasks,
-		RangeID:      leaseResponse.TaskListInfo.RangeID,
 	})
 
 	if err != nil {
@@ -766,11 +763,8 @@ func (s *TestBase) CreateActivityTasks(domainID string, workflowExecution workfl
 			},
 		}
 		_, err := s.TaskMgr.CreateTasks(&CreateTasksRequest{
-			DomainID:     domainID,
-			TaskList:     taskList,
-			TaskListType: TaskListTypeActivity,
+			TaskListInfo: leaseResponse.TaskListInfo,
 			Tasks:        tasks,
-			RangeID:      leaseResponse.TaskListInfo.RangeID,
 		})
 
 		if err != nil {

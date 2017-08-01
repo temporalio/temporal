@@ -460,10 +460,7 @@ type (
 
 	// CreateTasksRequest is used to create a new task for a workflow exectution
 	CreateTasksRequest struct {
-		DomainID     string
-		TaskList     string
-		TaskListType int
-		RangeID      int64
+		TaskListInfo *TaskListInfo
 		Tasks        []*CreateTaskInfo
 	}
 

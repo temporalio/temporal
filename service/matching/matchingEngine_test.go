@@ -1281,9 +1281,10 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 
 // CreateTask provides a mock function with given fields: request
 func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
-	domainID := request.DomainID
-	taskList := request.TaskList
-	taskType := request.TaskListType
+	domainID := request.TaskListInfo.DomainID
+	taskList := request.TaskListInfo.Name
+	taskType := request.TaskListInfo.TaskType
+	rangeID := request.TaskListInfo.RangeID
 
 	tlm := m.getTaskListManager(newTaskListID(domainID, taskList, taskType))
 	tlm.Lock()
@@ -1291,18 +1292,18 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 	// First validate the entire batch
 	for _, task := range request.Tasks {
-		m.logger.Debugf("testTaskManager.CreateTask taskID=%v, rangeID=%v", task.TaskID, request.RangeID)
+		m.logger.Debugf("testTaskManager.CreateTask taskID=%v, rangeID=%v", task.TaskID, rangeID)
 		if task.TaskID <= 0 {
 			panic(fmt.Errorf("Invalid taskID=%v", task.TaskID))
 		}
 
-		if tlm.rangeID != request.RangeID {
+		if tlm.rangeID != rangeID {
 			m.logger.Debugf("testTaskManager.CreateTask ConditionFailedError taskID=%v, rangeID: %v, db rangeID: %v",
-				task.TaskID, request.RangeID, tlm.rangeID)
+				task.TaskID, rangeID, tlm.rangeID)
 
 			return nil, &persistence.ConditionFailedError{
 				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskList: %v, taskType: %v, rangeID: %v, db rangeID: %v",
-					taskList, taskType, request.RangeID, tlm.rangeID),
+					taskList, taskType, rangeID, tlm.rangeID),
 			}
 		}
 		_, ok := tlm.tasks.Get(task.TaskID)
