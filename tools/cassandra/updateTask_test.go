@@ -22,16 +22,17 @@ package cassandra
 
 import (
 	"fmt"
-	"github.com/gocql/gocql"
-	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/uber-common/bark"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/gocql/gocql"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/uber-common/bark"
 )
 
 type (
@@ -129,7 +130,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	// update the version to the latest
 	s.log.Infof("Ver: %v", ver)
-	s.Equal(0, cmpVersion(ver, "0.3"))
+	s.Equal(0, cmpVersion(ver, "0.1"))
 
 	dropAllTablesTypes(client)
 }

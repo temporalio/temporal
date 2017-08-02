@@ -151,7 +151,7 @@ CREATE TABLE executions (
   transfer             frozen<transfer_task>,
   timer                frozen<timer_task>,
   next_event_id        bigint,  -- This is needed to make conditional updates on session history
-  range_id             bigint static, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
+  range_id             bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map         map<bigint, frozen<activity_info>>,
   timer_map            map<text, frozen<timer_info>>,
   child_executions_map map<bigint, frozen<child_execution_info>>,
@@ -159,8 +159,7 @@ CREATE TABLE executions (
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  }
-  AND GC_GRACE_SECONDS = 172800;
+  };
 
 CREATE TABLE events (
   domain_id      uuid,
@@ -177,8 +176,7 @@ CREATE TABLE events (
   PRIMARY KEY ((domain_id, workflow_id, run_id), first_event_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  }
-  AND GC_GRACE_SECONDS = 172800;
+  };
 
 -- Stores activity or workflow tasks
 CREATE TABLE tasks (
@@ -187,14 +185,13 @@ CREATE TABLE tasks (
   task_list_type   int, -- enum TaskListType {ActivityTask, DecisionTask}
   type             int, -- enum rowType {Task, TaskList}
   task_id          bigint,  -- unique identifier for tasks, monotonically increasing
-  range_id         bigint static, -- Used to ensure that only one process can write to the table
+  range_id         bigint, -- Used to ensure that only one process can write to the table
   task             frozen<task>,
   task_list        frozen<task_list>,
   PRIMARY KEY ((domain_id, task_list_name, task_list_type), type, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  }
-  AND GC_GRACE_SECONDS = 172800;
+  };
 
 CREATE TABLE domains (
   id     uuid,
@@ -203,8 +200,7 @@ CREATE TABLE domains (
   PRIMARY KEY (id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-  }
-  AND GC_GRACE_SECONDS = 172800;
+  };
 
 CREATE TABLE domains_by_name (
   name   text,
@@ -213,5 +209,4 @@ CREATE TABLE domains_by_name (
   PRIMARY KEY (name)
 )  WITH COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-   }
-   AND GC_GRACE_SECONDS = 172800;
+   };

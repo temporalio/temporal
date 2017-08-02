@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.2",
-  "MinCompatibleVersion": "0.1",
-  "Description": "Support for request cancel external workflow execution.",
-  "SchemaUpdateCqlFiles": [
-    "request_cancel.cql"
-  ]
-}

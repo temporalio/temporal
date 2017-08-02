@@ -246,6 +246,12 @@ const (
 	templateUpdateLeaseQuery = `UPDATE executions ` +
 		`SET range_id = ? ` +
 		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
 		`IF range_id = ?`
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, activity_map, timer_map, child_executions_map, request_cancel_map ` +
@@ -277,7 +283,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] =` + templateActivityInfoType + ` ` +
@@ -288,7 +294,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateUpdateTimerInfoQuery = `UPDATE executions ` +
 		`SET timer_map[ ? ] =` + templateTimerInfoType + ` ` +
@@ -299,7 +305,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateUpdateChildExecutionInfoQuery = `UPDATE executions ` +
 		`SET child_executions_map[ ? ] =` + templateChildExecutionInfoType + ` ` +
@@ -310,7 +316,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateUpdateRequestCancelInfoQuery = `UPDATE executions ` +
 		`SET request_cancel_map[ ? ] =` + templateRequestCancelInfoType + ` ` +
@@ -321,7 +327,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateDeleteActivityInfoQuery = `DELETE activity_map[ ? ] ` +
 		`FROM executions ` +
@@ -332,7 +338,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateDeleteTimerInfoQuery = `DELETE timer_map[ ? ] ` +
 		`FROM executions ` +
@@ -343,7 +349,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateDeleteChildExecutionInfoQuery = `DELETE child_executions_map[ ? ] ` +
 		`FROM executions ` +
@@ -354,7 +360,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateDeleteRequestCancelInfoQuery = `DELETE request_cancel_map[ ? ] ` +
 		`FROM executions ` +
@@ -365,7 +371,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF next_event_id = ? and range_id = ?`
+		`IF next_event_id = ?`
 
 	templateDeleteWorkflowExecutionQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -680,11 +686,18 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
 		d.shardID,
+		rowTypeShard,
+		rowTypeShardDomainID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
 		request.RangeID,
 	)
 
 	previous := make(map[string]interface{})
-	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	defer iter.Close()
 	if err != nil {
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
@@ -694,34 +707,62 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err),
 		}
+
 	}
 
 	if !applied {
-		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
-			// CreateWorkflowExecution failed because rangeID was modified
-			return nil, &ShardOwnershipLostError{
-				ShardID: d.shardID,
-				Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
-					request.RangeID, rangeID),
+		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
+		// the workflow is already started. Check the row info returned by Cassandra to figure out which one it is.
+	GetFailureReasonLoop:
+		for {
+			rowType, ok := previous["type"].(int)
+			if !ok {
+				// This should never happen, as all our rows have the type field.
+				break GetFailureReasonLoop
+			}
+
+			if rowType == rowTypeShard {
+				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+					// CreateWorkflowExecution failed because rangeID was modified
+					return nil, &ShardOwnershipLostError{
+						ShardID: d.shardID,
+						Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
+							request.RangeID, rangeID),
+					}
+				}
+
+			} else {
+				var columns []string
+				for k, v := range previous {
+					columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+				}
+
+				if execution, ok := previous["execution"].(map[string]interface{}); ok {
+					// CreateWorkflowExecution failed because it already exists
+					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
+						execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ","))
+					return nil, &workflow.WorkflowExecutionAlreadyStartedError{
+						Message:        common.StringPtr(msg),
+						StartRequestId: common.StringPtr(fmt.Sprintf("%v", execution["create_request_id"])),
+						RunId:          common.StringPtr(fmt.Sprintf("%v", execution["run_id"])),
+					}
+				}
+			}
+
+			previous = make(map[string]interface{})
+			if !iter.MapScan(previous) {
+				// Cassandra returns the actual row that caused a condition failure, so we should always return
+				// from the checks above, but just in case.
+				break GetFailureReasonLoop
 			}
 		}
 
+		// At this point we only know that the write was not applied.
+		// Return the row information returned by Cassandra.
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
-
-		if execution, ok := previous["execution"].(map[string]interface{}); ok {
-			// CreateWorkflowExecution failed because it already exists
-			msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-				execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ","))
-			return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-				Message:        common.StringPtr(msg),
-				StartRequestId: common.StringPtr(fmt.Sprintf("%v", execution["create_request_id"])),
-				RunId:          common.StringPtr(fmt.Sprintf("%v", execution["run_id"])),
-			}
-		}
-
 		return nil, &ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
 				request.RangeID, strings.Join(columns, ",")),
@@ -910,8 +951,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-		request.Condition,
-		request.RangeID)
+		request.Condition)
 
 	d.createTransferTasks(batch, request.TransferTasks, executionInfo.DomainID, executionInfo.WorkflowID,
 		executionInfo.RunID, cqlNowTimestamp)
@@ -948,8 +988,22 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 			rowTypeExecutionTaskID)
 	}
 
+	// Verifies that the RangeID has not changed
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		d.shardID,
+		rowTypeShard,
+		rowTypeShardDomainID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
 	previous := make(map[string]interface{})
-	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	defer iter.Close()
 	if err != nil {
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
@@ -962,23 +1016,45 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	}
 
 	if !applied {
-		if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
-			// UpdateWorkflowExecution failed because rangeID was modified
-			return &ShardOwnershipLostError{
-				ShardID: d.shardID,
-				Msg: fmt.Sprintf("Failed to update workflow execution.  Request RangeID: %v, Actual RangeID: %v",
-					request.RangeID, rangeID),
+		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
+		// the next_event_id check failed. Check the row info returned by Cassandra to figure out which one it is.
+	GetFailureReasonLoop:
+		for {
+			rowType, ok := previous["type"].(int)
+			if !ok {
+				// This should never happen, as all our rows have the type field.
+				break GetFailureReasonLoop
+			}
+
+			if rowType == rowTypeShard {
+				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+					// UpdateWorkflowExecution failed because rangeID was modified
+					return &ShardOwnershipLostError{
+						ShardID: d.shardID,
+						Msg: fmt.Sprintf("Failed to update workflow execution.  Request RangeID: %v, Actual RangeID: %v",
+							request.RangeID, rangeID),
+					}
+				}
+			} else {
+				if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
+					// CreateWorkflowExecution failed because next event ID is unexpected
+					return &ConditionFailedError{
+						Msg: fmt.Sprintf("Failed to update workflow execution.  Request Condition: %v, Actual Value: %v",
+							request.Condition, nextEventID),
+					}
+				}
+			}
+
+			previous = make(map[string]interface{})
+			if !iter.MapScan(previous) {
+				// Cassandra returns the actual row that caused a condition failure, so we should always return
+				// from the checks above, but just in case.
+				break GetFailureReasonLoop
 			}
 		}
 
-		if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
-			// CreateWorkflowExecution failed because next event ID is unexpected
-			return &ConditionFailedError{
-				Msg: fmt.Sprintf("Failed to update workflow execution.  Request Condition: %v, Actual Value: %v",
-					request.Condition, nextEventID),
-			}
-		}
-
+		// At this point we only know that the write was not applied.
+		// Return the row information returned by Cassandra.
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
@@ -1549,8 +1625,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 
 	if deleteInfo != nil {
@@ -1563,8 +1638,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 }
 
@@ -1585,8 +1659,7 @@ func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos [
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 
 	for _, t := range deleteInfos {
@@ -1599,8 +1672,7 @@ func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos [
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 }
 
@@ -1622,8 +1694,7 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 
 	// deleteInfo is the initiatedID for ChildInfo being deleted
@@ -1637,8 +1708,7 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 }
 
@@ -1657,8 +1727,7 @@ func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requ
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 
 	// deleteInfo is the initiatedID for RequestCancelInfo being deleted
@@ -1672,8 +1741,7 @@ func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requ
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			condition,
-			rangeID)
+			condition)
 	}
 }
 

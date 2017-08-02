@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "0.3",
-  "MinCompatibleVersion": "0.1",
-  "Description": "Support for optimizing activity timers.",
-  "SchemaUpdateCqlFiles": [
-    "activity_timers.cql"
-  ]
-}
