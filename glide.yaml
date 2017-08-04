@@ -1,6 +1,7 @@
 package: github.com/uber/cadence
 import:
 - package: github.com/uber/tchannel-go
+  version: 2d75494d3a0ffabbd00bc2cb71ed039d94def186
   subpackages:
   - thrift
   - thrift/thrift-gen

@@ -97,7 +97,7 @@ imports:
   - swim
   - util
 - name: github.com/uber/tchannel-go
-  version: b99c1d7cecb0fdc882bed0098e7cae6ec7459059
+  version: 2d75494d3a0ffabbd00bc2cb71ed039d94def186
   subpackages:
   - internal/argreader
   - json
