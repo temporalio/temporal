@@ -59,7 +59,7 @@ func createKeyspace(cli *cli.Context) error {
 	if err != nil {
 		return handleErr(err)
 	}
-	client, err := newCQLClient(config.CassHosts, "system")
+	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, "system")
 	if err != nil {
 		return handleErr(fmt.Errorf("error creating cql client:%v", err))
 	}
@@ -96,6 +96,9 @@ func validateSetupSchemaConfig(config *SetupSchemaConfig) error {
 	if len(config.CassHosts) == 0 {
 		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
 	}
+	if config.CassPort == 0 {
+		config.CassPort = defaultCassandraPort
+	}
 	if len(config.CassKeyspace) == 0 {
 		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
 	}
@@ -121,6 +124,9 @@ func newSetupSchemaConfig(cli *cli.Context) (*SetupSchemaConfig, error) {
 
 	config := new(SetupSchemaConfig)
 	config.CassHosts = cli.GlobalString(cliOptEndpoint)
+	config.CassPort = cli.GlobalInt(cliOptPort)
+	config.CassUser = cli.GlobalString(cliOptUser)
+	config.CassPassword = cli.GlobalString(cliOptPassword)
 	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
 	config.SchemaFilePath = cli.String(cliOptSchemaFile)
 	config.InitialVersion = cli.String(cliOptVersion)
@@ -138,6 +144,9 @@ func validateUpdateSchemaConfig(config *UpdateSchemaConfig) error {
 
 	if len(config.CassHosts) == 0 {
 		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
+	}
+	if config.CassPort == 0 {
+		config.CassPort = defaultCassandraPort
 	}
 	if len(config.CassKeyspace) == 0 {
 		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")
@@ -159,6 +168,9 @@ func newUpdateSchemaConfig(cli *cli.Context) (*UpdateSchemaConfig, error) {
 
 	config := new(UpdateSchemaConfig)
 	config.CassHosts = cli.GlobalString(cliOptEndpoint)
+	config.CassPort = cli.GlobalInt(cliOptPort)
+	config.CassUser = cli.GlobalString(cliOptUser)
+	config.CassPassword = cli.GlobalString(cliOptPassword)
 	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
 	config.SchemaDir = cli.String(cliOptSchemaDir)
 	config.IsDryRun = cli.Bool(cliOptDryrun)
@@ -174,6 +186,9 @@ func newUpdateSchemaConfig(cli *cli.Context) (*UpdateSchemaConfig, error) {
 func newCreateKeyspaceConfig(cli *cli.Context) (*CreateKeyspaceConfig, error) {
 	config := new(CreateKeyspaceConfig)
 	config.CassHosts = cli.GlobalString(cliOptEndpoint)
+	config.CassPort = cli.GlobalInt(cliOptPort)
+	config.CassUser = cli.GlobalString(cliOptUser)
+	config.CassPassword = cli.GlobalString(cliOptPassword)
 	config.CassKeyspace = cli.String(cliOptKeyspace)
 	config.ReplicationFactor = cli.Int(cliOptReplicationFactor)
 
@@ -186,6 +201,9 @@ func newCreateKeyspaceConfig(cli *cli.Context) (*CreateKeyspaceConfig, error) {
 func validateCreateKeyspaceConfig(config *CreateKeyspaceConfig) error {
 	if len(config.CassHosts) == 0 {
 		return newConfigError("missing cassandra endpoint argument " + flag(cliOptEndpoint))
+	}
+	if config.CassPort == 0 {
+		config.CassPort = defaultCassandraPort
 	}
 	if len(config.CassKeyspace) == 0 {
 		return newConfigError("missing " + flag(cliOptKeyspace) + " argument ")

@@ -73,10 +73,11 @@ var errNoHosts = errors.New("Cassandra hosts list is empty or malformed")
 var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
 
 const (
-	newLineDelim       = '\n'
-	defaultTimeout     = 30 * time.Second
-	cqlProtoVersion    = 4        // default CQL protocol version
-	defaultConsistency = "QUORUM" // schema updates must always be QUORUM
+	newLineDelim         = '\n'
+	defaultTimeout       = 30 * time.Second
+	cqlProtoVersion      = 4        // default CQL protocol version
+	defaultConsistency   = "QUORUM" // schema updates must always be QUORUM
+	defaultCassandraPort = 9042
 )
 
 const (
@@ -106,12 +107,19 @@ const (
 )
 
 // newCQLClient returns a new instance of CQLClient
-func newCQLClient(hostsCsv string, keyspace string) (CQLClient, error) {
+func newCQLClient(hostsCsv string, port int, user, password, keyspace string) (CQLClient, error) {
 	hosts := parseHosts(hostsCsv)
 	if len(hosts) == 0 {
 		return nil, errNoHosts
 	}
 	clusterCfg := gocql.NewCluster(hosts...)
+	clusterCfg.Port = port
+	if user != "" && password != "" {
+		clusterCfg.Authenticator = gocql.PasswordAuthenticator{
+			Username: user,
+			Password: password,
+		}
+	}
 	clusterCfg.Keyspace = keyspace
 	clusterCfg.Timeout = defaultTimeout
 	clusterCfg.ProtoVersion = cqlProtoVersion

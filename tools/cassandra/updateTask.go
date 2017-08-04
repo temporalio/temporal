@@ -86,7 +86,7 @@ func NewUpdateSchemaTask(config *UpdateSchemaConfig) (*UpdateSchemaTask, error) 
 		}
 	}
 
-	client, err := newCQLClient(config.CassHosts, keyspace)
+	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, keyspace)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +358,7 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 // executing the cassandra schema update
 func setupDryrunKeyspace(config *UpdateSchemaConfig) error {
 
-	client, err := newCQLClient(config.CassHosts, systemKeyspace)
+	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, systemKeyspace)
 	if err != nil {
 		return err
 	}

@@ -31,6 +31,9 @@ type (
 	// with cassandra
 	BaseConfig struct {
 		CassHosts    string
+		CassPort     int
+		CassUser     string
+		CassPassword string
 		CassKeyspace string
 	}
 
@@ -70,6 +73,9 @@ type (
 
 const (
 	cliOptEndpoint          = "endpoint"
+	cliOptPort              = "port"
+	cliOptUser              = "user"
+	cliOptPassword          = "password"
 	cliOptKeyspace          = "keyspace"
 	cliOptVersion           = "version"
 	cliOptSchemaFile        = "schema-file"
@@ -82,6 +88,9 @@ const (
 	cliOptQuiet             = "quiet"
 
 	cliFlagEndpoint          = cliOptEndpoint + ", ep"
+	cliFlagPort              = cliOptPort + ", p"
+	cliFlagUser              = cliOptUser + ", u"
+	cliFlagPassword          = cliOptPassword + ", pw"
 	cliFlagKeyspace          = cliOptKeyspace + ", k"
 	cliFlagVersion           = cliOptVersion + ", v"
 	cliFlagSchemaFile        = cliOptSchemaFile + ", f"

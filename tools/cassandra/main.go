@@ -62,6 +62,24 @@ func buildCLIOptions() *cli.App {
 			Usage:  "hostname or ip address of cassandra host to connect to",
 			EnvVar: "CASSANDRA_HOST",
 		},
+		cli.IntFlag{
+			Name:   cliFlagPort,
+			Value:  defaultCassandraPort,
+			Usage:  "port of cassandra host to connect to",
+			EnvVar: "CASSANDRA_PORT",
+		},
+		cli.StringFlag{
+			Name:   cliFlagUser,
+			Value:  "",
+			Usage:  "user name used for authentication for connecting to cassandra host",
+			EnvVar: "CASSANDRA_USER",
+		},
+		cli.StringFlag{
+			Name:   cliFlagPassword,
+			Value:  "",
+			Usage:  "password used for authentication for connecting to cassandra host",
+			EnvVar: "CASSANDRA_PASSWORD",
+		},
 		cli.StringFlag{
 			Name:   cliFlagKeyspace,
 			Value:  "cadence",

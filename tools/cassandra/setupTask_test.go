@@ -61,7 +61,7 @@ func (s *SetupSchemaTestSuite) SetupSuite() {
 	s.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	s.keyspace = fmt.Sprintf("setup_schema_test_%v", s.rand.Int63())
 
-	client, err := newCQLClient("127.0.0.1", "system")
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
 	if err != nil {
 		s.log.Fatal("Error creating CQLClient")
 	}
@@ -87,7 +87,7 @@ func (s *SetupSchemaTestSuite) TestCreateKeyspace() {
 
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
 
-	client, err := newCQLClient("127.0.0.1", s.keyspace)
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace)
 	s.Nil(err)
 
 	// test command fails without required arguments
