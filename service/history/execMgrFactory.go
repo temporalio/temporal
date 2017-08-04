@@ -51,6 +51,9 @@ func (factory *executionMgrFactory) CreateExecutionManager(shardID int) (persist
 
 	mgr, err := persistence.NewCassandraWorkflowExecutionPersistence(
 		factory.config.Hosts,
+		factory.config.Port,
+		factory.config.User,
+		factory.config.Password,
 		factory.config.Datacenter,
 		factory.config.Keyspace,
 		shardID,

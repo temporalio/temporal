@@ -88,9 +88,9 @@ type (
 )
 
 // NewCassandraMetadataPersistence is used to create an instance of HistoryManager implementation
-func NewCassandraMetadataPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (MetadataManager,
+func NewCassandraMetadataPersistence(hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (MetadataManager,
 	error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

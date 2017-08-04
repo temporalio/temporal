@@ -60,9 +60,9 @@ type (
 )
 
 // NewCassandraHistoryPersistence is used to create an instance of HistoryManager implementation
-func NewCassandraHistoryPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (HistoryManager,
+func NewCassandraHistoryPersistence(hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (HistoryManager,
 	error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

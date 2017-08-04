@@ -55,6 +55,9 @@ func (s *Service) Start() {
 	s.metricsClient = base.GetMetricsClient()
 
 	shardMgr, err := persistence.NewCassandraShardPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
 		p.Logger)
@@ -82,6 +85,9 @@ func (s *Service) Start() {
 	}
 
 	metadata, err := persistence.NewCassandraMetadataPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
 		p.Logger)
@@ -92,6 +98,9 @@ func (s *Service) Start() {
 	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient())
 
 	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.VisibilityKeyspace,
 		p.Logger)
@@ -101,6 +110,9 @@ func (s *Service) Start() {
 	}
 
 	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
 		p.Logger)

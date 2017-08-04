@@ -51,6 +51,9 @@ func (s *Service) Start() {
 	base := service.New(p)
 
 	taskPersistence, err := persistence.NewCassandraTaskPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
 		base.GetLogger())

@@ -124,8 +124,8 @@ type (
 
 // NewCassandraVisibilityPersistence is used to create an instance of VisibilityManager implementation
 func NewCassandraVisibilityPersistence(
-	hosts string, dc string, keyspace string, logger bark.Logger) (VisibilityManager, error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+	hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (VisibilityManager, error) {
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

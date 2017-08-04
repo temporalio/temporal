@@ -513,8 +513,9 @@ type (
 )
 
 // NewCassandraShardPersistence is used to create an instance of ShardManager implementation
-func NewCassandraShardPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (ShardManager, error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+func NewCassandraShardPersistence(hosts string, port int, user, password, dc string, keyspace string,
+	logger bark.Logger) (ShardManager, error) {
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
@@ -530,8 +531,9 @@ func NewCassandraShardPersistence(hosts string, dc string, keyspace string, logg
 }
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewCassandraWorkflowExecutionPersistence(hosts string, dc string, keyspace string, shardID int, logger bark.Logger) (ExecutionManager, error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+func NewCassandraWorkflowExecutionPersistence(hosts string, port int, user, password, dc string, keyspace string,
+	shardID int, logger bark.Logger) (ExecutionManager, error) {
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
@@ -547,8 +549,9 @@ func NewCassandraWorkflowExecutionPersistence(hosts string, dc string, keyspace 
 }
 
 // NewCassandraTaskPersistence is used to create an instance of TaskManager implementation
-func NewCassandraTaskPersistence(hosts string, dc string, keyspace string, logger bark.Logger) (TaskManager, error) {
-	cluster := common.NewCassandraCluster(hosts, dc)
+func NewCassandraTaskPersistence(hosts string, port int, user, password, dc string, keyspace string,
+	logger bark.Logger) (TaskManager, error) {
+	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

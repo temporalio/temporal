@@ -42,6 +42,9 @@ import (
 
 const (
 	testWorkflowClusterHosts = "127.0.0.1"
+	testPort                 = 0
+	testUser                 = ""
+	testPassword             = ""
 	testDatacenter           = ""
 	testSchemaDir            = "../.."
 )
@@ -49,11 +52,14 @@ const (
 type (
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		ClusterHost  string
-		KeySpace     string
-		Datacenter   string
-		DropKeySpace bool
-		SchemaDir    string
+		ClusterHost     string
+		ClusterPort     int
+		ClusterUser     string
+		ClusterPassword string
+		KeySpace        string
+		Datacenter      string
+		DropKeySpace    bool
+		SchemaDir       string
 	}
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
@@ -223,7 +229,8 @@ func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTest
 }
 
 func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
-	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.Datacenter, f.cassandra.keyspace,
+	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.ClusterPort, f.options.ClusterUser,
+		f.options.ClusterPassword, f.options.Datacenter, f.cassandra.keyspace,
 		shardID, f.logger)
 }
 
@@ -234,8 +241,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	shardID := 0
 	var err error
-	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.Datacenter,
-		s.CassandraTestCluster.keyspace, log)
+	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -245,25 +252,27 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace,
+	s.TaskMgr, err = NewCassandraTaskPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace,
 		log)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.Datacenter,
-		s.CassandraTestCluster.keyspace, log)
+	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.MetadataManager, err = NewCassandraMetadataPersistence(options.ClusterHost, options.Datacenter,
-		s.CassandraTestCluster.keyspace, log)
+	s.MetadataManager, err = NewCassandraMetadataPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.VisibilityMgr, err = NewCassandraVisibilityPersistence(options.ClusterHost, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+	s.VisibilityMgr, err = NewCassandraVisibilityPersistence(options.ClusterHost, options.ClusterPort,
+		options.ClusterUser, options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -851,9 +860,12 @@ func (s *TestBase) ClearTransferQueue() {
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
 	s.SetupWorkflowStoreWithOptions(TestBaseOptions{
-		SchemaDir:    testSchemaDir,
-		ClusterHost:  testWorkflowClusterHosts,
-		DropKeySpace: true,
+		SchemaDir:       testSchemaDir,
+		ClusterHost:     testWorkflowClusterHosts,
+		ClusterPort:     testPort,
+		ClusterUser:     testUser,
+		ClusterPassword: testPassword,
+		DropKeySpace:    true,
 	})
 }
 
@@ -877,7 +889,8 @@ func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bo
 	if keySpace == "" {
 		keySpace = generateRandomKeyspace(10)
 	}
-	s.createCluster(testWorkflowClusterHosts, testDatacenter, gocql.Consistency(1), keySpace)
+	s.createCluster(testWorkflowClusterHosts, testPort, testUser, testPassword, testDatacenter, gocql.Consistency(1),
+		keySpace)
 	s.createKeyspace(1, dropKeySpace)
 	s.loadSchema([]string{"schema.cql"}, schemaDir)
 	s.loadVisibilitySchema([]string{"schema.cql"}, schemaDir)
@@ -888,8 +901,9 @@ func (s *CassandraTestCluster) tearDownTestCluster() {
 	s.session.Close()
 }
 
-func (s *CassandraTestCluster) createCluster(clusterHosts string, dc string, cons gocql.Consistency, keyspace string) {
-	s.cluster = common.NewCassandraCluster(clusterHosts, dc)
+func (s *CassandraTestCluster) createCluster(clusterHosts string, port int, user, password, dc string,
+	cons gocql.Consistency, keyspace string) {
+	s.cluster = common.NewCassandraCluster(clusterHosts, port, user, password, dc)
 	s.cluster.Consistency = cons
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second
