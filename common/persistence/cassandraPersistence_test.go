@@ -95,7 +95,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 		ExecutionContext:     nil,
 		NextEventID:          int64(3),
 		LastProcessedEvent:   0,
-		RangeID:              s.ShardContext.GetRangeID() - 1,
+		RangeID:              s.ShardInfo.RangeID - 1,
 		TransferTasks: []Task{
 			&DecisionTask{
 				TaskID:     s.GetNextSequenceNumber(),

@@ -42,7 +42,7 @@ import (
 type (
 	timerQueueProcessorSuite struct {
 		suite.Suite
-		persistence.TestBase
+		TestBase
 		engineImpl       *historyEngineImpl
 		mockShardManager *mocks.ShardManager
 		shardClosedCh    chan int

@@ -40,7 +40,7 @@ import (
 type (
 	transferQueueProcessorSuite struct {
 		suite.Suite
-		persistence.TestBase
+		TestBase
 		processor         *transferQueueProcessorImpl
 		mockMatching      *mocks.MatchingClient
 		mockHistoryClient *mocks.HistoryClient
@@ -80,6 +80,7 @@ func (s *transferQueueProcessorSuite) TearDownTest() {
 func (s *transferQueueProcessorSuite) SetupTest() {
 	// First cleanup transfer tasks from other tests and reset shard context
 	s.ClearTransferQueue()
+	s.ShardContext.Reset()
 
 	s.mockMatching = &mocks.MatchingClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
