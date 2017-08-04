@@ -59,6 +59,7 @@ type (
 		metricsClient      metrics.Client
 		startWG            sync.WaitGroup
 		rateLimiter        common.TokenBucket
+		config             *Config
 		service.Service
 	}
 
@@ -67,12 +68,6 @@ type (
 		NextEventID      int64
 		PersistenceToken []byte
 	}
-)
-
-const (
-	defaultVisibilityMaxPageSize = 1000
-	defaultHistoryMaxPageSize    = 1000
-	defaultRPS                   = 1200 // This limit is based on experimental runs.
 )
 
 var (
@@ -89,17 +84,18 @@ var (
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(
-	sVice service.Service, metadataMgr persistence.MetadataManager,
+	sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager) (*WorkflowHandler, []thrift.TChanServer) {
 	handler := &WorkflowHandler{
 		Service:            sVice,
+		config:             config,
 		metadataMgr:        metadataMgr,
 		historyMgr:         historyMgr,
 		visibitiltyMgr:     visibilityMgr,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
-		rateLimiter:        common.NewTokenBucket(defaultRPS, common.NewRealTimeSource()),
+		rateLimiter:        common.NewTokenBucket(config.RPS, common.NewRealTimeSource()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -380,7 +376,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	if matchingResp.IsSetWorkflowExecution() {
 		// Non-empty response. Get the history
 		history, persistenceToken, err = wh.getHistory(
-			info.ID, *matchingResp.GetWorkflowExecution(), matchingResp.GetStartedEventId()+1, defaultHistoryMaxPageSize, nil)
+			info.ID, *matchingResp.GetWorkflowExecution(), matchingResp.GetStartedEventId()+1, wh.config.DefaultHistoryMaxPageSize, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -667,7 +663,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	}
 
 	if !getRequest.IsSetMaximumPageSize() || getRequest.GetMaximumPageSize() == 0 {
-		getRequest.MaximumPageSize = common.Int32Ptr(defaultHistoryMaxPageSize)
+		getRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultHistoryMaxPageSize)
 	}
 
 	domainName := getRequest.GetDomain()
@@ -911,7 +907,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx thrift.Context,
 	}
 
 	if !listRequest.IsSetMaximumPageSize() || listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(defaultVisibilityMaxPageSize)
+		listRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultVisibilityMaxPageSize)
 	}
 
 	domainName := listRequest.GetDomain()
@@ -999,7 +995,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx thrift.Context,
 	}
 
 	if !listRequest.IsSetMaximumPageSize() || listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(defaultVisibilityMaxPageSize)
+		listRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultVisibilityMaxPageSize)
 	}
 
 	domainName := listRequest.GetDomain()

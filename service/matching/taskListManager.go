@@ -39,12 +39,6 @@ import (
 )
 
 const (
-	defaultRangeSize  = 100000
-	getTasksBatchSize = 100
-	// To perform one db operation if there are no pollers
-	taskBufferSize    = getTasksBatchSize - 1
-	updateAckInterval = 10 * time.Second
-
 	done time.Duration = -1
 )
 
@@ -56,7 +50,10 @@ type taskListManager interface {
 	String() string
 }
 
-func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListManager {
+func newTaskListManager(e *matchingEngineImpl, taskList *taskListID, config *Config) taskListManager {
+	// To perform one db operation if there are no pollers
+	taskBufferSize := config.GetTasksBatchSize - 1
+
 	tlMgr := &taskListManagerImpl{
 		engine:     e,
 		taskBuffer: make(chan *persistence.TaskInfo, taskBufferSize),
@@ -70,6 +67,7 @@ func newTaskListManager(e *matchingEngineImpl, taskList *taskListID) taskListMan
 		metricsClient:  e.metricsClient,
 		taskAckManager: newAckManager(e.logger),
 		syncMatch:      make(chan *getTaskResult),
+		config:         config,
 	}
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	return tlMgr
@@ -89,6 +87,7 @@ type taskListManagerImpl struct {
 	logger        bark.Logger
 	metricsClient metrics.Client
 	engine        *matchingEngineImpl
+	config        *Config
 	// serializes all writes to persistence
 	// This is needed because of a known Cassandra issue where concurrent LWT to the same partition
 	// cause timeout errors.
@@ -253,7 +252,7 @@ func (c *taskListManagerImpl) completeTaskPoll(taskID int64) (ackLevel int64) {
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
 func (c *taskListManagerImpl) getTask(ctx thrift.Context) (*getTaskResult, error) {
 	scope := metrics.MatchingTaskListMgrScope
-	timer := time.NewTimer(c.engine.longPollExpirationInterval)
+	timer := time.NewTimer(c.config.LongPollExpirationInterval)
 	defer timer.Stop()
 	select {
 	case task, ok := <-c.taskBuffer:
@@ -288,7 +287,7 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
 			DomainID:     c.taskListID.domainID,
 			TaskList:     c.taskListID.taskListName,
 			TaskType:     c.taskListID.taskType,
-			BatchSize:    getTasksBatchSize,
+			BatchSize:    c.config.GetTasksBatchSize,
 			RangeID:      rangeID,
 			ReadLevel:    c.taskAckManager.getReadLevel(),
 			MaxReadLevel: c.taskWriter.GetMaxReadLevel(),
@@ -336,9 +335,9 @@ func (c *taskListManagerImpl) updateRangeIfNeededLocked(e *matchingEngineImpl) e
 	tli := resp.TaskListInfo
 	c.rangeID = tli.RangeID // Starts from 1
 	c.taskAckManager.setAckLevel(tli.AckLevel)
-	c.taskSequenceNumber = (tli.RangeID-1)*e.rangeSize + 1
+	c.taskSequenceNumber = (tli.RangeID-1)*e.config.RangeSize + 1
 
-	c.nextRangeSequenceNumber = (tli.RangeID)*e.rangeSize + 1
+	c.nextRangeSequenceNumber = (tli.RangeID)*e.config.RangeSize + 1
 	c.logger.Debugf("updateRangeLocked rangeID=%v, c.taskSequenceNumber=%v, c.nextRangeSequenceNumber=%v",
 		c.rangeID, c.taskSequenceNumber, c.nextRangeSequenceNumber)
 	return nil
@@ -369,6 +368,9 @@ func (c *taskListManagerImpl) String() string {
 // and sent to a poller. So it not necessary to persist it.
 // Returns (nil, nil) if there is no waiting poller which indicates that task has to be persisted.
 func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
+	if !c.config.EnableSyncMatch {
+		return nil, nil
+	}
 	// Request from the point of view of Add(Activity|Decision)Task operation.
 	// But it is getTask result from the point of view of a poll operation.
 	request := &getTaskResult{task: task, C: make(chan *syncMatchResponse, 1)}
@@ -384,7 +386,7 @@ func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persist
 func (c *taskListManagerImpl) getTasksPump() {
 	defer close(c.taskBuffer)
 
-	updateAckTimer := time.NewTimer(updateAckInterval)
+	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval)
 
 getTasksPumpLoop:
 	for {
@@ -435,7 +437,7 @@ getTasksPumpLoop:
 					// keep going as saving ack is not critical
 				}
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
-				updateAckTimer = time.NewTimer(updateAckInterval)
+				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval)
 			}
 		}
 	}

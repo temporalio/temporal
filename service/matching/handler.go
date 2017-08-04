@@ -40,16 +40,18 @@ var _ m.TChanMatchingService = (*Handler)(nil)
 type Handler struct {
 	taskPersistence persistence.TaskManager
 	engine          Engine
+	config          *Config
 	metricsClient   metrics.Client
 	startWG         sync.WaitGroup
 	service.Service
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(taskPersistence persistence.TaskManager, sVice service.Service) (*Handler, []thrift.TChanServer) {
+func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:         sVice,
 		taskPersistence: taskPersistence,
+		config:          config,
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
@@ -64,7 +66,7 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 		return err
 	}
 	h.metricsClient = h.Service.GetMetricsClient()
-	h.engine = NewEngine(h.taskPersistence, history, h.Service.GetLogger(), h.Service.GetMetricsClient())
+	h.engine = NewEngine(h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient())
 	h.startWG.Done()
 	return nil
 }

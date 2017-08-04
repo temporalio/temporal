@@ -21,14 +21,15 @@
 package main
 
 import (
+	"log"
+	"time"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/service/frontend"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
-	"log"
-	"time"
 )
 
 type (
@@ -107,11 +108,11 @@ func (s *server) startService() common.Daemon {
 
 	switch s.name {
 	case frontendService:
-		daemon = frontend.NewService(&params)
+		daemon = frontend.NewService(&params, frontend.NewConfig())
 	case historyService:
 		daemon = history.NewService(&params)
 	case matchingService:
-		daemon = matching.NewService(&params)
+		daemon = matching.NewService(&params, matching.NewConfig())
 	}
 
 	go execute(daemon, s.doneC)

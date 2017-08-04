@@ -21,21 +21,54 @@
 package matching
 
 import (
+	"time"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 )
 
+// Config represents configuration for cadence-matching service
+type Config struct {
+	EnableSyncMatch bool
+	// Time to hold a poll request before returning an empty response if there are no tasks
+	LongPollExpirationInterval time.Duration
+
+	// taskListManager configuration
+	RangeSize         int64
+	GetTasksBatchSize int
+	UpdateAckInterval time.Duration
+
+	// taskWriter configuration
+	OutstandingTaskAppendsThreshold int
+	MaxTaskBatchSize                int
+}
+
+// NewConfig returns new service config with default values
+func NewConfig() *Config {
+	return &Config{
+		EnableSyncMatch:                 true,
+		LongPollExpirationInterval:      time.Minute,
+		RangeSize:                       100000,
+		GetTasksBatchSize:               1000,
+		UpdateAckInterval:               10 * time.Second,
+		OutstandingTaskAppendsThreshold: 250,
+		MaxTaskBatchSize:                100,
+	}
+}
+
 // Service represents the cadence-matching service
 type Service struct {
 	stopC  chan struct{}
 	params *service.BootstrapParams
+	config *Config
 }
 
 // NewService builds a new cadence-matching service
-func NewService(params *service.BootstrapParams) common.Daemon {
+func NewService(params *service.BootstrapParams, config *Config) common.Daemon {
 	return &Service{
 		params: params,
+		config: config,
 		stopC:  make(chan struct{}),
 	}
 }
@@ -64,7 +97,7 @@ func (s *Service) Start() {
 
 	taskPersistence = persistence.NewTaskPersistenceClient(taskPersistence, base.GetMetricsClient())
 
-	handler, tchanServers := NewHandler(taskPersistence, base)
+	handler, tchanServers := NewHandler(base, s.config, taskPersistence)
 	handler.Start(tchanServers)
 
 	log.Infof("%v started", common.MatchingServiceName)

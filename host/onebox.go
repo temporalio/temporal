@@ -155,7 +155,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.CassandraConfig.Hosts = "127.0.0.1"
 	service := service.New(params)
 	var thriftServices []thrift.TChanServer
-	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service, c.metadataMgr, c.historyMgr, c.visibilityMgr)
+	c.frontendHandler, thriftServices = frontend.NewWorkflowHandler(service, frontend.NewConfig(), c.metadataMgr, c.historyMgr, c.visibilityMgr)
 	err := c.frontendHandler.Start(thriftServices)
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
@@ -203,7 +203,7 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	service := service.New(params)
 	var thriftServices []thrift.TChanServer
-	c.matchingHandler, thriftServices = matching.NewHandler(taskMgr, service)
+	c.matchingHandler, thriftServices = matching.NewHandler(service, matching.NewConfig(), taskMgr)
 	c.matchingHandler.Start(thriftServices)
 	startWG.Done()
 	<-c.shutdownCh

@@ -31,11 +31,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const (
-	outstandingTaskAppendsThreshold = 250
-	maxTaskBatchSize                = 100
-)
-
 type (
 	writeTaskResponse struct {
 		err                 error
@@ -52,6 +47,7 @@ type (
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
 		tlMgr        *taskListManagerImpl
+		config       *Config
 		taskListID   *taskListID
 		taskManager  persistence.TaskManager
 		appendCh     chan *writeTaskRequest
@@ -68,10 +64,11 @@ var errShutdown = errors.New("task list shutting down")
 func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
 	return &taskWriter{
 		tlMgr:       tlMgr,
+		config:      tlMgr.config,
 		taskListID:  tlMgr.taskListID,
 		taskManager: tlMgr.engine.taskManager,
 		stopCh:      make(chan struct{}),
-		appendCh:    make(chan *writeTaskRequest, outstandingTaskAppendsThreshold),
+		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold),
 		logger:      tlMgr.logger,
 	}
 }
@@ -200,7 +197,7 @@ writerLoop:
 
 func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
 readLoop:
-	for i := 0; i < maxTaskBatchSize; i++ {
+	for i := 0; i < w.config.MaxTaskBatchSize; i++ {
 		select {
 		case req := <-w.appendCh:
 			reqs = append(reqs, req)

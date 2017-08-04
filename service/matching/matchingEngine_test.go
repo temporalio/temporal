@@ -101,20 +101,19 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.historyClient = &mocks.HistoryClient{}
 	s.taskManager = newTestTaskManager(s.logger)
-	s.matchingEngine = s.newMatchingEngine(defaultRangeSize)
+	s.matchingEngine = s.newMatchingEngine(defaultTestConfig())
 	s.matchingEngine.Start()
 }
 
-func (s *matchingEngineSuite) newMatchingEngine(rangeSize int64) *matchingEngineImpl {
+func (s *matchingEngineSuite) newMatchingEngine(config *Config) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:                s.taskManager,
-		historyService:             s.historyClient,
-		taskLists:                  make(map[taskListID]taskListManager),
-		logger:                     s.logger,
-		metricsClient:              metrics.NewClient(tally.NoopScope, metrics.Matching),
-		tokenSerializer:            common.NewJSONTaskTokenSerializer(),
-		longPollExpirationInterval: 100 * time.Second, //time.Millisecond,
-		rangeSize:                  rangeSize,
+		taskManager:     s.taskManager,
+		historyService:  s.historyClient,
+		taskLists:       make(map[taskListID]taskListManager),
+		logger:          s.logger,
+		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+		config:          config,
 	}
 }
 
@@ -179,8 +178,10 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
-	s.matchingEngine.rangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.longPollExpirationInterval = 10 * time.Millisecond
+	config := defaultTestConfig()
+	config.RangeSize = 2 // to test that range is not updated without tasks
+	config.LongPollExpirationInterval = 10 * time.Millisecond
+	s.matchingEngine.config = config
 	domainID := "domainId"
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
@@ -223,7 +224,7 @@ func (s *matchingEngineSuite) TestAddDecisionTasks() {
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType int) {
-	s.matchingEngine.rangeSize = 300 // override to low number for the test
+	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -270,7 +271,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 }
 
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {
-	s.matchingEngine.rangeSize = 300 // override to low number for the test
+	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -315,7 +316,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	s.matchingEngine.longPollExpirationInterval = 10 * time.Millisecond
+	s.matchingEngine.config.LongPollExpirationInterval = 10 * time.Millisecond
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -330,7 +331,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -426,7 +427,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 }
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	s.matchingEngine.longPollExpirationInterval = 1 * time.Minute
+	s.matchingEngine.config.LongPollExpirationInterval = 1 * time.Minute
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -441,7 +442,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -550,7 +551,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -674,7 +675,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeDecision}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -817,7 +818,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -825,7 +826,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	var engines []*matchingEngineImpl
 
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(rangeSize)
+		e := s.newMatchingEngine(defaultTestConfig())
+		e.config.RangeSize = rangeSize
 		engines = append(engines, e)
 		e.Start()
 	}
@@ -968,7 +970,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeDecision}
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
-	s.matchingEngine.rangeSize = rangeSize // override to low number for the test
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskList := workflow.NewTaskList()
 	taskList.Name = &tl
@@ -976,7 +978,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	var engines []*matchingEngineImpl
 
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(rangeSize)
+		e := s.newMatchingEngine(defaultTestConfig())
+		e.config.RangeSize = rangeSize
 		engines = append(engines, e)
 		e.Start()
 	}
@@ -1410,4 +1413,10 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 		return false
 	}
 	return true
+}
+
+func defaultTestConfig() *Config {
+	config := NewConfig()
+	config.LongPollExpirationInterval = 100 * time.Millisecond
+	return config
 }
