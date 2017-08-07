@@ -713,7 +713,12 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
-	defer iter.Close()
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
+
 	if err != nil {
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
@@ -1019,7 +1024,12 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
-	defer iter.Close()
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
+
 	if err != nil {
 		if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
