@@ -36,17 +36,14 @@ import (
 )
 
 const (
-	defaultAcquireInterval                      = time.Minute
 	shardControllerMembershipUpdateListenerName = "ShardController"
 )
 
 type (
 	shardController struct {
-		numberOfShards      int
 		host                *membership.HostInfo
 		hServiceResolver    membership.ServiceResolver
 		membershipUpdateCh  chan *membership.ChangedEvent
-		acquireInterval     time.Duration
 		shardMgr            persistence.ShardManager
 		historyMgr          persistence.HistoryManager
 		executionMgrFactory persistence.ExecutionManagerFactory
@@ -57,6 +54,7 @@ type (
 		shutdownWG          sync.WaitGroup
 		shutdownCh          chan struct{}
 		logger              bark.Logger
+		config              *Config
 		metricsClient       metrics.Client
 
 		sync.RWMutex
@@ -71,6 +69,7 @@ type (
 		executionMgr  persistence.ExecutionManager
 		engineFactory EngineFactory
 		host          *membership.HostInfo
+		config        *Config
 		logger        bark.Logger
 		metricsClient metrics.Client
 
@@ -80,33 +79,32 @@ type (
 	}
 )
 
-func newShardController(numberOfShards int, host *membership.HostInfo, resolver membership.ServiceResolver,
+func newShardController(host *membership.HostInfo, resolver membership.ServiceResolver,
 	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, logger bark.Logger,
-	reporter metrics.Client) *shardController {
+	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, config *Config,
+	logger bark.Logger, reporter metrics.Client) *shardController {
 	return &shardController{
-		numberOfShards:      numberOfShards,
 		host:                host,
 		hServiceResolver:    resolver,
 		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
-		acquireInterval:     defaultAcquireInterval,
 		shardMgr:            shardMgr,
 		historyMgr:          historyMgr,
 		executionMgrFactory: executionMgrFactory,
 		engineFactory:       factory,
 		historyShards:       make(map[int]*historyShardsItem),
-		shardClosedCh:       make(chan int, numberOfShards),
+		shardClosedCh:       make(chan int, config.NumberOfShards),
 		shutdownCh:          make(chan struct{}),
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueShardController,
 		}),
+		config:        config,
 		metricsClient: reporter,
 	}
 }
 
 func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
-	logger bark.Logger, reporter metrics.Client) (*historyShardsItem, error) {
+	config *Config, logger bark.Logger, reporter metrics.Client) (*historyShardsItem, error) {
 
 	executionMgr, err := executionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
@@ -120,6 +118,7 @@ func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, histor
 		executionMgr:  executionMgr,
 		engineFactory: factory,
 		host:          host,
+		config:        config,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagHistoryShardID: shardID,
 		}),
@@ -166,7 +165,7 @@ func (c *shardController) Stop() {
 }
 
 func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+	shardID := common.WorkflowIDToHistoryShard(workflowID, c.config.NumberOfShards)
 	return c.getEngineForShard(shardID)
 }
 
@@ -211,7 +210,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 
 	if info.Identity() == c.host.Identity() {
 		shardItem, err := newHistoryShardsItem(shardID, c.shardMgr, c.historyMgr, c.executionMgrFactory, c.engineFactory, c.host,
-			c.logger, c.metricsClient)
+			c.config, c.logger, c.metricsClient)
 		if err != nil {
 			return nil, err
 		}
@@ -241,7 +240,7 @@ func (c *shardController) removeHistoryShardItem(shardID int) (*historyShardsIte
 func (c *shardController) shardManagementPump() {
 	defer c.shutdownWG.Done()
 
-	acquireTicker := time.NewTicker(c.acquireInterval)
+	acquireTicker := time.NewTicker(c.config.AcquireShardInterval)
 	defer acquireTicker.Stop()
 	for {
 		select {
@@ -270,7 +269,7 @@ func (c *shardController) shardManagementPump() {
 
 func (c *shardController) acquireShards() {
 AcquireLoop:
-	for shardID := 0; shardID < c.numberOfShards; shardID++ {
+	for shardID := 0; shardID < c.config.NumberOfShards; shardID++ {
 		info, err := c.hServiceResolver.Lookup(string(shardID))
 		if err != nil {
 			logging.LogOperationFailedEvent(c.logger, fmt.Sprintf("Error looking up host for shardID: %v", shardID), err)
@@ -315,7 +314,7 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 	logging.LogShardEngineCreatingEvent(i.logger, i.host.Identity(), i.shardID)
 
 	context, err := acquireShard(i.shardID, i.shardMgr, i.historyMgr, i.executionMgr, i.host.Identity(), shardClosedCh,
-		i.logger, i.metricsClient)
+		i.config, i.logger, i.metricsClient)
 	if err != nil {
 		return nil, err
 	}

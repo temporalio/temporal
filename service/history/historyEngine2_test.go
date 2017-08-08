@@ -58,6 +58,7 @@ type (
 		mockShardManager   *mocks.ShardManager
 		shardClosedCh      chan int
 		eventSerializer    historyEventSerializer
+		config             *Config
 		logger             bark.Logger
 	}
 )
@@ -75,6 +76,7 @@ func (s *engine2Suite) SetupSuite() {
 	l := log.New()
 	l.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(l)
+	s.config = NewConfig(1)
 }
 
 func (s *engine2Suite) TearDownSuite() {
@@ -101,14 +103,14 @@ func (s *engine2Suite) SetupTest() {
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
 		shardManager:              s.mockShardManager,
-		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
+		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
-	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
+	historyCache := newHistoryCache(mockShard, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache, domainCache)
 	h := &historyEngineImpl{
@@ -605,7 +607,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
 	startDecision bool) *mutableStateBuilder {
-	msBuilder := newMutableStateBuilder(s.logger)
+	msBuilder := newMutableStateBuilder(s.config, s.logger)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
@@ -641,7 +643,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	markerDetails := []byte("marker details")
 	markerName := "marker name"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)

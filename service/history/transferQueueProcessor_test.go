@@ -87,7 +87,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 
-	historyCache := newHistoryCache(historyCacheMaxSize, s.ShardContext, s.logger)
+	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient,
 		historyCache, domainCache).(*transferQueueProcessorImpl)
@@ -131,7 +131,7 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info)
 	addDecisionTaskStartedEvent(builder, int64(1), taskList, "identity")
@@ -183,7 +183,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	info1, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info1)
 	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
@@ -241,7 +241,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotE
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	info1, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info1)
 	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
@@ -295,7 +295,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info)
 	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
@@ -354,7 +354,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	builder.Load(info)
 	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)

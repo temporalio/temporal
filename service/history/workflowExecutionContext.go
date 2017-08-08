@@ -83,7 +83,7 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 		return nil, err
 	}
 
-	msBuilder := newMutableStateBuilder(c.logger)
+	msBuilder := newMutableStateBuilder(c.shard.GetConfig(), c.logger)
 	if response != nil && response.State != nil {
 		state := response.State
 		msBuilder.Load(state)

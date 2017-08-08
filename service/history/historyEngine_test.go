@@ -59,6 +59,7 @@ type (
 		mockShardManager   *mocks.ShardManager
 		shardClosedCh      chan int
 		eventSerializer    historyEventSerializer
+		config             *Config
 		logger             bark.Logger
 	}
 )
@@ -74,6 +75,7 @@ func (s *engineSuite) SetupSuite() {
 	}
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.config = NewConfig(1)
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -101,14 +103,14 @@ func (s *engineSuite) SetupTest() {
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
 		shardManager:              s.mockShardManager,
-		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
+		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
-	historyCache := newHistoryCache(historyCacheMaxSize, mockShard, s.logger)
+	historyCache := newHistoryCache(mockShard, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache, domainCache)
 	h := &historyEngineImpl{
@@ -212,7 +214,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -250,7 +252,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	startedEvent := addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -286,7 +288,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 	})
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	addDecisionTaskScheduledEvent(msBuilder)
 
@@ -326,7 +328,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	activity3Type := "activity_type3"
 	activity3Input := []byte("input3")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -428,7 +430,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	context := []byte("context")
 	input := []byte("input")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -489,7 +491,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	activity2Result := []byte("activity2_result")
 	workflowResult := []byte("workflow result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -568,7 +570,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	reason := "workflow fail reason"
 	details := []byte("workflow fail details")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -642,7 +644,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	activity1Input := []byte("input1")
 	activity1Result := []byte("activity1_result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -705,7 +707,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	context := []byte("context")
 	input := []byte("input")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -776,7 +778,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 	context := []byte("context")
 	workflowResult := []byte("success")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -832,7 +834,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	details := []byte("fail workflow details")
 	reason := "fail workflow reason"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
@@ -951,7 +953,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -998,7 +1000,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1046,7 +1048,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1093,7 +1095,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activity2Type := "activity_type2"
 	activity2Input := []byte("input2")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -1160,7 +1162,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1208,7 +1210,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityInput := []byte("input1")
 	activityResult := []byte("activity result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1326,7 +1328,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1373,7 +1375,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	failReason := "fail reason"
 	details := []byte("fail details")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1421,7 +1423,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1469,7 +1471,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activity2Input := []byte("input2")
 	activity2Result := []byte("activity2_result")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 25, 200, identity)
 	decisionScheduledEvent1, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent1 := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent1.GetEventId(), tl, identity)
@@ -1540,7 +1542,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1588,7 +1590,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	failReason := "failed"
 	failDetails := []byte("fail details.")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1645,7 +1647,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1691,7 +1693,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1743,7 +1745,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1786,7 +1788,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1841,7 +1843,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 	identity := "testIdentity"
 	activityID := "activity1_id"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1894,7 +1896,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -1954,7 +1956,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -2056,7 +2058,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 	activityType := "activity_type1"
 	activityInput := []byte("input1")
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.GetEventId(), tl, identity)
@@ -2156,7 +2158,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
@@ -2251,7 +2253,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
@@ -2309,7 +2311,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	identity := "testIdentity"
 	timerID := "t1"
 
-	msBuilder := newMutableStateBuilder(bark.NewLoggerFromLogrus(log.New()))
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	// Verify cancel timer with a start event.
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(msBuilder)

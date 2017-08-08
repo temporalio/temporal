@@ -38,14 +38,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const (
-	timerTaskBatchSize              = 100
-	processTimerTaskWorkerCount     = 30
-	updateFailureRetryCount         = 5
-	getFailureRetryCount            = 5
-	timerProcessorUpdateAckInterval = 10 * time.Second
-)
-
 var (
 	errTimerTaskNotFound          = errors.New("Timer task not found")
 	errFailedToAddTimeoutEvent    = errors.New("Failed to add timeout event")
@@ -63,6 +55,7 @@ type (
 		shutdownWG       sync.WaitGroup
 		shutdownCh       chan struct{}
 		newTimerCh       chan struct{}
+		config           *Config
 		logger           bark.Logger
 		metricsClient    metrics.Client
 		timerFiredCount  uint64
@@ -167,6 +160,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		executionManager: executionManager,
 		shutdownCh:       make(chan struct{}),
 		newTimerCh:       make(chan struct{}, 1),
+		config:           shard.GetConfig(),
 		logger:           l,
 		metricsClient:    historyService.metricsClient,
 	}
@@ -180,7 +174,7 @@ func (t *timerQueueProcessorImpl) Start() {
 	}
 
 	t.shutdownWG.Add(1)
-	go t.processorPump(processTimerTaskWorkerCount)
+	go t.processorPump(t.config.ProcessTimerTaskWorkerCount)
 
 	t.logger.Info("Timer queue processor started.")
 }
@@ -244,7 +238,7 @@ func (t *timerQueueProcessorImpl) processorPump(taskWorkerCount int) {
 	defer t.shutdownWG.Done()
 
 	// Workers to process timer tasks that are expired.
-	tasksCh := make(chan *persistence.TimerTaskInfo, 10*timerTaskBatchSize)
+	tasksCh := make(chan *persistence.TimerTaskInfo, 10*t.config.TimerTaskBatchSize)
 	var workerWG sync.WaitGroup
 	for i := 0; i < taskWorkerCount; i++ {
 		workerWG.Add(1)
@@ -275,7 +269,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- *persistence.
 	gate := newTimeGate()
 	defer gate.close()
 
-	updateAckChan := time.NewTicker(timerProcessorUpdateAckInterval).C
+	updateAckChan := time.NewTicker(t.config.TimerProcessorUpdateAckInterval).C
 	var nextKeyTask *persistence.TimerTaskInfo
 
 	for {
@@ -342,7 +336,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- *persistence.
 				tasksCh <- task
 			}
 
-			if lookAheadTask != nil || len(timerTasks) < timerTaskBatchSize {
+			if lookAheadTask != nil || len(timerTasks) < t.config.TimerTaskBatchSize {
 				// We have processed all the tasks.
 				nextKeyTask = lookAheadTask
 				break
@@ -379,7 +373,7 @@ func (t *timerQueueProcessorImpl) getTimerTasks(
 		MaxTimestamp: maxTimestamp,
 		BatchSize:    batchSize}
 
-	for attempt := 1; attempt <= getFailureRetryCount; attempt++ {
+	for attempt := 1; attempt <= t.config.TimerProcessorGetFailureRetryCount; attempt++ {
 		response, err := t.executionManager.GetTimerIndexTasks(request)
 		if err == nil {
 			return response.Timers, nil
@@ -402,7 +396,7 @@ func (t *timerQueueProcessorImpl) processTaskWorker(tasksCh <-chan *persistence.
 			var err error
 
 		UpdateFailureLoop:
-			for attempt := 1; attempt <= updateFailureRetryCount; attempt++ {
+			for attempt := 1; attempt <= t.config.TimerProcessorUpdateFailureRetryCount; attempt++ {
 				taskID := SequenceID{VisibilityTimestamp: task.VisibilityTimestamp, TaskID: task.TaskID}
 				err = t.processTimerTask(task)
 				if err != nil && err != errTimerTaskNotFound {
@@ -913,7 +907,7 @@ func (t *timerAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, *persisten
 	rLevel := t.readLevel
 	t.RUnlock()
 
-	tasks, err := t.processor.getTimerTasks(rLevel.VisibilityTimestamp, maxTimestamp, timerTaskBatchSize)
+	tasks, err := t.processor.getTimerTasks(rLevel.VisibilityTimestamp, maxTimestamp, t.processor.config.TimerTaskBatchSize)
 	if err != nil {
 		return nil, nil, err
 	}

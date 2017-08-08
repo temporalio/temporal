@@ -180,8 +180,8 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		service := service.New(params)
 		var thriftServices []thrift.TChanServer
 		var handler *history.Handler
-		handler, thriftServices = history.NewHandler(service, shardMgr, metadataMgr, visibilityMgr, historyMgr, executionMgrFactory,
-			c.numberOfHistoryShards)
+		handler, thriftServices = history.NewHandler(service, history.NewConfig(c.numberOfHistoryShards), shardMgr, metadataMgr,
+			visibilityMgr, historyMgr, executionMgrFactory)
 		handler.Start(thriftServices)
 		c.historyHandlers = append(c.historyHandlers, handler)
 	}

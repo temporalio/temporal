@@ -21,24 +21,86 @@
 package history
 
 import (
+	"time"
+
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 )
 
+// Config represents configuration for cadence-history service
+type Config struct {
+	NumberOfShards int
+
+	// HistoryCache settings
+	HistoryCacheInitialSize int
+	HistoryCacheMaxSize     int
+	HistoryCacheTTL         time.Duration
+
+	// ShardController settings
+	RangeSizeBits        uint
+	AcquireShardInterval time.Duration
+
+	// Timeout settings
+	DefaultScheduleToStartActivityTimeoutInSecs int32
+	DefaultScheduleToCloseActivityTimeoutInSecs int32
+	DefaultStartToCloseActivityTimeoutInSecs    int32
+
+	// TimerQueueProcessor settings
+	TimerTaskBatchSize                    int
+	ProcessTimerTaskWorkerCount           int
+	TimerProcessorUpdateFailureRetryCount int
+	TimerProcessorGetFailureRetryCount    int
+	TimerProcessorUpdateAckInterval       time.Duration
+
+	// TransferQueueProcessor settings
+	TransferTaskBatchSize              int
+	TransferProcessorMaxPollRPS        int
+	TransferProcessorMaxPollInterval   time.Duration
+	TransferProcessorUpdateAckInterval time.Duration
+	TransferTaskWorkerCount            int
+}
+
+// NewConfig returns new service config with default values
+func NewConfig(numberOfShards int) *Config {
+	return &Config{
+		NumberOfShards:                              numberOfShards,
+		HistoryCacheInitialSize:                     256,
+		HistoryCacheMaxSize:                         1 * 1024,
+		HistoryCacheTTL:                             time.Hour,
+		RangeSizeBits:                               20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:                        time.Minute,
+		DefaultScheduleToStartActivityTimeoutInSecs: 10,
+		DefaultScheduleToCloseActivityTimeoutInSecs: 10,
+		DefaultStartToCloseActivityTimeoutInSecs:    10,
+		TimerTaskBatchSize:                          100,
+		ProcessTimerTaskWorkerCount:                 30,
+		TimerProcessorUpdateFailureRetryCount:       5,
+		TimerProcessorGetFailureRetryCount:          5,
+		TimerProcessorUpdateAckInterval:             10 * time.Second,
+		TransferTaskBatchSize:                       10,
+		TransferProcessorMaxPollRPS:                 100,
+		TransferProcessorMaxPollInterval:            10 * time.Second,
+		TransferProcessorUpdateAckInterval:          10 * time.Second,
+		TransferTaskWorkerCount:                     10,
+	}
+}
+
 // Service represents the cadence-history service
 type Service struct {
 	stopC         chan struct{}
 	params        *service.BootstrapParams
+	config        *Config
 	metricsClient metrics.Client
 }
 
 // NewService builds a new cadence-history service
-func NewService(params *service.BootstrapParams) common.Daemon {
+func NewService(params *service.BootstrapParams, config *Config) common.Daemon {
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),
+		config: config,
 	}
 }
 
@@ -125,12 +187,12 @@ func (s *Service) Start() {
 	execMgrFactory := NewExecutionManagerFactory(&p.CassandraConfig, p.Logger, base.GetMetricsClient())
 
 	handler, tchanServers := NewHandler(base,
+		s.config,
 		shardMgr,
 		metadata,
 		visibility,
 		history,
-		execMgrFactory,
-		p.CassandraConfig.NumHistoryShards)
+		execMgrFactory)
 
 	handler.Start(tchanServers)
 

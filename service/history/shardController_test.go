@@ -51,6 +51,7 @@ type (
 		mockHistoryMgr          *mmocks.HistoryManager
 		mockServiceResolver     *mmocks.ServiceResolver
 		mockEngineFactory       *MockHistoryEngineFactory
+		config                  *Config
 		logger                  bark.Logger
 		metricsClient           metrics.Client
 	}
@@ -63,6 +64,7 @@ func TestShardControllerSuite(t *testing.T) {
 
 func (s *shardControllerSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
+	s.config = NewConfig(1)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.hostInfo = membership.NewHostInfo("shardController-host-test", nil)
 	s.mockShardManager = &mmocks.ShardManager{}
@@ -70,8 +72,8 @@ func (s *shardControllerSuite) SetupTest() {
 	s.mockHistoryMgr = &mmocks.HistoryManager{}
 	s.mockServiceResolver = &mmocks.ServiceResolver{}
 	s.mockEngineFactory = &MockHistoryEngineFactory{}
-	s.controller = newShardController(1, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger, s.metricsClient)
+	s.controller = newShardController(s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 }
 
 func (s *shardControllerSuite) TearDownTest() {
@@ -83,7 +85,7 @@ func (s *shardControllerSuite) TearDownTest() {
 
 func (s *shardControllerSuite) TestAcquireShardSuccess() {
 	numShards := 10
-	s.controller.numberOfShards = numShards
+	s.config.NumberOfShards = numShards
 	myShards := []int{}
 	for shardID := 0; shardID < numShards; shardID++ {
 		hostID := shardID % 4
@@ -130,7 +132,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 
 func (s *shardControllerSuite) TestAcquireShardLookupFailure() {
 	numShards := 2
-	s.controller.numberOfShards = numShards
+	s.config.NumberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
 		s.mockServiceResolver.On("Lookup", string(shardID)).Return(nil, errors.New("ring failure")).Once()
 	}
@@ -144,7 +146,7 @@ func (s *shardControllerSuite) TestAcquireShardLookupFailure() {
 
 func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := 2
-	s.controller.numberOfShards = numShards
+	s.config.NumberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
 		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
@@ -186,7 +188,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 
 func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := 2
-	s.controller.numberOfShards = numShards
+	s.config.NumberOfShards = numShards
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
 		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
@@ -228,8 +230,9 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 
 func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	numShards := 4
-	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger, s.metricsClient)
+	s.config.NumberOfShards = numShards
+	s.controller = newShardController(s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}
@@ -317,8 +320,9 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 
 func (s *shardControllerSuite) TestRingUpdated() {
 	numShards := 4
-	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger, s.metricsClient)
+	s.config.NumberOfShards = numShards
+	s.controller = newShardController(s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}
@@ -393,8 +397,9 @@ func (s *shardControllerSuite) TestRingUpdated() {
 
 func (s *shardControllerSuite) TestShardControllerClosed() {
 	numShards := 4
-	s.controller = newShardController(numShards, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.mockExecutionMgrFactory, s.mockEngineFactory, s.logger, s.metricsClient)
+	s.config.NumberOfShards = numShards
+	s.controller = newShardController(s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
+		s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}

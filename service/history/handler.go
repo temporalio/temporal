@@ -52,6 +52,7 @@ type Handler struct {
 	tokenSerializer       common.TaskTokenSerializer
 	startWG               sync.WaitGroup
 	metricsClient         metrics.Client
+	config                *Config
 	service.Service
 }
 
@@ -64,17 +65,17 @@ var (
 )
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice service.Service, shardManager persistence.ShardManager, metadataMgr persistence.MetadataManager,
-	visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
-	executionMgrFactory persistence.ExecutionManagerFactory, numberOfShards int) (*Handler, []thrift.TChanServer) {
+func NewHandler(sVice service.Service, config *Config, shardManager persistence.ShardManager,
+	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager,
+	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory) (*Handler, []thrift.TChanServer) {
 	handler := &Handler{
 		Service:             sVice,
+		config:              config,
 		shardManager:        shardManager,
 		metadataMgr:         metadataMgr,
 		historyMgr:          historyMgr,
 		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
-		numberOfShards:      numberOfShards,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 	}
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -102,8 +103,8 @@ func (h *Handler) Start(thriftService []thrift.TChanServer) error {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
 	}
 	h.hServiceResolver = hServiceResolver
-	h.controller = newShardController(h.numberOfShards, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
-		h.executionMgrFactory, h, h.GetLogger(), h.GetMetricsClient())
+	h.controller = newShardController(h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
+		h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
 	h.controller.Start()
 	h.metricsClient = h.GetMetricsClient()
 	h.startWG.Done()

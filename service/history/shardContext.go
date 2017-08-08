@@ -35,10 +35,6 @@ import (
 	"github.com/uber/cadence/common"
 )
 
-const (
-	defaultRangeSize = 20 // 20 bits for sequencer, 2^20 sequence number for any range
-)
-
 type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
@@ -53,6 +49,7 @@ type (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error
+		GetConfig() *Config
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
 		GetTimerAckLevel() time.Time
@@ -66,9 +63,9 @@ type (
 		shardManager     persistence.ShardManager
 		historyMgr       persistence.HistoryManager
 		executionManager persistence.ExecutionManager
-		rangeSize        uint
 		closeCh          chan<- int
 		isClosed         bool
+		config           *Config
 		logger           bark.Logger
 		metricsClient    metrics.Client
 
@@ -295,6 +292,10 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	return err0
 }
 
+func (s *shardContextImpl) GetConfig() *Config {
+	return s.config
+}
+
 func (s *shardContextImpl) GetLogger() bark.Logger {
 	return s.logger
 }
@@ -365,8 +366,8 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
-	s.transferSequenceNumber = updatedShardInfo.RangeID << s.rangeSize
-	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.rangeSize
+	s.transferSequenceNumber = updatedShardInfo.RangeID << s.config.RangeSizeBits
+	s.maxTransferSequenceNumber = (updatedShardInfo.RangeID + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
 	atomic.StoreInt64(&s.rangeID, updatedShardInfo.RangeID)
 	s.shardInfo = updatedShardInfo
@@ -432,8 +433,8 @@ func (s *shardContextImpl) GetTimeSource() common.TimeSource {
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, logger bark.Logger,
-	metricsClient metrics.Client) (ShardContext, error) {
+	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, config *Config,
+	logger bark.Logger, metricsClient metrics.Client) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -451,9 +452,9 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 		historyMgr:       historyMgr,
 		executionManager: executionMgr,
 		shardInfo:        updatedShardInfo,
-		rangeSize:        defaultRangeSize,
 		closeCh:          closeCh,
 		metricsClient:    metricsClient.Tagged(tags),
+		config:           config,
 	}
 	context.logger = logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardID,

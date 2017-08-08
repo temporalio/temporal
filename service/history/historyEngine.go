@@ -89,7 +89,7 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
-	historyCache := newHistoryCache(historyCacheMaxSize, shard, logger)
+	historyCache := newHistoryCache(shard, logger)
 	domainCache := cache.NewDomainCache(metadataMgr, logger)
 	txProcessor := newTransferQueueProcessor(shard, visibilityMgr, matching, historyClient, historyCache, domainCache)
 	historyEngImpl := &historyEngineImpl{
@@ -166,7 +166,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 
 	// Generate first decision task event.
 	taskList := request.GetTaskList().GetName()
-	msBuilder := newMutableStateBuilder(e.logger)
+	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, workflowExecution, request)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
@@ -1513,7 +1513,7 @@ func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *tim
 		logging.TagWorkflowExecutionID: we.GetWorkflowId(),
 		logging.TagWorkflowRunID:       we.GetRunId(),
 	})
-	return newTimerBuilder(lg, common.NewRealTimeSource())
+	return newTimerBuilder(e.shard.GetConfig(), lg, common.NewRealTimeSource())
 }
 
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {

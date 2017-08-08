@@ -21,8 +21,6 @@
 package history
 
 import (
-	"time"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
@@ -31,12 +29,6 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
-)
-
-const (
-	historyCacheInitialSize               = 256
-	historyCacheMaxSize                   = 1 * 1024
-	historyCacheTTL         time.Duration = time.Hour
 )
 
 type (
@@ -48,6 +40,7 @@ type (
 		executionManager persistence.ExecutionManager
 		disabled         bool
 		logger           bark.Logger
+		config           *Config
 	}
 )
 
@@ -57,19 +50,21 @@ var (
 	ErrTryLock = &workflow.InternalServiceError{Message: "Failed to acquire lock, backoff and retry"}
 )
 
-func newHistoryCache(maxSize int, shard ShardContext, logger bark.Logger) *historyCache {
+func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 	opts := &cache.Options{}
-	opts.InitialCapacity = historyCacheInitialSize
-	opts.TTL = historyCacheTTL
+	config := shard.GetConfig()
+	opts.InitialCapacity = config.HistoryCacheInitialSize
+	opts.TTL = config.HistoryCacheTTL
 	opts.Pin = true
 
 	return &historyCache{
-		Cache:            cache.New(maxSize, opts),
+		Cache:            cache.New(config.HistoryCacheMaxSize, opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryCacheComponent,
 		}),
+		config: config,
 	}
 }
 

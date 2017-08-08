@@ -66,18 +66,19 @@ func (s *historyCacheSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              &mocks.ShardManager{},
-		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
+		config:                    NewConfig(1),
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.cache = newHistoryCache(historyCacheMaxSize, s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard, s.logger)
 }
 
 func (s *historyCacheSuite) TestHistoryCachePinning() {
+	s.mockShard.GetConfig().HistoryCacheMaxSize = 2
 	domain := "test_domain"
-	s.cache = newHistoryCache(2, s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard, s.logger)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wf-cache-test"),
 		RunId:      common.StringPtr(uuid.New()),

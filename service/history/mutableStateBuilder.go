@@ -62,6 +62,7 @@ type (
 		continueAsNew   *persistence.CreateWorkflowExecutionRequest
 		hBuilder        *historyBuilder
 		eventSerializer historyEventSerializer
+		config          *Config
 		logger          bark.Logger
 	}
 
@@ -85,7 +86,7 @@ type (
 	}
 )
 
-func newMutableStateBuilder(logger bark.Logger) *mutableStateBuilder {
+func newMutableStateBuilder(config *Config, logger bark.Logger) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:             []*persistence.ActivityInfo{},
 		pendingActivityInfoIDs:          make(map[int64]*persistence.ActivityInfo),
@@ -98,6 +99,7 @@ func newMutableStateBuilder(logger bark.Logger) *mutableStateBuilder {
 		updateRequestCancelInfos:        []*persistence.RequestCancelInfo{},
 		pendingRequestCancelInfoIDs:     make(map[int64]*persistence.RequestCancelInfo),
 		eventSerializer:                 newJSONHistoryEventSerializer(),
+		config:                          config,
 		logger:                          logger,
 	}
 	s.hBuilder = newHistoryBuilder(s, logger)
@@ -609,15 +611,15 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEve
 	scheduleEventID := event.GetEventId()
 	scheduleToStartTimeout := attributes.GetScheduleToStartTimeoutSeconds()
 	if scheduleToStartTimeout <= 0 {
-		scheduleToStartTimeout = DefaultScheduleToStartActivityTimeoutInSecs
+		scheduleToStartTimeout = e.config.DefaultScheduleToStartActivityTimeoutInSecs
 	}
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
 	if scheduleToCloseTimeout <= 0 {
-		scheduleToCloseTimeout = DefaultScheduleToCloseActivityTimeoutInSecs
+		scheduleToCloseTimeout = e.config.DefaultScheduleToCloseActivityTimeoutInSecs
 	}
 	startToCloseTimeout := attributes.GetStartToCloseTimeoutSeconds()
 	if startToCloseTimeout <= 0 {
-		startToCloseTimeout = DefaultStartToCloseActivityTimeoutInSecs
+		startToCloseTimeout = e.config.DefaultStartToCloseActivityTimeoutInSecs
 	}
 	heartbeatTimeout := attributes.GetHeartbeatTimeoutSeconds()
 
@@ -1019,7 +1021,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		RunId:      common.StringPtr(newRunID),
 	}
 
-	newStateBuilder := newMutableStateBuilder(e.logger)
+	newStateBuilder := newMutableStateBuilder(e.config, e.logger)
 	startedEvent := newStateBuilder.AddWorkflowExecutionStartedEventForContinueAsNew(domainID, newExecution, e,
 		attributes)
 	if startedEvent == nil {

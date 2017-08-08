@@ -46,6 +46,7 @@ type (
 		suite.Suite
 		mockShardManager *mocks.ShardManager
 		shardClosedCh    chan int
+		config           *Config
 		logger           bark.Logger
 
 		mockHistoryEngine  *historyEngineImpl
@@ -72,6 +73,7 @@ func (s *timerQueueProcessor2Suite) SetupSuite() {
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
+	s.config = NewConfig(1)
 }
 
 func (s *timerQueueProcessor2Suite) SetupTest() {
@@ -90,14 +92,14 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		executionManager:          s.mockExecutionMgr,
 		shardManager:              s.mockShardManager,
 		historyMgr:                s.mockHistoryMgr,
-		rangeSize:                 defaultRangeSize,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
+		config:                    s.config,
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
-	historyCache := newHistoryCache(historyCacheMaxSize, s.mockShard, s.logger)
+	historyCache := newHistoryCache(s.mockShard, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	txProcessor := newTransferQueueProcessor(s.mockShard, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, historyCache, domainCache)
 	h := &historyEngineImpl{
@@ -131,7 +133,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	taskList := "user-timer-update-times-out"
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.config, s.logger)
 	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
 		WorkflowType:                   &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
@@ -194,7 +196,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "task-workflow-times-out"
 
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.config, s.logger)
 	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),

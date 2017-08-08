@@ -43,6 +43,7 @@ type (
 	timerBuilderProcessorSuite struct {
 		suite.Suite
 		tb     *timerBuilder
+		config *Config
 		logger bark.Logger
 	}
 )
@@ -67,14 +68,15 @@ func (s *timerBuilderProcessorSuite) SetupSuite() {
 	logger := log.New()
 	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
-	s.tb = newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	s.config = NewConfig(1)
+	s.tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
-	tb := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 
 	// Add one timer.
-	msb := newMutableStateBuilder(s.logger)
+	msb := newMutableStateBuilder(s.config, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(201)},
 		TimerInfos:    make(map[string]*persistence.TimerInfo),
@@ -101,12 +103,12 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderSingleUserTimer() {
 }
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
-	tb := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 
 	// Add two timers. (before and after)
 	tp := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid1": tp}
-	msb := newMutableStateBuilder(s.logger)
+	msb := newMutableStateBuilder(s.config, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(202)},
 		TimerInfos:    timerInfos,
@@ -130,10 +132,10 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 	s.Equal(tiBefore.ExpiryTime.Unix(), t1.(*persistence.UserTimerTask).VisibilityTimestamp.Unix())
 
 	// Mutable state with out a timer task.
-	tb = newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tp2 := &persistence.TimerInfo{TimerID: "tid1", StartedID: 201, TaskID: TimerTaskStatusNone, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos = map[string]*persistence.TimerInfo{"tid1": tp2}
-	msb = newMutableStateBuilder(s.logger)
+	msb = newMutableStateBuilder(s.config, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -160,7 +162,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderMulitpleUserTimer() {
 func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 	tp := &persistence.TimerInfo{TimerID: "tid-exist", StartedID: 201, TaskID: 101, ExpiryTime: time.Now().Add(10 * time.Second)}
 	timerInfos := map[string]*persistence.TimerInfo{"tid-exist": tp}
-	msb := newMutableStateBuilder(s.logger)
+	msb := newMutableStateBuilder(s.config, s.logger)
 	msb.Load(&persistence.WorkflowMutableState{
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{NextEventID: int64(203)},
 		TimerInfos:    timerInfos,
@@ -176,7 +178,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 
 func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	// ScheduleToStart being more than HB.
-	builder := newMutableStateBuilder(s.logger)
+	builder := newMutableStateBuilder(s.config, s.logger)
 	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
@@ -184,7 +186,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 			HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 		})
 	// create a schedule to start timeout
-	tb := newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tb.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	s.Equal(workflow.TimeoutType_SCHEDULE_TO_START, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
@@ -192,7 +194,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	// create a heart beat timeout
-	tb = newTimerBuilder(s.logger, &mockTimeSource{currTime: time.Now()})
+	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tt = tb.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
 	s.Equal(workflow.TimeoutType_HEARTBEAT, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))

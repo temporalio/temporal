@@ -48,6 +48,7 @@ type (
 		transferSequenceNumber int64
 		historyMgr             persistence.HistoryManager
 		executionMgr           persistence.ExecutionManager
+		config                 *Config
 		logger                 bark.Logger
 		metricsClient          metrics.Client
 	}
@@ -60,12 +61,13 @@ type (
 )
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, logger bark.Logger) *TestShardContext {
+	executionMgr persistence.ExecutionManager, config *Config, logger bark.Logger) *TestShardContext {
 	return &TestShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
 		historyMgr:             historyMgr,
 		executionMgr:           executionMgr,
+		config:                 config,
 		logger:                 logger,
 		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
 	}
@@ -148,6 +150,11 @@ func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistor
 	return s.historyMgr.AppendHistoryEvents(request)
 }
 
+// GetConfig test implementation
+func (s *TestShardContext) GetConfig() *Config {
+	return s.config
+}
+
 // GetLogger test implementation
 func (s *TestShardContext) GetLogger() bark.Logger {
 	return s.logger
@@ -178,7 +185,8 @@ func (s *TestShardContext) GetTimeSource() common.TimeSource {
 func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOptions) {
 	s.TestBase.SetupWorkflowStoreWithOptions(options)
 	log := bark.NewLoggerFromLogrus(log.New())
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, log)
+	config := NewConfig(1)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 
@@ -186,6 +194,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.SetupWorkflowStore()
 	log := bark.NewLoggerFromLogrus(log.New())
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, log)
+	config := NewConfig(1)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

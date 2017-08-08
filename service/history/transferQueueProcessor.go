@@ -42,14 +42,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const (
-	transferTaskBatchSize              = 10
-	transferProcessorMaxPollRPS        = 100
-	transferProcessorMaxPollInterval   = 10 * time.Second
-	transferProcessorUpdateAckInterval = 10 * time.Second
-	taskWorkerCount                    = 10
-)
-
 type (
 	transferQueueProcessorImpl struct {
 		shard             ShardContext
@@ -66,6 +58,7 @@ type (
 		isStopped         int32
 		shutdownWG        sync.WaitGroup
 		shutdownCh        chan struct{}
+		config            *Config
 		logger            bark.Logger
 		metricsClient     metrics.Client
 	}
@@ -75,7 +68,7 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	ackManager struct {
-		processor     transferQueueProcessor
+		processor     *transferQueueProcessorImpl
 		shard         ShardContext
 		executionMgr  persistence.ExecutionManager
 		logger        bark.Logger
@@ -93,6 +86,7 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 	historyClient hc.Client, cache *historyCache, domainCache cache.DomainCache) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
+	config := shard.GetConfig()
 	processor := &transferQueueProcessorImpl{
 		shard:             shard,
 		executionManager:  executionManager,
@@ -101,9 +95,10 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 		visibilityManager: visibilityMgr,
 		cache:             cache,
 		domainCache:       domainCache,
-		rateLimiter:       common.NewTokenBucket(transferProcessorMaxPollRPS, common.NewRealTimeSource()),
+		rateLimiter:       common.NewTokenBucket(config.TransferProcessorMaxPollRPS, common.NewRealTimeSource()),
 		appendCh:          make(chan struct{}, 1),
 		shutdownCh:        make(chan struct{}),
+		config:            config,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueTransferQueueComponent,
 		}),
@@ -114,7 +109,7 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 	return processor
 }
 
-func newAckManager(processor transferQueueProcessor, shard ShardContext, executionMgr persistence.ExecutionManager,
+func newAckManager(processor *transferQueueProcessorImpl, shard ShardContext, executionMgr persistence.ExecutionManager,
 	logger bark.Logger, metricsClient metrics.Client) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
 	return &ackManager{
@@ -169,16 +164,16 @@ func (t *transferQueueProcessorImpl) NotifyNewTask() {
 
 func (t *transferQueueProcessorImpl) processorPump() {
 	defer t.shutdownWG.Done()
-	tasksCh := make(chan *persistence.TransferTaskInfo, transferTaskBatchSize)
+	tasksCh := make(chan *persistence.TransferTaskInfo, t.config.TransferTaskBatchSize)
 
 	var workerWG sync.WaitGroup
-	for i := 0; i < taskWorkerCount; i++ {
+	for i := 0; i < t.config.TransferTaskWorkerCount; i++ {
 		workerWG.Add(1)
 		go t.taskWorker(tasksCh, &workerWG)
 	}
 
-	pollTimer := time.NewTimer(transferProcessorMaxPollInterval)
-	updateAckTimer := time.NewTimer(transferProcessorUpdateAckInterval)
+	pollTimer := time.NewTimer(t.config.TransferProcessorMaxPollInterval)
+	updateAckTimer := time.NewTimer(t.config.TransferProcessorUpdateAckInterval)
 
 processorPumpLoop:
 	for {
@@ -189,10 +184,10 @@ processorPumpLoop:
 			t.processTransferTasks(tasksCh)
 		case <-pollTimer.C:
 			t.processTransferTasks(tasksCh)
-			pollTimer = time.NewTimer(transferProcessorMaxPollInterval)
+			pollTimer = time.NewTimer(t.config.TransferProcessorMaxPollInterval)
 		case <-updateAckTimer.C:
 			t.ackMgr.updateAckLevel()
-			updateAckTimer = time.NewTimer(transferProcessorUpdateAckInterval)
+			updateAckTimer = time.NewTimer(t.config.TransferProcessorUpdateAckInterval)
 		}
 	}
 
@@ -208,7 +203,7 @@ processorPumpLoop:
 
 func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo) {
 
-	if !t.rateLimiter.Consume(1, transferProcessorMaxPollInterval) {
+	if !t.rateLimiter.Consume(1, t.config.TransferProcessorMaxPollInterval) {
 		t.NotifyNewTask() // re-enqueue the event
 		return
 	}
@@ -229,7 +224,7 @@ func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persis
 		tasksCh <- tsk
 	}
 
-	if len(tasks) == transferTaskBatchSize {
+	if len(tasks) == t.config.TransferTaskBatchSize {
 		// There might be more task
 		// We return now to yield, but enqueue an event to poll later
 		t.NotifyNewTask()
@@ -857,7 +852,7 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error
 	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ReadLevel:    rLevel,
 		MaxReadLevel: a.shard.GetTransferMaxReadLevel(),
-		BatchSize:    transferTaskBatchSize,
+		BatchSize:    a.processor.config.TransferTaskBatchSize,
 	})
 
 	if err != nil {

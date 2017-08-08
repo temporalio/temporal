@@ -33,13 +33,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-// Timer constants
-const (
-	DefaultScheduleToStartActivityTimeoutInSecs = 10
-	DefaultScheduleToCloseActivityTimeoutInSecs = 10
-	DefaultStartToCloseActivityTimeoutInSecs    = 10
-)
-
 // Timer task status
 const (
 	TimerTaskStatusNone = iota
@@ -74,6 +67,7 @@ type (
 		activityTimers         timers
 		pendingActivityTimers  map[int64]*persistence.ActivityInfo
 		isLoadedActivityTimers bool
+		config                 *Config
 		logger                 bark.Logger
 		localSeqNumGen         SequenceNumberGenerator // This one used to order in-memory list.
 		timeSource             common.TimeSource
@@ -125,12 +119,13 @@ func (l *localSeqNumGenerator) NextSeq() int64 {
 }
 
 // newTimerBuilder creates a timer builder.
-func newTimerBuilder(logger bark.Logger, timeSource common.TimeSource) *timerBuilder {
+func newTimerBuilder(config *Config, logger bark.Logger, timeSource common.TimeSource) *timerBuilder {
 	return &timerBuilder{
 		userTimers:            timers{},
 		pendingUserTimers:     make(map[string]*persistence.TimerInfo),
 		activityTimers:        timers{},
 		pendingActivityTimers: make(map[int64]*persistence.ActivityInfo),
+		config:                config,
 		logger:                logger.WithField(logging.TagWorkflowComponent, "timer-builder"),
 		localSeqNumGen:        &localSeqNumGenerator{counter: 1},
 		timeSource:            timeSource,

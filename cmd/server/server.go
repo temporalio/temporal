@@ -110,7 +110,7 @@ func (s *server) startService() common.Daemon {
 	case frontendService:
 		daemon = frontend.NewService(&params, frontend.NewConfig())
 	case historyService:
-		daemon = history.NewService(&params)
+		daemon = history.NewService(&params, history.NewConfig(s.cfg.Cassandra.NumHistoryShards))
 	case matchingService:
 		daemon = matching.NewService(&params, matching.NewConfig())
 	}
