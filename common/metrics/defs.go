@@ -273,6 +273,8 @@ const (
 	HistoryRecordChildExecutionCompletedScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
 	HistoryRequestCancelWorkflowExecutionScope
+	// HistoryShardControllerScope is the scope used by shard controller
+	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope
 	// TransferTaskActivityScope is the scope used for activity task processing by transfer queue processor
@@ -403,6 +405,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryScheduleDecisionTaskScope:            {operation: "ScheduleDecisionTask"},
 		HistoryRecordChildExecutionCompletedScope:   {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:  {operation: "RequestCancelWorkflowExecution"},
+		HistoryShardControllerScope:                 {operation: "ShardController"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
 		TransferTaskActivityScope:                   {operation: "TransferTaskActivity"},
 		TransferTaskDecisionScope:                   {operation: "TransferTaskDecision"},
@@ -478,6 +481,13 @@ const (
 	ScheduleToCloseTimeoutCounter
 	NewTimerCounter
 	NewTimerNotifyCounter
+	AcquireShardsCounter
+	AcquireShardsLatency
+	ShardClosedCounter
+	ShardItemCreatedCounter
+	ShardItemRemovedCounter
+	MembershipChangedCounter
+	NumShardsGauge
 )
 
 // Matching metrics enum
@@ -541,6 +551,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScheduleToCloseTimeoutCounter:             {metricName: "schedule-to-close-timeout", metricType: Counter},
 		NewTimerCounter:                           {metricName: "new-timer", metricType: Counter},
 		NewTimerNotifyCounter:                     {metricName: "new-timer-notifications", metricType: Counter},
+		AcquireShardsCounter:                      {metricName: "acquire-shards-count", metricType: Counter},
+		AcquireShardsLatency:                      {metricName: "acquire-shards-latency", metricType: Timer},
+		ShardClosedCounter:                        {metricName: "shard-closed-count", metricType: Counter},
+		ShardItemCreatedCounter:                   {metricName: "sharditem-created-count", metricType: Counter},
+		ShardItemRemovedCounter:                   {metricName: "sharditem-removed-count", metricType: Counter},
+		MembershipChangedCounter:                  {metricName: "membership-changed-count", metricType: Counter},
+		NumShardsGauge:                            {metricName: "numshards-gauge", metricType: Gauge},
 	},
 	Matching: {
 		PollSuccessCounter:          {metricName: "poll.success"},
