@@ -20,9 +20,6 @@ import:
 - package: github.com/dgryski/go-farm
 - package: github.com/emirpasic/gods
 - package: github.com/davecgh/go-spew
-- package: github.com/uber-go/timer
-  subpackages:
-  - twheel
 - package: github.com/urfave/cli
 - package: gopkg.in/yaml.v2
 - package: gopkg.in/validator.v2

@@ -167,15 +167,18 @@ func (c *shardController) GetEngine(workflowID string) (Engine, error) {
 }
 
 func (c *shardController) getEngineForShard(shardID int) (Engine, error) {
+	sw := c.metricsClient.StartTimer(metrics.HistoryShardControllerScope, metrics.GetEngineForShardLatency)
+	defer sw.Stop()
 	item, err := c.getOrCreateHistoryShardItem(shardID)
 	if err != nil {
 		return nil, err
 	}
-
 	return item.getOrCreateEngine(c.shardClosedCh)
 }
 
 func (c *shardController) removeEngineForShard(shardID int) {
+	sw := c.metricsClient.StartTimer(metrics.HistoryShardControllerScope, metrics.RemoveEngineForShardLatency)
+	defer sw.Stop()
 	item, _ := c.removeHistoryShardItem(shardID)
 	if item != nil {
 		item.stopEngine()
@@ -297,6 +300,7 @@ AcquireLoop:
 		if info.Identity() == c.host.Identity() {
 			_, err1 := c.getEngineForShard(shardID)
 			if err1 != nil {
+				c.metricsClient.IncCounter(metrics.HistoryShardControllerScope, metrics.GetEngineForShardErrorCounter)
 				logging.LogOperationFailedEvent(c.logger, fmt.Sprintf("Unable to create history shard engine: %v", shardID),
 					err1)
 				continue AcquireLoop
@@ -381,15 +385,18 @@ func (i *historyShardsItem) stopEngine() {
 	i.Lock()
 	defer i.Unlock()
 
-	if i.executionMgr != nil {
-		i.executionMgr.Close()
-	}
-
 	if i.engine != nil {
 		logging.LogShardEngineStoppingEvent(i.logger, i.host.Identity(), i.shardID)
 		i.engine.Stop()
 		i.engine = nil
 		logging.LogShardEngineStoppedEvent(i.logger, i.host.Identity(), i.shardID)
+	}
+
+	// Shutting down executionMgr will close all connections
+	// to cassandra for this engine. So, make sure to
+	// close executionMgr only after stopping the engine
+	if i.executionMgr != nil {
+		i.executionMgr.Close()
 	}
 }
 

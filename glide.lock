@@ -78,10 +78,6 @@ imports:
   - m3/thrift
   - m3/thriftudp
   - statsd
-- name: github.com/uber-go/timer
-  version: 65109e3ba73e9381daba2aaecef1ee4e1cc8fceb
-  subpackages:
-  - twheel
 - name: github.com/uber/ringpop-go
   version: 38331a7fdb7e3d102b4327ef0f1034d5239decaf
   subpackages:
