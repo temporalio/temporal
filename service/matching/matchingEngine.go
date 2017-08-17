@@ -253,13 +253,15 @@ pollLoop:
 			PollRequest:       request,
 		})
 		if err != nil {
-			if _, ok := err.(*workflow.EntityNotExistsError); ok {
-				e.logger.Debugf("Duplicated decision task taskList=%v, taskID=",
+			switch err.(type) {
+			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
+				e.logger.Debugf("Duplicated decision task taskList=%v, taskID=%v",
 					taskListName, tCtx.info.TaskID)
 				tCtx.completeTask(nil)
-				continue pollLoop
+			default:
+				tCtx.completeTask(err)
 			}
-			tCtx.completeTask(err)
+
 			continue pollLoop
 		}
 		tCtx.completeTask(nil)
@@ -303,13 +305,15 @@ pollLoop:
 			PollRequest:       request,
 		})
 		if err != nil {
-			if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			switch err.(type) {
+			case *workflow.EntityNotExistsError, *h.EventAlreadyStartedError:
 				e.logger.Debugf("Duplicated activity task taskList=%v, taskID=%v",
 					taskListName, tCtx.info.TaskID)
 				tCtx.completeTask(nil)
-				continue pollLoop // Duplicated or cancelled task
+			default:
+				tCtx.completeTask(err)
 			}
-			tCtx.completeTask(err)
+
 			continue pollLoop
 		}
 		tCtx.completeTask(nil)

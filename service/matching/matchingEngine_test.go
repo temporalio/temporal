@@ -1031,7 +1031,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 		func(ctx thrift.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) error {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
 				s.logger.Debugf("From error function Mock Received DUPLICATED RecordDecisionTaskStartedRequest for taskID=%v", taskRequest.TaskId)
-				return &workflow.EntityNotExistsError{Message: "already started"}
+				return &gohistory.EventAlreadyStartedError{Message: "already started"}
 			}
 			startedTasks[*taskRequest.TaskId] = true
 			return nil

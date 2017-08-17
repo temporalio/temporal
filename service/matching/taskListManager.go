@@ -500,10 +500,11 @@ func (c *taskContext) RecordDecisionTaskStartedWithRetry(
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		if _, ok := err.(*s.EntityNotExistsError); !ok {
-			return true
+		switch err.(type) {
+		case *s.EntityNotExistsError, *h.EventAlreadyStartedError:
+			return false
 		}
-		return false
+		return true
 	})
 	return
 }
@@ -516,10 +517,11 @@ func (c *taskContext) RecordActivityTaskStartedWithRetry(
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
-		if _, ok := err.(*s.EntityNotExistsError); !ok {
-			return true
+		switch err.(type) {
+		case *s.EntityNotExistsError, *h.EventAlreadyStartedError:
+			return false
 		}
-		return false
+		return true
 	})
 	return
 }
