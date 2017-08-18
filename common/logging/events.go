@@ -68,10 +68,11 @@ const (
 	InvalidMutableStateActionEventID = 4100
 
 	// Matching Engine events
-	TaskListLoading   = 5000
-	TaskListLoaded    = 5001
-	TaskListUnloading = 5002
-	TaskListUnloaded  = 5003
+	TaskListLoading       = 5000
+	TaskListLoaded        = 5001
+	TaskListUnloading     = 5002
+	TaskListUnloaded      = 5003
+	TaskListLoadingFailed = 5004
 
 	// General purpose events
 	OperationFailed = 9000

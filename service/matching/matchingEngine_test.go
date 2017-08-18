@@ -52,7 +52,9 @@ type (
 		suite.Suite
 		historyClient        *mocks.HistoryClient
 		matchingEngine       *matchingEngineImpl
+		mockMatchingEngine   *matchingEngineImpl
 		taskManager          *testTaskManager
+		mockTaskManager      *mocks.TaskManager
 		mockExecutionManager *mocks.ExecutionManager
 		logger               bark.Logger
 		callContext          thrift.Context
@@ -99,15 +101,20 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.Lock()
 	defer s.Unlock()
 	s.mockExecutionManager = &mocks.ExecutionManager{}
+	s.mockTaskManager = &mocks.TaskManager{}
 	s.historyClient = &mocks.HistoryClient{}
 	s.taskManager = newTestTaskManager(s.logger)
-	s.matchingEngine = s.newMatchingEngine(defaultTestConfig())
+
+	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
+
+	s.mockMatchingEngine = s.newMatchingEngine(defaultTestConfig(), s.mockTaskManager)
+	s.mockMatchingEngine.Start()
 }
 
-func (s *matchingEngineSuite) newMatchingEngine(config *Config) *matchingEngineImpl {
+func (s *matchingEngineSuite) newMatchingEngine(config *Config, taskMgr persistence.TaskManager) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:     s.taskManager,
+		taskManager:     taskMgr,
 		historyService:  s.historyClient,
 		taskLists:       make(map[taskListID]taskListManager),
 		logger:          s.logger,
@@ -120,6 +127,7 @@ func (s *matchingEngineSuite) newMatchingEngine(config *Config) *matchingEngineI
 func (s *matchingEngineSuite) TearDownTest() {
 	s.mockExecutionManager.AssertExpectations(s.T())
 	s.matchingEngine.Stop()
+	s.mockMatchingEngine.Stop()
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
@@ -178,10 +186,9 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
-	config := defaultTestConfig()
-	config.RangeSize = 2 // to test that range is not updated without tasks
-	config.LongPollExpirationInterval = 10 * time.Millisecond
-	s.matchingEngine.config = config
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	s.matchingEngine.config.LongPollExpirationInterval = 10 * time.Millisecond
+
 	domainID := "domainId"
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
@@ -826,7 +833,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	var engines []*matchingEngineImpl
 
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(defaultTestConfig())
+		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
 		engines = append(engines, e)
 		e.Start()
@@ -978,7 +985,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	var engines []*matchingEngineImpl
 
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(defaultTestConfig())
+		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
 		engines = append(engines, e)
 		e.Start()
@@ -1134,6 +1141,20 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	ctx2.completeTask(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+}
+
+func (s *matchingEngineSuite) TestLoadTaskListError() {
+	domainID := "domainId"
+	tl := "makeToast"
+
+	tlID := newTaskListID(domainID, tl, persistence.TaskListTypeDecision)
+	s.mockTaskManager.On("GetTasks", mock.Anything).Return(nil, &persistence.GetTasksResponse{})
+	s.mockTaskManager.On("LeaseTaskList", mock.Anything).Once().Return(nil, errors.New("load error"))
+	tlMgr, err := s.mockMatchingEngine.getTaskListManager(tlID)
+	s.Nil(tlMgr)
+	s.NotNil(err)
+	_, ok := s.mockMatchingEngine.taskLists[*tlID]
+	s.False(ok)
 }
 
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
