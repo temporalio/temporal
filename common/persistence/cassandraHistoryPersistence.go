@@ -115,7 +115,11 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if _, ok := err.(*gocql.RequestErrWriteTimeout); ok {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Error: %v", err),
+			}
+		} else if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
 			return &TimeoutError{Msg: fmt.Sprintf("AppendHistoryEvents timed out. Error: %v", err)}
@@ -189,6 +193,11 @@ func (h *cassandraHistoryPersistence) DeleteWorkflowExecutionHistory(
 
 	err := query.Exec()
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("DeleteWorkflowExecutionHistory operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecutionHistory operation failed. Error: %v", err),
 		}

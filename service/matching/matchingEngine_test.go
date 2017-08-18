@@ -1143,20 +1143,6 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 }
 
-func (s *matchingEngineSuite) TestLoadTaskListError() {
-	domainID := "domainId"
-	tl := "makeToast"
-
-	tlID := newTaskListID(domainID, tl, persistence.TaskListTypeDecision)
-	s.mockTaskManager.On("GetTasks", mock.Anything).Return(nil, &persistence.GetTasksResponse{})
-	s.mockTaskManager.On("LeaseTaskList", mock.Anything).Once().Return(nil, errors.New("load error"))
-	tlMgr, err := s.mockMatchingEngine.getTaskListManager(tlID)
-	s.Nil(tlMgr)
-	s.NotNil(err)
-	_, ok := s.mockMatchingEngine.taskLists[*tlID]
-	s.False(ok)
-}
-
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,
 	scheduleAttributes *workflow.ScheduleActivityTaskDecisionAttributes) *workflow.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, workflow.EventType_ActivityTaskScheduled)

@@ -166,6 +166,8 @@ Create_Loop:
 		response, err := s.executionManager.CreateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
+			case *shared.WorkflowExecutionAlreadyStartedError, *shared.ServiceBusyError:
+				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
 					// RangeID might have been renewed by the same host while this update was in flight
@@ -177,7 +179,6 @@ Create_Loop:
 						s.closeShard()
 					}
 				}
-			case *shared.WorkflowExecutionAlreadyStartedError:
 			default:
 				{
 					// We have no idea if the write failed or will eventually make it to
@@ -241,6 +242,8 @@ Update_Loop:
 		err := s.executionManager.UpdateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
+			case *persistence.ConditionFailedError, *shared.ServiceBusyError:
+				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{
 					// RangeID might have been renewed by the same host while this update was in flight
@@ -252,7 +255,6 @@ Update_Loop:
 						s.closeShard()
 					}
 				}
-			case *persistence.ConditionFailedError:
 			default:
 				{
 					// We have no idea if the write failed or will eventually make it to

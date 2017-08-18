@@ -447,6 +447,7 @@ const (
 	PersistenceErrShardOwnershipLostCounter
 	PersistenceErrConditionFailedCounter
 	PersistenceErrTimeoutCounter
+	PersistenceErrBusyCounter
 
 	NumCommonMetrics
 )
@@ -523,6 +524,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrShardOwnershipLostCounter:       {metricName: "persistence.errors.shard-ownership-lost", metricType: Counter},
 		PersistenceErrConditionFailedCounter:          {metricName: "persistence.errors.condition-failed", metricType: Counter},
 		PersistenceErrTimeoutCounter:                  {metricName: "persistence.errors.timeout", metricType: Counter},
+		PersistenceErrBusyCounter:                     {metricName: "persistence.errors.busy", metricType: Counter},
 	},
 	Frontend: {},
 	History: {

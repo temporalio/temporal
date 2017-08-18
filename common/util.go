@@ -107,7 +107,7 @@ func CreateHistoryServiceRetryPolicy() backoff.RetryPolicy {
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *workflow.InternalServiceError:
+	case *workflow.InternalServiceError, *workflow.ServiceBusyError:
 		return true
 	}
 

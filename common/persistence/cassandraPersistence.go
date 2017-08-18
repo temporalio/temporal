@@ -595,6 +595,11 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CreateShard operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateShard operation failed. Error : %v", err),
 		}
@@ -627,6 +632,10 @@ func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResp
 		if err == gocql.ErrNotFound {
 			return nil, &workflow.EntityNotExistsError{
 				Message: fmt.Sprintf("Shard not found.  ShardId: %v", shardID),
+			}
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("GetShard operation failed. Error: %v", err),
 			}
 		}
 
@@ -665,6 +674,11 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
 		}
@@ -724,6 +738,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
 			return nil, &TimeoutError{Msg: fmt.Sprintf("CreateWorkflowExecution timed out. Error: %v", err)}
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err),
+			}
 		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err),
@@ -887,6 +905,10 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
 					execution.GetWorkflowId(), execution.GetRunId()),
 			}
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err),
+			}
 		}
 
 		return nil, &workflow.InternalServiceError{
@@ -1035,6 +1057,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
 			return &TimeoutError{Msg: fmt.Sprintf("UpdateWorkflowExecution timed out. Error: %v", err)}
+		} else if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
+			}
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
@@ -1109,6 +1135,11 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowEx
 
 	err := query.Exec()
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err),
 		}
@@ -1134,6 +1165,10 @@ func (d *cassandraPersistence) GetCurrentExecution(request *GetCurrentExecutionR
 			return nil, &workflow.EntityNotExistsError{
 				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v",
 					request.WorkflowID),
+			}
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err),
 			}
 		}
 
@@ -1197,6 +1232,11 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 
 	err := query.Exec()
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err),
 		}
@@ -1218,6 +1258,11 @@ func (d *cassandraPersistence) CompleteTimerTask(request *CompleteTimerTaskReque
 
 	err := query.Exec()
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
 		}
@@ -1256,9 +1301,14 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 				request.TaskList,
 				request.TaskType,
 				0)
+		} else if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v",
+					request.TaskList, request.TaskType, err),
+			}
 		} else {
 			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error : %v",
+				Message: fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v",
 					request.TaskList, request.TaskType, err),
 			}
 		}
@@ -1281,6 +1331,11 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
+		if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("LeaseTaskList operation failed. Error: %v", err),
+			}
+		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("LeaseTaskList operation failed. Error : %v", err),
 		}
@@ -1316,6 +1371,11 @@ func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
+		if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err),
+			}
+		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err),
 		}
@@ -1390,8 +1450,13 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
+		if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CreateTasks operation failed. Error: %v", err),
+			}
+		}
 		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateTask operation failed. Error : %v", err),
+			Message: fmt.Sprintf("CreateTasks operation failed. Error : %v", err),
 		}
 	}
 	if !applied {
@@ -1466,6 +1531,11 @@ func (d *cassandraPersistence) CompleteTask(request *CompleteTaskRequest) error 
 
 	err := query.Exec()
 	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CompleteTask operation failed. Error: %v", err),
+			}
+		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTask operation failed. Error: %v", err),
 		}
@@ -1507,6 +1577,11 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 	}
 
 	if err := iter.Close(); err != nil {
+		if isThrottlingError(err) {
+			return nil, &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("GetTimerTasks operation failed. Error: %v", err),
+			}
+		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("GetTimerTasks operation failed. Error: %v", err),
 		}
@@ -2033,6 +2108,14 @@ func isTimeoutError(err error) bool {
 	}
 	_, ok := err.(*gocql.RequestErrWriteTimeout)
 	return ok
+}
+
+func isThrottlingError(err error) bool {
+	if req, ok := err.(gocql.RequestError); ok {
+		// gocql does not expose the constant errOverloaded = 0x1001
+		return req.Code() == 0x1001
+	}
+	return false
 }
 
 // GetVisibilityTSFrom - helper method to get visibility timestamp

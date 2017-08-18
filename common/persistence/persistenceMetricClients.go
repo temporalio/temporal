@@ -295,6 +295,9 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+	case *workflow.ServiceBusyError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
