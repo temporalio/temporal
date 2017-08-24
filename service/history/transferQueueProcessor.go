@@ -849,12 +849,19 @@ func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error
 	a.RLock()
 	rLevel := a.readLevel
 	a.RUnlock()
-	response, err := a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel:    rLevel,
-		MaxReadLevel: a.shard.GetTransferMaxReadLevel(),
-		BatchSize:    a.processor.config.TransferTaskBatchSize,
-	})
 
+	var response *persistence.GetTransferTasksResponse
+	op := func() error {
+		var err error
+		response, err = a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
+			ReadLevel:    rLevel,
+			MaxReadLevel: a.shard.GetTransferMaxReadLevel(),
+			BatchSize:    a.processor.config.TransferTaskBatchSize,
+		})
+		return err
+	}
+
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
