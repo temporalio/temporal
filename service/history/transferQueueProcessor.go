@@ -651,21 +651,15 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 				return err
 			}
 			// Finally create first decision task for Child execution so it is really started
-			err = t.historyClient.ScheduleDecisionTask(nil, &history.ScheduleDecisionTaskRequest{
-				DomainUUID: common.StringPtr(targetDomainID),
-				WorkflowExecution: &workflow.WorkflowExecution{
-					WorkflowId: common.StringPtr(task.TargetWorkflowID),
-					RunId:      common.StringPtr(startResponse.GetRunId()),
-				},
+			err = t.createFirstDecisionTask(targetDomainID, &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(task.TargetWorkflowID),
+				RunId:      common.StringPtr(startResponse.GetRunId()),
 			})
 		} else {
 			// ChildExecution already started, just create DecisionTask and complete transfer task
 			startedEvent, _ := msBuilder.GetChildExecutionStartedEvent(initiatedEventID)
 			startedAttributes := startedEvent.GetChildWorkflowExecutionStartedEventAttributes()
-			err = t.historyClient.ScheduleDecisionTask(nil, &history.ScheduleDecisionTaskRequest{
-				DomainUUID:        common.StringPtr(targetDomainID),
-				WorkflowExecution: startedAttributes.GetWorkflowExecution(),
-			})
+			err = t.createFirstDecisionTask(targetDomainID, startedAttributes.GetWorkflowExecution())
 		}
 	}
 
@@ -742,6 +736,26 @@ func (t *transferQueueProcessorImpl) recordStartChildExecutionFailed(task *persi
 
 			return nil
 		})
+}
+
+// createFirstDecisionTask is used by StartChildExecution transfer task to create the first decision task for
+// child execution.
+func (t *transferQueueProcessorImpl) createFirstDecisionTask(domainID string,
+	execution *workflow.WorkflowExecution) error {
+	err := t.historyClient.ScheduleDecisionTask(nil, &history.ScheduleDecisionTaskRequest{
+		DomainUUID:        common.StringPtr(domainID),
+		WorkflowExecution: execution,
+	})
+
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// Maybe child workflow execution already timedout or terminated
+			// Safe to discard the error and complete this transfer task
+			return nil
+		}
+	}
+
+	return err
 }
 
 func (t *transferQueueProcessorImpl) requestCancelCompleted(task *persistence.TransferTaskInfo,

@@ -519,6 +519,18 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 	})
 }
 
+// UpdateWorkflowExecutionForChildExecutionsInitiated is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
+	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task, childInfos []*ChildExecutionInfo) error {
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:             updatedInfo,
+		TransferTasks:             transferTasks,
+		Condition:                 condition,
+		UpsertChildExecutionInfos: childInfos,
+		RangeID:                   s.ShardInfo.RangeID,
+	})
+}
+
 // UpdateWorkflowExecutionForRequestCancel is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task,

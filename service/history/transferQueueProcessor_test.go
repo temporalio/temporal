@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -422,6 +423,108 @@ workerPump:
 			break workerPump
 		}
 	}
+}
+
+func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasks() {
+	domain := "start-child-execution-transfer-tasks-test-domain"
+	domainID := "b7f71853-0a8c-4eb1-af6b-c4e71dae50a1"
+	workflowID := "start-child-execution-transfertasks-test"
+	runID := "67ad6d62-79c6-4c8a-a27a-1fb7a10ae789"
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	taskList := "start-child-execution-transfertasks-queue"
+	identity := "start-child-execution-transfertasks-test"
+
+	tasksCh := s.createChildExecutionState(domain, domainID, workflowExecution, taskList, identity)
+	childRunID := "d3f9164e-b696-4350-8409-9a6cf670f4f2"
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			if task.TaskType == persistence.TransferTaskTypeStartChildExecution {
+				s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.Anything).Once().Return(
+					&workflow.StartWorkflowExecutionResponse{
+						RunId: common.StringPtr(childRunID),
+					}, nil)
+				s.mockHistoryClient.On("ScheduleDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+}
+
+func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasksChildCompleted() {
+	domain := "start-child-execution-transfer-tasks-child-completed-test-domain"
+	domainID := "8bf7aaf8-810a-4778-a549-d7913d2a5b82"
+	workflowID := "start-child-execution-transfertasks-child-completed-test"
+	runID := "a627ea38-7e5e-41cc-9a32-4c7979b93ae2"
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	taskList := "start-child-execution-transfertasks-child-completed-queue"
+	identity := "start-child-execution-transfertasks-child-completed-test"
+
+	tasksCh := s.createChildExecutionState(domain, domainID, workflowExecution, taskList, identity)
+	childRunID := "66825b60-5ae2-4ff3-8da6-cbb286b4a7e6"
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			if task.TaskType == persistence.TransferTaskTypeStartChildExecution {
+				s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.Anything).Once().Return(
+					&workflow.StartWorkflowExecutionResponse{
+						RunId: common.StringPtr(childRunID),
+					}, nil)
+				s.mockHistoryClient.On("ScheduleDecisionTask", mock.Anything, mock.Anything).Once().Return(
+					&workflow.EntityNotExistsError{})
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+}
+
+func (s *transferQueueProcessorSuite) createChildExecutionState(domain, domainID string,
+	workflowExecution workflow.WorkflowExecution, taskList, identity string) chan *persistence.TransferTaskInfo {
+	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
+	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
+
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	info1, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info1)
+	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
+	completedEvent := addDecisionTaskCompletedEvent(builder, int64(2), startedEvent.GetEventId(), nil, identity)
+
+	transferTasks := []persistence.Task{}
+	createRequestID := uuid.New()
+
+	childWorkflowID := "start-child-execution-transfertasks-test-child-workflow-id"
+	childWorkflowType := "child-workflow-type"
+	_, ci := addStartChildWorkflowExecutionInitiatedEvent(builder, completedEvent.GetEventId(), createRequestID,
+		domain, childWorkflowID, childWorkflowType, taskList, nil, int32(100), int32(10))
+	transferTasks = append(transferTasks, &persistence.StartChildExecutionTask{
+		TargetDomainID:   domainID,
+		TargetWorkflowID: childWorkflowID,
+		InitiatedID:      ci.InitiatedID,
+	})
+
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionForChildExecutionsInitiated(updatedInfo, int64(3), transferTasks,
+		builder.updateChildExecutionInfos)
+	s.Nil(err1, "No error expected.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+
+	return tasksCh
 }
 
 func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStartTimeout int32) interface{} {
