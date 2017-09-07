@@ -52,9 +52,7 @@ type (
 		suite.Suite
 		historyClient        *mocks.HistoryClient
 		matchingEngine       *matchingEngineImpl
-		mockMatchingEngine   *matchingEngineImpl
 		taskManager          *testTaskManager
-		mockTaskManager      *mocks.TaskManager
 		mockExecutionManager *mocks.ExecutionManager
 		logger               bark.Logger
 		callContext          thrift.Context
@@ -101,15 +99,11 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.Lock()
 	defer s.Unlock()
 	s.mockExecutionManager = &mocks.ExecutionManager{}
-	s.mockTaskManager = &mocks.TaskManager{}
 	s.historyClient = &mocks.HistoryClient{}
 	s.taskManager = newTestTaskManager(s.logger)
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
-
-	s.mockMatchingEngine = s.newMatchingEngine(defaultTestConfig(), s.mockTaskManager)
-	s.mockMatchingEngine.Start()
 }
 
 func (s *matchingEngineSuite) newMatchingEngine(config *Config, taskMgr persistence.TaskManager) *matchingEngineImpl {
@@ -127,7 +121,6 @@ func (s *matchingEngineSuite) newMatchingEngine(config *Config, taskMgr persiste
 func (s *matchingEngineSuite) TearDownTest() {
 	s.mockExecutionManager.AssertExpectations(s.T())
 	s.matchingEngine.Stop()
-	s.mockMatchingEngine.Stop()
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
