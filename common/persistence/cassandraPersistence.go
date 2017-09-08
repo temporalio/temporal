@@ -708,10 +708,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 	d.CreateWorkflowExecutionWithinBatch(request, batch, cqlNowTimestamp)
 
-	d.createTransferTasks(batch, request.TransferTasks, request.DomainID, request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(), cqlNowTimestamp)
-	d.createTimerTasks(batch, request.TimerTasks, nil, request.DomainID, request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(), cqlNowTimestamp)
+	d.createTransferTasks(batch, request.TransferTasks, request.DomainID, *request.Execution.WorkflowId,
+		*request.Execution.RunId, cqlNowTimestamp)
+	d.createTimerTasks(batch, request.TimerTasks, nil, request.DomainID, *request.Execution.WorkflowId,
+		*request.Execution.RunId, cqlNowTimestamp)
 
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
@@ -815,13 +815,13 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 	batch *gocql.Batch, cqlNowTimestamp int64) {
 	if request.ContinueAsNew {
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			request.Execution.GetRunId(),
-			request.Execution.GetRunId(),
+			*request.Execution.RunId,
+			*request.Execution.RunId,
 			request.RequestID,
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
-			request.Execution.GetWorkflowId(),
+			*request.Execution.WorkflowId,
 			permanentRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
@@ -830,12 +830,12 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
-			request.Execution.GetWorkflowId(),
+			*request.Execution.WorkflowId,
 			permanentRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			request.Execution.GetRunId(),
-			request.Execution.GetRunId(),
+			*request.Execution.RunId,
+			*request.Execution.RunId,
 			request.RequestID)
 	}
 
@@ -845,20 +845,20 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 	initiatedID := emptyInitiatedID
 	if request.ParentExecution != nil {
 		parentDomainID = request.ParentDomainID
-		parentWorkflowID = request.ParentExecution.GetWorkflowId()
-		parentRunID = request.ParentExecution.GetRunId()
+		parentWorkflowID = *request.ParentExecution.WorkflowId
+		parentRunID = *request.ParentExecution.RunId
 		initiatedID = request.InitiatedID
 	}
 
 	batch.Query(templateCreateWorkflowExecutionQuery2,
 		d.shardID,
 		request.DomainID,
-		request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(),
+		*request.Execution.WorkflowId,
+		*request.Execution.RunId,
 		rowTypeExecution,
 		request.DomainID,
-		request.Execution.GetWorkflowId(),
-		request.Execution.GetRunId(),
+		*request.Execution.WorkflowId,
+		*request.Execution.RunId,
 		parentDomainID,
 		parentWorkflowID,
 		parentRunID,
@@ -893,8 +893,8 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 		d.shardID,
 		rowTypeExecution,
 		request.DomainID,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
+		*execution.WorkflowId,
+		*execution.RunId,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 
@@ -903,7 +903,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 		if err == gocql.ErrNotFound {
 			return nil, &workflow.EntityNotExistsError{
 				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-					execution.GetWorkflowId(), execution.GetRunId()),
+					*execution.WorkflowId, *execution.RunId),
 			}
 		} else if isThrottlingError(err) {
 			return nil, &workflow.ServiceBusyError{
@@ -1017,8 +1017,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	if request.ContinueAsNew != nil {
 		startReq := request.ContinueAsNew
 		d.CreateWorkflowExecutionWithinBatch(startReq, batch, cqlNowTimestamp)
-		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, startReq.Execution.GetWorkflowId(),
-			startReq.Execution.GetRunId(), cqlNowTimestamp)
+		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, *startReq.Execution.WorkflowId,
+			*startReq.Execution.RunId, cqlNowTimestamp)
 	} else if request.CloseExecution {
 		// Delete WorkflowExecution row representing current execution
 		batch.Query(templateDeleteWorkflowExecutionQuery,
@@ -1414,8 +1414,8 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 				rowTypeTask,
 				task.TaskID,
 				domainID,
-				task.Execution.GetWorkflowId(),
-				task.Execution.GetRunId(),
+				*task.Execution.WorkflowId,
+				*task.Execution.RunId,
 				scheduleID)
 		} else {
 			batch.Query(templateCreateTaskWithTTLQuery,
@@ -1425,8 +1425,8 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 				rowTypeTask,
 				task.TaskID,
 				domainID,
-				task.Execution.GetWorkflowId(),
-				task.Execution.GetRunId(),
+				*task.Execution.WorkflowId,
+				*task.Execution.RunId,
 				scheduleID,
 				task.Data.ScheduleToStartTimeout)
 		}

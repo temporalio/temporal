@@ -21,9 +21,9 @@
 package matching
 
 import (
+	"context"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/tchannel-go/thrift"
 )
 
 type (
@@ -32,7 +32,7 @@ type (
 		Stop()
 		AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error
 		AddActivityTask(addRequest *m.AddActivityTaskRequest) error
-		PollForDecisionTask(ctx thrift.Context, request *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error)
-		PollForActivityTask(ctx thrift.Context, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
+		PollForDecisionTask(ctx context.Context, request *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error)
+		PollForActivityTask(ctx context.Context, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
 	}
 )

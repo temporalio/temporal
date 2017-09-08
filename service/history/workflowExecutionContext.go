@@ -56,8 +56,8 @@ var (
 func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExecution, shard ShardContext,
 	executionManager persistence.ExecutionManager, logger bark.Logger) *workflowExecutionContext {
 	lg := logger.WithFields(bark.Fields{
-		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-		logging.TagWorkflowRunID:       execution.GetRunId(),
+		logging.TagWorkflowExecutionID: *execution.WorkflowId,
+		logging.TagWorkflowRunID:       *execution.RunId,
 	})
 
 	return &workflowExecutionContext{
@@ -128,7 +128,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			DomainID:      c.domainID,
 			Execution:     c.workflowExecution,
 			TransactionID: transactionID,
-			FirstEventID:  firstEvent.GetEventId(),
+			FirstEventID:  *firstEvent.EventId,
 			Events:        serializedHistory,
 		}); err0 != nil {
 			// Clear all cached state in case of error
@@ -201,8 +201,8 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	serializedHistory, serializedError := newStateBuilder.hBuilder.Serialize()
 	if serializedError != nil {
 		logging.LogHistorySerializationErrorEvent(c.logger, serializedError, fmt.Sprintf(
-			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", newExecution.GetWorkflowId(),
-			newExecution.GetRunId()))
+			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", *newExecution.WorkflowId,
+			*newExecution.RunId))
 		return serializedError
 	}
 
@@ -212,7 +212,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
 		// no potential duplicates to override.
 		TransactionID: 0,
-		FirstEventID:  firstEvent.GetEventId(),
+		FirstEventID:  *firstEvent.EventId,
 		Events:        serializedHistory,
 	})
 	if err1 != nil {

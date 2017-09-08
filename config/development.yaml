@@ -13,7 +13,7 @@ ringpop:
 
 services:
   frontend:
-    tchannel:
+    rpc:
       port: 7933
       bindOnLocalHost: true
     metrics:
@@ -22,7 +22,7 @@ services:
         prefix: "cadence"
 
   matching:
-    tchannel:
+    rpc:
       port: 7935
       bindOnLocalHost: true
     metrics:
@@ -31,7 +31,7 @@ services:
         prefix: "cadence"
 
   history:
-    tchannel:
+    rpc:
       port: 7934
       bindOnLocalHost: true
     metrics:

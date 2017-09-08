@@ -91,7 +91,7 @@ func (s *visibilityPersistenceSuite) TestBasicVisibility() {
 	})
 	s.Nil(err1)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
 	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       testDomainUUID,
@@ -160,7 +160,7 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution2.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
 	// Use token to get the second one
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
@@ -172,7 +172,7 @@ func (s *visibilityPersistenceSuite) TestVisibilityPagination() {
 	})
 	s.Nil(err3)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution1.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
 	// Now should get empty result by using token
 	resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&ListWorkflowExecutionsRequest{
@@ -227,7 +227,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution1.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
 	// Close both executions
 	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
@@ -260,7 +260,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByType() {
 	})
 	s.Nil(err5)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution2.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 }
 
 func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
@@ -304,7 +304,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution1.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
 	// Close both executions
 	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&RecordWorkflowExecutionClosedRequest{
@@ -337,7 +337,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	})
 	s.Nil(err5)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution2.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 }
 
 func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
@@ -376,7 +376,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           gen.WorkflowExecutionCloseStatus_COMPLETED,
+		Status:           gen.WorkflowExecutionCloseStatusCompleted,
 	})
 	s.Nil(err2)
 
@@ -386,7 +386,7 @@ func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
 		WorkflowTypeName: "visibility-workflow",
 		StartTimestamp:   startTime,
 		CloseTimestamp:   time.Now().UnixNano(),
-		Status:           gen.WorkflowExecutionCloseStatus_FAILED,
+		Status:           gen.WorkflowExecutionCloseStatusFailed,
 	})
 	s.Nil(err3)
 
@@ -398,11 +398,11 @@ func (s *visibilityPersistenceSuite) TestFilteringByCloseStatus() {
 			EarliestStartTime: startTime,
 			LatestStartTime:   startTime,
 		},
-		Status: gen.WorkflowExecutionCloseStatus_FAILED,
+		Status: gen.WorkflowExecutionCloseStatusFailed,
 	})
 	s.Nil(err4)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].Execution.GetWorkflowId())
+	s.Equal(workflowExecution2.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 }
 
 func (s *visibilityPersistenceSuite) TestGetClosedExecution() {
@@ -443,6 +443,6 @@ func (s *visibilityPersistenceSuite) TestGetClosedExecution() {
 		Execution:  workflowExecution,
 	})
 	s.Nil(err3)
-	s.Equal(workflowExecution.GetWorkflowId(), resp.Execution.GetExecution().GetWorkflowId())
-	s.Equal(int64(3), resp.Execution.GetHistoryLength())
+	s.Equal(workflowExecution.WorkflowId, resp.Execution.Execution.WorkflowId)
+	s.Equal(int64(3), *resp.Execution.HistoryLength)
 }

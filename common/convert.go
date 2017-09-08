@@ -86,3 +86,64 @@ func EventTypePtr(t s.EventType) *s.EventType {
 func WorkflowTypePtr(t s.WorkflowType) *s.WorkflowType {
 	return &t
 }
+
+// TimeoutTypePtr makes a copy and returns the pointer to a TimeoutType.
+func TimeoutTypePtr(t s.TimeoutType) *s.TimeoutType {
+	return &t
+}
+
+// DecisionTaskFailedCausePtr makes a copy and returns the pointer to a DecisionTaskFailedCause.
+func DecisionTaskFailedCausePtr(t s.DecisionTaskFailedCause) *s.DecisionTaskFailedCause {
+	return &t
+}
+
+// CancelExternalWorkflowExecutionFailedCausePtr makes a copy and returns the pointer to a CancelExternalWorkflowExecutionFailedCause.
+func CancelExternalWorkflowExecutionFailedCausePtr(t s.CancelExternalWorkflowExecutionFailedCause) *s.CancelExternalWorkflowExecutionFailedCause {
+	return &t
+}
+
+// ChildPolicyPtr makes a copy and returns the pointer to a ChildPolicy.
+func ChildPolicyPtr(t s.ChildPolicy) *s.ChildPolicy {
+	return &t
+}
+
+// ChildWorkflowExecutionFailedCausePtr makes a copy and returns the pointer to a ChildWorkflowExecutionFailedCause.
+func ChildWorkflowExecutionFailedCausePtr(t s.ChildWorkflowExecutionFailedCause) *s.ChildWorkflowExecutionFailedCause {
+	return &t
+}
+
+// StringDefault returns value if string pointer is set otherwise default value of string
+func StringDefault(v *string) string {
+	var defaultString string
+	if v == nil {
+		return defaultString
+	}
+	return *v
+}
+
+// Int32Default returns value if int32 pointer is set otherwise default value of int32
+func Int32Default(v *int32) int32 {
+	var defaultInt32 int32
+	if v == nil {
+		return defaultInt32
+	}
+	return *v
+}
+
+// Int64Default returns value if int64 pointer is set otherwise default value of int64
+func Int64Default(v *int64) int64 {
+	var defaultInt64 int64
+	if v == nil {
+		return defaultInt64
+	}
+	return *v
+}
+
+// BoolDefault returns value if bool pointer is set otherwise default value of bool
+func BoolDefault(v *bool) bool {
+	var defaultBool bool
+	if v == nil {
+		return defaultBool
+	}
+	return *v
+}

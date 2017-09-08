@@ -34,7 +34,6 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/tchannel-go/thrift"
 	"golang.org/x/net/context"
 )
 
@@ -46,7 +45,7 @@ type taskListManager interface {
 	Start() error
 	Stop()
 	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error
-	GetTaskContext(ctx thrift.Context) (*taskContext, error)
+	GetTaskContext(ctx context.Context) (*taskContext, error)
 	String() string
 }
 
@@ -169,7 +168,7 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 }
 
 // Loads a task from DB or from sync match and wraps it in a task context
-func (c *taskListManagerImpl) GetTaskContext(ctx thrift.Context) (*taskContext, error) {
+func (c *taskListManagerImpl) GetTaskContext(ctx context.Context) (*taskContext, error) {
 	result, err := c.getTask(ctx)
 	if err != nil {
 		return nil, err
@@ -256,7 +255,7 @@ func (c *taskListManagerImpl) completeTaskPoll(taskID int64) (ackLevel int64) {
 }
 
 // Loads task from taskBuffer (which is populated from persistence) or from sync match to add task call
-func (c *taskListManagerImpl) getTask(ctx thrift.Context) (*getTaskResult, error) {
+func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, error) {
 	scope := metrics.MatchingTaskListMgrScope
 	timer := time.NewTimer(c.config.LongPollExpirationInterval)
 	defer timer.Stop()
@@ -593,7 +592,7 @@ func (c *taskContext) completeTask(err error) {
 }
 
 func createServiceBusyError() *s.ServiceBusyError {
-	err := s.NewServiceBusyError()
+	err := &s.ServiceBusyError{}
 	err.Message = "Too many outstanding appends to the TaskList"
 	return err
 }

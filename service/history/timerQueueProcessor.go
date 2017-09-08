@@ -604,7 +604,7 @@ Update_History_Loop:
 					timeoutType, ai.ScheduleID, ai.StartedID)
 
 				switch timeoutType {
-				case workflow.TimeoutType_SCHEDULE_TO_CLOSE:
+				case workflow.TimeoutTypeScheduleToClose:
 					{
 						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
 						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
@@ -613,7 +613,7 @@ Update_History_Loop:
 						updateHistory = true
 					}
 
-				case workflow.TimeoutType_START_TO_CLOSE:
+				case workflow.TimeoutTypeStartToClose:
 					{
 						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 						if ai.StartedID != emptyEventID {
@@ -624,7 +624,7 @@ Update_History_Loop:
 						}
 					}
 
-				case workflow.TimeoutType_HEARTBEAT:
+				case workflow.TimeoutTypeHeartbeat:
 					{
 						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 						t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
@@ -635,7 +635,7 @@ Update_History_Loop:
 						updateHistory = true
 					}
 
-				case workflow.TimeoutType_SCHEDULE_TO_START:
+				case workflow.TimeoutTypeScheduleToStart:
 					{
 						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 						if ai.StartedID == emptyEventID {
@@ -648,7 +648,7 @@ Update_History_Loop:
 				}
 			} else {
 				// See if we have next timer in list to be created.
-				isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutType_HEARTBEAT)
+				isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
 
 				// Create next timer task if we don't have one (or)
 				// if current one is HB task and we need to create next HB task for the same.
@@ -823,8 +823,8 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 		newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
 			DomainID:   msBuilder.executionInfo.DomainID,
-			TaskList:   newDecisionEvent.GetDecisionTaskScheduledEventAttributes().GetTaskList().GetName(),
-			ScheduleID: newDecisionEvent.GetEventId(),
+			TaskList:   *newDecisionEvent.DecisionTaskScheduledEventAttributes.TaskList.Name,
+			ScheduleID: *newDecisionEvent.EventId,
 		}}
 	}
 

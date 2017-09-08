@@ -149,6 +149,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -177,6 +178,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -208,6 +210,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -243,6 +246,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -286,6 +290,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -299,9 +304,9 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	})
 	s.Nil(err)
 	s.NotNil(response)
-	s.Equal("wType", response.GetWorkflowType().GetName())
-	s.False(response.IsSetPreviousStartedEventId())
-	s.Equal(int64(3), response.GetStartedEventId())
+	s.Equal("wType", *response.WorkflowType.Name)
+	s.True(response.PreviousStartedEventId == nil)
+	s.Equal(int64(3), *response.StartedEventId)
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
@@ -328,6 +333,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -342,9 +348,9 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 
 	s.Nil(err)
 	s.NotNil(response)
-	s.Equal("wType", response.GetWorkflowType().GetName())
-	s.False(response.IsSetPreviousStartedEventId())
-	s.Equal(startedEventID.GetEventId(), response.GetStartedEventId())
+	s.Equal("wType", *response.WorkflowType.Name)
+	s.True(response.PreviousStartedEventId == nil)
+	s.Equal(startedEventID.EventId, response.StartedEventId)
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
@@ -371,6 +377,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -412,6 +419,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		&persistence.ConditionFailedError{}).Times(conditionalRetryCount)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -446,6 +454,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -460,9 +469,9 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 
 	s.Nil(err)
 	s.NotNil(response)
-	s.Equal("wType", response.GetWorkflowType().GetName())
-	s.False(response.IsSetPreviousStartedEventId())
-	s.Equal(int64(3), response.GetStartedEventId())
+	s.Equal("wType", *response.WorkflowType.Name)
+	s.True(response.PreviousStartedEventId == nil)
+	s.Equal(int64(3), *response.StartedEventId)
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
@@ -477,6 +486,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
 		TaskId:            common.Int64Ptr(100),
@@ -511,7 +521,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, int64(2), int64(3), nil, identity)
-	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, decisionCompletedEvent.GetEventId(), activityID,
+	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
 		activityType, tl, activityInput, 100, 10, 5)
 
 	ms1 := createMutableState(msBuilder)
@@ -522,6 +532,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
+		DomainUUID:        common.StringPtr("domainId"),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
 		TaskId:            common.Int64Ptr(100),
@@ -535,9 +546,9 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	})
 	s.Nil(err)
 	s.NotNil(response)
-	s.Equal(scheduledEvent, response.GetScheduledEvent())
-	s.Equal(scheduledEvent.GetEventId()+1, response.GetStartedEvent().GetEventId())
-	s.Equal("reqId", response.GetStartedEvent().GetActivityTaskStartedEventAttributes().GetRequestId())
+	s.Equal(scheduledEvent, response.ScheduledEvent)
+	s.Equal(*scheduledEvent.EventId+1, *response.StartedEvent.EventId)
+	s.Equal("reqId", *response.StartedEvent.ActivityTaskStartedEventAttributes.RequestId)
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
@@ -611,7 +622,7 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
-		addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
+		addDecisionTaskStartedEvent(msBuilder, *scheduleEvent.EventId, tl, identity)
 	}
 
 	return msBuilder
@@ -646,10 +657,10 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, scheduleEvent.GetEventId(), tl, identity)
+	addDecisionTaskStartedEvent(msBuilder, *scheduleEvent.EventId, tl, identity)
 
 	decisions := []*workflow.Decision{{
-		DecisionType: workflow.DecisionTypePtr(workflow.DecisionType_RecordMarker),
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),
 		RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
 			MarkerName: common.StringPtr(markerName),
 			Details:    markerDetails,

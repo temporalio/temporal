@@ -22,11 +22,10 @@ package service
 
 import (
 	"github.com/uber-common/bark"
-	"github.com/uber/tchannel-go/thrift"
-
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
+	"go.uber.org/yarpc"
 )
 
 type (
@@ -35,8 +34,8 @@ type (
 		// GetHostName returns the name of host running the service
 		GetHostName() string
 
-		// Start starts the service
-		Start(thriftService []thrift.TChanServer)
+		// Start the service
+		Start()
 
 		// Stop stops the service
 		Stop()
@@ -46,6 +45,8 @@ type (
 		GetMetricsClient() metrics.Client
 
 		GetClientFactory() client.Factory
+
+		GetDispatcher() *yarpc.Dispatcher
 
 		GetMembershipMonitor() membership.Monitor
 

@@ -70,15 +70,15 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 
 func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
-	if execution.GetWorkflowId() == "" {
+	if execution.WorkflowId == nil || *execution.WorkflowId == "" {
 		return nil, nil, &workflow.InternalServiceError{Message: "Can't load workflow execution.  WorkflowId not set."}
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
-	if execution.GetRunId() == "" {
+	if execution.RunId == nil || *execution.RunId == "" {
 		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
 			DomainID:   domainID,
-			WorkflowID: execution.GetWorkflowId(),
+			WorkflowID: *execution.WorkflowId,
 		})
 
 		if err != nil {
@@ -93,7 +93,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func() {}, nil
 	}
 
-	key := execution.GetRunId()
+	key := *execution.RunId
 	context, cacheHit := c.Get(key).(*workflowExecutionContext)
 	if !cacheHit {
 		// Let's create the workflow execution context

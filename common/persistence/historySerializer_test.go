@@ -67,9 +67,9 @@ func (s *historySerializerSuite) TestSerializerFactory() {
 	event1 := &workflow.HistoryEvent{
 		EventId:   common.Int64Ptr(999),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
-		EventType: common.EventTypePtr(workflow.EventType_ActivityTaskCompleted),
+		EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
 		ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
-			Result_:          []byte("result-1-event-1"),
+			Result:           []byte("result-1-event-1"),
 			ScheduledEventId: common.Int64Ptr(4),
 			StartedEventId:   common.Int64Ptr(5),
 			Identity:         common.StringPtr("event-1"),
@@ -122,10 +122,10 @@ func (s *historySerializerSuite) TestSerializerFactory() {
 
 			s.Equal(dh.Version, 1)
 			s.Equal(len(dh.Events), 1)
-			s.Equal(event1.GetEventId(), dh.Events[0].GetEventId())
-			s.Equal(event1.GetTimestamp(), dh.Events[0].GetTimestamp())
-			s.Equal(event1.GetEventType(), dh.Events[0].GetEventType())
-			s.Equal(event1.GetActivityTaskCompletedEventAttributes().GetResult_(), dh.Events[0].GetActivityTaskCompletedEventAttributes().GetResult_())
+			s.Equal(event1.EventId, dh.Events[0].EventId)
+			s.Equal(event1.Timestamp, dh.Events[0].Timestamp)
+			s.Equal(event1.EventType, dh.Events[0].EventType)
+			s.Equal(event1.ActivityTaskCompletedEventAttributes.Result, dh.Events[0].ActivityTaskCompletedEventAttributes.Result)
 
 		}()
 	}

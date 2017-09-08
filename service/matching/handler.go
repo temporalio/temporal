@@ -21,20 +21,21 @@
 package matching
 
 import (
+	"context"
 	"sync"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/health"
 	m "github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/matching/matchingserviceserver"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/tchannel-go/thrift"
 )
 
-var _ m.TChanMatchingService = (*Handler)(nil)
+var _ matchingserviceserver.Interface = (*Handler)(nil)
 
 // Handler - Thrift handler inteface for history service
 type Handler struct {
@@ -47,7 +48,7 @@ type Handler struct {
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager) (*Handler, []thrift.TChanServer) {
+func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager) *Handler {
 	handler := &Handler{
 		Service:         sVice,
 		taskPersistence: taskPersistence,
@@ -55,12 +56,13 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
-	return handler, []thrift.TChanServer{m.NewTChanMatchingServiceServer(handler), health.NewTChanMetaServer(handler)}
+	return handler
 }
 
 // Start starts the handler
-func (h *Handler) Start(thriftService []thrift.TChanServer) error {
-	h.Service.Start(thriftService)
+func (h *Handler) Start() error {
+	h.Service.GetDispatcher().Register(matchingserviceserver.New(h))
+	h.Service.Start()
 	history, err := h.Service.GetClientFactory().NewHistoryClient()
 	if err != nil {
 		return err
@@ -79,7 +81,7 @@ func (h *Handler) Stop() {
 }
 
 // Health is for health check
-func (h *Handler) Health(ctx thrift.Context) (*health.HealthStatus, error) {
+func (h *Handler) Health(ctx context.Context) (*health.HealthStatus, error) {
 	h.startWG.Wait()
 	h.GetLogger().Debug("Matching service health check endpoint reached.")
 	hs := &health.HealthStatus{Ok: true, Msg: common.StringPtr("matching good")}
@@ -96,7 +98,7 @@ func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
 }
 
 // AddActivityTask - adds an activity task.
-func (h *Handler) AddActivityTask(ctx thrift.Context, addRequest *m.AddActivityTaskRequest) error {
+func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivityTaskRequest) error {
 	scope := metrics.MatchingAddActivityTaskScope
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
@@ -104,7 +106,7 @@ func (h *Handler) AddActivityTask(ctx thrift.Context, addRequest *m.AddActivityT
 }
 
 // AddDecisionTask - adds a decision task.
-func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionTaskRequest) error {
+func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecisionTaskRequest) error {
 	scope := metrics.MatchingAddDecisionTaskScope
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
@@ -112,7 +114,7 @@ func (h *Handler) AddDecisionTask(ctx thrift.Context, addRequest *m.AddDecisionT
 }
 
 // PollForActivityTask - long poll for an activity task.
-func (h *Handler) PollForActivityTask(ctx thrift.Context,
+func (h *Handler) PollForActivityTask(ctx context.Context,
 	pollRequest *m.PollForActivityTaskRequest) (*gen.PollForActivityTaskResponse, error) {
 
 	scope := metrics.MatchingPollForActivityTaskScope
@@ -126,7 +128,7 @@ func (h *Handler) PollForActivityTask(ctx thrift.Context,
 }
 
 // PollForDecisionTask - long poll for a decision task.
-func (h *Handler) PollForDecisionTask(ctx thrift.Context,
+func (h *Handler) PollForDecisionTask(ctx context.Context,
 	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
 
 	scope := metrics.MatchingPollForDecisionTaskScope

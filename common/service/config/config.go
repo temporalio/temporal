@@ -43,18 +43,18 @@ type (
 	// Service contains the service specific config items
 	Service struct {
 		// TChannel is the tchannel configuration
-		TChannel TChannel `yaml:"tchannel"`
+		RPC RPC `yaml:"rpc"`
 		// Metrics is the metrics subsystem configuration
 		Metrics Metrics `yaml:"metrics"`
 	}
 
-	// TChannel contains the tchannel config items
-	TChannel struct {
+	// RPC contains the rpc config items
+	RPC struct {
 		// Port is the port  on which the channel will bind to
 		Port int `yaml:"port"`
 		// BindOnLocalHost is true if localhost is the bind address
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
-		// DisableLogging disables all logging for tchannel
+		// DisableLogging disables all logging for rpc
 		DisableLogging bool `yaml:"disableLogging"`
 		// LogLevel is the desired log level
 		LogLevel string `yaml:"logLevel"`

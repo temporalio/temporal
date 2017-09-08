@@ -21,135 +21,144 @@
 package history
 
 import (
+	"context"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
 	h "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
-	tchannel "github.com/uber/tchannel-go"
-	"github.com/uber/tchannel-go/thrift"
+	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)
 
 type clientImpl struct {
-	connection      *tchannel.Channel
 	resolver        membership.ServiceResolver
 	tokenSerializer common.TaskTokenSerializer
 	numberOfShards  int
 	// TODO: consider refactor thriftCache into a separate struct
 	thriftCacheLock sync.RWMutex
-	thriftCache     map[string]h.TChanHistoryService
+	thriftCache     map[string]historyserviceclient.Interface
+	rpcFactory      common.RPCFactory
 }
 
 // NewClient creates a new history service TChannel client
-func NewClient(ch *tchannel.Channel, monitor membership.Monitor, numberOfShards int) (Client, error) {
+func NewClient(d common.RPCFactory, monitor membership.Monitor, numberOfShards int) (Client, error) {
 	sResolver, err := monitor.GetResolver(common.HistoryServiceName)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &clientImpl{
-		connection:      ch,
+		rpcFactory:      d,
 		resolver:        sResolver,
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		numberOfShards:  numberOfShards,
-		thriftCache:     make(map[string]h.TChanHistoryService),
+		thriftCache:     make(map[string]historyserviceclient.Interface),
 	}
 	return client, nil
 }
 
-func (c *clientImpl) StartWorkflowExecution(context thrift.Context,
-	request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse, error) {
-	client, err := c.getHostForRequest(request.GetStartRequest().GetWorkflowId())
+func (c *clientImpl) StartWorkflowExecution(
+	ctx context.Context,
+	request *h.StartWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) (*workflow.StartWorkflowExecutionResponse, error) {
+	client, err := c.getHostForRequest(*request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 	var response *workflow.StartWorkflowExecutionResponse
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
-		ctx, cancel := c.createContext(context)
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.StartWorkflowExecution(ctx, request)
 		return err
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (c *clientImpl) GetWorkflowExecutionNextEventID(context thrift.Context,
-	request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
-	client, err := c.getHostForRequest(request.GetExecution().GetWorkflowId())
+func (c *clientImpl) GetWorkflowExecutionNextEventID(
+	ctx context.Context,
+	request *h.GetWorkflowExecutionNextEventIDRequest,
+	opts ...yarpc.CallOption) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
+	client, err := c.getHostForRequest(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 	var response *h.GetWorkflowExecutionNextEventIDResponse
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
-		ctx, cancel := c.createContext(context)
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.GetWorkflowExecutionNextEventID(ctx, request)
 		return err
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (c *clientImpl) RecordDecisionTaskStarted(context thrift.Context,
-	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
-	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
+func (c *clientImpl) RecordDecisionTaskStarted(
+	ctx context.Context,
+	request *h.RecordDecisionTaskStartedRequest,
+	opts ...yarpc.CallOption) (*h.RecordDecisionTaskStartedResponse, error) {
+	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 	var response *h.RecordDecisionTaskStartedResponse
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
-		ctx, cancel := c.createContext(context)
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.RecordDecisionTaskStarted(ctx, request)
 		return err
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (c *clientImpl) RecordActivityTaskStarted(context thrift.Context,
-	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
-	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
+func (c *clientImpl) RecordActivityTaskStarted(
+	ctx context.Context,
+	request *h.RecordActivityTaskStartedRequest,
+	opts ...yarpc.CallOption) (*h.RecordActivityTaskStartedResponse, error) {
+	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
 	var response *h.RecordActivityTaskStartedResponse
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
-		ctx, cancel := c.createContext(context)
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
-	request *h.RespondDecisionTaskCompletedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().TaskToken)
+func (c *clientImpl) RespondDecisionTaskCompleted(
+	ctx context.Context,
+	request *h.RespondDecisionTaskCompletedRequest,
+	opts ...yarpc.CallOption) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
 		return err
 	}
@@ -157,18 +166,20 @@ func (c *clientImpl) RespondDecisionTaskCompleted(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RespondDecisionTaskCompleted(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
-	request *h.RespondActivityTaskCompletedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
+func (c *clientImpl) RespondActivityTaskCompleted(
+	ctx context.Context,
+	request *h.RespondActivityTaskCompletedRequest,
+	opts ...yarpc.CallOption) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
 		return err
 	}
@@ -176,18 +187,20 @@ func (c *clientImpl) RespondActivityTaskCompleted(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RespondActivityTaskCompleted(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
-	request *h.RespondActivityTaskFailedRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.GetFailedRequest().GetTaskToken())
+func (c *clientImpl) RespondActivityTaskFailed(
+	ctx context.Context,
+	request *h.RespondActivityTaskFailedRequest,
+	opts ...yarpc.CallOption) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.FailedRequest.TaskToken)
 	if err != nil {
 		return err
 	}
@@ -195,18 +208,20 @@ func (c *clientImpl) RespondActivityTaskFailed(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RespondActivityTaskFailed(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
-	request *h.RespondActivityTaskCanceledRequest) error {
-	taskToken, err := c.tokenSerializer.Deserialize(request.GetCancelRequest().GetTaskToken())
+func (c *clientImpl) RespondActivityTaskCanceled(
+	ctx context.Context,
+	request *h.RespondActivityTaskCanceledRequest,
+	opts ...yarpc.CallOption) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.CancelRequest.TaskToken)
 	if err != nil {
 		return err
 	}
@@ -214,18 +229,20 @@ func (c *clientImpl) RespondActivityTaskCanceled(context thrift.Context,
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RespondActivityTaskCanceled(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
-	request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
-	taskToken, err := c.tokenSerializer.Deserialize(request.GetHeartbeatRequest().GetTaskToken())
+func (c *clientImpl) RecordActivityTaskHeartbeat(
+	ctx context.Context,
+	request *h.RecordActivityTaskHeartbeatRequest,
+	opts ...yarpc.CallOption) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
+	taskToken, err := c.tokenSerializer.Deserialize(request.HeartbeatRequest.TaskToken)
 	if err != nil {
 		return nil, err
 	}
@@ -234,94 +251,106 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(context thrift.Context,
 		return nil, err
 	}
 	var response *workflow.RecordActivityTaskHeartbeatResponse
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		var err error
-		ctx, cancel := c.createContext(context)
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.RecordActivityTaskHeartbeat(ctx, request)
 		return err
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (c *clientImpl) RequestCancelWorkflowExecution(context thrift.Context,
-	request *h.RequestCancelWorkflowExecutionRequest) error {
-	client, err := c.getHostForRequest(request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
+func (c *clientImpl) RequestCancelWorkflowExecution(
+	ctx context.Context,
+	request *h.RequestCancelWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.CancelRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RequestCancelWorkflowExecution(ctx, request)
 	}
-	return c.executeWithRedirect(context, client, op)
+	return c.executeWithRedirect(ctx, client, op)
 }
 
-func (c *clientImpl) SignalWorkflowExecution(context thrift.Context,
-	request *h.SignalWorkflowExecutionRequest) error {
-	client, err := c.getHostForRequest(request.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
+func (c *clientImpl) SignalWorkflowExecution(
+	ctx context.Context,
+	request *h.SignalWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.SignalWorkflowExecution(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 
 	return err
 }
 
-func (c *clientImpl) TerminateWorkflowExecution(context thrift.Context,
-	request *h.TerminateWorkflowExecutionRequest) error {
-	client, err := c.getHostForRequest(request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
+func (c *clientImpl) TerminateWorkflowExecution(
+	ctx context.Context,
+	request *h.TerminateWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.TerminateRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.TerminateWorkflowExecution(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) ScheduleDecisionTask(context thrift.Context, request *h.ScheduleDecisionTaskRequest) error {
-	client, err := c.getHostForRequest(request.GetWorkflowExecution().GetWorkflowId())
+func (c *clientImpl) ScheduleDecisionTask(
+	ctx context.Context,
+	request *h.ScheduleDecisionTaskRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.ScheduleDecisionTask(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) RecordChildExecutionCompleted(context thrift.Context, request *h.RecordChildExecutionCompletedRequest) error {
-	client, err := c.getHostForRequest(request.GetWorkflowExecution().GetWorkflowId())
+func (c *clientImpl) RecordChildExecutionCompleted(
+	ctx context.Context,
+	request *h.RecordChildExecutionCompletedRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
-	op := func(context thrift.Context, client h.TChanHistoryService) error {
-		ctx, cancel := c.createContext(context)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		return client.RecordChildExecutionCompleted(ctx, request)
 	}
-	err = c.executeWithRedirect(context, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	return err
 }
 
-func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService, error) {
+func (c *clientImpl) getHostForRequest(workflowID string) (historyserviceclient.Interface, error) {
 	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	host, err := c.resolver.Lookup(string(key))
 	if err != nil {
@@ -331,18 +360,16 @@ func (c *clientImpl) getHostForRequest(workflowID string) (h.TChanHistoryService
 	return c.getThriftClient(host.GetAddress()), nil
 }
 
-func (c *clientImpl) createContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
+	// TODO: make timeout configurable
 	timeout := time.Second * 30
 	if parent == nil {
-		// TODO: make timeout configurable
-		return thrift.NewContext(timeout)
+		return context.WithTimeout(context.Background(), timeout)
 	}
-	builder := tchannel.NewContextBuilder(timeout)
-	builder.SetParentContext(parent)
-	return builder.Build()
+	return context.WithTimeout(parent, timeout)
 }
 
-func (c *clientImpl) getThriftClient(hostPort string) h.TChanHistoryService {
+func (c *clientImpl) getThriftClient(hostPort string) historyserviceclient.Interface {
 	c.thriftCacheLock.RLock()
 	client, ok := c.thriftCache[hostPort]
 	c.thriftCacheLock.RUnlock()
@@ -357,21 +384,19 @@ func (c *clientImpl) getThriftClient(hostPort string) h.TChanHistoryService {
 	// before we acquired the lock
 	client, ok = c.thriftCache[hostPort]
 	if !ok {
-		tClient := thrift.NewClient(c.connection, common.HistoryServiceName, &thrift.ClientOptions{
-			HostPort: hostPort,
-		})
-
-		client = h.NewTChanHistoryServiceClient(tClient)
+		d := c.rpcFactory.CreateDispatcherForOutbound(
+			"history-service-client", common.HistoryServiceName, hostPort)
+		client = historyserviceclient.New(d.ClientConfig(common.HistoryServiceName))
 		c.thriftCache[hostPort] = client
 	}
 	return client
 }
 
-func (c *clientImpl) executeWithRedirect(ctx thrift.Context, client h.TChanHistoryService,
-	op func(context thrift.Context, client h.TChanHistoryService) error) error {
+func (c *clientImpl) executeWithRedirect(ctx context.Context, client historyserviceclient.Interface,
+	op func(ctx context.Context, client historyserviceclient.Interface) error) error {
 	var err error
 	if ctx == nil {
-		ctx = common.BackgroundThriftContext()
+		ctx = context.Background()
 	}
 redirectLoop:
 	for {
@@ -383,7 +408,7 @@ redirectLoop:
 		if err != nil {
 			if s, ok := err.(*h.ShardOwnershipLostError); ok {
 				// TODO: consider emitting a metric for number of redirects
-				client = c.getThriftClient(s.GetOwner())
+				client = c.getThriftClient(*s.Owner)
 				continue redirectLoop
 			}
 		}

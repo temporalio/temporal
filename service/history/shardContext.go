@@ -423,7 +423,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 			return err
 		}
 		task.SetTaskID(seqNum)
-		s.logger.Debugf("%v: Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
+		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
 			persistence.GetVisibilityTSFrom(task), task.GetTaskID(), s.shardInfo.TimerAckLevel)
 	}
 	return nil

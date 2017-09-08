@@ -32,7 +32,6 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
-	"github.com/uber/tchannel-go/thrift"
 )
 
 const (
@@ -148,7 +147,7 @@ func PrettyPrintHistory(history *workflow.History, logger bark.Logger) {
 // IsValidContext checks that the thrift context is not expired on cancelled.
 // Returns nil if the context is still valid. Otherwise, returns the result of
 // ctx.Err()
-func IsValidContext(ctx thrift.Context) error {
+func IsValidContext(ctx context.Context) error {
 	ch := ctx.Done()
 	if ch != nil {
 		select {
@@ -159,9 +158,4 @@ func IsValidContext(ctx thrift.Context) error {
 		}
 	}
 	return nil
-}
-
-// BackgroundThriftContext returns a wrapper around context.Background()
-func BackgroundThriftContext() thrift.Context {
-	return thrift.Wrap(context.Background())
 }

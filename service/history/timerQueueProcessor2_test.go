@@ -135,13 +135,14 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	builder := newMutableStateBuilder(s.config, s.logger)
 	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
-		WorkflowType:                   &workflow.WorkflowType{Name: common.StringPtr("wType")},
-		TaskList:                       common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
-		TaskStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
+		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	})
 
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
-	addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), taskList, uuid.New())
+	addDecisionTaskStartedEvent(builder, *decisionScheduledEvent.EventId, taskList, uuid.New())
 
 	waitCh := make(chan struct{})
 
@@ -149,9 +150,9 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	taskID := int64(100)
 	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
-		TaskType: persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutType_START_TO_CLOSE),
+		TaskType: persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: mockTS.Now(),
-		EventID:             decisionScheduledEvent.GetEventId()}
+		EventID:             *decisionScheduledEvent.EventId}
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
@@ -201,10 +202,11 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	})
 
 	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
-	addDecisionTaskStartedEvent(builder, decisionScheduledEvent.GetEventId(), taskList, uuid.New())
+	addDecisionTaskStartedEvent(builder, *decisionScheduledEvent.EventId, taskList, uuid.New())
 
 	waitCh := make(chan struct{})
 
@@ -214,7 +216,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
 		VisibilityTimestamp: mockTS.Now(),
-		EventID:             decisionScheduledEvent.GetEventId()}
+		EventID:             *decisionScheduledEvent.EventId}
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()

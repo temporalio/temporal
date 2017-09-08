@@ -21,10 +21,11 @@
 package matching
 
 import (
+	"context"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/tchannel-go/thrift"
+	"go.uber.org/yarpc"
 )
 
 var _ Client = (*metricClient)(nil)
@@ -42,7 +43,10 @@ func NewMetricClient(client Client, metricsClient metrics.Client) Client {
 	}
 }
 
-func (c *metricClient) AddActivityTask(context thrift.Context, addRequest *m.AddActivityTaskRequest) error {
+func (c *metricClient) AddActivityTask(
+	context context.Context,
+	addRequest *m.AddActivityTaskRequest,
+	opts ...yarpc.CallOption) error {
 	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceLatency)
@@ -56,7 +60,10 @@ func (c *metricClient) AddActivityTask(context thrift.Context, addRequest *m.Add
 	return err
 }
 
-func (c *metricClient) AddDecisionTask(context thrift.Context, addRequest *m.AddDecisionTaskRequest) error {
+func (c *metricClient) AddDecisionTask(
+	context context.Context,
+	addRequest *m.AddDecisionTaskRequest,
+	opts ...yarpc.CallOption) error {
 	c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceLatency)
@@ -70,8 +77,10 @@ func (c *metricClient) AddDecisionTask(context thrift.Context, addRequest *m.Add
 	return err
 }
 
-func (c *metricClient) PollForActivityTask(context thrift.Context,
-	pollRequest *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
+func (c *metricClient) PollForActivityTask(
+	context context.Context,
+	pollRequest *m.PollForActivityTaskRequest,
+	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceLatency)
@@ -85,8 +94,10 @@ func (c *metricClient) PollForActivityTask(context thrift.Context,
 	return resp, err
 }
 
-func (c *metricClient) PollForDecisionTask(context thrift.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
+func (c *metricClient) PollForDecisionTask(
+	context context.Context,
+	pollRequest *m.PollForDecisionTaskRequest,
+	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
 	c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceLatency)

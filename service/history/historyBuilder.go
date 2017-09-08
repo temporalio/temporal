@@ -175,12 +175,12 @@ func (b *historyBuilder) AddContinuedAsNewEvent(decisionCompletedEventID int64, 
 func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 	request *workflow.StartTimerDecisionAttributes) *workflow.HistoryEvent {
 
-	attributes := workflow.NewTimerStartedEventAttributes()
-	attributes.TimerId = common.StringPtr(request.GetTimerId())
-	attributes.StartToFireTimeoutSeconds = common.Int64Ptr(request.GetStartToFireTimeoutSeconds())
+	attributes := &workflow.TimerStartedEventAttributes{}
+	attributes.TimerId = common.StringPtr(*request.TimerId)
+	attributes.StartToFireTimeoutSeconds = common.Int64Ptr(*request.StartToFireTimeoutSeconds)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_TimerStarted)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeTimerStarted)
 	event.TimerStartedEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -189,11 +189,11 @@ func (b *historyBuilder) AddTimerStartedEvent(decisionCompletedEventID int64,
 func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
 	timerID string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewTimerFiredEventAttributes()
+	attributes := &workflow.TimerFiredEventAttributes{}
 	attributes.TimerId = common.StringPtr(timerID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_TimerFired)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeTimerFired)
 	event.TimerFiredEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -202,11 +202,11 @@ func (b *historyBuilder) AddTimerFiredEvent(startedEventID int64,
 func (b *historyBuilder) AddActivityTaskCancelRequestedEvent(decisionCompletedEventID int64,
 	activityID string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewActivityTaskCancelRequestedEventAttributes()
+	attributes := &workflow.ActivityTaskCancelRequestedEventAttributes{}
 	attributes.ActivityId = common.StringPtr(activityID)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskCancelRequested)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskCancelRequested)
 	event.ActivityTaskCancelRequestedEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -215,12 +215,12 @@ func (b *historyBuilder) AddActivityTaskCancelRequestedEvent(decisionCompletedEv
 func (b *historyBuilder) AddRequestCancelActivityTaskFailedEvent(decisionCompletedEventID int64,
 	activityID string, cause string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewRequestCancelActivityTaskFailedEventAttributes()
+	attributes := &workflow.RequestCancelActivityTaskFailedEventAttributes{}
 	attributes.ActivityId = common.StringPtr(activityID)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionCompletedEventID)
 	attributes.Cause = common.StringPtr(cause)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_RequestCancelActivityTaskFailed)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeRequestCancelActivityTaskFailed)
 	event.RequestCancelActivityTaskFailedEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -229,14 +229,14 @@ func (b *historyBuilder) AddRequestCancelActivityTaskFailedEvent(decisionComplet
 func (b *historyBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEventID int64,
 	latestCancelRequestedEventID int64, details []byte, identity string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewActivityTaskCanceledEventAttributes()
+	attributes := &workflow.ActivityTaskCanceledEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.LatestCancelRequestedEventId = common.Int64Ptr(latestCancelRequestedEventID)
 	attributes.Details = details
 	attributes.Identity = common.StringPtr(identity)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskCanceled)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskCanceled)
 	event.ActivityTaskCanceledEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -245,13 +245,13 @@ func (b *historyBuilder) AddActivityTaskCanceledEvent(scheduleEventID, startedEv
 func (b *historyBuilder) AddTimerCanceledEvent(startedEventID int64,
 	decisionTaskCompletedEventID int64, timerID string, identity string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewTimerCanceledEventAttributes()
+	attributes := &workflow.TimerCanceledEventAttributes{}
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	attributes.TimerId = common.StringPtr(timerID)
 	attributes.Identity = common.StringPtr(identity)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_TimerCanceled)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeTimerCanceled)
 	event.TimerCanceledEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -260,13 +260,13 @@ func (b *historyBuilder) AddTimerCanceledEvent(startedEventID int64,
 func (b *historyBuilder) AddCancelTimerFailedEvent(timerID string, decisionTaskCompletedEventID int64,
 	cause string, identity string) *workflow.HistoryEvent {
 
-	attributes := workflow.NewCancelTimerFailedEventAttributes()
+	attributes := &workflow.CancelTimerFailedEventAttributes{}
 	attributes.TimerId = common.StringPtr(timerID)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	attributes.Cause = common.StringPtr(cause)
 	attributes.Identity = common.StringPtr(identity)
 
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_CancelTimerFailed)
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeCancelTimerFailed)
 	event.CancelTimerFailedEventAttributes = attributes
 
 	return b.addEventToHistory(event)
@@ -388,14 +388,14 @@ func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workfl
 
 func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	request *workflow.StartWorkflowExecutionRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionStarted)
-	attributes := workflow.NewWorkflowExecutionStartedEventAttributes()
-	attributes.WorkflowType = request.GetWorkflowType()
-	attributes.TaskList = request.GetTaskList()
-	attributes.Input = request.GetInput()
-	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetExecutionStartToCloseTimeoutSeconds())
-	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetTaskStartToCloseTimeoutSeconds())
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionStarted)
+	attributes := &workflow.WorkflowExecutionStartedEventAttributes{}
+	attributes.WorkflowType = request.WorkflowType
+	attributes.TaskList = request.TaskList
+	attributes.Input = request.Input
+	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*request.ExecutionStartToCloseTimeoutSeconds)
+	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*request.TaskStartToCloseTimeoutSeconds)
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.WorkflowExecutionStartedEventAttributes = attributes
 
 	return historyEvent
@@ -403,9 +403,9 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 
 func (b *historyBuilder) newDecisionTaskScheduledEvent(taskList string,
 	startToCloseTimeoutSeconds int32) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_DecisionTaskScheduled)
-	attributes := workflow.NewDecisionTaskScheduledEventAttributes()
-	attributes.TaskList = workflow.NewTaskList()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskScheduled)
+	attributes := &workflow.DecisionTaskScheduledEventAttributes{}
+	attributes.TaskList = &workflow.TaskList{}
 	attributes.TaskList.Name = common.StringPtr(taskList)
 	attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(startToCloseTimeoutSeconds)
 	historyEvent.DecisionTaskScheduledEventAttributes = attributes
@@ -415,10 +415,10 @@ func (b *historyBuilder) newDecisionTaskScheduledEvent(taskList string,
 
 func (b *historyBuilder) newDecisionTaskStartedEvent(scheduledEventID int64, requestID string,
 	request *workflow.PollForDecisionTaskRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_DecisionTaskStarted)
-	attributes := workflow.NewDecisionTaskStartedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskStarted)
+	attributes := &workflow.DecisionTaskStartedEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	attributes.RequestId = common.StringPtr(requestID)
 	historyEvent.DecisionTaskStartedEventAttributes = attributes
 
@@ -427,23 +427,23 @@ func (b *historyBuilder) newDecisionTaskStartedEvent(scheduledEventID int64, req
 
 func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_DecisionTaskCompleted)
-	attributes := workflow.NewDecisionTaskCompletedEventAttributes()
-	attributes.ExecutionContext = request.GetExecutionContext()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskCompleted)
+	attributes := &workflow.DecisionTaskCompletedEventAttributes{}
+	attributes.ExecutionContext = request.ExecutionContext
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.DecisionTaskCompletedEventAttributes = attributes
 
 	return historyEvent
 }
 
 func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_DecisionTaskTimedOut)
-	attributes := workflow.NewDecisionTaskTimedOutEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskTimedOut)
+	attributes := &workflow.DecisionTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.TimeoutType = workflow.TimeoutTypePtr(workflow.TimeoutType_START_TO_CLOSE)
+	attributes.TimeoutType = common.TimeoutTypePtr(workflow.TimeoutTypeStartToClose)
 	historyEvent.DecisionTaskTimedOutEventAttributes = attributes
 
 	return historyEvent
@@ -451,12 +451,12 @@ func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, sta
 
 func (b *historyBuilder) newDecisionTaskFailedEvent(scheduleEventID int64, startedEventID int64,
 	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_DecisionTaskFailed)
-	attributes := workflow.NewDecisionTaskFailedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskFailed)
+	attributes := &workflow.DecisionTaskFailedEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.Cause = workflow.DecisionTaskFailedCausePtr(cause)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Cause = common.DecisionTaskFailedCausePtr(cause)
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.DecisionTaskFailedEventAttributes = attributes
 
 	return historyEvent
@@ -464,16 +464,16 @@ func (b *historyBuilder) newDecisionTaskFailedEvent(scheduleEventID int64, start
 
 func (b *historyBuilder) newActivityTaskScheduledEvent(decisionTaskCompletedEventID int64,
 	scheduleAttributes *workflow.ScheduleActivityTaskDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskScheduled)
-	attributes := workflow.NewActivityTaskScheduledEventAttributes()
-	attributes.ActivityId = common.StringPtr(scheduleAttributes.GetActivityId())
-	attributes.ActivityType = scheduleAttributes.GetActivityType()
-	attributes.TaskList = scheduleAttributes.GetTaskList()
-	attributes.Input = scheduleAttributes.GetInput()
-	attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(scheduleAttributes.GetScheduleToCloseTimeoutSeconds())
-	attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(scheduleAttributes.GetScheduleToStartTimeoutSeconds())
-	attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(scheduleAttributes.GetStartToCloseTimeoutSeconds())
-	attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(scheduleAttributes.GetHeartbeatTimeoutSeconds())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskScheduled)
+	attributes := &workflow.ActivityTaskScheduledEventAttributes{}
+	attributes.ActivityId = common.StringPtr(common.StringDefault(scheduleAttributes.ActivityId))
+	attributes.ActivityType = scheduleAttributes.ActivityType
+	attributes.TaskList = scheduleAttributes.TaskList
+	attributes.Input = scheduleAttributes.Input
+	attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.ScheduleToCloseTimeoutSeconds))
+	attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.ScheduleToStartTimeoutSeconds))
+	attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.StartToCloseTimeoutSeconds))
+	attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.HeartbeatTimeoutSeconds))
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.ActivityTaskScheduledEventAttributes = attributes
 
@@ -482,10 +482,10 @@ func (b *historyBuilder) newActivityTaskScheduledEvent(decisionTaskCompletedEven
 
 func (b *historyBuilder) newActivityTaskStartedEvent(scheduledEventID int64, requestID string,
 	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskStarted)
-	attributes := workflow.NewActivityTaskStartedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskStarted)
+	attributes := &workflow.ActivityTaskStartedEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	attributes.RequestId = common.StringPtr(requestID)
 	historyEvent.ActivityTaskStartedEventAttributes = attributes
 
@@ -494,12 +494,12 @@ func (b *historyBuilder) newActivityTaskStartedEvent(scheduledEventID int64, req
 
 func (b *historyBuilder) newActivityTaskCompletedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondActivityTaskCompletedRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskCompleted)
-	attributes := workflow.NewActivityTaskCompletedEventAttributes()
-	attributes.Result_ = request.GetResult_()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskCompleted)
+	attributes := &workflow.ActivityTaskCompletedEventAttributes{}
+	attributes.Result = request.Result
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.ActivityTaskCompletedEventAttributes = attributes
 
 	return historyEvent
@@ -507,11 +507,11 @@ func (b *historyBuilder) newActivityTaskCompletedEvent(scheduleEventID, startedE
 
 func (b *historyBuilder) newActivityTaskTimedOutEvent(scheduleEventID, startedEventID int64,
 	timeoutType workflow.TimeoutType, lastHeartBeatDetails []byte) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskTimedOut)
-	attributes := workflow.NewActivityTaskTimedOutEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskTimedOut)
+	attributes := &workflow.ActivityTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.TimeoutType = workflow.TimeoutTypePtr(timeoutType)
+	attributes.TimeoutType = common.TimeoutTypePtr(timeoutType)
 	attributes.Details = lastHeartBeatDetails
 	historyEvent.ActivityTaskTimedOutEventAttributes = attributes
 
@@ -520,13 +520,13 @@ func (b *historyBuilder) newActivityTaskTimedOutEvent(scheduleEventID, startedEv
 
 func (b *historyBuilder) newActivityTaskFailedEvent(scheduleEventID, startedEventID int64,
 	request *workflow.RespondActivityTaskFailedRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ActivityTaskFailed)
-	attributes := workflow.NewActivityTaskFailedEventAttributes()
-	attributes.Reason = common.StringPtr(request.GetReason())
-	attributes.Details = request.GetDetails()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskFailed)
+	attributes := &workflow.ActivityTaskFailedEventAttributes{}
+	attributes.Reason = common.StringPtr(common.StringDefault(request.Reason))
+	attributes.Details = request.Details
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.ActivityTaskFailedEventAttributes = attributes
 
 	return historyEvent
@@ -534,9 +534,9 @@ func (b *historyBuilder) newActivityTaskFailedEvent(scheduleEventID, startedEven
 
 func (b *historyBuilder) newCompleteWorkflowExecutionEvent(decisionTaskCompletedEventID int64,
 	request *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionCompleted)
-	attributes := workflow.NewWorkflowExecutionCompletedEventAttributes()
-	attributes.Result_ = request.GetResult_()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionCompleted)
+	attributes := &workflow.WorkflowExecutionCompletedEventAttributes{}
+	attributes.Result = request.Result
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.WorkflowExecutionCompletedEventAttributes = attributes
 
@@ -545,10 +545,10 @@ func (b *historyBuilder) newCompleteWorkflowExecutionEvent(decisionTaskCompleted
 
 func (b *historyBuilder) newFailWorkflowExecutionEvent(decisionTaskCompletedEventID int64,
 	request *workflow.FailWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionFailed)
-	attributes := workflow.NewWorkflowExecutionFailedEventAttributes()
-	attributes.Reason = common.StringPtr(request.GetReason())
-	attributes.Details = request.GetDetails()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionFailed)
+	attributes := &workflow.WorkflowExecutionFailedEventAttributes{}
+	attributes.Reason = common.StringPtr(common.StringDefault(request.Reason))
+	attributes.Details = request.Details
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.WorkflowExecutionFailedEventAttributes = attributes
 
@@ -556,9 +556,9 @@ func (b *historyBuilder) newFailWorkflowExecutionEvent(decisionTaskCompletedEven
 }
 
 func (b *historyBuilder) newTimeoutWorkflowExecutionEvent() *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionTimedOut)
-	attributes := workflow.NewWorkflowExecutionTimedOutEventAttributes()
-	attributes.TimeoutType = workflow.TimeoutTypePtr(workflow.TimeoutType_START_TO_CLOSE)
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionTimedOut)
+	attributes := &workflow.WorkflowExecutionTimedOutEventAttributes{}
+	attributes.TimeoutType = common.TimeoutTypePtr(workflow.TimeoutTypeStartToClose)
 	historyEvent.WorkflowExecutionTimedOutEventAttributes = attributes
 
 	return historyEvent
@@ -566,11 +566,11 @@ func (b *historyBuilder) newTimeoutWorkflowExecutionEvent() *workflow.HistoryEve
 
 func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
 	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionSignaled)
-	attributes := workflow.NewWorkflowExecutionSignaledEventAttributes()
-	attributes.SignalName = common.StringPtr(request.GetSignalName())
-	attributes.Input = request.GetInput()
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionSignaled)
+	attributes := &workflow.WorkflowExecutionSignaledEventAttributes{}
+	attributes.SignalName = common.StringPtr(common.StringDefault(request.SignalName))
+	attributes.Input = request.Input
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.WorkflowExecutionSignaledEventAttributes = attributes
 
 	return historyEvent
@@ -578,11 +578,11 @@ func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
 
 func (b *historyBuilder) newWorkflowExecutionTerminatedEvent(
 	request *workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionTerminated)
-	attributes := workflow.NewWorkflowExecutionTerminatedEventAttributes()
-	attributes.Reason = common.StringPtr(request.GetReason())
-	attributes.Details = request.GetDetails()
-	attributes.Identity = common.StringPtr(request.GetIdentity())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionTerminated)
+	attributes := &workflow.WorkflowExecutionTerminatedEventAttributes{}
+	attributes.Reason = common.StringPtr(common.StringDefault(request.Reason))
+	attributes.Details = request.Details
+	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
 	historyEvent.WorkflowExecutionTerminatedEventAttributes = attributes
 
 	return historyEvent
@@ -590,10 +590,10 @@ func (b *historyBuilder) newWorkflowExecutionTerminatedEvent(
 
 func (b *historyBuilder) newMarkerRecordedEventAttributes(decisionTaskCompletedEventID int64,
 	request *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_MarkerRecorded)
-	attributes := workflow.NewMarkerRecordedEventAttributes()
-	attributes.MarkerName = common.StringPtr(request.GetMarkerName())
-	attributes.Details = request.GetDetails()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeMarkerRecorded)
+	attributes := &workflow.MarkerRecordedEventAttributes{}
+	attributes.MarkerName = common.StringPtr(common.StringDefault(request.MarkerName))
+	attributes.Details = request.Details
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.MarkerRecordedEventAttributes = attributes
 
@@ -602,15 +602,15 @@ func (b *historyBuilder) newMarkerRecordedEventAttributes(decisionTaskCompletedE
 
 func (b *historyBuilder) newWorkflowExecutionCancelRequestedEvent(cause string,
 	request *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent {
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionCancelRequested)
-	attributes := workflow.NewWorkflowExecutionCancelRequestedEventAttributes()
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionCancelRequested)
+	attributes := &workflow.WorkflowExecutionCancelRequestedEventAttributes{}
 	attributes.Cause = common.StringPtr(cause)
-	attributes.Identity = common.StringPtr(request.GetCancelRequest().GetIdentity())
-	if request.IsSetExternalInitiatedEventId() {
-		attributes.ExternalInitiatedEventId = common.Int64Ptr(request.GetExternalInitiatedEventId())
+	attributes.Identity = common.StringPtr(common.StringDefault(request.CancelRequest.Identity))
+	if request.ExternalInitiatedEventId != nil {
+		attributes.ExternalInitiatedEventId = common.Int64Ptr(*request.ExternalInitiatedEventId)
 	}
-	if request.IsSetExternalWorkflowExecution() {
-		attributes.ExternalWorkflowExecution = request.GetExternalWorkflowExecution()
+	if request.ExternalWorkflowExecution != nil {
+		attributes.ExternalWorkflowExecution = request.ExternalWorkflowExecution
 	}
 	event.WorkflowExecutionCancelRequestedEventAttributes = attributes
 
@@ -619,10 +619,10 @@ func (b *historyBuilder) newWorkflowExecutionCancelRequestedEvent(cause string,
 
 func (b *historyBuilder) newWorkflowExecutionCanceledEvent(decisionTaskCompletedEventID int64,
 	request *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionCanceled)
-	attributes := workflow.NewWorkflowExecutionCanceledEventAttributes()
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionCanceled)
+	attributes := &workflow.WorkflowExecutionCanceledEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
-	attributes.Details = request.GetDetails()
+	attributes.Details = request.Details
 	event.WorkflowExecutionCanceledEventAttributes = attributes
 
 	return event
@@ -630,13 +630,13 @@ func (b *historyBuilder) newWorkflowExecutionCanceledEvent(decisionTaskCompleted
 
 func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionInitiatedEvent(decisionTaskCompletedEventID int64,
 	request *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_RequestCancelExternalWorkflowExecutionInitiated)
-	attributes := workflow.NewRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated)
+	attributes := &workflow.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
-	attributes.Domain = common.StringPtr(request.GetDomain())
+	attributes.Domain = common.StringPtr(*request.Domain)
 	attributes.WorkflowExecution = &workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(request.GetWorkflowId()),
-		RunId:      common.StringPtr(request.GetRunId()),
+		WorkflowId: common.StringPtr(*request.WorkflowId),
+		RunId:      common.StringPtr(*request.RunId),
 	}
 	attributes.Control = request.Control
 	event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes = attributes
@@ -646,8 +646,8 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionInitiatedEvent
 
 func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionFailedEvent(decisionTaskCompletedEventID, initiatedEventID int64,
 	domain, workflowID, runID string, cause workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_RequestCancelExternalWorkflowExecutionFailed)
-	attributes := workflow.NewRequestCancelExternalWorkflowExecutionFailedEventAttributes()
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeRequestCancelExternalWorkflowExecutionFailed)
+	attributes := &workflow.RequestCancelExternalWorkflowExecutionFailedEventAttributes{}
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedEventID)
 	attributes.Domain = common.StringPtr(domain)
@@ -655,7 +655,7 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionFailedEvent(de
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(runID),
 	}
-	attributes.Cause = workflow.CancelExternalWorkflowExecutionFailedCausePtr(cause)
+	attributes.Cause = common.CancelExternalWorkflowExecutionFailedCausePtr(cause)
 	event.RequestCancelExternalWorkflowExecutionFailedEventAttributes = attributes
 
 	return event
@@ -663,8 +663,8 @@ func (b *historyBuilder) newRequestCancelExternalWorkflowExecutionFailedEvent(de
 
 func (b *historyBuilder) newExternalWorkflowExecutionCancelRequestedEvent(initiatedEventID int64,
 	domain, workflowID, runID string) *workflow.HistoryEvent {
-	event := b.msBuilder.createNewHistoryEvent(workflow.EventType_ExternalWorkflowExecutionCancelRequested)
-	attributes := workflow.NewExternalWorkflowExecutionCancelRequestedEventAttributes()
+	event := b.msBuilder.createNewHistoryEvent(workflow.EventTypeExternalWorkflowExecutionCancelRequested)
+	attributes := &workflow.ExternalWorkflowExecutionCancelRequestedEventAttributes{}
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedEventID)
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = &workflow.WorkflowExecution{
@@ -678,14 +678,14 @@ func (b *historyBuilder) newExternalWorkflowExecutionCancelRequestedEvent(initia
 
 func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCompletedEventID int64,
 	newRunID string, request *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_WorkflowExecutionContinuedAsNew)
-	attributes := workflow.NewWorkflowExecutionContinuedAsNewEventAttributes()
-	attributes.NewExecutionRunId_ = common.StringPtr(newRunID)
-	attributes.WorkflowType = request.GetWorkflowType()
-	attributes.TaskList = request.GetTaskList()
-	attributes.Input = request.GetInput()
-	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetExecutionStartToCloseTimeoutSeconds())
-	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(request.GetTaskStartToCloseTimeoutSeconds())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeWorkflowExecutionContinuedAsNew)
+	attributes := &workflow.WorkflowExecutionContinuedAsNewEventAttributes{}
+	attributes.NewExecutionRunId = common.StringPtr(newRunID)
+	attributes.WorkflowType = request.WorkflowType
+	attributes.TaskList = request.TaskList
+	attributes.Input = request.Input
+	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*request.ExecutionStartToCloseTimeoutSeconds)
+	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*request.TaskStartToCloseTimeoutSeconds)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = attributes
 
@@ -694,16 +694,16 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 
 func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTaskCompletedEventID int64,
 	startAttributes *workflow.StartChildWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_StartChildWorkflowExecutionInitiated)
-	attributes := workflow.NewStartChildWorkflowExecutionInitiatedEventAttributes()
-	attributes.Domain = common.StringPtr(startAttributes.GetDomain())
-	attributes.WorkflowId = common.StringPtr(startAttributes.GetWorkflowId())
-	attributes.WorkflowType = startAttributes.GetWorkflowType()
-	attributes.TaskList = startAttributes.GetTaskList()
-	attributes.Input = startAttributes.GetInput()
-	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(startAttributes.GetExecutionStartToCloseTimeoutSeconds())
-	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(startAttributes.GetTaskStartToCloseTimeoutSeconds())
-	attributes.ChildPolicy = workflow.ChildPolicyPtr(startAttributes.GetChildPolicy())
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeStartChildWorkflowExecutionInitiated)
+	attributes := &workflow.StartChildWorkflowExecutionInitiatedEventAttributes{}
+	attributes.Domain = common.StringPtr(*startAttributes.Domain)
+	attributes.WorkflowId = common.StringPtr(*startAttributes.WorkflowId)
+	attributes.WorkflowType = startAttributes.WorkflowType
+	attributes.TaskList = startAttributes.TaskList
+	attributes.Input = startAttributes.Input
+	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*startAttributes.ExecutionStartToCloseTimeoutSeconds)
+	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*startAttributes.TaskStartToCloseTimeoutSeconds)
+	attributes.ChildPolicy = common.ChildPolicyPtr(*startAttributes.ChildPolicy)
 	attributes.Control = startAttributes.Control
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	historyEvent.StartChildWorkflowExecutionInitiatedEventAttributes = attributes
@@ -713,8 +713,8 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 
 func (b *historyBuilder) newChildWorkflowExecutionStartedEvent(domain string, execution *workflow.WorkflowExecution,
 	workflowType *workflow.WorkflowType, initiatedID int64) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ChildWorkflowExecutionStarted)
-	attributes := workflow.NewChildWorkflowExecutionStartedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionStarted)
+	attributes := &workflow.ChildWorkflowExecutionStartedEventAttributes{}
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
@@ -727,15 +727,15 @@ func (b *historyBuilder) newChildWorkflowExecutionStartedEvent(domain string, ex
 func (b *historyBuilder) newStartChildWorkflowExecutionFailedEvent(initiatedID int64,
 	cause workflow.ChildWorkflowExecutionFailedCause,
 	initiatedEventAttributes *workflow.StartChildWorkflowExecutionInitiatedEventAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_StartChildWorkflowExecutionFailed)
-	attributes := workflow.NewStartChildWorkflowExecutionFailedEventAttributes()
-	attributes.Domain = common.StringPtr(initiatedEventAttributes.GetDomain())
-	attributes.WorkflowId = common.StringPtr(initiatedEventAttributes.GetWorkflowId())
-	attributes.WorkflowType = initiatedEventAttributes.GetWorkflowType()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeStartChildWorkflowExecutionFailed)
+	attributes := &workflow.StartChildWorkflowExecutionFailedEventAttributes{}
+	attributes.Domain = common.StringPtr(*initiatedEventAttributes.Domain)
+	attributes.WorkflowId = common.StringPtr(*initiatedEventAttributes.WorkflowId)
+	attributes.WorkflowType = initiatedEventAttributes.WorkflowType
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
-	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(initiatedEventAttributes.GetDecisionTaskCompletedEventId())
-	attributes.Control = initiatedEventAttributes.GetControl()
-	attributes.Cause = workflow.ChildWorkflowExecutionFailedCausePtr(cause)
+	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(*initiatedEventAttributes.DecisionTaskCompletedEventId)
+	attributes.Control = initiatedEventAttributes.Control
+	attributes.Cause = common.ChildWorkflowExecutionFailedCausePtr(cause)
 	historyEvent.StartChildWorkflowExecutionFailedEventAttributes = attributes
 
 	return historyEvent
@@ -744,14 +744,14 @@ func (b *historyBuilder) newStartChildWorkflowExecutionFailedEvent(initiatedID i
 func (b *historyBuilder) newChildWorkflowExecutionCompletedEvent(domain string, execution *workflow.WorkflowExecution,
 	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
 	completedAttributes *workflow.WorkflowExecutionCompletedEventAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ChildWorkflowExecutionCompleted)
-	attributes := workflow.NewChildWorkflowExecutionCompletedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionCompleted)
+	attributes := &workflow.ChildWorkflowExecutionCompletedEventAttributes{}
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
 	attributes.StartedEventId = common.Int64Ptr(startedID)
-	attributes.Result_ = completedAttributes.GetResult_()
+	attributes.Result = completedAttributes.Result
 	historyEvent.ChildWorkflowExecutionCompletedEventAttributes = attributes
 
 	return historyEvent
@@ -760,15 +760,15 @@ func (b *historyBuilder) newChildWorkflowExecutionCompletedEvent(domain string, 
 func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(domain string, execution *workflow.WorkflowExecution,
 	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
 	failedAttributes *workflow.WorkflowExecutionFailedEventAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ChildWorkflowExecutionFailed)
-	attributes := workflow.NewChildWorkflowExecutionFailedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionFailed)
+	attributes := &workflow.ChildWorkflowExecutionFailedEventAttributes{}
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
 	attributes.StartedEventId = common.Int64Ptr(startedID)
-	attributes.Reason = common.StringPtr(failedAttributes.GetReason())
-	attributes.Details = failedAttributes.GetDetails()
+	attributes.Reason = common.StringPtr(common.StringDefault(failedAttributes.Reason))
+	attributes.Details = failedAttributes.Details
 	historyEvent.ChildWorkflowExecutionFailedEventAttributes = attributes
 
 	return historyEvent
@@ -777,14 +777,14 @@ func (b *historyBuilder) newChildWorkflowExecutionFailedEvent(domain string, exe
 func (b *historyBuilder) newChildWorkflowExecutionCanceledEvent(domain string, execution *workflow.WorkflowExecution,
 	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
 	canceledAttributes *workflow.WorkflowExecutionCanceledEventAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ChildWorkflowExecutionCanceled)
-	attributes := workflow.NewChildWorkflowExecutionCanceledEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionCanceled)
+	attributes := &workflow.ChildWorkflowExecutionCanceledEventAttributes{}
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
 	attributes.StartedEventId = common.Int64Ptr(startedID)
-	attributes.Details = canceledAttributes.GetDetails()
+	attributes.Details = canceledAttributes.Details
 	historyEvent.ChildWorkflowExecutionCanceledEventAttributes = attributes
 
 	return historyEvent
@@ -793,8 +793,8 @@ func (b *historyBuilder) newChildWorkflowExecutionCanceledEvent(domain string, e
 func (b *historyBuilder) newChildWorkflowExecutionTerminatedEvent(domain string, execution *workflow.WorkflowExecution,
 	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
 	terminatedAttributes *workflow.WorkflowExecutionTerminatedEventAttributes) *workflow.HistoryEvent {
-	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventType_ChildWorkflowExecutionTerminated)
-	attributes := workflow.NewChildWorkflowExecutionTerminatedEventAttributes()
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionTerminated)
+	attributes := &workflow.ChildWorkflowExecutionTerminatedEventAttributes{}
 	attributes.Domain = common.StringPtr(domain)
 	attributes.WorkflowExecution = execution
 	attributes.WorkflowType = workflowType

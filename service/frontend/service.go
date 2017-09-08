@@ -107,8 +107,8 @@ func (s *Service) Start() {
 
 	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
 
-	handler, tchanServers := NewWorkflowHandler(base, s.config, metadata, history, visibility)
-	handler.Start(tchanServers)
+	handler := NewWorkflowHandler(base, s.config, metadata, history, visibility)
+	handler.Start()
 
 	log.Infof("%v started", common.FrontendServiceName)
 

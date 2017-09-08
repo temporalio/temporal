@@ -10,11 +10,12 @@ default: test
 
 # define the list of thrift files the service depends on
 # (if you have some)
-THRIFT_SRCS = idl/github.com/uber/cadence/cadence.thrift \
-	idl/github.com/uber/cadence/shared.thrift \
+THRIFTRW_SRCS = \
+  idl/github.com/uber/cadence/cadence.thrift \
+  idl/github.com/uber/cadence/health.thrift \
   idl/github.com/uber/cadence/history.thrift \
   idl/github.com/uber/cadence/matching.thrift \
-  idl/github.com/uber/cadence/health.thrift \
+  idl/github.com/uber/cadence/shared.thrift \
 
 PROGS = cadence
 TEST_ARG ?= -race -v -timeout 5m
@@ -25,19 +26,16 @@ INTEG_TEST_DIR=host
 
 export PATH := $(GOPATH)/bin:$(PATH)
 
-THRIFT_GEN=$(GOPATH)/bin/thrift-gen
+define thriftrwrule
+THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
 
-define thriftrule
-THRIFT_GEN_SRC += $(THRIFT_GENDIR)/go/$1/tchan-$1.go
-
-$(THRIFT_GENDIR)/go/$1/tchan-$1.go:: $2 $(THRIFT_GEN)
+$(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	@mkdir -p $(THRIFT_GENDIR)/go
-	$(ECHO_V)$(THRIFT_GEN) --generateThrift --packagePrefix $(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --inputFile $2 --outputDir $(THRIFT_GENDIR)/go \
-		$(foreach template,$(THRIFT_TEMPLATES), --template $(template))
+	$(ECHO_V)thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
-$(foreach tsrc,$(THRIFT_SRCS),$(eval $(call \
-	thriftrule,$(basename $(notdir \
+$(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \
+	thriftrwrule,$(basename $(notdir \
 	$(shell echo $(tsrc) | tr A-Z a-z))),$(tsrc))))
 
 # Automatically gather all srcs
@@ -69,10 +67,14 @@ vendor/glide.updated: glide.lock glide.yaml
 	glide install
 	touch vendor/glide.updated
 
+yarpc-install:
+	@type thriftrw >/dev/null 2>&1 || go get 'go.uber.org/thriftrw'
+	@type thriftrw-plugin-yarpc >/dev/null 2>&1 || go get 'go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc'
+
 clean_thrift:
 	rm -rf .gen
 
-thriftc: clean_thrift $(THRIFT_GEN_SRC)
+thriftc: clean_thrift yarpc-install $(THRIFTRW_GEN_SRC)
 
 copyright: cmd/tools/copyright/licensegen.go
 	go run ./cmd/tools/copyright/licensegen.go --verifyOnly

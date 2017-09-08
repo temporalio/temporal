@@ -143,17 +143,17 @@ func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
 
 func (tb *timerBuilder) AddScheduleToStartActivityTimeout(
 	ai *persistence.ActivityInfo) *persistence.ActivityTimeoutTask {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_START, ai.ScheduleToStartTimeout, nil)
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeScheduleToStart, ai.ScheduleToStartTimeout, nil)
 }
 
 func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(
 	ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask, error) {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_SCHEDULE_TO_CLOSE, ai.ScheduleToCloseTimeout, nil), nil
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeScheduleToClose, ai.ScheduleToCloseTimeout, nil), nil
 }
 
 func (tb *timerBuilder) AddStartToCloseActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
 	error) {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_START_TO_CLOSE, ai.StartToCloseTimeout, nil), nil
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeStartToClose, ai.StartToCloseTimeout, nil), nil
 }
 
 func (tb *timerBuilder) AddHeartBeatActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
@@ -162,9 +162,9 @@ func (tb *timerBuilder) AddHeartBeatActivityTimeout(ai *persistence.ActivityInfo
 	// avoid creating timers before the current timer frame.
 	targetTime := common.AddSecondsToBaseTime(ai.LastHeartBeatUpdatedTime.UnixNano(), int64(ai.HeartbeatTimeout))
 	if targetTime > tb.timeSource.Now().UnixNano() {
-		return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout, &ai.LastHeartBeatUpdatedTime), nil
+		return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeHeartbeat, ai.HeartbeatTimeout, &ai.LastHeartBeatUpdatedTime), nil
 	}
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutType_HEARTBEAT, ai.HeartbeatTimeout, nil), nil
+	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeHeartbeat, ai.HeartbeatTimeout, nil), nil
 }
 
 // AddActivityTimeoutTask - Adds an activity timeout task.
@@ -282,7 +282,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					SequenceID:  SequenceID{VisibilityTimestamp: startToCloseExpiry},
 					ActivityID:  v.ScheduleID,
 					EventID:     v.StartedID,
-					TimeoutType: w.TimeoutType_START_TO_CLOSE,
+					TimeoutType: w.TimeoutTypeStartToClose,
 					TimeoutSec:  v.StartToCloseTimeout,
 					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
@@ -296,7 +296,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 						SequenceID:  SequenceID{VisibilityTimestamp: heartBeatExpiry},
 						ActivityID:  v.ScheduleID,
 						EventID:     v.StartedID,
-						TimeoutType: w.TimeoutType_HEARTBEAT,
+						TimeoutType: w.TimeoutTypeHeartbeat,
 						TimeoutSec:  v.HeartbeatTimeout,
 						TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) != 0}
 					tb.activityTimers = append(tb.activityTimers, td)
@@ -308,7 +308,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					ActivityID:  v.ScheduleID,
 					EventID:     v.ScheduleID,
 					TimeoutSec:  v.ScheduleToStartTimeout,
-					TimeoutType: w.TimeoutType_SCHEDULE_TO_START,
+					TimeoutType: w.TimeoutTypeScheduleToStart,
 					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToStart) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
 				scheduleToCloseExpiry := v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
@@ -317,7 +317,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					ActivityID:  v.ScheduleID,
 					EventID:     v.ScheduleID,
 					TimeoutSec:  v.ScheduleToCloseTimeout,
-					TimeoutType: w.TimeoutType_SCHEDULE_TO_CLOSE,
+					TimeoutType: w.TimeoutTypeScheduleToClose,
 					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
 			}
@@ -426,13 +426,13 @@ func compareTimerIDLess(first *SequenceID, second *SequenceID) bool {
 
 func getActivityTimerStatus(timeoutType w.TimeoutType) int32 {
 	switch timeoutType {
-	case w.TimeoutType_HEARTBEAT:
+	case w.TimeoutTypeHeartbeat:
 		return TimerTaskStatusCreatedHeartbeat
-	case w.TimeoutType_SCHEDULE_TO_START:
+	case w.TimeoutTypeScheduleToStart:
 		return TimerTaskStatusCreatedScheduleToStart
-	case w.TimeoutType_SCHEDULE_TO_CLOSE:
+	case w.TimeoutTypeScheduleToClose:
 		return TimerTaskStatusCreatedScheduleToClose
-	case w.TimeoutType_START_TO_CLOSE:
+	case w.TimeoutTypeStartToClose:
 		return TimerTaskStatusCreatedStartToClose
 	}
 	panic("invalid timeout type")

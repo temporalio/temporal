@@ -21,46 +21,47 @@
 package matching
 
 import (
+	"context"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
-
 	m "github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
-	tchannel "github.com/uber/tchannel-go"
-	"github.com/uber/tchannel-go/thrift"
+	"go.uber.org/yarpc"
 )
 
 var _ Client = (*clientImpl)(nil)
 
 type clientImpl struct {
-	connection      *tchannel.Channel
 	resolver        membership.ServiceResolver
 	thriftCacheLock sync.RWMutex
-	thriftCache     map[string]m.TChanMatchingService
+	thriftCache     map[string]matchingserviceclient.Interface
+	rpcFactory      common.RPCFactory
 }
 
 // NewClient creates a new history service TChannel client
-func NewClient(ch *tchannel.Channel, monitor membership.Monitor) (Client, error) {
+func NewClient(d common.RPCFactory, monitor membership.Monitor) (Client, error) {
 	sResolver, err := monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &clientImpl{
-		connection:  ch,
+		rpcFactory:  d,
 		resolver:    sResolver,
-		thriftCache: make(map[string]m.TChanMatchingService),
+		thriftCache: make(map[string]matchingserviceclient.Interface),
 	}
 	return client, nil
 }
 
-func (c *clientImpl) AddActivityTask(context thrift.Context,
-	addRequest *m.AddActivityTaskRequest) error {
-	client, err := c.getHostForRequest(addRequest.GetTaskList().GetName())
+func (c *clientImpl) AddActivityTask(
+	context context.Context,
+	addRequest *m.AddActivityTaskRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*addRequest.TaskList.Name)
 	if err != nil {
 		return err
 	}
@@ -69,9 +70,11 @@ func (c *clientImpl) AddActivityTask(context thrift.Context,
 	return client.AddActivityTask(ctx, addRequest)
 }
 
-func (c *clientImpl) AddDecisionTask(context thrift.Context,
-	addRequest *m.AddDecisionTaskRequest) error {
-	client, err := c.getHostForRequest(addRequest.GetTaskList().GetName())
+func (c *clientImpl) AddDecisionTask(
+	context context.Context,
+	addRequest *m.AddDecisionTaskRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*addRequest.TaskList.Name)
 	if err != nil {
 		return err
 	}
@@ -80,9 +83,11 @@ func (c *clientImpl) AddDecisionTask(context thrift.Context,
 	return client.AddDecisionTask(ctx, addRequest)
 }
 
-func (c *clientImpl) PollForActivityTask(context thrift.Context,
-	pollRequest *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error) {
-	client, err := c.getHostForRequest(pollRequest.GetPollRequest().GetTaskList().GetName())
+func (c *clientImpl) PollForActivityTask(
+	context context.Context,
+	pollRequest *m.PollForActivityTaskRequest,
+	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
+	client, err := c.getHostForRequest(*pollRequest.PollRequest.TaskList.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +96,11 @@ func (c *clientImpl) PollForActivityTask(context thrift.Context,
 	return client.PollForActivityTask(ctx, pollRequest)
 }
 
-func (c *clientImpl) PollForDecisionTask(context thrift.Context,
-	pollRequest *m.PollForDecisionTaskRequest) (*m.PollForDecisionTaskResponse, error) {
-	client, err := c.getHostForRequest(pollRequest.GetPollRequest().GetTaskList().GetName())
+func (c *clientImpl) PollForDecisionTask(
+	context context.Context,
+	pollRequest *m.PollForDecisionTaskRequest,
+	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
+	client, err := c.getHostForRequest(*pollRequest.PollRequest.TaskList.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +109,7 @@ func (c *clientImpl) PollForDecisionTask(context thrift.Context,
 	return client.PollForDecisionTask(ctx, pollRequest)
 }
 
-func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, error) {
+func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interface, error) {
 	host, err := c.resolver.Lookup(key)
 	if err != nil {
 		return nil, err
@@ -110,29 +117,25 @@ func (c *clientImpl) getHostForRequest(key string) (m.TChanMatchingService, erro
 	return c.getThriftClient(host.GetAddress()), nil
 }
 
-func (c *clientImpl) createContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
 	timeout := time.Minute * 1
 	if parent == nil {
-		return thrift.NewContext(timeout)
+		return context.WithTimeout(context.Background(), timeout)
 	}
-	builder := tchannel.NewContextBuilder(timeout)
-	builder.SetParentContext(parent)
-	return builder.Build()
+	return context.WithTimeout(parent, timeout)
 }
 
-func (c *clientImpl) createLongPollContext(parent thrift.Context) (thrift.Context, context.CancelFunc) {
+func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
 	// TODO: make timeout configurable
 	timeout := time.Minute * 2
 	if parent == nil {
-		return thrift.NewContext(timeout)
+		return context.WithTimeout(context.Background(), timeout)
 	}
-	builder := tchannel.NewContextBuilder(timeout)
-	builder.SetParentContext(parent)
-	return builder.Build()
+	return context.WithTimeout(parent, timeout)
 }
 
-func (c *clientImpl) getThriftClient(hostPort string) m.TChanMatchingService {
+func (c *clientImpl) getThriftClient(hostPort string) matchingserviceclient.Interface {
 	c.thriftCacheLock.RLock()
 	client, ok := c.thriftCache[hostPort]
 	c.thriftCacheLock.RUnlock()
@@ -147,11 +150,9 @@ func (c *clientImpl) getThriftClient(hostPort string) m.TChanMatchingService {
 	// before we acquired the lock
 	client, ok = c.thriftCache[hostPort]
 	if !ok {
-		tClient := thrift.NewClient(c.connection, common.MatchingServiceName, &thrift.ClientOptions{
-			HostPort: hostPort,
-		})
-
-		client = m.NewTChanMatchingServiceClient(tClient)
+		d := c.rpcFactory.CreateDispatcherForOutbound(
+			"matching-service-client", common.MatchingServiceName, hostPort)
+		client = matchingserviceclient.New(d.ClientConfig(common.MatchingServiceName))
 		c.thriftCache[hostPort] = client
 	}
 	return client

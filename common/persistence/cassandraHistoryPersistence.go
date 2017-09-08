@@ -94,16 +94,16 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 			request.Events.EncodingType,
 			request.Events.Version,
 			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
+			*request.Execution.WorkflowId,
+			*request.Execution.RunId,
 			request.FirstEventID,
 			request.RangeID,
 			request.TransactionID)
 	} else {
 		query = h.session.Query(templateAppendHistoryEvents,
 			request.DomainID,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
+			*request.Execution.WorkflowId,
+			*request.Execution.RunId,
 			request.FirstEventID,
 			request.RangeID,
 			request.TransactionID,
@@ -143,8 +143,8 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 	execution := request.Execution
 	query := h.session.Query(templateGetWorkflowExecutionHistory,
 		request.DomainID,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
+		*execution.WorkflowId,
+		*execution.RunId,
 		request.NextEventID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -176,7 +176,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 	if !found {
 		return nil, &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("Workflow execution history not found.  WorkflowId: %v, RunId: %v",
-				execution.GetWorkflowId(), execution.GetRunId()),
+				*execution.WorkflowId, *execution.RunId),
 		}
 	}
 
@@ -188,8 +188,8 @@ func (h *cassandraHistoryPersistence) DeleteWorkflowExecutionHistory(
 	execution := request.Execution
 	query := h.session.Query(templateDeleteWorkflowExecutionHistory,
 		request.DomainID,
-		execution.GetWorkflowId(),
-		execution.GetRunId())
+		*execution.WorkflowId,
+		*execution.RunId)
 
 	err := query.Exec()
 	if err != nil {

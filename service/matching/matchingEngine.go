@@ -21,6 +21,7 @@
 package matching
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -37,7 +38,6 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/tchannel-go/thrift"
 )
 
 // Implements matching.Engine
@@ -62,9 +62,9 @@ type taskListID struct {
 
 var (
 	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
-	emptyPollForDecisionTaskResponse = m.NewPollForDecisionTaskResponse()
+	emptyPollForDecisionTaskResponse = &m.PollForDecisionTaskResponse{}
 	// EmptyPollForActivityTaskResponse is the response when there are no activity tasks to hand out
-	emptyPollForActivityTaskResponse   = workflow.NewPollForActivityTaskResponse()
+	emptyPollForActivityTaskResponse   = &workflow.PollForActivityTaskResponse{}
 	persistenceOperationRetryPolicy    = common.CreatePersistanceRetryPolicy()
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
@@ -178,8 +178,8 @@ func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
 
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
-	domainID := addRequest.GetDomainUUID()
-	taskListName := addRequest.GetTaskList().GetName()
+	domainID := *addRequest.DomainUUID
+	taskListName := *addRequest.TaskList.Name
 	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v",
 		addRequest.TaskList.Name, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
@@ -189,18 +189,18 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 	}
 	taskInfo := &persistence.TaskInfo{
 		DomainID:   domainID,
-		RunID:      addRequest.GetExecution().GetRunId(),
-		WorkflowID: addRequest.GetExecution().GetWorkflowId(),
-		ScheduleID: addRequest.GetScheduleId(),
+		RunID:      *addRequest.Execution.RunId,
+		WorkflowID: *addRequest.Execution.WorkflowId,
+		ScheduleID: *addRequest.ScheduleId,
 	}
-	return tlMgr.AddTask(addRequest.GetExecution(), taskInfo)
+	return tlMgr.AddTask(addRequest.Execution, taskInfo)
 }
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
 func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
-	domainID := addRequest.GetDomainUUID()
-	sourceDomainID := addRequest.GetSourceDomainUUID()
-	taskListName := addRequest.GetTaskList().GetName()
+	domainID := *addRequest.DomainUUID
+	sourceDomainID := *addRequest.SourceDomainUUID
+	taskListName := *addRequest.TaskList.Name
 	e.logger.Debugf("Received AddActivityTask for taskList=%v WorkflowID=%v, RunID=%v",
 		taskListName, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
@@ -210,20 +210,20 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 	}
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               sourceDomainID,
-		RunID:                  addRequest.GetExecution().GetRunId(),
-		WorkflowID:             addRequest.GetExecution().GetWorkflowId(),
-		ScheduleID:             addRequest.GetScheduleId(),
-		ScheduleToStartTimeout: addRequest.GetScheduleToStartTimeoutSeconds(),
+		RunID:                  *addRequest.Execution.RunId,
+		WorkflowID:             *addRequest.Execution.WorkflowId,
+		ScheduleID:             *addRequest.ScheduleId,
+		ScheduleToStartTimeout: *addRequest.ScheduleToStartTimeoutSeconds,
 	}
-	return tlMgr.AddTask(addRequest.GetExecution(), taskInfo)
+	return tlMgr.AddTask(addRequest.Execution, taskInfo)
 }
 
 // PollForDecisionTask tries to get the decision task using exponential backoff.
-func (e *matchingEngineImpl) PollForDecisionTask(ctx thrift.Context, req *m.PollForDecisionTaskRequest) (
+func (e *matchingEngineImpl) PollForDecisionTask(ctx context.Context, req *m.PollForDecisionTaskRequest) (
 	*m.PollForDecisionTaskResponse, error) {
-	domainID := req.GetDomainUUID()
-	request := req.GetPollRequest()
-	taskListName := request.GetTaskList().GetName()
+	domainID := *req.DomainUUID
+	request := req.PollRequest
+	taskListName := *request.TaskList.Name
 	e.logger.Debugf("Received PollForDecisionTask for taskList=%v", taskListName)
 pollLoop:
 	for {
@@ -272,11 +272,11 @@ pollLoop:
 // pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
-func (e *matchingEngineImpl) PollForActivityTask(ctx thrift.Context, req *m.PollForActivityTaskRequest) (
+func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *m.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
-	domainID := req.GetDomainUUID()
-	request := req.GetPollRequest()
-	taskListName := request.GetTaskList().GetName()
+	domainID := *req.DomainUUID
+	request := req.PollRequest
+	taskListName := *request.TaskList.Name
 	e.logger.Debugf("Received PollForActivityTask for taskList=%v", taskListName)
 pollLoop:
 	for {
@@ -322,7 +322,7 @@ pollLoop:
 }
 
 // Loads a task from persistence and wraps it in a task context
-func (e *matchingEngineImpl) getTask(ctx thrift.Context, taskList *taskListID) (*taskContext, error) {
+func (e *matchingEngineImpl) getTask(ctx context.Context, taskList *taskListID) (*taskContext, error) {
 	tlMgr, err := e.getTaskListManager(taskList)
 	if err != nil {
 		return nil, err
@@ -347,7 +347,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 	historyResponse *h.RecordDecisionTaskStartedResponse) *m.PollForDecisionTaskResponse {
 	task := context.info
 
-	response := m.NewPollForDecisionTaskResponse()
+	response := &m.PollForDecisionTaskResponse{}
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 	token := &common.TaskToken{
 		DomainID:   task.DomainID,
@@ -356,8 +356,9 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		ScheduleID: task.ScheduleID,
 	}
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
-	response.WorkflowType = historyResponse.GetWorkflowType()
-	if historyResponse.GetPreviousStartedEventId() != common.EmptyEventID {
+	response.WorkflowType = historyResponse.WorkflowType
+	if historyResponse.PreviousStartedEventId == nil ||
+		*historyResponse.PreviousStartedEventId != common.EmptyEventID {
 		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
 	response.StartedEventId = historyResponse.StartedEventId
@@ -372,25 +373,25 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 
 	startedEvent := historyResponse.StartedEvent
 	scheduledEvent := historyResponse.ScheduledEvent
-	if !scheduledEvent.IsSetActivityTaskScheduledEventAttributes() {
+	if scheduledEvent.ActivityTaskScheduledEventAttributes == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
 	}
-	attributes := scheduledEvent.GetActivityTaskScheduledEventAttributes()
-	if !attributes.IsSetActivityId() {
+	attributes := scheduledEvent.ActivityTaskScheduledEventAttributes
+	if attributes.ActivityId == nil {
 		panic("ActivityTaskScheduledEventAttributes.ActivityID is not set")
 	}
 
-	response := workflow.NewPollForActivityTaskResponse()
+	response := &workflow.PollForActivityTaskResponse{}
 	response.ActivityId = attributes.ActivityId
-	response.ActivityType = attributes.GetActivityType()
-	response.Input = attributes.GetInput()
-	response.StartedEventId = common.Int64Ptr(startedEvent.GetEventId())
+	response.ActivityType = attributes.ActivityType
+	response.Input = attributes.Input
+	response.StartedEventId = common.Int64Ptr(*startedEvent.EventId)
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
-	response.ScheduledTimestamp = common.Int64Ptr(scheduledEvent.GetTimestamp())
-	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
-	response.StartedTimestamp = common.Int64Ptr(startedEvent.GetTimestamp())
-	response.StartToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetStartToCloseTimeoutSeconds())
-	response.HeartbeatTimeoutSeconds = common.Int32Ptr(attributes.GetHeartbeatTimeoutSeconds())
+	response.ScheduledTimestamp = common.Int64Ptr(*scheduledEvent.Timestamp)
+	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(*attributes.ScheduleToCloseTimeoutSeconds)
+	response.StartedTimestamp = common.Int64Ptr(*startedEvent.Timestamp)
+	response.StartToCloseTimeoutSeconds = common.Int32Ptr(*attributes.StartToCloseTimeoutSeconds)
+	response.HeartbeatTimeoutSeconds = common.Int32Ptr(*attributes.HeartbeatTimeoutSeconds)
 
 	token := &common.TaskToken{
 		DomainID:   task.DomainID,

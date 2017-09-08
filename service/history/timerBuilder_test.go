@@ -181,23 +181,25 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	builder := newMutableStateBuilder(s.config, s.logger)
 	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ActivityId:                    common.StringPtr("test-id"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(2),
 			HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(3),
 		})
 	// create a schedule to start timeout
 	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := tb.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
-	s.Equal(workflow.TimeoutType_SCHEDULE_TO_START, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
+	s.Equal(workflow.TimeoutTypeScheduleToStart, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
 
-	builder.AddActivityTaskStartedEvent(ai, ase.GetEventId(), uuid.New(), &workflow.PollForActivityTaskRequest{})
+	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), &workflow.PollForActivityTaskRequest{})
 
 	// create a heart beat timeout
 	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 	tt = tb.GetActivityTimerTaskIfNeeded(builder)
 	s.NotNil(tt)
-	s.Equal(workflow.TimeoutType_HEARTBEAT, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
+	s.Equal(workflow.TimeoutTypeHeartbeat, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
@@ -210,7 +212,7 @@ func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
 		panic("Failed deserialization of history")
 	}
 
-	history := workflow.NewHistory()
+	history := &workflow.History{}
 	history.Events = historyEvents
 
 	common.PrettyPrintHistory(history, s.logger)

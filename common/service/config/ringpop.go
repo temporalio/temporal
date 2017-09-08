@@ -23,14 +23,18 @@ package config
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
+	"time"
+
 	"github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery"
 	"github.com/uber/ringpop-go/discovery/jsonfile"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
-	"github.com/uber/tchannel-go"
-	"strings"
-	"time"
+	tcg "github.com/uber/tchannel-go"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/transport/tchannel"
 )
 
 const (
@@ -125,14 +129,19 @@ func newRingpopFactory(rpConfig *Ringpop) (*RingpopFactory, error) {
 }
 
 // CreateRingpop is the implementation for RingpopFactory.CreateRingpop
-func (factory *RingpopFactory) CreateRingpop(ch *tchannel.Channel) (*ringpop.Ringpop, error) {
-
-	discoveryProvider, err := newDiscoveryProvider(factory.config)
-	if err != nil {
+func (factory *RingpopFactory) CreateRingpop(dispatcher *yarpc.Dispatcher) (*ringpop.Ringpop, error) {
+	var ch *tcg.Channel
+	var err error
+	if ch, err = factory.getChannel(dispatcher); err != nil {
 		return nil, err
 	}
 
 	rp, err := ringpop.New(factory.config.Name, ringpop.Channel(ch))
+	if err != nil {
+		return nil, err
+	}
+
+	discoveryProvider, err := newDiscoveryProvider(factory.config)
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +156,17 @@ func (factory *RingpopFactory) CreateRingpop(ch *tchannel.Channel) (*ringpop.Rin
 		return nil, err
 	}
 	return rp, nil
+}
+
+func (factory *RingpopFactory) getChannel(dispatcher *yarpc.Dispatcher) (*tcg.Channel, error) {
+	t := dispatcher.Inbounds()[0].Transports()[0].(*tchannel.ChannelTransport)
+	ty := reflect.ValueOf(t.Channel())
+	var ch *tcg.Channel
+	var ok bool
+	if ch, ok = ty.Interface().(*tcg.Channel); !ok {
+		return nil, errors.New("Unable to get tchannel out of the dispatcher")
+	}
+	return ch, nil
 }
 
 func newDiscoveryProvider(cfg *Ringpop) (discovery.DiscoverProvider, error) {

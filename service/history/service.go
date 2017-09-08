@@ -186,7 +186,7 @@ func (s *Service) Start() {
 	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
 	execMgrFactory := NewExecutionManagerFactory(&p.CassandraConfig, p.Logger, base.GetMetricsClient())
 
-	handler, tchanServers := NewHandler(base,
+	handler := NewHandler(base,
 		s.config,
 		shardMgr,
 		metadata,
@@ -194,7 +194,7 @@ func (s *Service) Start() {
 		history,
 		execMgrFactory)
 
-	handler.Start(tchanServers)
+	handler.Start()
 
 	log.Infof("%v started", common.HistoryServiceName)
 

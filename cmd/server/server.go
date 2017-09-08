@@ -102,7 +102,7 @@ func (s *server) startService() common.Daemon {
 	svcCfg := s.cfg.Services[s.name]
 
 	params.MetricScope = svcCfg.Metrics.NewScope()
-	params.TChannelFactory = svcCfg.TChannel.NewFactory()
+	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 
 	var daemon common.Daemon
 
