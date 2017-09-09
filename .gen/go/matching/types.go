@@ -251,6 +251,34 @@ func (v *AddActivityTaskRequest) Equals(rhs *AddActivityTaskRequest) bool {
 	return true
 }
 
+func (v *AddActivityTaskRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *AddActivityTaskRequest) GetSourceDomainUUID() (o string) {
+	if v.SourceDomainUUID != nil {
+		return *v.SourceDomainUUID
+	}
+	return
+}
+
+func (v *AddActivityTaskRequest) GetScheduleId() (o int64) {
+	if v.ScheduleId != nil {
+		return *v.ScheduleId
+	}
+	return
+}
+
+func (v *AddActivityTaskRequest) GetScheduleToStartTimeoutSeconds() (o int32) {
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		return *v.ScheduleToStartTimeoutSeconds
+	}
+	return
+}
+
 type AddDecisionTaskRequest struct {
 	DomainUUID *string                   `json:"domainUUID,omitempty"`
 	Execution  *shared.WorkflowExecution `json:"execution,omitempty"`
@@ -382,6 +410,20 @@ func (v *AddDecisionTaskRequest) Equals(rhs *AddDecisionTaskRequest) bool {
 	return true
 }
 
+func (v *AddDecisionTaskRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *AddDecisionTaskRequest) GetScheduleId() (o int64) {
+	if v.ScheduleId != nil {
+		return *v.ScheduleId
+	}
+	return
+}
+
 type PollForActivityTaskRequest struct {
 	DomainUUID  *string                            `json:"domainUUID,omitempty"`
 	PollRequest *shared.PollForActivityTaskRequest `json:"pollRequest,omitempty"`
@@ -471,6 +513,13 @@ func (v *PollForActivityTaskRequest) Equals(rhs *PollForActivityTaskRequest) boo
 	return true
 }
 
+func (v *PollForActivityTaskRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type PollForDecisionTaskRequest struct {
 	DomainUUID  *string                            `json:"domainUUID,omitempty"`
 	PollRequest *shared.PollForDecisionTaskRequest `json:"pollRequest,omitempty"`
@@ -558,6 +607,13 @@ func (v *PollForDecisionTaskRequest) Equals(rhs *PollForDecisionTaskRequest) boo
 		return false
 	}
 	return true
+}
+
+func (v *PollForDecisionTaskRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type PollForDecisionTaskResponse struct {
@@ -718,4 +774,18 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 		return false
 	}
 	return true
+}
+
+func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
+	if v.PreviousStartedEventId != nil {
+		return *v.PreviousStartedEventId
+	}
+	return
+}
+
+func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }

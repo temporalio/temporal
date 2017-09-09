@@ -25,13 +25,13 @@ package historyserviceclient
 
 import (
 	"context"
-	"reflect"
-	"go.uber.org/thriftrw/wire"
-	"go.uber.org/yarpc/api/transport"
-	"go.uber.org/yarpc/encoding/thrift"
-	"go.uber.org/yarpc"
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
+	"go.uber.org/thriftrw/wire"
+	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/api/transport"
+	"go.uber.org/yarpc/encoding/thrift"
+	"reflect"
 )
 
 // Interface is a client for the HistoryService service.

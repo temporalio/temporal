@@ -25,11 +25,11 @@ package matchingserviceserver
 
 import (
 	"context"
+	"github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/encoding/thrift"
-	"github.com/uber/cadence/.gen/go/matching"
-	"github.com/uber/cadence/.gen/go/shared"
 )
 
 // Interface is the server-side interface for the MatchingService service.

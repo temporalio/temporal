@@ -137,6 +137,20 @@ func (v *ActivityTaskCancelRequestedEventAttributes) Equals(rhs *ActivityTaskCan
 	return true
 }
 
+func (v *ActivityTaskCancelRequestedEventAttributes) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
+}
+
+func (v *ActivityTaskCancelRequestedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type ActivityTaskCanceledEventAttributes struct {
 	Details                      []byte  `json:"details"`
 	LatestCancelRequestedEventId *int64  `json:"latestCancelRequestedEventId,omitempty"`
@@ -295,6 +309,34 @@ func (v *ActivityTaskCanceledEventAttributes) Equals(rhs *ActivityTaskCanceledEv
 	return true
 }
 
+func (v *ActivityTaskCanceledEventAttributes) GetLatestCancelRequestedEventId() (o int64) {
+	if v.LatestCancelRequestedEventId != nil {
+		return *v.LatestCancelRequestedEventId
+	}
+	return
+}
+
+func (v *ActivityTaskCanceledEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *ActivityTaskCanceledEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *ActivityTaskCanceledEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type ActivityTaskCompletedEventAttributes struct {
 	Result           []byte  `json:"result"`
 	ScheduledEventId *int64  `json:"scheduledEventId,omitempty"`
@@ -426,6 +468,27 @@ func (v *ActivityTaskCompletedEventAttributes) Equals(rhs *ActivityTaskCompleted
 		return false
 	}
 	return true
+}
+
+func (v *ActivityTaskCompletedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *ActivityTaskCompletedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *ActivityTaskCompletedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type ActivityTaskFailedEventAttributes struct {
@@ -584,6 +647,34 @@ func (v *ActivityTaskFailedEventAttributes) Equals(rhs *ActivityTaskFailedEventA
 		return false
 	}
 	return true
+}
+
+func (v *ActivityTaskFailedEventAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *ActivityTaskFailedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *ActivityTaskFailedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *ActivityTaskFailedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type ActivityTaskScheduledEventAttributes struct {
@@ -886,6 +977,55 @@ func (v *ActivityTaskScheduledEventAttributes) Equals(rhs *ActivityTaskScheduled
 	return true
 }
 
+func (v *ActivityTaskScheduledEventAttributes) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetScheduleToCloseTimeoutSeconds() (o int32) {
+	if v.ScheduleToCloseTimeoutSeconds != nil {
+		return *v.ScheduleToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetScheduleToStartTimeoutSeconds() (o int32) {
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		return *v.ScheduleToStartTimeoutSeconds
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetStartToCloseTimeoutSeconds() (o int32) {
+	if v.StartToCloseTimeoutSeconds != nil {
+		return *v.StartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetHeartbeatTimeoutSeconds() (o int32) {
+	if v.HeartbeatTimeoutSeconds != nil {
+		return *v.HeartbeatTimeoutSeconds
+	}
+	return
+}
+
+func (v *ActivityTaskScheduledEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type ActivityTaskStartedEventAttributes struct {
 	ScheduledEventId *int64  `json:"scheduledEventId,omitempty"`
 	Identity         *string `json:"identity,omitempty"`
@@ -994,6 +1134,27 @@ func (v *ActivityTaskStartedEventAttributes) Equals(rhs *ActivityTaskStartedEven
 		return false
 	}
 	return true
+}
+
+func (v *ActivityTaskStartedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *ActivityTaskStartedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
+func (v *ActivityTaskStartedEventAttributes) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
 }
 
 type ActivityTaskTimedOutEventAttributes struct {
@@ -1144,6 +1305,27 @@ func (v *ActivityTaskTimedOutEventAttributes) Equals(rhs *ActivityTaskTimedOutEv
 	return true
 }
 
+func (v *ActivityTaskTimedOutEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *ActivityTaskTimedOutEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *ActivityTaskTimedOutEventAttributes) GetTimeoutType() (o TimeoutType) {
+	if v.TimeoutType != nil {
+		return *v.TimeoutType
+	}
+	return
+}
+
 type ActivityType struct {
 	Name *string `json:"name,omitempty"`
 }
@@ -1202,6 +1384,13 @@ func (v *ActivityType) Equals(rhs *ActivityType) bool {
 		return false
 	}
 	return true
+}
+
+func (v *ActivityType) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
 }
 
 type BadRequestError struct {
@@ -1405,6 +1594,13 @@ func (v *CancelTimerDecisionAttributes) Equals(rhs *CancelTimerDecisionAttribute
 	return true
 }
 
+func (v *CancelTimerDecisionAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
 type CancelTimerFailedEventAttributes struct {
 	TimerId                      *string `json:"timerId,omitempty"`
 	Cause                        *string `json:"cause,omitempty"`
@@ -1538,6 +1734,34 @@ func (v *CancelTimerFailedEventAttributes) Equals(rhs *CancelTimerFailedEventAtt
 		return false
 	}
 	return true
+}
+
+func (v *CancelTimerFailedEventAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
+func (v *CancelTimerFailedEventAttributes) GetCause() (o string) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *CancelTimerFailedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
+func (v *CancelTimerFailedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type CancelWorkflowExecutionDecisionAttributes struct {
@@ -1946,6 +2170,27 @@ func (v *ChildWorkflowExecutionCanceledEventAttributes) Equals(rhs *ChildWorkflo
 	return true
 }
 
+func (v *ChildWorkflowExecutionCanceledEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionCanceledEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionCanceledEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
 type ChildWorkflowExecutionCompletedEventAttributes struct {
 	Result            []byte             `json:"result"`
 	Domain            *string            `json:"domain,omitempty"`
@@ -2123,6 +2368,27 @@ func (v *ChildWorkflowExecutionCompletedEventAttributes) Equals(rhs *ChildWorkfl
 		return false
 	}
 	return true
+}
+
+func (v *ChildWorkflowExecutionCompletedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionCompletedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionCompletedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }
 
 type ChildWorkflowExecutionFailedCause int32
@@ -2407,6 +2673,34 @@ func (v *ChildWorkflowExecutionFailedEventAttributes) Equals(rhs *ChildWorkflowE
 	return true
 }
 
+func (v *ChildWorkflowExecutionFailedEventAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionFailedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionFailedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionFailedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
 type ChildWorkflowExecutionStartedEventAttributes struct {
 	Domain            *string            `json:"domain,omitempty"`
 	InitiatedEventId  *int64             `json:"initiatedEventId,omitempty"`
@@ -2536,6 +2830,20 @@ func (v *ChildWorkflowExecutionStartedEventAttributes) Equals(rhs *ChildWorkflow
 		return false
 	}
 	return true
+}
+
+func (v *ChildWorkflowExecutionStartedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionStartedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
 }
 
 type ChildWorkflowExecutionTerminatedEventAttributes struct {
@@ -2692,6 +3000,27 @@ func (v *ChildWorkflowExecutionTerminatedEventAttributes) Equals(rhs *ChildWorkf
 		return false
 	}
 	return true
+}
+
+func (v *ChildWorkflowExecutionTerminatedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionTerminatedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionTerminatedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }
 
 type ChildWorkflowExecutionTimedOutEventAttributes struct {
@@ -2873,6 +3202,34 @@ func (v *ChildWorkflowExecutionTimedOutEventAttributes) Equals(rhs *ChildWorkflo
 		return false
 	}
 	return true
+}
+
+func (v *ChildWorkflowExecutionTimedOutEventAttributes) GetTimeoutType() (o TimeoutType) {
+	if v.TimeoutType != nil {
+		return *v.TimeoutType
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionTimedOutEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionTimedOutEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ChildWorkflowExecutionTimedOutEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }
 
 type CompleteWorkflowExecutionDecisionAttributes struct {
@@ -3085,6 +3442,20 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) Equals(rhs *ContinueA
 		return false
 	}
 	return true
+}
+
+func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
 }
 
 type Decision struct {
@@ -3481,6 +3852,13 @@ func (v *Decision) Equals(rhs *Decision) bool {
 	return true
 }
 
+func (v *Decision) GetDecisionType() (o DecisionType) {
+	if v.DecisionType != nil {
+		return *v.DecisionType
+	}
+	return
+}
+
 type DecisionTaskCompletedEventAttributes struct {
 	ExecutionContext []byte  `json:"executionContext"`
 	ScheduledEventId *int64  `json:"scheduledEventId,omitempty"`
@@ -3612,6 +3990,27 @@ func (v *DecisionTaskCompletedEventAttributes) Equals(rhs *DecisionTaskCompleted
 		return false
 	}
 	return true
+}
+
+func (v *DecisionTaskCompletedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *DecisionTaskCompletedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *DecisionTaskCompletedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type DecisionTaskFailedCause int32
@@ -3930,6 +4329,34 @@ func (v *DecisionTaskFailedEventAttributes) Equals(rhs *DecisionTaskFailedEventA
 	return true
 }
 
+func (v *DecisionTaskFailedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *DecisionTaskFailedEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *DecisionTaskFailedEventAttributes) GetCause() (o DecisionTaskFailedCause) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *DecisionTaskFailedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type DecisionTaskScheduledEventAttributes struct {
 	TaskList                   *TaskList `json:"taskList,omitempty"`
 	StartToCloseTimeoutSeconds *int32    `json:"startToCloseTimeoutSeconds,omitempty"`
@@ -4011,6 +4438,13 @@ func (v *DecisionTaskScheduledEventAttributes) Equals(rhs *DecisionTaskScheduled
 		return false
 	}
 	return true
+}
+
+func (v *DecisionTaskScheduledEventAttributes) GetStartToCloseTimeoutSeconds() (o int32) {
+	if v.StartToCloseTimeoutSeconds != nil {
+		return *v.StartToCloseTimeoutSeconds
+	}
+	return
 }
 
 type DecisionTaskStartedEventAttributes struct {
@@ -4123,6 +4557,27 @@ func (v *DecisionTaskStartedEventAttributes) Equals(rhs *DecisionTaskStartedEven
 	return true
 }
 
+func (v *DecisionTaskStartedEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *DecisionTaskStartedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
+func (v *DecisionTaskStartedEventAttributes) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
+}
+
 type DecisionTaskTimedOutEventAttributes struct {
 	ScheduledEventId *int64       `json:"scheduledEventId,omitempty"`
 	StartedEventId   *int64       `json:"startedEventId,omitempty"`
@@ -4231,6 +4686,27 @@ func (v *DecisionTaskTimedOutEventAttributes) Equals(rhs *DecisionTaskTimedOutEv
 		return false
 	}
 	return true
+}
+
+func (v *DecisionTaskTimedOutEventAttributes) GetScheduledEventId() (o int64) {
+	if v.ScheduledEventId != nil {
+		return *v.ScheduledEventId
+	}
+	return
+}
+
+func (v *DecisionTaskTimedOutEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *DecisionTaskTimedOutEventAttributes) GetTimeoutType() (o TimeoutType) {
+	if v.TimeoutType != nil {
+		return *v.TimeoutType
+	}
+	return
 }
 
 type DecisionType int32
@@ -4451,6 +4927,13 @@ func (v *DeprecateDomainRequest) Equals(rhs *DeprecateDomainRequest) bool {
 	return true
 }
 
+func (v *DeprecateDomainRequest) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
+}
+
 type DescribeDomainRequest struct {
 	Name *string `json:"name,omitempty"`
 }
@@ -4509,6 +4992,13 @@ func (v *DescribeDomainRequest) Equals(rhs *DescribeDomainRequest) bool {
 		return false
 	}
 	return true
+}
+
+func (v *DescribeDomainRequest) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
 }
 
 type DescribeDomainResponse struct {
@@ -4761,6 +5251,20 @@ func (v *DomainConfiguration) Equals(rhs *DomainConfiguration) bool {
 	return true
 }
 
+func (v *DomainConfiguration) GetWorkflowExecutionRetentionPeriodInDays() (o int32) {
+	if v.WorkflowExecutionRetentionPeriodInDays != nil {
+		return *v.WorkflowExecutionRetentionPeriodInDays
+	}
+	return
+}
+
+func (v *DomainConfiguration) GetEmitMetric() (o bool) {
+	if v.EmitMetric != nil {
+		return *v.EmitMetric
+	}
+	return
+}
+
 type DomainInfo struct {
 	Name        *string       `json:"name,omitempty"`
 	Status      *DomainStatus `json:"status,omitempty"`
@@ -4909,6 +5413,34 @@ func (v *DomainInfo) Equals(rhs *DomainInfo) bool {
 		return false
 	}
 	return true
+}
+
+func (v *DomainInfo) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
+}
+
+func (v *DomainInfo) GetStatus() (o DomainStatus) {
+	if v.Status != nil {
+		return *v.Status
+	}
+	return
+}
+
+func (v *DomainInfo) GetDescription() (o string) {
+	if v.Description != nil {
+		return *v.Description
+	}
+	return
+}
+
+func (v *DomainInfo) GetOwnerEmail() (o string) {
+	if v.OwnerEmail != nil {
+		return *v.OwnerEmail
+	}
+	return
 }
 
 type DomainStatus int32
@@ -5550,6 +6082,20 @@ func (v *ExternalWorkflowExecutionCancelRequestedEventAttributes) Equals(rhs *Ex
 	return true
 }
 
+func (v *ExternalWorkflowExecutionCancelRequestedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *ExternalWorkflowExecutionCancelRequestedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
 type FailWorkflowExecutionDecisionAttributes struct {
 	Reason  *string `json:"reason,omitempty"`
 	Details []byte  `json:"details"`
@@ -5631,6 +6177,13 @@ func (v *FailWorkflowExecutionDecisionAttributes) Equals(rhs *FailWorkflowExecut
 		return false
 	}
 	return true
+}
+
+func (v *FailWorkflowExecutionDecisionAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
 }
 
 type GetWorkflowExecutionHistoryRequest struct {
@@ -5762,6 +6315,20 @@ func (v *GetWorkflowExecutionHistoryRequest) Equals(rhs *GetWorkflowExecutionHis
 		return false
 	}
 	return true
+}
+
+func (v *GetWorkflowExecutionHistoryRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *GetWorkflowExecutionHistoryRequest) GetMaximumPageSize() (o int32) {
+	if v.MaximumPageSize != nil {
+		return *v.MaximumPageSize
+	}
+	return
 }
 
 type GetWorkflowExecutionHistoryResponse struct {
@@ -7202,6 +7769,27 @@ func (v *HistoryEvent) Equals(rhs *HistoryEvent) bool {
 	return true
 }
 
+func (v *HistoryEvent) GetEventId() (o int64) {
+	if v.EventId != nil {
+		return *v.EventId
+	}
+	return
+}
+
+func (v *HistoryEvent) GetTimestamp() (o int64) {
+	if v.Timestamp != nil {
+		return *v.Timestamp
+	}
+	return
+}
+
+func (v *HistoryEvent) GetEventType() (o EventType) {
+	if v.EventType != nil {
+		return *v.EventType
+	}
+	return
+}
+
 type InternalServiceError struct {
 	Message string `json:"message,required"`
 }
@@ -7498,6 +8086,27 @@ func (v *ListClosedWorkflowExecutionsRequest) Equals(rhs *ListClosedWorkflowExec
 		return false
 	}
 	return true
+}
+
+func (v *ListClosedWorkflowExecutionsRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ListClosedWorkflowExecutionsRequest) GetMaximumPageSize() (o int32) {
+	if v.MaximumPageSize != nil {
+		return *v.MaximumPageSize
+	}
+	return
+}
+
+func (v *ListClosedWorkflowExecutionsRequest) GetStatusFilter() (o WorkflowExecutionCloseStatus) {
+	if v.StatusFilter != nil {
+		return *v.StatusFilter
+	}
+	return
 }
 
 type ListClosedWorkflowExecutionsResponse struct {
@@ -7824,6 +8433,20 @@ func (v *ListOpenWorkflowExecutionsRequest) Equals(rhs *ListOpenWorkflowExecutio
 	return true
 }
 
+func (v *ListOpenWorkflowExecutionsRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ListOpenWorkflowExecutionsRequest) GetMaximumPageSize() (o int32) {
+	if v.MaximumPageSize != nil {
+		return *v.MaximumPageSize
+	}
+	return
+}
+
 type ListOpenWorkflowExecutionsResponse struct {
 	Executions    []*WorkflowExecutionInfo `json:"executions"`
 	NextPageToken []byte                   `json:"nextPageToken"`
@@ -8013,6 +8636,20 @@ func (v *MarkerRecordedEventAttributes) Equals(rhs *MarkerRecordedEventAttribute
 	return true
 }
 
+func (v *MarkerRecordedEventAttributes) GetMarkerName() (o string) {
+	if v.MarkerName != nil {
+		return *v.MarkerName
+	}
+	return
+}
+
+func (v *MarkerRecordedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type PollForActivityTaskRequest struct {
 	Domain   *string   `json:"domain,omitempty"`
 	TaskList *TaskList `json:"taskList,omitempty"`
@@ -8119,6 +8756,20 @@ func (v *PollForActivityTaskRequest) Equals(rhs *PollForActivityTaskRequest) boo
 		return false
 	}
 	return true
+}
+
+func (v *PollForActivityTaskRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *PollForActivityTaskRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type PollForActivityTaskResponse struct {
@@ -8423,6 +9074,55 @@ func (v *PollForActivityTaskResponse) Equals(rhs *PollForActivityTaskResponse) b
 	return true
 }
 
+func (v *PollForActivityTaskResponse) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetScheduledTimestamp() (o int64) {
+	if v.ScheduledTimestamp != nil {
+		return *v.ScheduledTimestamp
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetScheduleToCloseTimeoutSeconds() (o int32) {
+	if v.ScheduleToCloseTimeoutSeconds != nil {
+		return *v.ScheduleToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetStartedTimestamp() (o int64) {
+	if v.StartedTimestamp != nil {
+		return *v.StartedTimestamp
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetStartToCloseTimeoutSeconds() (o int32) {
+	if v.StartToCloseTimeoutSeconds != nil {
+		return *v.StartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *PollForActivityTaskResponse) GetHeartbeatTimeoutSeconds() (o int32) {
+	if v.HeartbeatTimeoutSeconds != nil {
+		return *v.HeartbeatTimeoutSeconds
+	}
+	return
+}
+
 type PollForDecisionTaskRequest struct {
 	Domain   *string   `json:"domain,omitempty"`
 	TaskList *TaskList `json:"taskList,omitempty"`
@@ -8529,6 +9229,20 @@ func (v *PollForDecisionTaskRequest) Equals(rhs *PollForDecisionTaskRequest) boo
 		return false
 	}
 	return true
+}
+
+func (v *PollForDecisionTaskRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *PollForDecisionTaskRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type PollForDecisionTaskResponse struct {
@@ -8731,6 +9445,20 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	return true
 }
 
+func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
+	if v.PreviousStartedEventId != nil {
+		return *v.PreviousStartedEventId
+	}
+	return
+}
+
+func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
 type RecordActivityTaskHeartbeatRequest struct {
 	TaskToken []byte  `json:"taskToken"`
 	Details   []byte  `json:"details"`
@@ -8837,6 +9565,13 @@ func (v *RecordActivityTaskHeartbeatRequest) Equals(rhs *RecordActivityTaskHeart
 	return true
 }
 
+func (v *RecordActivityTaskHeartbeatRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type RecordActivityTaskHeartbeatResponse struct {
 	CancelRequested *bool `json:"cancelRequested,omitempty"`
 }
@@ -8895,6 +9630,13 @@ func (v *RecordActivityTaskHeartbeatResponse) Equals(rhs *RecordActivityTaskHear
 		return false
 	}
 	return true
+}
+
+func (v *RecordActivityTaskHeartbeatResponse) GetCancelRequested() (o bool) {
+	if v.CancelRequested != nil {
+		return *v.CancelRequested
+	}
+	return
 }
 
 type RecordMarkerDecisionAttributes struct {
@@ -8978,6 +9720,13 @@ func (v *RecordMarkerDecisionAttributes) Equals(rhs *RecordMarkerDecisionAttribu
 		return false
 	}
 	return true
+}
+
+func (v *RecordMarkerDecisionAttributes) GetMarkerName() (o string) {
+	if v.MarkerName != nil {
+		return *v.MarkerName
+	}
+	return
 }
 
 type RegisterDomainRequest struct {
@@ -9140,6 +9889,41 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 	return true
 }
 
+func (v *RegisterDomainRequest) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
+}
+
+func (v *RegisterDomainRequest) GetDescription() (o string) {
+	if v.Description != nil {
+		return *v.Description
+	}
+	return
+}
+
+func (v *RegisterDomainRequest) GetOwnerEmail() (o string) {
+	if v.OwnerEmail != nil {
+		return *v.OwnerEmail
+	}
+	return
+}
+
+func (v *RegisterDomainRequest) GetWorkflowExecutionRetentionPeriodInDays() (o int32) {
+	if v.WorkflowExecutionRetentionPeriodInDays != nil {
+		return *v.WorkflowExecutionRetentionPeriodInDays
+	}
+	return
+}
+
+func (v *RegisterDomainRequest) GetEmitMetric() (o bool) {
+	if v.EmitMetric != nil {
+		return *v.EmitMetric
+	}
+	return
+}
+
 type RequestCancelActivityTaskDecisionAttributes struct {
 	ActivityId *string `json:"activityId,omitempty"`
 }
@@ -9198,6 +9982,13 @@ func (v *RequestCancelActivityTaskDecisionAttributes) Equals(rhs *RequestCancelA
 		return false
 	}
 	return true
+}
+
+func (v *RequestCancelActivityTaskDecisionAttributes) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
 }
 
 type RequestCancelActivityTaskFailedEventAttributes struct {
@@ -9308,6 +10099,27 @@ func (v *RequestCancelActivityTaskFailedEventAttributes) Equals(rhs *RequestCanc
 		return false
 	}
 	return true
+}
+
+func (v *RequestCancelActivityTaskFailedEventAttributes) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
+}
+
+func (v *RequestCancelActivityTaskFailedEventAttributes) GetCause() (o string) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *RequestCancelActivityTaskFailedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
 }
 
 type RequestCancelExternalWorkflowExecutionDecisionAttributes struct {
@@ -9441,6 +10253,27 @@ func (v *RequestCancelExternalWorkflowExecutionDecisionAttributes) Equals(rhs *R
 		return false
 	}
 	return true
+}
+
+func (v *RequestCancelExternalWorkflowExecutionDecisionAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionDecisionAttributes) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionDecisionAttributes) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+	return
 }
 
 type RequestCancelExternalWorkflowExecutionFailedEventAttributes struct {
@@ -9639,6 +10472,34 @@ func (v *RequestCancelExternalWorkflowExecutionFailedEventAttributes) Equals(rhs
 	return true
 }
 
+func (v *RequestCancelExternalWorkflowExecutionFailedEventAttributes) GetCause() (o CancelExternalWorkflowExecutionFailedCause) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionFailedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionFailedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionFailedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
 type RequestCancelExternalWorkflowExecutionInitiatedEventAttributes struct {
 	DecisionTaskCompletedEventId *int64             `json:"decisionTaskCompletedEventId,omitempty"`
 	Domain                       *string            `json:"domain,omitempty"`
@@ -9768,6 +10629,20 @@ func (v *RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) Equals(
 		return false
 	}
 	return true
+}
+
+func (v *RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
+func (v *RequestCancelExternalWorkflowExecutionInitiatedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
 }
 
 type RequestCancelWorkflowExecutionRequest struct {
@@ -9903,6 +10778,27 @@ func (v *RequestCancelWorkflowExecutionRequest) Equals(rhs *RequestCancelWorkflo
 	return true
 }
 
+func (v *RequestCancelWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *RequestCancelWorkflowExecutionRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
+func (v *RequestCancelWorkflowExecutionRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
+}
+
 type RespondActivityTaskCanceledRequest struct {
 	TaskToken []byte  `json:"taskToken"`
 	Details   []byte  `json:"details"`
@@ -10009,6 +10905,13 @@ func (v *RespondActivityTaskCanceledRequest) Equals(rhs *RespondActivityTaskCanc
 	return true
 }
 
+func (v *RespondActivityTaskCanceledRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type RespondActivityTaskCompletedRequest struct {
 	TaskToken []byte  `json:"taskToken"`
 	Result    []byte  `json:"result"`
@@ -10113,6 +11016,13 @@ func (v *RespondActivityTaskCompletedRequest) Equals(rhs *RespondActivityTaskCom
 		return false
 	}
 	return true
+}
+
+func (v *RespondActivityTaskCompletedRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type RespondActivityTaskFailedRequest struct {
@@ -10244,6 +11154,20 @@ func (v *RespondActivityTaskFailedRequest) Equals(rhs *RespondActivityTaskFailed
 		return false
 	}
 	return true
+}
+
+func (v *RespondActivityTaskFailedRequest) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *RespondActivityTaskFailedRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type RespondDecisionTaskCompletedRequest struct {
@@ -10439,6 +11363,13 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 		return false
 	}
 	return true
+}
+
+func (v *RespondDecisionTaskCompletedRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type ScheduleActivityTaskDecisionAttributes struct {
@@ -10695,6 +11626,48 @@ func (v *ScheduleActivityTaskDecisionAttributes) Equals(rhs *ScheduleActivityTas
 	return true
 }
 
+func (v *ScheduleActivityTaskDecisionAttributes) GetActivityId() (o string) {
+	if v.ActivityId != nil {
+		return *v.ActivityId
+	}
+	return
+}
+
+func (v *ScheduleActivityTaskDecisionAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *ScheduleActivityTaskDecisionAttributes) GetScheduleToCloseTimeoutSeconds() (o int32) {
+	if v.ScheduleToCloseTimeoutSeconds != nil {
+		return *v.ScheduleToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *ScheduleActivityTaskDecisionAttributes) GetScheduleToStartTimeoutSeconds() (o int32) {
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		return *v.ScheduleToStartTimeoutSeconds
+	}
+	return
+}
+
+func (v *ScheduleActivityTaskDecisionAttributes) GetStartToCloseTimeoutSeconds() (o int32) {
+	if v.StartToCloseTimeoutSeconds != nil {
+		return *v.StartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *ScheduleActivityTaskDecisionAttributes) GetHeartbeatTimeoutSeconds() (o int32) {
+	if v.HeartbeatTimeoutSeconds != nil {
+		return *v.HeartbeatTimeoutSeconds
+	}
+	return
+}
+
 type ServiceBusyError struct {
 	Message string `json:"message,required"`
 }
@@ -10912,6 +11885,27 @@ func (v *SignalWorkflowExecutionRequest) Equals(rhs *SignalWorkflowExecutionRequ
 		return false
 	}
 	return true
+}
+
+func (v *SignalWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *SignalWorkflowExecutionRequest) GetSignalName() (o string) {
+	if v.SignalName != nil {
+		return *v.SignalName
+	}
+	return
+}
+
+func (v *SignalWorkflowExecutionRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type StartChildWorkflowExecutionDecisionAttributes struct {
@@ -11181,6 +12175,41 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) Equals(rhs *StartChildWo
 	return true
 }
 
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetChildPolicy() (o ChildPolicy) {
+	if v.ChildPolicy != nil {
+		return *v.ChildPolicy
+	}
+	return
+}
+
 type StartChildWorkflowExecutionFailedEventAttributes struct {
 	Domain                       *string                            `json:"domain,omitempty"`
 	WorkflowId                   *string                            `json:"workflowId,omitempty"`
@@ -11400,6 +12429,41 @@ func (v *StartChildWorkflowExecutionFailedEventAttributes) Equals(rhs *StartChil
 		return false
 	}
 	return true
+}
+
+func (v *StartChildWorkflowExecutionFailedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionFailedEventAttributes) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionFailedEventAttributes) GetCause() (o ChildWorkflowExecutionFailedCause) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionFailedEventAttributes) GetInitiatedEventId() (o int64) {
+	if v.InitiatedEventId != nil {
+		return *v.InitiatedEventId
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionFailedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
 }
 
 type StartChildWorkflowExecutionInitiatedEventAttributes struct {
@@ -11679,6 +12743,48 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) Equals(rhs *StartC
 	return true
 }
 
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetChildPolicy() (o ChildPolicy) {
+	if v.ChildPolicy != nil {
+		return *v.ChildPolicy
+	}
+	return
+}
+
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type StartTimeFilter struct {
 	EarliestTime *int64 `json:"earliestTime,omitempty"`
 	LatestTime   *int64 `json:"latestTime,omitempty"`
@@ -11764,6 +12870,20 @@ func (v *StartTimeFilter) Equals(rhs *StartTimeFilter) bool {
 	return true
 }
 
+func (v *StartTimeFilter) GetEarliestTime() (o int64) {
+	if v.EarliestTime != nil {
+		return *v.EarliestTime
+	}
+	return
+}
+
+func (v *StartTimeFilter) GetLatestTime() (o int64) {
+	if v.LatestTime != nil {
+		return *v.LatestTime
+	}
+	return
+}
+
 type StartTimerDecisionAttributes struct {
 	TimerId                   *string `json:"timerId,omitempty"`
 	StartToFireTimeoutSeconds *int64  `json:"startToFireTimeoutSeconds,omitempty"`
@@ -11847,6 +12967,20 @@ func (v *StartTimerDecisionAttributes) Equals(rhs *StartTimerDecisionAttributes)
 		return false
 	}
 	return true
+}
+
+func (v *StartTimerDecisionAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
+func (v *StartTimerDecisionAttributes) GetStartToFireTimeoutSeconds() (o int64) {
+	if v.StartToFireTimeoutSeconds != nil {
+		return *v.StartToFireTimeoutSeconds
+	}
+	return
 }
 
 type StartWorkflowExecutionRequest struct {
@@ -12103,6 +13237,48 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 	return true
 }
 
+func (v *StartWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *StartWorkflowExecutionRequest) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *StartWorkflowExecutionRequest) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartWorkflowExecutionRequest) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *StartWorkflowExecutionRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
+func (v *StartWorkflowExecutionRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
+}
+
 type StartWorkflowExecutionResponse struct {
 	RunId *string `json:"runId,omitempty"`
 }
@@ -12163,6 +13339,13 @@ func (v *StartWorkflowExecutionResponse) Equals(rhs *StartWorkflowExecutionRespo
 	return true
 }
 
+func (v *StartWorkflowExecutionResponse) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+	return
+}
+
 type TaskList struct {
 	Name *string `json:"name,omitempty"`
 }
@@ -12221,6 +13404,13 @@ func (v *TaskList) Equals(rhs *TaskList) bool {
 		return false
 	}
 	return true
+}
+
+func (v *TaskList) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
 }
 
 type TerminateWorkflowExecutionRequest struct {
@@ -12377,6 +13567,27 @@ func (v *TerminateWorkflowExecutionRequest) Equals(rhs *TerminateWorkflowExecuti
 		return false
 	}
 	return true
+}
+
+func (v *TerminateWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+func (v *TerminateWorkflowExecutionRequest) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *TerminateWorkflowExecutionRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type TimeoutType int32
@@ -12616,6 +13827,34 @@ func (v *TimerCanceledEventAttributes) Equals(rhs *TimerCanceledEventAttributes)
 	return true
 }
 
+func (v *TimerCanceledEventAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
+func (v *TimerCanceledEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *TimerCanceledEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
+func (v *TimerCanceledEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type TimerFiredEventAttributes struct {
 	TimerId        *string `json:"timerId,omitempty"`
 	StartedEventId *int64  `json:"startedEventId,omitempty"`
@@ -12699,6 +13938,20 @@ func (v *TimerFiredEventAttributes) Equals(rhs *TimerFiredEventAttributes) bool 
 		return false
 	}
 	return true
+}
+
+func (v *TimerFiredEventAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
+func (v *TimerFiredEventAttributes) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }
 
 type TimerStartedEventAttributes struct {
@@ -12811,6 +14064,27 @@ func (v *TimerStartedEventAttributes) Equals(rhs *TimerStartedEventAttributes) b
 	return true
 }
 
+func (v *TimerStartedEventAttributes) GetTimerId() (o string) {
+	if v.TimerId != nil {
+		return *v.TimerId
+	}
+	return
+}
+
+func (v *TimerStartedEventAttributes) GetStartToFireTimeoutSeconds() (o int64) {
+	if v.StartToFireTimeoutSeconds != nil {
+		return *v.StartToFireTimeoutSeconds
+	}
+	return
+}
+
+func (v *TimerStartedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type UpdateDomainInfo struct {
 	Description *string `json:"description,omitempty"`
 	OwnerEmail  *string `json:"ownerEmail,omitempty"`
@@ -12894,6 +14168,20 @@ func (v *UpdateDomainInfo) Equals(rhs *UpdateDomainInfo) bool {
 		return false
 	}
 	return true
+}
+
+func (v *UpdateDomainInfo) GetDescription() (o string) {
+	if v.Description != nil {
+		return *v.Description
+	}
+	return
+}
+
+func (v *UpdateDomainInfo) GetOwnerEmail() (o string) {
+	if v.OwnerEmail != nil {
+		return *v.OwnerEmail
+	}
+	return
 }
 
 type UpdateDomainRequest struct {
@@ -13006,6 +14294,13 @@ func (v *UpdateDomainRequest) Equals(rhs *UpdateDomainRequest) bool {
 		return false
 	}
 	return true
+}
+
+func (v *UpdateDomainRequest) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
 }
 
 type UpdateDomainResponse struct {
@@ -13174,6 +14469,20 @@ func (v *WorkflowExecution) Equals(rhs *WorkflowExecution) bool {
 	return true
 }
 
+func (v *WorkflowExecution) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
+}
+
+func (v *WorkflowExecution) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+	return
+}
+
 type WorkflowExecutionAlreadyStartedError struct {
 	Message        *string `json:"message,omitempty"`
 	StartRequestId *string `json:"startRequestId,omitempty"`
@@ -13282,6 +14591,27 @@ func (v *WorkflowExecutionAlreadyStartedError) Equals(rhs *WorkflowExecutionAlre
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionAlreadyStartedError) GetMessage() (o string) {
+	if v.Message != nil {
+		return *v.Message
+	}
+	return
+}
+
+func (v *WorkflowExecutionAlreadyStartedError) GetStartRequestId() (o string) {
+	if v.StartRequestId != nil {
+		return *v.StartRequestId
+	}
+	return
+}
+
+func (v *WorkflowExecutionAlreadyStartedError) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+	return
 }
 
 func (v *WorkflowExecutionAlreadyStartedError) Error() string {
@@ -13421,6 +14751,27 @@ func (v *WorkflowExecutionCancelRequestedEventAttributes) Equals(rhs *WorkflowEx
 	return true
 }
 
+func (v *WorkflowExecutionCancelRequestedEventAttributes) GetCause() (o string) {
+	if v.Cause != nil {
+		return *v.Cause
+	}
+	return
+}
+
+func (v *WorkflowExecutionCancelRequestedEventAttributes) GetExternalInitiatedEventId() (o int64) {
+	if v.ExternalInitiatedEventId != nil {
+		return *v.ExternalInitiatedEventId
+	}
+	return
+}
+
+func (v *WorkflowExecutionCancelRequestedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type WorkflowExecutionCanceledEventAttributes struct {
 	DecisionTaskCompletedEventId *int64 `json:"decisionTaskCompletedEventId,omitempty"`
 	Details                      []byte `json:"details"`
@@ -13502,6 +14853,13 @@ func (v *WorkflowExecutionCanceledEventAttributes) Equals(rhs *WorkflowExecution
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionCanceledEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
 }
 
 type WorkflowExecutionCloseStatus int32
@@ -13703,6 +15061,13 @@ func (v *WorkflowExecutionCompletedEventAttributes) Equals(rhs *WorkflowExecutio
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionCompletedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
 }
 
 type WorkflowExecutionContinuedAsNewEventAttributes struct {
@@ -13909,6 +15274,34 @@ func (v *WorkflowExecutionContinuedAsNewEventAttributes) Equals(rhs *WorkflowExe
 	return true
 }
 
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetNewExecutionRunId() (o string) {
+	if v.NewExecutionRunId != nil {
+		return *v.NewExecutionRunId
+	}
+	return
+}
+
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionContinuedAsNewEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type WorkflowExecutionFailedEventAttributes struct {
 	Reason                       *string `json:"reason,omitempty"`
 	Details                      []byte  `json:"details"`
@@ -14017,6 +15410,20 @@ func (v *WorkflowExecutionFailedEventAttributes) Equals(rhs *WorkflowExecutionFa
 	return true
 }
 
+func (v *WorkflowExecutionFailedEventAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *WorkflowExecutionFailedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
+	if v.DecisionTaskCompletedEventId != nil {
+		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
 type WorkflowExecutionFilter struct {
 	WorkflowId *string `json:"workflowId,omitempty"`
 }
@@ -14075,6 +15482,13 @@ func (v *WorkflowExecutionFilter) Equals(rhs *WorkflowExecutionFilter) bool {
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionFilter) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+	return
 }
 
 type WorkflowExecutionInfo struct {
@@ -14258,6 +15672,34 @@ func (v *WorkflowExecutionInfo) Equals(rhs *WorkflowExecutionInfo) bool {
 	return true
 }
 
+func (v *WorkflowExecutionInfo) GetStartTime() (o int64) {
+	if v.StartTime != nil {
+		return *v.StartTime
+	}
+	return
+}
+
+func (v *WorkflowExecutionInfo) GetCloseTime() (o int64) {
+	if v.CloseTime != nil {
+		return *v.CloseTime
+	}
+	return
+}
+
+func (v *WorkflowExecutionInfo) GetCloseStatus() (o WorkflowExecutionCloseStatus) {
+	if v.CloseStatus != nil {
+		return *v.CloseStatus
+	}
+	return
+}
+
+func (v *WorkflowExecutionInfo) GetHistoryLength() (o int64) {
+	if v.HistoryLength != nil {
+		return *v.HistoryLength
+	}
+	return
+}
+
 type WorkflowExecutionSignaledEventAttributes struct {
 	SignalName *string `json:"signalName,omitempty"`
 	Input      []byte  `json:"input"`
@@ -14364,6 +15806,20 @@ func (v *WorkflowExecutionSignaledEventAttributes) Equals(rhs *WorkflowExecution
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionSignaledEventAttributes) GetSignalName() (o string) {
+	if v.SignalName != nil {
+		return *v.SignalName
+	}
+	return
+}
+
+func (v *WorkflowExecutionSignaledEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
 }
 
 type WorkflowExecutionStartedEventAttributes struct {
@@ -14545,6 +16001,27 @@ func (v *WorkflowExecutionStartedEventAttributes) Equals(rhs *WorkflowExecutionS
 	return true
 }
 
+func (v *WorkflowExecutionStartedEventAttributes) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionStartedEventAttributes) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionStartedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type WorkflowExecutionTerminatedEventAttributes struct {
 	Reason   *string `json:"reason,omitempty"`
 	Details  []byte  `json:"details"`
@@ -14653,6 +16130,20 @@ func (v *WorkflowExecutionTerminatedEventAttributes) Equals(rhs *WorkflowExecuti
 	return true
 }
 
+func (v *WorkflowExecutionTerminatedEventAttributes) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+	return
+}
+
+func (v *WorkflowExecutionTerminatedEventAttributes) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+	return
+}
+
 type WorkflowExecutionTimedOutEventAttributes struct {
 	TimeoutType *TimeoutType `json:"timeoutType,omitempty"`
 }
@@ -14711,6 +16202,13 @@ func (v *WorkflowExecutionTimedOutEventAttributes) Equals(rhs *WorkflowExecution
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowExecutionTimedOutEventAttributes) GetTimeoutType() (o TimeoutType) {
+	if v.TimeoutType != nil {
+		return *v.TimeoutType
+	}
+	return
 }
 
 type WorkflowType struct {
@@ -14773,6 +16271,13 @@ func (v *WorkflowType) Equals(rhs *WorkflowType) bool {
 	return true
 }
 
+func (v *WorkflowType) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
+}
+
 type WorkflowTypeFilter struct {
 	Name *string `json:"name,omitempty"`
 }
@@ -14831,4 +16336,11 @@ func (v *WorkflowTypeFilter) Equals(rhs *WorkflowTypeFilter) bool {
 		return false
 	}
 	return true
+}
+
+func (v *WorkflowTypeFilter) GetName() (o string) {
+	if v.Name != nil {
+		return *v.Name
+	}
+	return
 }

@@ -192,6 +192,13 @@ func (v *GetWorkflowExecutionNextEventIDRequest) Equals(rhs *GetWorkflowExecutio
 	return true
 }
 
+func (v *GetWorkflowExecutionNextEventIDRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type GetWorkflowExecutionNextEventIDResponse struct {
 	EventId *int64  `json:"eventId,omitempty"`
 	RunId   *string `json:"runId,omitempty"`
@@ -284,6 +291,20 @@ func (v *GetWorkflowExecutionNextEventIDResponse) Equals(rhs *GetWorkflowExecuti
 		return false
 	}
 	return true
+}
+
+func (v *GetWorkflowExecutionNextEventIDResponse) GetEventId() (o int64) {
+	if v.EventId != nil {
+		return *v.EventId
+	}
+	return
+}
+
+func (v *GetWorkflowExecutionNextEventIDResponse) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+	return
 }
 
 type ParentExecutionInfo struct {
@@ -394,6 +415,20 @@ func (v *ParentExecutionInfo) Equals(rhs *ParentExecutionInfo) bool {
 	return true
 }
 
+func (v *ParentExecutionInfo) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *ParentExecutionInfo) GetInitiatedId() (o int64) {
+	if v.InitiatedId != nil {
+		return *v.InitiatedId
+	}
+	return
+}
+
 type RecordActivityTaskHeartbeatRequest struct {
 	DomainUUID       *string                                    `json:"domainUUID,omitempty"`
 	HeartbeatRequest *shared.RecordActivityTaskHeartbeatRequest `json:"heartbeatRequest,omitempty"`
@@ -481,6 +516,13 @@ func (v *RecordActivityTaskHeartbeatRequest) Equals(rhs *RecordActivityTaskHeart
 		return false
 	}
 	return true
+}
+
+func (v *RecordActivityTaskHeartbeatRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type RecordActivityTaskStartedRequest struct {
@@ -668,6 +710,34 @@ func (v *RecordActivityTaskStartedRequest) Equals(rhs *RecordActivityTaskStarted
 		return false
 	}
 	return true
+}
+
+func (v *RecordActivityTaskStartedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *RecordActivityTaskStartedRequest) GetScheduleId() (o int64) {
+	if v.ScheduleId != nil {
+		return *v.ScheduleId
+	}
+	return
+}
+
+func (v *RecordActivityTaskStartedRequest) GetTaskId() (o int64) {
+	if v.TaskId != nil {
+		return *v.TaskId
+	}
+	return
+}
+
+func (v *RecordActivityTaskStartedRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
 }
 
 type RecordActivityTaskStartedResponse struct {
@@ -911,6 +981,20 @@ func (v *RecordChildExecutionCompletedRequest) Equals(rhs *RecordChildExecutionC
 	return true
 }
 
+func (v *RecordChildExecutionCompletedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *RecordChildExecutionCompletedRequest) GetInitiatedId() (o int64) {
+	if v.InitiatedId != nil {
+		return *v.InitiatedId
+	}
+	return
+}
+
 type RecordDecisionTaskStartedRequest struct {
 	DomainUUID        *string                            `json:"domainUUID,omitempty"`
 	WorkflowExecution *shared.WorkflowExecution          `json:"workflowExecution,omitempty"`
@@ -1098,6 +1182,34 @@ func (v *RecordDecisionTaskStartedRequest) Equals(rhs *RecordDecisionTaskStarted
 	return true
 }
 
+func (v *RecordDecisionTaskStartedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *RecordDecisionTaskStartedRequest) GetScheduleId() (o int64) {
+	if v.ScheduleId != nil {
+		return *v.ScheduleId
+	}
+	return
+}
+
+func (v *RecordDecisionTaskStartedRequest) GetTaskId() (o int64) {
+	if v.TaskId != nil {
+		return *v.TaskId
+	}
+	return
+}
+
+func (v *RecordDecisionTaskStartedRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+	return
+}
+
 type RecordDecisionTaskStartedResponse struct {
 	WorkflowType           *shared.WorkflowType `json:"workflowType,omitempty"`
 	PreviousStartedEventId *int64               `json:"previousStartedEventId,omitempty"`
@@ -1210,6 +1322,20 @@ func (v *RecordDecisionTaskStartedResponse) Equals(rhs *RecordDecisionTaskStarte
 		return false
 	}
 	return true
+}
+
+func (v *RecordDecisionTaskStartedResponse) GetPreviousStartedEventId() (o int64) {
+	if v.PreviousStartedEventId != nil {
+		return *v.PreviousStartedEventId
+	}
+	return
+}
+
+func (v *RecordDecisionTaskStartedResponse) GetStartedEventId() (o int64) {
+	if v.StartedEventId != nil {
+		return *v.StartedEventId
+	}
+	return
 }
 
 type RequestCancelWorkflowExecutionRequest struct {
@@ -1349,6 +1475,20 @@ func (v *RequestCancelWorkflowExecutionRequest) Equals(rhs *RequestCancelWorkflo
 	return true
 }
 
+func (v *RequestCancelWorkflowExecutionRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *RequestCancelWorkflowExecutionRequest) GetExternalInitiatedEventId() (o int64) {
+	if v.ExternalInitiatedEventId != nil {
+		return *v.ExternalInitiatedEventId
+	}
+	return
+}
+
 type RespondActivityTaskCanceledRequest struct {
 	DomainUUID    *string                                    `json:"domainUUID,omitempty"`
 	CancelRequest *shared.RespondActivityTaskCanceledRequest `json:"cancelRequest,omitempty"`
@@ -1436,6 +1576,13 @@ func (v *RespondActivityTaskCanceledRequest) Equals(rhs *RespondActivityTaskCanc
 		return false
 	}
 	return true
+}
+
+func (v *RespondActivityTaskCanceledRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type RespondActivityTaskCompletedRequest struct {
@@ -1527,6 +1674,13 @@ func (v *RespondActivityTaskCompletedRequest) Equals(rhs *RespondActivityTaskCom
 	return true
 }
 
+func (v *RespondActivityTaskCompletedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type RespondActivityTaskFailedRequest struct {
 	DomainUUID    *string                                  `json:"domainUUID,omitempty"`
 	FailedRequest *shared.RespondActivityTaskFailedRequest `json:"failedRequest,omitempty"`
@@ -1614,6 +1768,13 @@ func (v *RespondActivityTaskFailedRequest) Equals(rhs *RespondActivityTaskFailed
 		return false
 	}
 	return true
+}
+
+func (v *RespondActivityTaskFailedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type RespondDecisionTaskCompletedRequest struct {
@@ -1705,6 +1866,13 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 	return true
 }
 
+func (v *RespondDecisionTaskCompletedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type ScheduleDecisionTaskRequest struct {
 	DomainUUID        *string                   `json:"domainUUID,omitempty"`
 	WorkflowExecution *shared.WorkflowExecution `json:"workflowExecution,omitempty"`
@@ -1786,6 +1954,13 @@ func (v *ScheduleDecisionTaskRequest) Equals(rhs *ScheduleDecisionTaskRequest) b
 		return false
 	}
 	return true
+}
+
+func (v *ScheduleDecisionTaskRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type ShardOwnershipLostError struct {
@@ -1871,6 +2046,20 @@ func (v *ShardOwnershipLostError) Equals(rhs *ShardOwnershipLostError) bool {
 		return false
 	}
 	return true
+}
+
+func (v *ShardOwnershipLostError) GetMessage() (o string) {
+	if v.Message != nil {
+		return *v.Message
+	}
+	return
+}
+
+func (v *ShardOwnershipLostError) GetOwner() (o string) {
+	if v.Owner != nil {
+		return *v.Owner
+	}
+	return
 }
 
 func (v *ShardOwnershipLostError) Error() string {
@@ -1964,6 +2153,13 @@ func (v *SignalWorkflowExecutionRequest) Equals(rhs *SignalWorkflowExecutionRequ
 		return false
 	}
 	return true
+}
+
+func (v *SignalWorkflowExecutionRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }
 
 type StartWorkflowExecutionRequest struct {
@@ -2084,6 +2280,13 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 	return true
 }
 
+func (v *StartWorkflowExecutionRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type TerminateWorkflowExecutionRequest struct {
 	DomainUUID       *string                                   `json:"domainUUID,omitempty"`
 	TerminateRequest *shared.TerminateWorkflowExecutionRequest `json:"terminateRequest,omitempty"`
@@ -2171,4 +2374,11 @@ func (v *TerminateWorkflowExecutionRequest) Equals(rhs *TerminateWorkflowExecuti
 		return false
 	}
 	return true
+}
+
+func (v *TerminateWorkflowExecutionRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
 }

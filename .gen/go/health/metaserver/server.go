@@ -25,10 +25,10 @@ package metaserver
 
 import (
 	"context"
+	"github.com/uber/cadence/.gen/go/health"
 	"go.uber.org/thriftrw/wire"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/encoding/thrift"
-	"github.com/uber/cadence/.gen/go/health"
 )
 
 // Interface is the server-side interface for the Meta service.

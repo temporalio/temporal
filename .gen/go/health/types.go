@@ -122,3 +122,10 @@ func (v *HealthStatus) Equals(rhs *HealthStatus) bool {
 	}
 	return true
 }
+
+func (v *HealthStatus) GetMsg() (o string) {
+	if v.Msg != nil {
+		return *v.Msg
+	}
+	return
+}

@@ -24,9 +24,16 @@ import:
 - package: gopkg.in/yaml.v2
 - package: gopkg.in/validator.v2
 - package: github.com/cactus/go-statsd-client/statsd
+- package: go.uber.org/thriftrw
+  version: ^1.6
 - package: go.uber.org/yarpc
   version: ^1.7.1
   subpackages:
   - api/transport
+  - encoding/thrift/thriftrw-plugin-yarpc
   - transport/http
   - transport/tchannel
+
+# Added excludeDirs to prevent build from failing on the yarpc generated code.
+excludeDirs:
+  - .gen

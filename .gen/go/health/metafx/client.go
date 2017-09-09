@@ -26,8 +26,8 @@ package metafx
 import (
 	"github.com/uber/cadence/.gen/go/health/metaclient"
 	"go.uber.org/fx"
-	"go.uber.org/yarpc/encoding/thrift"
 	"go.uber.org/yarpc"
+	"go.uber.org/yarpc/encoding/thrift"
 )
 
 // Params defines the dependencies for the Meta client.

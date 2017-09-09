@@ -25,11 +25,11 @@ package workflowserviceserver
 
 import (
 	"context"
+	"github.com/uber/cadence/.gen/go/cadence"
+	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 	"go.uber.org/yarpc/api/transport"
 	"go.uber.org/yarpc/encoding/thrift"
-	"github.com/uber/cadence/.gen/go/cadence"
-	"github.com/uber/cadence/.gen/go/shared"
 )
 
 // Interface is the server-side interface for the WorkflowService service.

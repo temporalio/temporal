@@ -1,5 +1,5 @@
-hash: c26a12112bd86e8f9ca6399479952c9f0ab04b8e13e683a47ba58b132aaf20cb
-updated: 2017-08-28T15:26:20.949029257-07:00
+hash: 92a784157d332533286d603981f80f7b53d1cbc667b8452fabea784487e593fb
+updated: 2017-09-08T17:11:16.180016998-07:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -16,7 +16,7 @@ imports:
   subpackages:
   - statsd
 - name: github.com/davecgh/go-spew
-  version: adab96458c51a58dc1783b3335dcce5461522e75
+  version: a476722483882dd40b8111f0eb64e1d7f43f56e4
   subpackages:
   - spew
 - name: github.com/dgryski/go-farm
@@ -43,7 +43,7 @@ imports:
   subpackages:
   - proto
 - name: github.com/golang/mock
-  version: e9b646f0c18577a42c2e2c59f97dbcc5aa61db32
+  version: 13f360950a79f5864a972c786a10a50e44b69541
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
@@ -106,11 +106,11 @@ imports:
 - name: github.com/uber-go/atomic
   version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
 - name: github.com/uber-go/mapdecode
-  version: 2d8ecd5e64c88634bd7dfcbc9fd2a9e813830e8d
+  version: 718b4994083e432669f44a00174c5f1bcdb1434d
   subpackages:
   - internal/mapstructure
 - name: github.com/uber-go/tally
-  version: 2605c407d7d219644d03a3680ad7df4779017782
+  version: be9e53c77349ae2dd4b8c03a6dc20ed9a88b9927
   subpackages:
   - m3
   - m3/customtransports
@@ -157,18 +157,20 @@ imports:
   - internal/semver
   - version
 - name: go.uber.org/yarpc
-  version: df6f636a8ec8a0f7e90ab431ede56b9371159a9e
+  version: 6e4afef7d1b168b594da0fcfb54eac34f5037e89
   subpackages:
   - api/backoff
   - api/encoding
   - api/middleware
   - api/peer
   - api/transport
+  - encoding/thrift/thriftrw-plugin-yarpc
   - internal
   - internal/backoff
   - internal/bufferpool
   - internal/clientconfig
   - internal/config
+  - internal/digester
   - internal/errorsync
   - internal/humanize
   - internal/inboundmiddleware
@@ -189,7 +191,7 @@ imports:
   - yarpcconfig
   - yarpcerrors
 - name: go.uber.org/zap
-  version: 9d9d6135afe89b6fc4a05e9a8552526caba38048
+  version: 3216c4c73e8ebbafff73c456dd27143f4a7c1f94
   subpackages:
   - buffer
   - internal/bufferpool
@@ -197,7 +199,7 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/net
-  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
+  version: 66aacef3dd8a676686c7ae3716979581e8b03c47
   repo: https://github.com/golang/net
   subpackages:
   - bpf
@@ -216,5 +218,5 @@ imports:
 - name: gopkg.in/validator.v2
   version: 07ffaad256c8e957050ad83d6472eb97d785013d
 - name: gopkg.in/yaml.v2
-  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
+  version: eb3733d160e74a9c7e442f435eb3bea458e1d19f
 testImports: []

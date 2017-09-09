@@ -68,13 +68,13 @@ vendor/glide.updated: glide.lock glide.yaml
 	touch vendor/glide.updated
 
 yarpc-install:
-	@type thriftrw >/dev/null 2>&1 || go get 'go.uber.org/thriftrw'
-	@type thriftrw-plugin-yarpc >/dev/null 2>&1 || go get 'go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc'
+	go get './vendor/go.uber.org/thriftrw'
+	go get './vendor/go.uber.org/yarpc/encoding/thrift/thriftrw-plugin-yarpc'
 
 clean_thrift:
 	rm -rf .gen
 
-thriftc: clean_thrift yarpc-install $(THRIFTRW_GEN_SRC)
+thriftc: yarpc-install $(THRIFTRW_GEN_SRC)
 
 copyright: cmd/tools/copyright/licensegen.go
 	go run ./cmd/tools/copyright/licensegen.go --verifyOnly
@@ -89,7 +89,7 @@ bins_nothrift: lint copyright cadence-cassandra-tool cadence
 
 bins: thriftc bins_nothrift
 
-test: bins
+test: vendor/glide.updated bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
