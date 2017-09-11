@@ -200,13 +200,14 @@ func (v *GetWorkflowExecutionNextEventIDRequest) GetDomainUUID() (o string) {
 }
 
 type GetWorkflowExecutionNextEventIDResponse struct {
-	EventId *int64  `json:"eventId,omitempty"`
-	RunId   *string `json:"runId,omitempty"`
+	EventId  *int64           `json:"eventId,omitempty"`
+	RunId    *string          `json:"runId,omitempty"`
+	Tasklist *shared.TaskList `json:"tasklist,omitempty"`
 }
 
 func (v *GetWorkflowExecutionNextEventIDResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -227,7 +228,21 @@ func (v *GetWorkflowExecutionNextEventIDResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
+	if v.Tasklist != nil {
+		w, err = v.Tasklist.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _TaskList_Read(w wire.Value) (*shared.TaskList, error) {
+	var v shared.TaskList
+	err := v.FromWire(w)
+	return &v, err
 }
 
 func (v *GetWorkflowExecutionNextEventIDResponse) FromWire(w wire.Value) error {
@@ -252,6 +267,13 @@ func (v *GetWorkflowExecutionNextEventIDResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.Tasklist, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -261,7 +283,7 @@ func (v *GetWorkflowExecutionNextEventIDResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.EventId != nil {
 		fields[i] = fmt.Sprintf("EventId: %v", *(v.EventId))
@@ -269,6 +291,10 @@ func (v *GetWorkflowExecutionNextEventIDResponse) String() string {
 	}
 	if v.RunId != nil {
 		fields[i] = fmt.Sprintf("RunId: %v", *(v.RunId))
+		i++
+	}
+	if v.Tasklist != nil {
+		fields[i] = fmt.Sprintf("Tasklist: %v", v.Tasklist)
 		i++
 	}
 	return fmt.Sprintf("GetWorkflowExecutionNextEventIDResponse{%v}", strings.Join(fields[:i], ", "))
@@ -288,6 +314,9 @@ func (v *GetWorkflowExecutionNextEventIDResponse) Equals(rhs *GetWorkflowExecuti
 		return false
 	}
 	if !_String_EqualsPtr(v.RunId, rhs.RunId) {
+		return false
+	}
+	if !((v.Tasklist == nil && rhs.Tasklist == nil) || (v.Tasklist != nil && rhs.Tasklist != nil && v.Tasklist.Equals(rhs.Tasklist))) {
 		return false
 	}
 	return true

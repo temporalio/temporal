@@ -9253,11 +9253,12 @@ type PollForDecisionTaskResponse struct {
 	StartedEventId         *int64             `json:"startedEventId,omitempty"`
 	History                *History           `json:"history,omitempty"`
 	NextPageToken          []byte             `json:"nextPageToken"`
+	Query                  *WorkflowQuery     `json:"query,omitempty"`
 }
 
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -9318,7 +9319,21 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
+	if v.Query != nil {
+		w, err = v.Query.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _WorkflowQuery_Read(w wire.Value) (*WorkflowQuery, error) {
+	var v WorkflowQuery
+	err := v.FromWire(w)
+	return &v, err
 }
 
 func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
@@ -9378,6 +9393,13 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 80:
+			if field.Value.Type() == wire.TStruct {
+				v.Query, err = _WorkflowQuery_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -9387,7 +9409,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -9417,6 +9439,10 @@ func (v *PollForDecisionTaskResponse) String() string {
 		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
 		i++
 	}
+	if v.Query != nil {
+		fields[i] = fmt.Sprintf("Query: %v", v.Query)
+		i++
+	}
 	return fmt.Sprintf("PollForDecisionTaskResponse{%v}", strings.Join(fields[:i], ", "))
 }
 
@@ -9442,6 +9468,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
 		return false
 	}
+	if !((v.Query == nil && rhs.Query == nil) || (v.Query != nil && rhs.Query != nil && v.Query.Equals(rhs.Query))) {
+		return false
+	}
 	return true
 }
 
@@ -9457,6 +9486,326 @@ func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
 		return *v.StartedEventId
 	}
 	return
+}
+
+type QueryFailedError struct {
+	Message string `json:"message,required"`
+}
+
+func (v *QueryFailedError) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	w, err = wire.NewValueString(v.Message), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 1, Value: w}
+	i++
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *QueryFailedError) FromWire(w wire.Value) error {
+	var err error
+	messageIsSet := false
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TBinary {
+				v.Message, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				messageIsSet = true
+			}
+		}
+	}
+	if !messageIsSet {
+		return errors.New("field Message of QueryFailedError is required")
+	}
+	return nil
+}
+
+func (v *QueryFailedError) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [1]string
+	i := 0
+	fields[i] = fmt.Sprintf("Message: %v", v.Message)
+	i++
+	return fmt.Sprintf("QueryFailedError{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *QueryFailedError) Equals(rhs *QueryFailedError) bool {
+	if !(v.Message == rhs.Message) {
+		return false
+	}
+	return true
+}
+
+func (v *QueryFailedError) Error() string {
+	return v.String()
+}
+
+type QueryTaskCompletedType int32
+
+const (
+	QueryTaskCompletedTypeCompleted QueryTaskCompletedType = 0
+	QueryTaskCompletedTypeFailed    QueryTaskCompletedType = 1
+)
+
+func QueryTaskCompletedType_Values() []QueryTaskCompletedType {
+	return []QueryTaskCompletedType{QueryTaskCompletedTypeCompleted, QueryTaskCompletedTypeFailed}
+}
+
+func (v *QueryTaskCompletedType) UnmarshalText(value []byte) error {
+	switch string(value) {
+	case "COMPLETED":
+		*v = QueryTaskCompletedTypeCompleted
+		return nil
+	case "FAILED":
+		*v = QueryTaskCompletedTypeFailed
+		return nil
+	default:
+		return fmt.Errorf("unknown enum value %q for %q", value, "QueryTaskCompletedType")
+	}
+}
+
+func (v QueryTaskCompletedType) ToWire() (wire.Value, error) {
+	return wire.NewValueI32(int32(v)), nil
+}
+
+func (v *QueryTaskCompletedType) FromWire(w wire.Value) error {
+	*v = (QueryTaskCompletedType)(w.GetI32())
+	return nil
+}
+
+func (v QueryTaskCompletedType) String() string {
+	w := int32(v)
+	switch w {
+	case 0:
+		return "COMPLETED"
+	case 1:
+		return "FAILED"
+	}
+	return fmt.Sprintf("QueryTaskCompletedType(%d)", w)
+}
+
+func (v QueryTaskCompletedType) Equals(rhs QueryTaskCompletedType) bool {
+	return v == rhs
+}
+
+func (v QueryTaskCompletedType) MarshalJSON() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return ([]byte)("\"COMPLETED\""), nil
+	case 1:
+		return ([]byte)("\"FAILED\""), nil
+	}
+	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
+}
+
+func (v *QueryTaskCompletedType) UnmarshalJSON(text []byte) error {
+	d := json.NewDecoder(bytes.NewReader(text))
+	d.UseNumber()
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+	switch w := t.(type) {
+	case json.Number:
+		x, err := w.Int64()
+		if err != nil {
+			return err
+		}
+		if x > math.MaxInt32 {
+			return fmt.Errorf("enum overflow from JSON %q for %q", text, "QueryTaskCompletedType")
+		}
+		if x < math.MinInt32 {
+			return fmt.Errorf("enum underflow from JSON %q for %q", text, "QueryTaskCompletedType")
+		}
+		*v = (QueryTaskCompletedType)(x)
+		return nil
+	case string:
+		return v.UnmarshalText([]byte(w))
+	default:
+		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "QueryTaskCompletedType")
+	}
+}
+
+type QueryWorkflowRequest struct {
+	Domain    *string            `json:"domain,omitempty"`
+	Execution *WorkflowExecution `json:"execution,omitempty"`
+	Query     *WorkflowQuery     `json:"query,omitempty"`
+}
+
+func (v *QueryWorkflowRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Query != nil {
+		w, err = v.Query.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *QueryWorkflowRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.Query, err = _WorkflowQuery_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *QueryWorkflowRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [3]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+	if v.Query != nil {
+		fields[i] = fmt.Sprintf("Query: %v", v.Query)
+		i++
+	}
+	return fmt.Sprintf("QueryWorkflowRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *QueryWorkflowRequest) Equals(rhs *QueryWorkflowRequest) bool {
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+	if !((v.Query == nil && rhs.Query == nil) || (v.Query != nil && rhs.Query != nil && v.Query.Equals(rhs.Query))) {
+		return false
+	}
+	return true
+}
+
+func (v *QueryWorkflowRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+type QueryWorkflowResponse struct {
+	QueryResult []byte `json:"queryResult"`
+}
+
+func (v *QueryWorkflowResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.QueryResult != nil {
+		w, err = wire.NewValueBinary(v.QueryResult), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *QueryWorkflowResponse) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				v.QueryResult, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *QueryWorkflowResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [1]string
+	i := 0
+	if v.QueryResult != nil {
+		fields[i] = fmt.Sprintf("QueryResult: %v", v.QueryResult)
+		i++
+	}
+	return fmt.Sprintf("QueryWorkflowResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *QueryWorkflowResponse) Equals(rhs *QueryWorkflowResponse) bool {
+	if !((v.QueryResult == nil && rhs.QueryResult == nil) || (v.QueryResult != nil && rhs.QueryResult != nil && bytes.Equal(v.QueryResult, rhs.QueryResult))) {
+		return false
+	}
+	return true
 }
 
 type RecordActivityTaskHeartbeatRequest struct {
@@ -11368,6 +11717,166 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 func (v *RespondDecisionTaskCompletedRequest) GetIdentity() (o string) {
 	if v.Identity != nil {
 		return *v.Identity
+	}
+	return
+}
+
+type RespondQueryTaskCompletedRequest struct {
+	TaskToken     []byte                  `json:"taskToken"`
+	CompletedType *QueryTaskCompletedType `json:"completedType,omitempty"`
+	QueryResult   []byte                  `json:"queryResult"`
+	ErrorMessage  *string                 `json:"errorMessage,omitempty"`
+}
+
+func (v *RespondQueryTaskCompletedRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.TaskToken != nil {
+		w, err = wire.NewValueBinary(v.TaskToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.CompletedType != nil {
+		w, err = v.CompletedType.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.QueryResult != nil {
+		w, err = wire.NewValueBinary(v.QueryResult), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ErrorMessage != nil {
+		w, err = wire.NewValueString(*(v.ErrorMessage)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _QueryTaskCompletedType_Read(w wire.Value) (QueryTaskCompletedType, error) {
+	var v QueryTaskCompletedType
+	err := v.FromWire(w)
+	return v, err
+}
+
+func (v *RespondQueryTaskCompletedRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				v.TaskToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x QueryTaskCompletedType
+				x, err = _QueryTaskCompletedType_Read(field.Value)
+				v.CompletedType = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				v.QueryResult, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ErrorMessage = &x
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *RespondQueryTaskCompletedRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [4]string
+	i := 0
+	if v.TaskToken != nil {
+		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
+		i++
+	}
+	if v.CompletedType != nil {
+		fields[i] = fmt.Sprintf("CompletedType: %v", *(v.CompletedType))
+		i++
+	}
+	if v.QueryResult != nil {
+		fields[i] = fmt.Sprintf("QueryResult: %v", v.QueryResult)
+		i++
+	}
+	if v.ErrorMessage != nil {
+		fields[i] = fmt.Sprintf("ErrorMessage: %v", *(v.ErrorMessage))
+		i++
+	}
+	return fmt.Sprintf("RespondQueryTaskCompletedRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _QueryTaskCompletedType_EqualsPtr(lhs, rhs *QueryTaskCompletedType) bool {
+	if lhs != nil && rhs != nil {
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func (v *RespondQueryTaskCompletedRequest) Equals(rhs *RespondQueryTaskCompletedRequest) bool {
+	if !((v.TaskToken == nil && rhs.TaskToken == nil) || (v.TaskToken != nil && rhs.TaskToken != nil && bytes.Equal(v.TaskToken, rhs.TaskToken))) {
+		return false
+	}
+	if !_QueryTaskCompletedType_EqualsPtr(v.CompletedType, rhs.CompletedType) {
+		return false
+	}
+	if !((v.QueryResult == nil && rhs.QueryResult == nil) || (v.QueryResult != nil && rhs.QueryResult != nil && bytes.Equal(v.QueryResult, rhs.QueryResult))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ErrorMessage, rhs.ErrorMessage) {
+		return false
+	}
+	return true
+}
+
+func (v *RespondQueryTaskCompletedRequest) GetCompletedType() (o QueryTaskCompletedType) {
+	if v.CompletedType != nil {
+		return *v.CompletedType
+	}
+	return
+}
+
+func (v *RespondQueryTaskCompletedRequest) GetErrorMessage() (o string) {
+	if v.ErrorMessage != nil {
+		return *v.ErrorMessage
 	}
 	return
 }
@@ -16207,6 +16716,96 @@ func (v *WorkflowExecutionTimedOutEventAttributes) Equals(rhs *WorkflowExecution
 func (v *WorkflowExecutionTimedOutEventAttributes) GetTimeoutType() (o TimeoutType) {
 	if v.TimeoutType != nil {
 		return *v.TimeoutType
+	}
+	return
+}
+
+type WorkflowQuery struct {
+	QueryType *string `json:"queryType,omitempty"`
+	QueryArgs []byte  `json:"queryArgs"`
+}
+
+func (v *WorkflowQuery) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.QueryType != nil {
+		w, err = wire.NewValueString(*(v.QueryType)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.QueryArgs != nil {
+		w, err = wire.NewValueBinary(v.QueryArgs), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *WorkflowQuery) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.QueryType = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				v.QueryArgs, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *WorkflowQuery) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [2]string
+	i := 0
+	if v.QueryType != nil {
+		fields[i] = fmt.Sprintf("QueryType: %v", *(v.QueryType))
+		i++
+	}
+	if v.QueryArgs != nil {
+		fields[i] = fmt.Sprintf("QueryArgs: %v", v.QueryArgs)
+		i++
+	}
+	return fmt.Sprintf("WorkflowQuery{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *WorkflowQuery) Equals(rhs *WorkflowQuery) bool {
+	if !_String_EqualsPtr(v.QueryType, rhs.QueryType) {
+		return false
+	}
+	if !((v.QueryArgs == nil && rhs.QueryArgs == nil) || (v.QueryArgs != nil && rhs.QueryArgs != nil && bytes.Equal(v.QueryArgs, rhs.QueryArgs))) {
+		return false
+	}
+	return true
+}
+
+func (v *WorkflowQuery) GetQueryType() (o string) {
+	if v.QueryType != nil {
+		return *v.QueryType
 	}
 	return
 }

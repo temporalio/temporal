@@ -262,4 +262,28 @@ service WorkflowService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
     )
+
+  /**
+  * RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a DecisionTask for query)
+  * as a result of 'PollForDecisionTask' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
+  * API and return the query result to client as a response to 'QueryWorkflow' API call.
+  **/
+  void RespondQueryTaskCompleted(1: shared.RespondQueryTaskCompletedRequest completeRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * QueryWorkflow returns query result for a specified workflow execution
+  **/
+  shared.QueryWorkflowResponse QueryWorkflow(1: shared.QueryWorkflowRequest queryRequest)
+	throws (
+	  1: shared.BadRequestError badRequestError,
+	  2: shared.InternalServiceError internalServiceError,
+	  3: shared.EntityNotExistsError entityNotExistError,
+	  4: shared.QueryFailedError queryFailedError,
+	)
+
 }

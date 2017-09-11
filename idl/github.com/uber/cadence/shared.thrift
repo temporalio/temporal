@@ -50,6 +50,10 @@ exception CancellationAlreadyRequestedError {
   1: required string message
 }
 
+exception QueryFailedError {
+  1: required string message
+}
+
 enum DomainStatus {
   REGISTERED,
   DEPRECATED,
@@ -154,6 +158,11 @@ enum ChildPolicy {
   TERMINATE,
   REQUEST_CANCEL,
   ABANDON,
+}
+
+enum QueryTaskCompletedType {
+  COMPLETED,
+  FAILED,
 }
 
 struct WorkflowType {
@@ -684,6 +693,7 @@ struct PollForDecisionTaskResponse {
   50: optional i64 (js.type = "Long") startedEventId
   60: optional History history
   70: optional binary nextPageToken
+  80: optional WorkflowQuery query
 }
 
 struct RespondDecisionTaskCompletedRequest {
@@ -804,4 +814,26 @@ struct ListClosedWorkflowExecutionsRequest {
 struct ListClosedWorkflowExecutionsResponse {
   10: optional list<WorkflowExecutionInfo> executions
   20: optional binary nextPageToken
+}
+
+struct QueryWorkflowRequest {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+  30: optional WorkflowQuery query
+}
+
+struct QueryWorkflowResponse {
+  10: optional binary queryResult
+}
+
+struct WorkflowQuery {
+  10: optional string queryType
+  20: optional binary queryArgs
+}
+
+struct RespondQueryTaskCompletedRequest {
+  10: optional binary taskToken
+  20: optional QueryTaskCompletedType completedType
+  30: optional binary queryResult
+  40: optional string errorMessage
 }

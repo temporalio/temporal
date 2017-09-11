@@ -197,6 +197,10 @@ const (
 	MatchingClientAddActivityTaskScope
 	// MatchingClientAddDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientAddDecisionTaskScope
+	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
+	MatchingClientQueryWorkflowScope
+	// MatchingClientRespondQueryTaskCompletedScope tracks RPC calls to matching service
+	MatchingClientRespondQueryTaskCompletedScope
 
 	NumCommonScopes
 )
@@ -367,6 +371,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientPollForActivityTaskScope:            {operation: "MatchingClientPollForActivityTask"},
 		MatchingClientAddActivityTaskScope:                {operation: "MatchingClientAddActivityTask"},
 		MatchingClientAddDecisionTaskScope:                {operation: "MatchingClientAddDecisionTask"},
+		MatchingClientQueryWorkflowScope:                  {operation: "MatchingClientQueryWorkflow"},
+		MatchingClientRespondQueryTaskCompletedScope:      {operation: "RespondQueryTaskCompleted"},
 	},
 	// Frontend Scope Names
 	Frontend: {

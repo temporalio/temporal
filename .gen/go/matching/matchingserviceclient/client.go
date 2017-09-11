@@ -59,6 +59,18 @@ type Interface interface {
 		PollRequest *matching.PollForDecisionTaskRequest,
 		opts ...yarpc.CallOption,
 	) (*matching.PollForDecisionTaskResponse, error)
+
+	QueryWorkflow(
+		ctx context.Context,
+		QueryRequest *matching.QueryWorkflowRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.QueryWorkflowResponse, error)
+
+	RespondQueryTaskCompleted(
+		ctx context.Context,
+		Request *matching.RespondQueryTaskCompletedRequest,
+		opts ...yarpc.CallOption,
+	) error
 }
 
 // New builds a new client for the MatchingService service.
@@ -174,5 +186,51 @@ func (c client) PollForDecisionTask(
 	}
 
 	success, err = matching.MatchingService_PollForDecisionTask_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *matching.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.QueryWorkflowResponse, err error) {
+
+	args := matching.MatchingService_QueryWorkflow_Helper.Args(_QueryRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result matching.MatchingService_QueryWorkflow_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = matching.MatchingService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RespondQueryTaskCompleted(
+	ctx context.Context,
+	_Request *matching.RespondQueryTaskCompletedRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := matching.MatchingService_RespondQueryTaskCompleted_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result matching.MatchingService_RespondQueryTaskCompleted_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = matching.MatchingService_RespondQueryTaskCompleted_Helper.UnwrapResponse(&result)
 	return
 }

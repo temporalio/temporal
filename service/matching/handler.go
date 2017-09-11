@@ -140,6 +140,17 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 	return response, h.handleErr(error, scope)
 }
 
+// QueryWorkflow queries a given workflow synchronously and return the query result.
+func (h *Handler) QueryWorkflow(ctx context.Context,
+	queryRequest *m.QueryWorkflowRequest) (*gen.QueryWorkflowResponse, error) {
+	return nil, &gen.InternalServiceError{Message: "Not implemented yet"}
+}
+
+// RespondQueryTaskCompleted responds a query task completed
+func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error {
+	return &gen.InternalServiceError{Message: "Not implemented yet"}
+}
+
 func (h *Handler) handleErr(err error, scope int) error {
 
 	if err == nil {

@@ -22,6 +22,7 @@ package matching
 
 import (
 	"context"
+
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
@@ -109,4 +110,38 @@ func (c *metricClient) PollForDecisionTask(
 	}
 
 	return resp, err
+}
+
+func (c *metricClient) QueryWorkflow(
+	ctx context.Context,
+	queryRequest *m.QueryWorkflowRequest,
+	opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
+	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceLatency)
+	resp, err := c.client.QueryWorkflow(ctx, queryRequest)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceFailures)
+	}
+
+	return resp, err
+}
+
+func (c *metricClient) RespondQueryTaskCompleted(
+	ctx context.Context,
+	request *m.RespondQueryTaskCompletedRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceLatency)
+	err := c.client.RespondQueryTaskCompleted(ctx, request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceFailures)
+	}
+
+	return err
 }

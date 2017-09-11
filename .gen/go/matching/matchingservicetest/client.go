@@ -190,3 +190,67 @@ func (mr *_MockClientRecorder) PollForDecisionTask(
 	args := append([]interface{}{ctx, _PollRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "PollForDecisionTask", args...)
 }
+
+// QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().QueryWorkflow(gomock.Any(), ...).Return(...)
+// 	... := client.QueryWorkflow(...)
+func (m *MockClient) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *matching.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.QueryWorkflowResponse, err error) {
+
+	args := []interface{}{ctx, _QueryRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "QueryWorkflow", args...)
+	success, _ = ret[i].(*shared.QueryWorkflowResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) QueryWorkflow(
+	ctx interface{},
+	_QueryRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _QueryRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
+// RespondQueryTaskCompleted responds to a RespondQueryTaskCompleted call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RespondQueryTaskCompleted(gomock.Any(), ...).Return(...)
+// 	... := client.RespondQueryTaskCompleted(...)
+func (m *MockClient) RespondQueryTaskCompleted(
+	ctx context.Context,
+	_Request *matching.RespondQueryTaskCompletedRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RespondQueryTaskCompleted", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RespondQueryTaskCompleted(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RespondQueryTaskCompleted", args...)
+}

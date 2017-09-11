@@ -622,11 +622,12 @@ type PollForDecisionTaskResponse struct {
 	WorkflowType           *shared.WorkflowType      `json:"workflowType,omitempty"`
 	PreviousStartedEventId *int64                    `json:"previousStartedEventId,omitempty"`
 	StartedEventId         *int64                    `json:"startedEventId,omitempty"`
+	Query                  *shared.WorkflowQuery     `json:"query,omitempty"`
 }
 
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -671,11 +672,25 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
+	if v.Query != nil {
+		w, err = v.Query.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
 func _WorkflowType_Read(w wire.Value) (*shared.WorkflowType, error) {
 	var v shared.WorkflowType
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _WorkflowQuery_Read(w wire.Value) (*shared.WorkflowQuery, error) {
+	var v shared.WorkflowQuery
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -723,6 +738,13 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 60:
+			if field.Value.Type() == wire.TStruct {
+				v.Query, err = _WorkflowQuery_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -732,7 +754,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -754,6 +776,10 @@ func (v *PollForDecisionTaskResponse) String() string {
 		fields[i] = fmt.Sprintf("StartedEventId: %v", *(v.StartedEventId))
 		i++
 	}
+	if v.Query != nil {
+		fields[i] = fmt.Sprintf("Query: %v", v.Query)
+		i++
+	}
 	return fmt.Sprintf("PollForDecisionTaskResponse{%v}", strings.Join(fields[:i], ", "))
 }
 
@@ -773,6 +799,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !_I64_EqualsPtr(v.StartedEventId, rhs.StartedEventId) {
 		return false
 	}
+	if !((v.Query == nil && rhs.Query == nil) || (v.Query != nil && rhs.Query != nil && v.Query.Equals(rhs.Query))) {
+		return false
+	}
 	return true
 }
 
@@ -786,6 +815,276 @@ func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
 func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
 	if v.StartedEventId != nil {
 		return *v.StartedEventId
+	}
+	return
+}
+
+type QueryWorkflowRequest struct {
+	DomainUUID   *string                      `json:"domainUUID,omitempty"`
+	TaskList     *shared.TaskList             `json:"taskList,omitempty"`
+	QueryRequest *shared.QueryWorkflowRequest `json:"queryRequest,omitempty"`
+}
+
+func (v *QueryWorkflowRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.QueryRequest != nil {
+		w, err = v.QueryRequest.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _QueryWorkflowRequest_Read(w wire.Value) (*shared.QueryWorkflowRequest, error) {
+	var v shared.QueryWorkflowRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func (v *QueryWorkflowRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.QueryRequest, err = _QueryWorkflowRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *QueryWorkflowRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [3]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.QueryRequest != nil {
+		fields[i] = fmt.Sprintf("QueryRequest: %v", v.QueryRequest)
+		i++
+	}
+	return fmt.Sprintf("QueryWorkflowRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *QueryWorkflowRequest) Equals(rhs *QueryWorkflowRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !((v.QueryRequest == nil && rhs.QueryRequest == nil) || (v.QueryRequest != nil && rhs.QueryRequest != nil && v.QueryRequest.Equals(rhs.QueryRequest))) {
+		return false
+	}
+	return true
+}
+
+func (v *QueryWorkflowRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+type RespondQueryTaskCompletedRequest struct {
+	DomainUUID       *string                                  `json:"domainUUID,omitempty"`
+	TaskList         *shared.TaskList                         `json:"taskList,omitempty"`
+	TaskID           *string                                  `json:"taskID,omitempty"`
+	CompletedRequest *shared.RespondQueryTaskCompletedRequest `json:"completedRequest,omitempty"`
+}
+
+func (v *RespondQueryTaskCompletedRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.TaskID != nil {
+		w, err = wire.NewValueString(*(v.TaskID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.CompletedRequest != nil {
+		w, err = v.CompletedRequest.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RespondQueryTaskCompletedRequest_Read(w wire.Value) (*shared.RespondQueryTaskCompletedRequest, error) {
+	var v shared.RespondQueryTaskCompletedRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func (v *RespondQueryTaskCompletedRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.TaskID = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.CompletedRequest, err = _RespondQueryTaskCompletedRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *RespondQueryTaskCompletedRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [4]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.TaskID != nil {
+		fields[i] = fmt.Sprintf("TaskID: %v", *(v.TaskID))
+		i++
+	}
+	if v.CompletedRequest != nil {
+		fields[i] = fmt.Sprintf("CompletedRequest: %v", v.CompletedRequest)
+		i++
+	}
+	return fmt.Sprintf("RespondQueryTaskCompletedRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *RespondQueryTaskCompletedRequest) Equals(rhs *RespondQueryTaskCompletedRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.TaskID, rhs.TaskID) {
+		return false
+	}
+	if !((v.CompletedRequest == nil && rhs.CompletedRequest == nil) || (v.CompletedRequest != nil && rhs.CompletedRequest != nil && v.CompletedRequest.Equals(rhs.CompletedRequest))) {
+		return false
+	}
+	return true
+}
+
+func (v *RespondQueryTaskCompletedRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *RespondQueryTaskCompletedRequest) GetTaskID() (o string) {
+	if v.TaskID != nil {
+		return *v.TaskID
 	}
 	return
 }

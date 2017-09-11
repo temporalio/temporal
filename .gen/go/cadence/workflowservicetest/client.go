@@ -291,6 +291,39 @@ func (mr *_MockClientRecorder) PollForDecisionTask(
 	return mr.mock.ctrl.RecordCall(mr.mock, "PollForDecisionTask", args...)
 }
 
+// QueryWorkflow responds to a QueryWorkflow call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().QueryWorkflow(gomock.Any(), ...).Return(...)
+// 	... := client.QueryWorkflow(...)
+func (m *MockClient) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *shared.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.QueryWorkflowResponse, err error) {
+
+	args := []interface{}{ctx, _QueryRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "QueryWorkflow", args...)
+	success, _ = ret[i].(*shared.QueryWorkflowResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) QueryWorkflow(
+	ctx interface{},
+	_QueryRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _QueryRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "QueryWorkflow", args...)
+}
+
 // RecordActivityTaskHeartbeat responds to a RecordActivityTaskHeartbeat call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -508,6 +541,37 @@ func (mr *_MockClientRecorder) RespondDecisionTaskCompleted(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _CompleteRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "RespondDecisionTaskCompleted", args...)
+}
+
+// RespondQueryTaskCompleted responds to a RespondQueryTaskCompleted call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RespondQueryTaskCompleted(gomock.Any(), ...).Return(...)
+// 	... := client.RespondQueryTaskCompleted(...)
+func (m *MockClient) RespondQueryTaskCompleted(
+	ctx context.Context,
+	_CompleteRequest *shared.RespondQueryTaskCompletedRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _CompleteRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RespondQueryTaskCompleted", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RespondQueryTaskCompleted(
+	ctx interface{},
+	_CompleteRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _CompleteRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RespondQueryTaskCompleted", args...)
 }
 
 // SignalWorkflowExecution responds to a SignalWorkflowExecution call based on the mock expectations. This

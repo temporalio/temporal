@@ -69,6 +69,11 @@ type Interface interface {
 		PollRequest *shared.PollForDecisionTaskRequest,
 	) (*shared.PollForDecisionTaskResponse, error)
 
+	QueryWorkflow(
+		ctx context.Context,
+		QueryRequest *shared.QueryWorkflowRequest,
+	) (*shared.QueryWorkflowResponse, error)
+
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
 		HeartbeatRequest *shared.RecordActivityTaskHeartbeatRequest,
@@ -102,6 +107,11 @@ type Interface interface {
 	RespondDecisionTaskCompleted(
 		ctx context.Context,
 		CompleteRequest *shared.RespondDecisionTaskCompletedRequest,
+	) error
+
+	RespondQueryTaskCompleted(
+		ctx context.Context,
+		CompleteRequest *shared.RespondQueryTaskCompletedRequest,
 	) error
 
 	SignalWorkflowExecution(
@@ -214,6 +224,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "QueryWorkflow",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.QueryWorkflow),
+				},
+				Signature:    "QueryWorkflow(QueryRequest *shared.QueryWorkflowRequest) (*shared.QueryWorkflowResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RecordActivityTaskHeartbeat",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -291,6 +312,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RespondQueryTaskCompleted",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RespondQueryTaskCompleted),
+				},
+				Signature:    "RespondQueryTaskCompleted(CompleteRequest *shared.RespondQueryTaskCompletedRequest)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "SignalWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -336,7 +368,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 18)
+	procedures := make([]transport.Procedure, 0, 20)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -476,6 +508,25 @@ func (h handler) PollForDecisionTask(ctx context.Context, body wire.Value) (thri
 	return response, err
 }
 
+func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_QueryWorkflow_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.QueryWorkflow(ctx, args.QueryRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_QueryWorkflow_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) RecordActivityTaskHeartbeat(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args cadence.WorkflowService_RecordActivityTaskHeartbeat_Args
 	if err := args.FromWire(body); err != nil {
@@ -600,6 +651,25 @@ func (h handler) RespondDecisionTaskCompleted(ctx context.Context, body wire.Val
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_RespondDecisionTaskCompleted_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RespondQueryTaskCompleted(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_RespondQueryTaskCompleted_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RespondQueryTaskCompleted(ctx, args.CompleteRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_RespondQueryTaskCompleted_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

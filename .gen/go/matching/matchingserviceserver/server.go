@@ -53,6 +53,16 @@ type Interface interface {
 		ctx context.Context,
 		PollRequest *matching.PollForDecisionTaskRequest,
 	) (*matching.PollForDecisionTaskResponse, error)
+
+	QueryWorkflow(
+		ctx context.Context,
+		QueryRequest *matching.QueryWorkflowRequest,
+	) (*shared.QueryWorkflowResponse, error)
+
+	RespondQueryTaskCompleted(
+		ctx context.Context,
+		Request *matching.RespondQueryTaskCompletedRequest,
+	) error
 }
 
 // New prepares an implementation of the MatchingService service for
@@ -109,10 +119,32 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 				Signature:    "PollForDecisionTask(PollRequest *matching.PollForDecisionTaskRequest) (*matching.PollForDecisionTaskResponse)",
 				ThriftModule: matching.ThriftModule,
 			},
+
+			thrift.Method{
+				Name: "QueryWorkflow",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.QueryWorkflow),
+				},
+				Signature:    "QueryWorkflow(QueryRequest *matching.QueryWorkflowRequest) (*shared.QueryWorkflowResponse)",
+				ThriftModule: matching.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "RespondQueryTaskCompleted",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RespondQueryTaskCompleted),
+				},
+				Signature:    "RespondQueryTaskCompleted(Request *matching.RespondQueryTaskCompletedRequest)",
+				ThriftModule: matching.ThriftModule,
+			},
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 4)
+	procedures := make([]transport.Procedure, 0, 6)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -186,6 +218,44 @@ func (h handler) PollForDecisionTask(ctx context.Context, body wire.Value) (thri
 
 	hadError := err != nil
 	result, err := matching.MatchingService_PollForDecisionTask_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) QueryWorkflow(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args matching.MatchingService_QueryWorkflow_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.QueryWorkflow(ctx, args.QueryRequest)
+
+	hadError := err != nil
+	result, err := matching.MatchingService_QueryWorkflow_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RespondQueryTaskCompleted(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args matching.MatchingService_RespondQueryTaskCompleted_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RespondQueryTaskCompleted(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := matching.MatchingService_RespondQueryTaskCompleted_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

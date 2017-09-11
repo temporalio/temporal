@@ -579,6 +579,13 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	return nil
 }
 
+// RespondQueryTaskCompleted - response to a query task
+func (wh *WorkflowHandler) RespondQueryTaskCompleted(
+	ctx context.Context,
+	completeRequest *gen.RespondQueryTaskCompletedRequest) error {
+	return &gen.InternalServiceError{Message: "Not implemented yet"}
+}
+
 // StartWorkflowExecution - Creates a new workflow execution
 func (wh *WorkflowHandler) StartWorkflowExecution(
 	ctx context.Context,
@@ -1010,6 +1017,12 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	resp.Executions = persistenceResp.Executions
 	resp.NextPageToken = persistenceResp.NextPageToken
 	return resp, nil
+}
+
+// QueryWorkflow returns query result for a specified workflow execution
+func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
+	queryRequest *gen.QueryWorkflowRequest) (*gen.QueryWorkflowResponse, error) {
+	return nil, &gen.InternalServiceError{Message: "Not implemented."}
 }
 
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,

@@ -78,6 +78,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.PollForDecisionTaskResponse, error)
 
+	QueryWorkflow(
+		ctx context.Context,
+		QueryRequest *shared.QueryWorkflowRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.QueryWorkflowResponse, error)
+
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
 		HeartbeatRequest *shared.RecordActivityTaskHeartbeatRequest,
@@ -117,6 +123,12 @@ type Interface interface {
 	RespondDecisionTaskCompleted(
 		ctx context.Context,
 		CompleteRequest *shared.RespondDecisionTaskCompletedRequest,
+		opts ...yarpc.CallOption,
+	) error
+
+	RespondQueryTaskCompleted(
+		ctx context.Context,
+		CompleteRequest *shared.RespondQueryTaskCompletedRequest,
 		opts ...yarpc.CallOption,
 	) error
 
@@ -330,6 +342,29 @@ func (c client) PollForDecisionTask(
 	return
 }
 
+func (c client) QueryWorkflow(
+	ctx context.Context,
+	_QueryRequest *shared.QueryWorkflowRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.QueryWorkflowResponse, err error) {
+
+	args := cadence.WorkflowService_QueryWorkflow_Helper.Args(_QueryRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_QueryWorkflow_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_QueryWorkflow_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	_HeartbeatRequest *shared.RecordActivityTaskHeartbeatRequest,
@@ -488,6 +523,29 @@ func (c client) RespondDecisionTaskCompleted(
 	}
 
 	err = cadence.WorkflowService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RespondQueryTaskCompleted(
+	ctx context.Context,
+	_CompleteRequest *shared.RespondQueryTaskCompletedRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := cadence.WorkflowService_RespondQueryTaskCompleted_Helper.Args(_CompleteRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_RespondQueryTaskCompleted_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = cadence.WorkflowService_RespondQueryTaskCompleted_Helper.UnwrapResponse(&result)
 	return
 }
 

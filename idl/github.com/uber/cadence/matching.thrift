@@ -33,6 +33,7 @@ struct PollForDecisionTaskResponse {
   30: optional shared.WorkflowType workflowType
   40: optional i64 (js.type = "Long") previousStartedEventId
   50: optional i64 (js.type = "Long") startedEventId
+  60: optional shared.WorkflowQuery query
 }
 
 struct PollForActivityTaskRequest {
@@ -54,6 +55,19 @@ struct AddActivityTaskRequest {
   40: optional shared.TaskList taskList
   50: optional i64 (js.type = "Long") scheduleId
   60: optional i32 scheduleToStartTimeoutSeconds
+}
+
+struct QueryWorkflowRequest {
+  10: optional string domainUUID
+  20: optional shared.TaskList taskList
+  30: optional shared.QueryWorkflowRequest queryRequest
+}
+
+struct RespondQueryTaskCompletedRequest {
+  10: optional string domainUUID
+  20: optional shared.TaskList taskList
+  30: optional string taskID
+  40: optional shared.RespondQueryTaskCompletedRequest completedRequest
 }
 
 /**
@@ -105,4 +119,26 @@ service MatchingService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
     )
+
+  /**
+  * QueryWorkflow is called by frontend to query a workflow.
+  **/
+  shared.QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)
+	throws (
+	  1: shared.BadRequestError badRequestError,
+	  2: shared.InternalServiceError internalServiceError,
+	  3: shared.EntityNotExistsError entityNotExistError,
+	  4: shared.QueryFailedError queryFailedError,
+	)
+
+  /**
+  * RespondQueryTaskCompleted is called by frontend to respond query completed.
+  **/
+  void RespondQueryTaskCompleted(1: RespondQueryTaskCompletedRequest request)
+	throws (
+	  1: shared.BadRequestError badRequestError,
+	  2: shared.InternalServiceError internalServiceError,
+	  3: shared.EntityNotExistsError entityNotExistError,
+	)
+
 }
