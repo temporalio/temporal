@@ -827,7 +827,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
 	const engineCount = 2
-	const taskCount = 200
+	const taskCount = 400
 	const iterations = 2
 	const initialRangeID = 0
 	const rangeSize = 10
@@ -985,7 +985,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
 	const engineCount = 2
-	const taskCount = 200
+	const taskCount = 400
 	const iterations = 2
 	const initialRangeID = 0
 	const rangeSize = 10

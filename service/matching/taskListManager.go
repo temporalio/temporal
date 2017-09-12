@@ -128,14 +128,17 @@ type syncMatchResponse struct {
 func (c *taskListManagerImpl) Start() error {
 	defer c.startWG.Done()
 
-	c.taskWriter.Start()
-	c.signalNewTask()
-	go c.getTasksPump()
+	// Make sure to grab the range first before starting task writer, as it needs the range to initialize maxReadLevel
 	err := c.updateRangeIfNeeded() // Grabs a new range and updates read and ackLevels
 	if err != nil {
 		c.Stop()
 		return err
 	}
+
+	c.taskWriter.Start()
+	c.signalNewTask()
+	go c.getTasksPump()
+
 	return nil
 }
 
