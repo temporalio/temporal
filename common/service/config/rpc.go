@@ -73,12 +73,16 @@ func (d *RPCFactory) CreateDispatcherForOutbound(
 	// Setup dispatcher(outbound) for onebox
 	d.logger.Infof("Created RPC dispatcher outbound for service '%v' for host '%v'",
 		serviceName, hostName)
-	return yarpc.NewDispatcher(yarpc.Config{
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
 		Name: callerName,
 		Outbounds: yarpc.Outbounds{
 			serviceName: {Unary: d.ch.NewSingleOutbound(hostName)},
 		},
 	})
+	if err := dispatcher.Start(); err != nil {
+		d.logger.WithField("error", err).Fatal("Failed to create outbound transport channel")
+	}
+	return dispatcher
 }
 
 func (d *RPCFactory) getListenIP() net.IP {
