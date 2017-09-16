@@ -23,9 +23,12 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/pborman/uuid"
+	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceserver"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaserver"
@@ -36,12 +39,10 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-
-	"github.com/uber-common/bark"
-	"github.com/uber-go/tally"
 )
 
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
@@ -74,6 +75,7 @@ type (
 var (
 	errDomainNotSet               = &gen.BadRequestError{Message: "Domain not set on request."}
 	errTaskTokenNotSet            = &gen.BadRequestError{Message: "Task token not set on request."}
+	errInvalidTaskToken           = &gen.BadRequestError{Message: "Invalid TaskToken."}
 	errTaskListNotSet             = &gen.BadRequestError{Message: "TaskList is not set on request."}
 	errExecutionNotSet            = &gen.BadRequestError{Message: "Execution is not set on request."}
 	errWorkflowIDNotSet           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
@@ -81,6 +83,8 @@ var (
 	errInvalidRunID               = &gen.BadRequestError{Message: "Invalid RunId."}
 	errInvalidNextPageToken       = &gen.BadRequestError{Message: "Invalid NextPageToken."}
 	errNextPageTokenRunIDMismatch = &gen.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
+	errQueryNotSet                = &gen.BadRequestError{Message: "WorkflowQuery is not set on request."}
+	errQueryTypeNotSet            = &gen.BadRequestError{Message: "QueryType is not set on request."}
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
@@ -400,7 +404,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		}
 	}
 
-	return createPollForDecisionTaskResponse(matchingResp, history, continuation), nil
+	return wh.createPollForDecisionTaskResponse(ctx, matchingResp, history, continuation), nil
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -583,7 +587,37 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	completeRequest *gen.RespondQueryTaskCompletedRequest) error {
-	return &gen.InternalServiceError{Message: "Not implemented yet"}
+
+	scope := metrics.FrontendRespondQueryTaskCompletedScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	if completeRequest.TaskToken == nil {
+		return wh.error(errTaskTokenNotSet, scope)
+	}
+	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(completeRequest.TaskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	if queryTaskToken.DomainID == "" || queryTaskToken.TaskList == "" || queryTaskToken.TaskID == "" {
+		return wh.error(errInvalidTaskToken, scope)
+	}
+
+	matchingRequest := &m.RespondQueryTaskCompletedRequest{
+		DomainUUID:       common.StringPtr(queryTaskToken.DomainID),
+		TaskList:         &gen.TaskList{Name: common.StringPtr(queryTaskToken.TaskList)},
+		TaskID:           common.StringPtr(queryTaskToken.TaskID),
+		CompletedRequest: completeRequest,
+	}
+
+	err = wh.matching.RespondQueryTaskCompleted(ctx, matchingRequest)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
 }
 
 // StartWorkflowExecution - Creates a new workflow execution
@@ -1022,7 +1056,81 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	queryRequest *gen.QueryWorkflowRequest) (*gen.QueryWorkflowResponse, error) {
-	return nil, &gen.InternalServiceError{Message: "Not implemented."}
+
+	scope := metrics.FrontendQueryWorkflowScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if queryRequest.Domain == nil {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if queryRequest.Execution == nil {
+		return nil, wh.error(errExecutionNotSet, scope)
+	}
+
+	if queryRequest.Execution.WorkflowId == nil {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+
+	if queryRequest.Execution.RunId != nil && uuid.Parse(*queryRequest.Execution.RunId) == nil {
+		return nil, wh.error(errInvalidRunID, scope)
+	}
+
+	if queryRequest.Query == nil {
+		return nil, wh.error(errQueryNotSet, scope)
+	}
+
+	if queryRequest.Query.QueryType == nil {
+		return nil, wh.error(errQueryTypeNotSet, scope)
+	}
+
+	domainInfo, _, err := wh.domainCache.GetDomain(queryRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	matchingRequest := &m.QueryWorkflowRequest{
+		DomainUUID:   common.StringPtr(domainInfo.ID),
+		QueryRequest: queryRequest,
+	}
+	if queryRequest.Execution.RunId == nil {
+		// RunID is not set, we would use the running one if it exists.
+		response, err := wh.history.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
+			DomainUUID: common.StringPtr(domainInfo.ID),
+			Execution:  queryRequest.Execution,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+
+		queryRequest.Execution.RunId = response.RunId
+		matchingRequest.TaskList = response.Tasklist
+	} else {
+		// Get the TaskList from history (first event)
+		history, _, err := wh.getHistory(domainInfo.ID, *queryRequest.Execution, 2, 1, nil)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		if len(history.Events) == 0 || history.Events[0].GetEventType() != gen.EventTypeWorkflowExecutionStarted {
+			// this should not happen
+			return nil, wh.error(errors.New("invalid history events"), scope)
+		}
+		matchingRequest.TaskList = history.Events[0].WorkflowExecutionStartedEventAttributes.TaskList
+	}
+
+	matchingResp, err := wh.matching.QueryWorkflow(ctx, matchingRequest)
+	if err != nil {
+		logging.LogQueryTaskFailedEvent(wh.GetLogger(),
+			*queryRequest.Domain,
+			*queryRequest.Execution.WorkflowId,
+			*queryRequest.Execution.RunId,
+			*queryRequest.Query.QueryType,
+			err.Error())
+		return nil, wh.error(err, scope)
+	}
+
+	return matchingResp, nil
 }
 
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
@@ -1118,6 +1226,9 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 	case *gen.CancellationAlreadyRequestedError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrCancellationAlreadyRequestedCounter)
 		return err
+	case *gen.QueryFailedError:
+		wh.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
+		return err
 	default:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return &gen.InternalServiceError{Message: err.Error()}
@@ -1176,7 +1287,7 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 	return i, c
 }
 
-func createPollForDecisionTaskResponse(
+func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context,
 	matchingResponse *m.PollForDecisionTaskResponse, history *gen.History, nextPageToken []byte) *gen.PollForDecisionTaskResponse {
 	resp := &gen.PollForDecisionTaskResponse{}
 	if matchingResponse != nil {
@@ -1185,7 +1296,41 @@ func createPollForDecisionTaskResponse(
 		resp.WorkflowType = matchingResponse.WorkflowType
 		resp.PreviousStartedEventId = matchingResponse.PreviousStartedEventId
 		resp.StartedEventId = matchingResponse.StartedEventId
+		resp.Query = matchingResponse.Query
 	}
+
+	if matchingResponse.Query != nil && resp.WorkflowType == nil {
+		// for query task, the matching engine was not able to populate the WorkflowType, so set here from history
+		if history != nil && len(history.Events) > 0 &&
+			history.Events[0].WorkflowExecutionStartedEventAttributes != nil {
+			resp.WorkflowType = history.Events[0].WorkflowExecutionStartedEventAttributes.WorkflowType
+		} else {
+			// this should never happen, but if it does happen, log it and respond error back to query client.
+			logging.LogQueryTaskMissingWorkflowTypeErrorEvent(wh.GetLogger(),
+				*matchingResponse.WorkflowExecution.WorkflowId,
+				*matchingResponse.WorkflowExecution.RunId,
+				*resp.Query.QueryType)
+
+			queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(matchingResponse.TaskToken)
+			if err == nil {
+				completeType := gen.QueryTaskCompletedTypeFailed
+				wh.matching.RespondQueryTaskCompleted(ctx, &m.RespondQueryTaskCompletedRequest{
+					DomainUUID: common.StringPtr(queryTaskToken.DomainID),
+					TaskList:   &gen.TaskList{Name: common.StringPtr(queryTaskToken.TaskList)},
+					TaskID:     common.StringPtr(queryTaskToken.TaskID),
+					CompletedRequest: &gen.RespondQueryTaskCompletedRequest{
+						TaskToken:     matchingResponse.TaskToken,
+						CompletedType: &completeType,
+						ErrorMessage:  common.StringPtr("server internal error: cannot get WorkflowType for QueryTask"),
+					},
+				})
+			}
+
+			// in this case, just return empty response for the pool request and client will just ignore
+			return &gen.PollForDecisionTaskResponse{}
+		}
+	}
+
 	resp.History = history
 	resp.NextPageToken = nextPageToken
 	return resp

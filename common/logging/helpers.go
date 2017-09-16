@@ -331,3 +331,24 @@ func LogTaskListUnloadedEvent(logger bark.Logger) {
 		TagWorkflowEventID: TaskListUnloaded,
 	}).Info("Unloaded TaskList.")
 }
+
+// LogQueryTaskMissingWorkflowTypeErrorEvent is used to log invalid query task that is missing workflow type
+func LogQueryTaskMissingWorkflowTypeErrorEvent(logger bark.Logger, workflowID, runID, queryType string) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: InvalidQueryTaskEventID,
+		"WorkflowID":       workflowID,
+		"RunID":            runID,
+		"QueryType":        queryType,
+	}).Error("Cannot get WorkflowType for QueryTask.")
+}
+
+// LogQueryTaskFailedEvent is used to log query task failure
+func LogQueryTaskFailedEvent(logger bark.Logger, domain, workflowID, runID, queryType, errMsg string) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: QueryTaskFailedEventID,
+		"Domain":           domain,
+		"WorkflowID":       workflowID,
+		"RunID":            runID,
+		"QueryType":        queryType,
+	}).Info(errMsg)
+}

@@ -28,6 +28,7 @@ import (
 
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
+	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -46,6 +47,7 @@ type taskListManager interface {
 	Stop()
 	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error
 	GetTaskContext(ctx context.Context) (*taskContext, error)
+	SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 	String() string
 }
 
@@ -79,6 +81,12 @@ type taskContext struct {
 	info              *persistence.TaskInfo
 	syncResponseCh    chan<- *syncMatchResponse
 	workflowExecution s.WorkflowExecution
+	queryTaskInfo     *queryTaskInfo
+}
+
+type queryTaskInfo struct {
+	taskID       string
+	queryRequest *m.QueryWorkflowRequest
 }
 
 // Single task list in memory state
@@ -113,8 +121,9 @@ type taskListManagerImpl struct {
 // getTaskResult contains task info and optional channel to notify createTask caller
 // that task is successfully started and returned to a poller
 type getTaskResult struct {
-	task *persistence.TaskInfo
-	C    chan *syncMatchResponse
+	task      *persistence.TaskInfo
+	C         chan *syncMatchResponse
+	queryTask *queryTaskInfo
 }
 
 // syncMatchResponse result of sync match delivered to a createTask caller
@@ -170,6 +179,27 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 	return err
 }
 
+func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error {
+	c.startWG.Wait()
+
+	domainID := queryTask.queryRequest.GetDomainUUID()
+	we := queryTask.queryRequest.QueryRequest.Execution
+	taskInfo := &persistence.TaskInfo{
+		DomainID:   domainID,
+		RunID:      we.GetRunId(),
+		WorkflowID: we.GetWorkflowId(),
+	}
+
+	request := &getTaskResult{task: taskInfo, C: make(chan *syncMatchResponse, 1), queryTask: queryTask}
+	select {
+	case c.syncMatch <- request:
+		<-request.C
+		return nil
+	case <-ctx.Done():
+		return &s.QueryFailedError{Message: "timeout: no workflow worker polling for given tasklist"}
+	}
+}
+
 // Loads a task from DB or from sync match and wraps it in a task context
 func (c *taskListManagerImpl) GetTaskContext(ctx context.Context) (*taskContext, error) {
 	result, err := c.getTask(ctx)
@@ -185,7 +215,8 @@ func (c *taskListManagerImpl) GetTaskContext(ctx context.Context) (*taskContext,
 		info:              task,
 		workflowExecution: workflowExecution,
 		tlMgr:             c,
-		syncResponseCh:    result.C, // nil if task is loaded from persistence
+		syncResponseCh:    result.C,         // nil if task is loaded from persistence
+		queryTaskInfo:     result.queryTask, // non-nil for query task
 	}
 	return tCtx, nil
 }

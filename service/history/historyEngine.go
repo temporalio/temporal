@@ -309,6 +309,7 @@ func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
 	result := &h.GetWorkflowExecutionNextEventIDResponse{}
 	result.EventId = common.Int64Ptr(msBuilder.GetNextEventID())
 	result.RunId = context.workflowExecution.RunId
+	result.Tasklist = &workflow.TaskList{Name: common.StringPtr(context.msBuilder.executionInfo.TaskList)}
 
 	return result, nil
 }

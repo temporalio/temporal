@@ -217,6 +217,8 @@ const (
 	FrontendRecordActivityTaskHeartbeatScope
 	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
 	FrontendRespondDecisionTaskCompletedScope
+	// FrontendRespondQueryTaskCompletedScope is the metric scope for frontend.RespondQueryTaskCompleted
+	FrontendRespondQueryTaskCompletedScope
 	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompleted
 	FrontendRespondActivityTaskCompletedScope
 	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailed
@@ -243,6 +245,8 @@ const (
 	FrontendUpdateDomainScope
 	// FrontendDeprecateDomainScope is the metric scope for frontend.DeprecateDomain
 	FrontendDeprecateDomainScope
+	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
+	FrontendQueryWorkflowScope
 
 	NumFrontendScopes
 )
@@ -319,6 +323,10 @@ const (
 	MatchingAddDecisionTaskScope
 	// MatchingTaskListMgrScope is the metrics scope for matching.TaskListManager component
 	MatchingTaskListMgrScope
+	// MatchingQueryWorkflowScope tracks AddDecisionTask API calls received by service
+	MatchingQueryWorkflowScope
+	// MatchingRespondQueryTaskCompletedScope tracks AddDecisionTask API calls received by service
+	MatchingRespondQueryTaskCompletedScope
 
 	NumMatchingScopes
 )
@@ -381,6 +389,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendPollForActivityTaskScope:            {operation: "PollForActivityTask"},
 		FrontendRecordActivityTaskHeartbeatScope:    {operation: "RecordActivityTaskHeartbeat"},
 		FrontendRespondDecisionTaskCompletedScope:   {operation: "RespondDecisionTaskCompleted"},
+		FrontendRespondQueryTaskCompletedScope:      {operation: "RespondQueryTaskCompleted"},
 		FrontendRespondActivityTaskCompletedScope:   {operation: "RespondActivityTaskCompleted"},
 		FrontendRespondActivityTaskFailedScope:      {operation: "RespondActivityTaskFailed"},
 		FrontendRespondActivityTaskCanceledScope:    {operation: "RespondActivityTaskCanceled"},
@@ -394,6 +403,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeDomainScope:                 {operation: "DescribeDomain"},
 		FrontendUpdateDomainScope:                   {operation: "UpdateDomain"},
 		FrontendDeprecateDomainScope:                {operation: "DeprecateDomain"},
+		FrontendQueryWorkflowScope:                  {operation: "QueryWorkflow"},
 	},
 	// History Scope Names
 	History: {
@@ -427,11 +437,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Matching Scope Names
 	Matching: {
-		MatchingPollForDecisionTaskScope: {operation: "PollForDecisionTask"},
-		MatchingPollForActivityTaskScope: {operation: "PollForActivityTask"},
-		MatchingAddActivityTaskScope:     {operation: "AddActivityTask"},
-		MatchingAddDecisionTaskScope:     {operation: "AddDecisionTask"},
-		MatchingTaskListMgrScope:         {operation: "TaskListMgr"},
+		MatchingPollForDecisionTaskScope:       {operation: "PollForDecisionTask"},
+		MatchingPollForActivityTaskScope:       {operation: "PollForActivityTask"},
+		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
+		MatchingAddDecisionTaskScope:           {operation: "AddDecisionTask"},
+		MatchingTaskListMgrScope:               {operation: "TaskListMgr"},
+		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
+		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
 	},
 }
 
@@ -446,6 +458,7 @@ const (
 	CadenceErrExecutionAlreadyStartedCounter
 	CadenceErrDomainAlreadyExistsCounter
 	CadenceErrCancellationAlreadyRequestedCounter
+	CadenceErrQueryFailedCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -509,6 +522,7 @@ const (
 	LeaseRequestCounter
 	LeaseFailureCounter
 	ConditionFailedErrorCounter
+	RespondQueryTaskFailedCounter
 )
 
 // MetricDefs record the metrics for all services
@@ -574,13 +588,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RemoveEngineForShardLatency:               {metricName: "remove-engine-for-shard-latency", metricType: Timer},
 	},
 	Matching: {
-		PollSuccessCounter:          {metricName: "poll.success"},
-		PollTimeoutCounter:          {metricName: "poll.timeouts"},
-		PollErrorsCounter:           {metricName: "poll.errors"},
-		PollSuccessWithSyncCounter:  {metricName: "poll.success.sync"},
-		LeaseRequestCounter:         {metricName: "lease.requests"},
-		LeaseFailureCounter:         {metricName: "lease.failures"},
-		ConditionFailedErrorCounter: {metricName: "condition-failed-errors"},
+		PollSuccessCounter:            {metricName: "poll.success"},
+		PollTimeoutCounter:            {metricName: "poll.timeouts"},
+		PollErrorsCounter:             {metricName: "poll.errors"},
+		PollSuccessWithSyncCounter:    {metricName: "poll.success.sync"},
+		LeaseRequestCounter:           {metricName: "lease.requests"},
+		LeaseFailureCounter:           {metricName: "lease.failures"},
+		ConditionFailedErrorCounter:   {metricName: "condition-failed-errors"},
+		RespondQueryTaskFailedCounter: {metricName: "respond-query-failed"},
 	},
 }
 

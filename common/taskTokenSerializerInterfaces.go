@@ -25,6 +25,8 @@ type (
 	TaskTokenSerializer interface {
 		Serialize(token *TaskToken) ([]byte, error)
 		Deserialize(data []byte) (*TaskToken, error)
+		SerializeQueryTaskToken(token *QueryTaskToken) ([]byte, error)
+		DeserializeQueryTaskToken(data []byte) (*QueryTaskToken, error)
 	}
 
 	// TaskToken identifies a task
@@ -33,5 +35,12 @@ type (
 		WorkflowID string `json:"workflowId"`
 		RunID      string `json:"runId"`
 		ScheduleID int64  `json:"scheduleId"`
+	}
+
+	// QueryTaskToken identifies a query task
+	QueryTaskToken struct {
+		DomainID string `json:"domainId"`
+		TaskList string `jaon:"taskList"`
+		TaskID   string `jaon:"taskId"`
 	}
 )

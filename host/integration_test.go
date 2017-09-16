@@ -38,6 +38,8 @@ import (
 	"encoding/binary"
 	"strconv"
 
+	"errors"
+
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/frontend"
@@ -75,6 +77,8 @@ type (
 	activityTaskHandler func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, startedEventID int64, input []byte, takeToken []byte) ([]byte, bool, error)
 
+	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
+
 	taskPoller struct {
 		engine          frontend.Client
 		domain          string
@@ -82,6 +86,7 @@ type (
 		identity        string
 		decisionHandler decisionTaskHandler
 		activityHandler activityTaskHandler
+		queryHandler    queryHandler
 		logger          bark.Logger
 	}
 )
@@ -533,6 +538,83 @@ retry:
 			ExecutionContext: executionCtx,
 			Decisions:        decisions,
 		})
+	}
+
+	return matching.ErrNoTasks
+}
+
+func (p *taskPoller) pollAndProcessQueryTask(dumpHistory bool, dropTask bool) error {
+retry:
+	for attempt := 0; attempt < 5; attempt++ {
+		response, err1 := p.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
+			Domain:   common.StringPtr(p.domain),
+			TaskList: p.taskList,
+			Identity: common.StringPtr(p.identity),
+		})
+
+		if err1 == history.ErrDuplicate {
+			p.logger.Info("Duplicate Decision task: Polling again.")
+			continue retry
+		}
+
+		if err1 != nil {
+			return err1
+		}
+
+		if response == nil || len(response.TaskToken) == 0 {
+			p.logger.Info("Empty Decision task: Polling again.")
+			continue retry
+		}
+
+		history := response.History
+		if history == nil {
+			p.logger.Fatal("History is nil")
+		}
+
+		events := history.Events
+		if events == nil || len(events) == 0 {
+			p.logger.Fatalf("History Events are empty: %v", events)
+		}
+
+		nextPageToken := response.NextPageToken
+		for nextPageToken != nil {
+			resp, err2 := p.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+				Domain:        common.StringPtr(p.domain),
+				Execution:     response.WorkflowExecution,
+				NextPageToken: nextPageToken,
+			})
+
+			if err2 != nil {
+				return err2
+			}
+
+			events = append(events, resp.History.Events...)
+			nextPageToken = resp.NextPageToken
+		}
+
+		if dropTask {
+			p.logger.Info("Dropping Decision task: ")
+			return nil
+		}
+
+		if dumpHistory {
+			common.PrettyPrintHistory(response.History, p.logger)
+		}
+
+		blob, err := p.queryHandler(response)
+
+		completeRequest := &workflow.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
+		if err != nil {
+			completeType := workflow.QueryTaskCompletedTypeFailed
+			completeRequest.CompletedType = &completeType
+			completeRequest.ErrorMessage = common.StringPtr(err.Error())
+		} else {
+			completeType := workflow.QueryTaskCompletedTypeCompleted
+			completeRequest.CompletedType = &completeType
+			completeRequest.QueryResult = blob
+		}
+
+		return p.engine.RespondQueryTaskCompleted(createContext(), completeRequest)
 	}
 
 	return matching.ErrNoTasks
@@ -1298,6 +1380,155 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	})
 	s.NotNil(err)
 	s.IsType(&workflow.EntityNotExistsError{}, err)
+}
+
+func (s *integrationSuite) TestQueryWorkflow() {
+	id := "interation-query-workflow-test"
+	wt := "interation-query-workflow-test-type"
+	tl := "interation-query-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+	queryType := "test-query"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	workflowComplete := false
+	activityScheduled := false
+	activityData := int32(1)
+	var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}
+		} else if previousStartedEventID > 0 {
+			for _, event := range history.Events[previousStartedEventID:] {
+				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
+					signalEvent = event
+					return nil, []*workflow.Decision{}
+				}
+			}
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	queryHandler := func(task *workflow.PollForDecisionTaskResponse) ([]byte, error) {
+		s.NotNil(task.Query)
+		s.NotNil(task.Query.QueryType)
+		if *task.Query.QueryType == queryType {
+			return []byte("query-result"), nil
+		}
+
+		return nil, errors.New("unknown-query-type")
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		queryHandler:    queryHandler,
+		logger:          s.logger,
+	}
+
+	// Make first decision to schedule activity
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	type QueryResult struct {
+		Resp *workflow.QueryWorkflowResponse
+		Err  error
+	}
+	queryResultCh := make(chan QueryResult)
+	queryWorkflowFn := func(queryType string) {
+		queryResp, err := s.engine.QueryWorkflow(createContext(), &workflow.QueryWorkflowRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+			Query: &workflow.WorkflowQuery{
+				QueryType: common.StringPtr(queryType),
+			},
+		})
+		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
+	}
+
+	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
+	go queryWorkflowFn(queryType)
+	// process that query task, which should respond via RespondQueryTaskCompleted
+	err = poller.pollAndProcessQueryTask(false, false)
+	// wait until query result is ready
+	queryResult := <-queryResultCh
+	s.NoError(queryResult.Err)
+	s.NotNil(queryResult.Resp)
+	s.NotNil(queryResult.Resp.QueryResult)
+	queryResultString := string(queryResult.Resp.QueryResult)
+	s.Equal("query-result", queryResultString)
+
+	go queryWorkflowFn("invalid-query-type")
+	err = poller.pollAndProcessQueryTask(false, false)
+	queryResult = <-queryResultCh
+	s.NotNil(queryResult.Err)
+	queryFailError, ok := queryResult.Err.(*workflow.QueryFailedError)
+	s.True(ok)
+	s.Equal("unknown-query-type", queryFailError.Message)
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {

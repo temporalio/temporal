@@ -121,10 +121,8 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForActivityTask", scope)
 	defer sw.Stop()
 
-	response, error := h.engine.PollForActivityTask(ctx, pollRequest)
-	h.Service.GetLogger().Debug("Engine returned from PollForActivityTask")
-	return response, h.handleErr(error, scope)
-
+	response, err := h.engine.PollForActivityTask(ctx, pollRequest)
+	return response, h.handleErr(err, scope)
 }
 
 // PollForDecisionTask - long poll for a decision task.
@@ -135,20 +133,29 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForDecisionTask", scope)
 	defer sw.Stop()
 
-	response, error := h.engine.PollForDecisionTask(ctx, pollRequest)
-	h.Service.GetLogger().Debug("Engine returned from PollForDecisionTask")
-	return response, h.handleErr(error, scope)
+	response, err := h.engine.PollForDecisionTask(ctx, pollRequest)
+	return response, h.handleErr(err, scope)
 }
 
 // QueryWorkflow queries a given workflow synchronously and return the query result.
 func (h *Handler) QueryWorkflow(ctx context.Context,
 	queryRequest *m.QueryWorkflowRequest) (*gen.QueryWorkflowResponse, error) {
-	return nil, &gen.InternalServiceError{Message: "Not implemented yet"}
+	scope := metrics.MatchingQueryWorkflowScope
+	sw := h.startRequestProfile("QueryWorkflow", scope)
+	defer sw.Stop()
+
+	response, err := h.engine.QueryWorkflow(ctx, queryRequest)
+	return response, h.handleErr(err, scope)
 }
 
 // RespondQueryTaskCompleted responds a query task completed
 func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error {
-	return &gen.InternalServiceError{Message: "Not implemented yet"}
+	scope := metrics.MatchingRespondQueryTaskCompletedScope
+	sw := h.startRequestProfile("RespondQueryTaskCompleted", scope)
+	defer sw.Stop()
+
+	err := h.engine.RespondQueryTaskCompleted(ctx, request)
+	return h.handleErr(err, scope)
 }
 
 func (h *Handler) handleErr(err error, scope int) error {
@@ -172,6 +179,9 @@ func (h *Handler) handleErr(err error, scope int) error {
 		return err
 	case *gen.DomainAlreadyExistsError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainAlreadyExistsCounter)
+		return err
+	case *gen.QueryFailedError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)

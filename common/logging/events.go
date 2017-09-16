@@ -74,6 +74,10 @@ const (
 	TaskListUnloaded      = 5003
 	TaskListLoadingFailed = 5004
 
+	// Query task events
+	InvalidQueryTaskEventID = 6000
+	QueryTaskFailedEventID  = 6001
+
 	// General purpose events
 	OperationFailed = 9000
 	OperationPanic  = 9001

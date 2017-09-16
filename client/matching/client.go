@@ -110,11 +110,23 @@ func (c *clientImpl) PollForDecisionTask(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
-	return nil, &workflow.InternalServiceError{Message: "Not implemented yet"}
+	client, err := c.getHostForRequest(*queryRequest.TaskList.Name)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.QueryWorkflow(ctx, queryRequest)
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest, opts ...yarpc.CallOption) error {
-	return &workflow.InternalServiceError{Message: "Not implemented yet"}
+	client, err := c.getHostForRequest(*request.TaskList.Name)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RespondQueryTaskCompleted(ctx, request)
 }
 
 func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interface, error) {

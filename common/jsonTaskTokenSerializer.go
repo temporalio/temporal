@@ -43,3 +43,16 @@ func (j *jsonTaskTokenSerializer) Deserialize(data []byte) (*TaskToken, error) {
 
 	return &token, err
 }
+
+func (j *jsonTaskTokenSerializer) SerializeQueryTaskToken(token *QueryTaskToken) ([]byte, error) {
+	data, err := json.Marshal(token)
+
+	return data, err
+}
+
+func (j *jsonTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*QueryTaskToken, error) {
+	var token QueryTaskToken
+	err := json.Unmarshal(data, &token)
+
+	return &token, err
+}
