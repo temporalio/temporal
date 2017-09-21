@@ -343,12 +343,12 @@ func LogQueryTaskMissingWorkflowTypeErrorEvent(logger bark.Logger, workflowID, r
 }
 
 // LogQueryTaskFailedEvent is used to log query task failure
-func LogQueryTaskFailedEvent(logger bark.Logger, domain, workflowID, runID, queryType, errMsg string) {
+func LogQueryTaskFailedEvent(logger bark.Logger, domain, workflowID, runID, queryType string) {
 	logger.WithFields(bark.Fields{
 		TagWorkflowEventID: QueryTaskFailedEventID,
 		"Domain":           domain,
 		"WorkflowID":       workflowID,
 		"RunID":            runID,
 		"QueryType":        queryType,
-	}).Info(errMsg)
+	}).Info("QueryWorkflowFailed.")
 }

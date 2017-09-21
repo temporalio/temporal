@@ -1125,8 +1125,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 			*queryRequest.Domain,
 			*queryRequest.Execution.WorkflowId,
 			*queryRequest.Execution.RunId,
-			*queryRequest.Query.QueryType,
-			err.Error())
+			*queryRequest.Query.QueryType)
 		return nil, wh.error(err, scope)
 	}
 
