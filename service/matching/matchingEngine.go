@@ -63,6 +63,8 @@ type taskListID struct {
 	taskType     int
 }
 
+type pollerIDCtxKey string
+
 var (
 	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
 	emptyPollForDecisionTaskResponse = &m.PollForDecisionTaskResponse{}
@@ -74,6 +76,8 @@ var (
 	// ErrNoTasks is exported temporarily for integration test
 	ErrNoTasks    = errors.New("No tasks")
 	errPumpClosed = errors.New("Task list pump closed its channel")
+
+	pollerIDKey pollerIDCtxKey = "pollerID"
 )
 
 func (t *taskListID) String() string {
@@ -225,9 +229,10 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 // PollForDecisionTask tries to get the decision task using exponential backoff.
 func (e *matchingEngineImpl) PollForDecisionTask(ctx context.Context, req *m.PollForDecisionTaskRequest) (
 	*m.PollForDecisionTaskResponse, error) {
-	domainID := *req.DomainUUID
+	domainID := req.GetDomainUUID()
+	pollerID := req.GetPollerID()
 	request := req.PollRequest
-	taskListName := *request.TaskList.Name
+	taskListName := request.TaskList.GetName()
 	e.logger.Debugf("Received PollForDecisionTask for taskList=%v", taskListName)
 pollLoop:
 	for {
@@ -235,9 +240,11 @@ pollLoop:
 		if err != nil {
 			return nil, err
 		}
-
+		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// long-poll when frontend calls CancelOutstandingPoll API
+		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
-		tCtx, err := e.getTask(ctx, taskList)
+		tCtx, err := e.getTask(pollerCtx, taskList)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -307,9 +314,10 @@ pollLoop:
 // error. Timeouts handled by the timer queue.
 func (e *matchingEngineImpl) PollForActivityTask(ctx context.Context, req *m.PollForActivityTaskRequest) (
 	*workflow.PollForActivityTaskResponse, error) {
-	domainID := *req.DomainUUID
+	domainID := req.GetDomainUUID()
+	pollerID := req.GetPollerID()
 	request := req.PollRequest
-	taskListName := *request.TaskList.Name
+	taskListName := request.TaskList.GetName()
 	e.logger.Debugf("Received PollForActivityTask for taskList=%v", taskListName)
 pollLoop:
 	for {
@@ -319,7 +327,10 @@ pollLoop:
 		}
 
 		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
-		tCtx, err := e.getTask(ctx, taskList)
+		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
+		// long-poll when frontend calls CancelOutstandingPoll API
+		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
+		tCtx, err := e.getTask(pollerCtx, taskList)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -405,6 +416,22 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(ctx context.Context, requ
 
 	queryResultCh <- request.CompletedRequest
 
+	return nil
+}
+
+func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest) error {
+	domainID := request.GetDomainUUID()
+	taskListType := int(request.GetTaskListType())
+	taskListName := request.TaskList.GetName()
+	pollerID := request.GetPollerID()
+
+	taskList := newTaskListID(domainID, taskListName, taskListType)
+	tlMgr, err := e.getTaskListManager(taskList)
+	if err != nil {
+		return err
+	}
+
+	tlMgr.CancelPoller(pollerID)
 	return nil
 }
 

@@ -37,5 +37,6 @@ type (
 		PollForActivityTask(ctx context.Context, request *m.PollForActivityTaskRequest) (*workflow.PollForActivityTaskResponse, error)
 		QueryWorkflow(ctx context.Context, request *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error)
 		RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error
+		CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest) error
 	}
 )

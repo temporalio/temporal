@@ -125,6 +125,37 @@ func (mr *_MockClientRecorder) AddDecisionTask(
 	return mr.mock.ctrl.RecordCall(mr.mock, "AddDecisionTask", args...)
 }
 
+// CancelOutstandingPoll responds to a CancelOutstandingPoll call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().CancelOutstandingPoll(gomock.Any(), ...).Return(...)
+// 	... := client.CancelOutstandingPoll(...)
+func (m *MockClient) CancelOutstandingPoll(
+	ctx context.Context,
+	_Request *matching.CancelOutstandingPollRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "CancelOutstandingPoll", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) CancelOutstandingPoll(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "CancelOutstandingPoll", args...)
+}
+
 // PollForActivityTask responds to a PollForActivityTask call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

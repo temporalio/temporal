@@ -149,3 +149,18 @@ func (_m *MatchingClient) RespondQueryTaskCompleted(ctx context.Context,
 
 	return r0
 }
+
+// CancelOutstandingPoll provides a mock function with given fields: ctx, request
+func (_m *MatchingClient) CancelOutstandingPoll(ctx context.Context,
+	request *matching.CancelOutstandingPollRequest, opts ...yarpc.CallOption) error {
+	ret := _m.Called(ctx, request)
+
+	var r0 error
+	if rf, ok := ret.Get(1).(func(context.Context, *matching.CancelOutstandingPollRequest) error); ok {
+		r0 = rf(ctx, request)
+	} else {
+		r0 = ret.Error(1)
+	}
+
+	return r0
+}

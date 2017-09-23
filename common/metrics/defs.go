@@ -201,6 +201,8 @@ const (
 	MatchingClientQueryWorkflowScope
 	// MatchingClientRespondQueryTaskCompletedScope tracks RPC calls to matching service
 	MatchingClientRespondQueryTaskCompletedScope
+	// MatchingClientCancelOutstandingPollScope tracks RPC calls to matching service
+	MatchingClientCancelOutstandingPollScope
 
 	NumCommonScopes
 )
@@ -327,6 +329,8 @@ const (
 	MatchingQueryWorkflowScope
 	// MatchingRespondQueryTaskCompletedScope tracks AddDecisionTask API calls received by service
 	MatchingRespondQueryTaskCompletedScope
+	// MatchingCancelOutstandingPollScope tracks CancelOutstandingPoll API calls received by service
+	MatchingCancelOutstandingPollScope
 
 	NumMatchingScopes
 )
@@ -380,7 +384,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientAddActivityTaskScope:                {operation: "MatchingClientAddActivityTask"},
 		MatchingClientAddDecisionTaskScope:                {operation: "MatchingClientAddDecisionTask"},
 		MatchingClientQueryWorkflowScope:                  {operation: "MatchingClientQueryWorkflow"},
-		MatchingClientRespondQueryTaskCompletedScope:      {operation: "RespondQueryTaskCompleted"},
+		MatchingClientRespondQueryTaskCompletedScope:      {operation: "MatchingClientRespondQueryTaskCompleted"},
+		MatchingClientCancelOutstandingPollScope:          {operation: "MatchingClientCancelOutstandingPoll"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -444,6 +449,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingTaskListMgrScope:               {operation: "TaskListMgr"},
 		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
 		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
+		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
 	},
 }
 

@@ -318,14 +318,20 @@ func (wh *WorkflowHandler) PollForActivityTask(
 		return nil, wh.error(err, scope)
 	}
 
+	pollerID := uuid.New()
 	resp, err := wh.matching.PollForActivityTask(ctx, &m.PollForActivityTaskRequest{
 		DomainUUID:  common.StringPtr(info.ID),
+		PollerID:    common.StringPtr(pollerID),
 		PollRequest: pollRequest,
 	})
 	if err != nil {
-		wh.Service.GetLogger().Errorf(
-			"PollForActivityTask failed. TaskList: %v, Error: %v", *pollRequest.TaskList.Name, err)
-		return nil, wh.error(err, scope)
+		err = wh.cancelOutstandingPoll(ctx, err, info.ID, persistence.TaskListTypeActivity, pollRequest.TaskList, pollerID)
+		if err != nil {
+			// For all other errors log an error and return it back to client.
+			wh.Service.GetLogger().Errorf(
+				"PollForActivityTask failed. TaskList: %v, Error: %v", *pollRequest.TaskList.Name, err)
+			return nil, wh.error(err, scope)
+		}
 	}
 	return resp, nil
 }
@@ -360,14 +366,23 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 
 	wh.Service.GetLogger().Debugf("Poll for decision. DomainName: %v, DomainID: %v", domainName, info.ID)
 
+	pollerID := uuid.New()
 	matchingResp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
 		DomainUUID:  common.StringPtr(info.ID),
+		PollerID:    common.StringPtr(pollerID),
 		PollRequest: pollRequest,
 	})
 	if err != nil {
-		wh.Service.GetLogger().Errorf(
-			"PollForDecisionTask failed. TaskList: %v, Error: %v", *pollRequest.TaskList.Name, err)
-		return nil, wh.error(err, scope)
+		err = wh.cancelOutstandingPoll(ctx, err, info.ID, persistence.TaskListTypeDecision, pollRequest.TaskList, pollerID)
+		if err != nil {
+			// For all other errors log an error and return it back to client.
+			wh.Service.GetLogger().Errorf(
+				"PollForDecisionTask failed. TaskList: %v, Error: %v", *pollRequest.TaskList.Name, err)
+			return nil, wh.error(err, scope)
+		}
+
+		// Must be cancellation error.  Does'nt matter what we return here.  Client already went away.
+		return nil, nil
 	}
 
 	var history *gen.History
@@ -405,6 +420,31 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	}
 
 	return wh.createPollForDecisionTaskResponse(ctx, matchingResp, history, continuation), nil
+}
+
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, domainID string, taskListType int32,
+	taskList *gen.TaskList, pollerID string) error {
+	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
+	if ctx.Err() == context.Canceled {
+		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
+		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
+		err = wh.matching.CancelOutstandingPoll(context.Background(), &m.CancelOutstandingPollRequest{
+			DomainUUID:   common.StringPtr(domainID),
+			TaskListType: common.Int32Ptr(taskListType),
+			TaskList:     taskList,
+			PollerID:     common.StringPtr(pollerID),
+		})
+		// We can do much if this call fails.  Just log the error and move on
+		if err != nil {
+			wh.Service.GetLogger().Errorf("Failed to cancel outstanding poller.  Tasklist: %v, Error: %v,",
+				taskList.GetName(), err)
+		}
+
+		// Clear error as we don't want to report context cancellation error to count against our SLA
+		return nil
+	}
+
+	return err
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.

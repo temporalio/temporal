@@ -145,3 +145,20 @@ func (c *metricClient) RespondQueryTaskCompleted(
 
 	return err
 }
+
+func (c *metricClient) CancelOutstandingPoll(
+	ctx context.Context,
+	request *m.CancelOutstandingPollRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceLatency)
+	err := c.client.CancelOutstandingPoll(ctx, request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceFailures)
+	}
+
+	return err
+}

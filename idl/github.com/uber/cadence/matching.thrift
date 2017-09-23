@@ -24,6 +24,7 @@ namespace java com.uber.cadence.matching
 
 struct PollForDecisionTaskRequest {
   10: optional string domainUUID
+  15: optional string pollerID
   20: optional shared.PollForDecisionTaskRequest pollRequest
 }
 
@@ -38,6 +39,7 @@ struct PollForDecisionTaskResponse {
 
 struct PollForActivityTaskRequest {
   10: optional string domainUUID
+  15: optional string pollerID
   20: optional shared.PollForActivityTaskRequest pollRequest
 }
 
@@ -68,6 +70,13 @@ struct RespondQueryTaskCompletedRequest {
   20: optional shared.TaskList taskList
   30: optional string taskID
   40: optional shared.RespondQueryTaskCompletedRequest completedRequest
+}
+
+struct CancelOutstandingPollRequest {
+  10: optional string domainUUID
+  20: optional i32 taskListType
+  30: optional shared.TaskList taskList
+  40: optional string pollerID
 }
 
 /**
@@ -140,5 +149,20 @@ service MatchingService {
 	  2: shared.InternalServiceError internalServiceError,
 	  3: shared.EntityNotExistsError entityNotExistError,
 	)
+
+  /**
+    * CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
+    * Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
+    * cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
+    * see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks
+    * being dispatched to zombie pollers in this situation.  This API is added so everytime frontend makes a long-poll
+    * api call to matching it passes in a pollerID and then calls this API when it detects client connection is closed
+    * to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
+    **/
+  void CancelOutstandingPoll(1: CancelOutstandingPollRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+    )
 
 }

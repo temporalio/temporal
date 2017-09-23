@@ -158,6 +158,17 @@ func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.Resp
 	return h.handleErr(err, scope)
 }
 
+// CancelOutstandingPoll is used to cancel outstanding pollers
+func (h *Handler) CancelOutstandingPoll(ctx context.Context,
+	request *m.CancelOutstandingPollRequest) error {
+	scope := metrics.MatchingCancelOutstandingPollScope
+	sw := h.startRequestProfile("CancelOutstandingPoll", scope)
+	defer sw.Stop()
+
+	err := h.engine.CancelOutstandingPoll(ctx, request)
+	return h.handleErr(err, scope)
+}
+
 func (h *Handler) handleErr(err error, scope int) error {
 
 	if err == nil {

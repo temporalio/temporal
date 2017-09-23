@@ -44,6 +44,11 @@ type Interface interface {
 		AddRequest *matching.AddDecisionTaskRequest,
 	) error
 
+	CancelOutstandingPoll(
+		ctx context.Context,
+		Request *matching.CancelOutstandingPollRequest,
+	) error
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *matching.PollForActivityTaskRequest,
@@ -99,6 +104,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "CancelOutstandingPoll",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.CancelOutstandingPoll),
+				},
+				Signature:    "CancelOutstandingPoll(Request *matching.CancelOutstandingPollRequest)",
+				ThriftModule: matching.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "PollForActivityTask",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -144,7 +160,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 6)
+	procedures := make([]transport.Procedure, 0, 7)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -180,6 +196,25 @@ func (h handler) AddDecisionTask(ctx context.Context, body wire.Value) (thrift.R
 
 	hadError := err != nil
 	result, err := matching.MatchingService_AddDecisionTask_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) CancelOutstandingPoll(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args matching.MatchingService_CancelOutstandingPoll_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.CancelOutstandingPoll(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := matching.MatchingService_CancelOutstandingPoll_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

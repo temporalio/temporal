@@ -48,6 +48,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	CancelOutstandingPoll(
+		ctx context.Context,
+		Request *matching.CancelOutstandingPollRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *matching.PollForActivityTaskRequest,
@@ -140,6 +146,29 @@ func (c client) AddDecisionTask(
 	}
 
 	err = matching.MatchingService_AddDecisionTask_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) CancelOutstandingPoll(
+	ctx context.Context,
+	_Request *matching.CancelOutstandingPollRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := matching.MatchingService_CancelOutstandingPoll_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result matching.MatchingService_CancelOutstandingPoll_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = matching.MatchingService_CancelOutstandingPoll_Helper.UnwrapResponse(&result)
 	return
 }
 

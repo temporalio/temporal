@@ -129,6 +129,16 @@ func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.R
 	return client.RespondQueryTaskCompleted(ctx, request)
 }
 
+func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest, opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(*request.TaskList.Name)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CancelOutstandingPoll(ctx, request)
+}
+
 func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interface, error) {
 	host, err := c.resolver.Lookup(key)
 	if err != nil {

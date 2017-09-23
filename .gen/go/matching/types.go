@@ -424,14 +424,16 @@ func (v *AddDecisionTaskRequest) GetScheduleId() (o int64) {
 	return
 }
 
-type PollForActivityTaskRequest struct {
-	DomainUUID  *string                            `json:"domainUUID,omitempty"`
-	PollRequest *shared.PollForActivityTaskRequest `json:"pollRequest,omitempty"`
+type CancelOutstandingPollRequest struct {
+	DomainUUID   *string          `json:"domainUUID,omitempty"`
+	TaskListType *int32           `json:"taskListType,omitempty"`
+	TaskList     *shared.TaskList `json:"taskList,omitempty"`
+	PollerID     *string          `json:"pollerID,omitempty"`
 }
 
-func (v *PollForActivityTaskRequest) ToWire() (wire.Value, error) {
+func (v *CancelOutstandingPollRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -442,6 +444,167 @@ func (v *PollForActivityTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.TaskListType != nil {
+		w, err = wire.NewValueI32(*(v.TaskListType)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.PollerID != nil {
+		w, err = wire.NewValueString(*(v.PollerID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *CancelOutstandingPollRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.TaskListType = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.PollerID = &x
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *CancelOutstandingPollRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [4]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.TaskListType != nil {
+		fields[i] = fmt.Sprintf("TaskListType: %v", *(v.TaskListType))
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.PollerID != nil {
+		fields[i] = fmt.Sprintf("PollerID: %v", *(v.PollerID))
+		i++
+	}
+	return fmt.Sprintf("CancelOutstandingPollRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *CancelOutstandingPollRequest) Equals(rhs *CancelOutstandingPollRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.TaskListType, rhs.TaskListType) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.PollerID, rhs.PollerID) {
+		return false
+	}
+	return true
+}
+
+func (v *CancelOutstandingPollRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *CancelOutstandingPollRequest) GetTaskListType() (o int32) {
+	if v.TaskListType != nil {
+		return *v.TaskListType
+	}
+	return
+}
+
+func (v *CancelOutstandingPollRequest) GetPollerID() (o string) {
+	if v.PollerID != nil {
+		return *v.PollerID
+	}
+	return
+}
+
+type PollForActivityTaskRequest struct {
+	DomainUUID  *string                            `json:"domainUUID,omitempty"`
+	PollerID    *string                            `json:"pollerID,omitempty"`
+	PollRequest *shared.PollForActivityTaskRequest `json:"pollRequest,omitempty"`
+}
+
+func (v *PollForActivityTaskRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.PollerID != nil {
+		w, err = wire.NewValueString(*(v.PollerID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 15, Value: w}
 		i++
 	}
 	if v.PollRequest != nil {
@@ -474,6 +637,15 @@ func (v *PollForActivityTaskRequest) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 15:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.PollerID = &x
+				if err != nil {
+					return err
+				}
+			}
 		case 20:
 			if field.Value.Type() == wire.TStruct {
 				v.PollRequest, err = _PollForActivityTaskRequest_Read(field.Value)
@@ -490,10 +662,14 @@ func (v *PollForActivityTaskRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.PollerID != nil {
+		fields[i] = fmt.Sprintf("PollerID: %v", *(v.PollerID))
 		i++
 	}
 	if v.PollRequest != nil {
@@ -505,6 +681,9 @@ func (v *PollForActivityTaskRequest) String() string {
 
 func (v *PollForActivityTaskRequest) Equals(rhs *PollForActivityTaskRequest) bool {
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.PollerID, rhs.PollerID) {
 		return false
 	}
 	if !((v.PollRequest == nil && rhs.PollRequest == nil) || (v.PollRequest != nil && rhs.PollRequest != nil && v.PollRequest.Equals(rhs.PollRequest))) {
@@ -520,14 +699,22 @@ func (v *PollForActivityTaskRequest) GetDomainUUID() (o string) {
 	return
 }
 
+func (v *PollForActivityTaskRequest) GetPollerID() (o string) {
+	if v.PollerID != nil {
+		return *v.PollerID
+	}
+	return
+}
+
 type PollForDecisionTaskRequest struct {
 	DomainUUID  *string                            `json:"domainUUID,omitempty"`
+	PollerID    *string                            `json:"pollerID,omitempty"`
 	PollRequest *shared.PollForDecisionTaskRequest `json:"pollRequest,omitempty"`
 }
 
 func (v *PollForDecisionTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -538,6 +725,14 @@ func (v *PollForDecisionTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.PollerID != nil {
+		w, err = wire.NewValueString(*(v.PollerID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 15, Value: w}
 		i++
 	}
 	if v.PollRequest != nil {
@@ -570,6 +765,15 @@ func (v *PollForDecisionTaskRequest) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 15:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.PollerID = &x
+				if err != nil {
+					return err
+				}
+			}
 		case 20:
 			if field.Value.Type() == wire.TStruct {
 				v.PollRequest, err = _PollForDecisionTaskRequest_Read(field.Value)
@@ -586,10 +790,14 @@ func (v *PollForDecisionTaskRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.PollerID != nil {
+		fields[i] = fmt.Sprintf("PollerID: %v", *(v.PollerID))
 		i++
 	}
 	if v.PollRequest != nil {
@@ -603,6 +811,9 @@ func (v *PollForDecisionTaskRequest) Equals(rhs *PollForDecisionTaskRequest) boo
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
+	if !_String_EqualsPtr(v.PollerID, rhs.PollerID) {
+		return false
+	}
 	if !((v.PollRequest == nil && rhs.PollRequest == nil) || (v.PollRequest != nil && rhs.PollRequest != nil && v.PollRequest.Equals(rhs.PollRequest))) {
 		return false
 	}
@@ -612,6 +823,13 @@ func (v *PollForDecisionTaskRequest) Equals(rhs *PollForDecisionTaskRequest) boo
 func (v *PollForDecisionTaskRequest) GetDomainUUID() (o string) {
 	if v.DomainUUID != nil {
 		return *v.DomainUUID
+	}
+	return
+}
+
+func (v *PollForDecisionTaskRequest) GetPollerID() (o string) {
+	if v.PollerID != nil {
+		return *v.PollerID
 	}
 	return
 }
