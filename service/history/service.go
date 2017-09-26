@@ -53,13 +53,15 @@ type Config struct {
 	TimerProcessorUpdateFailureRetryCount int
 	TimerProcessorGetFailureRetryCount    int
 	TimerProcessorUpdateAckInterval       time.Duration
+	TimerProcessorForceUpdateInterval     time.Duration
 
 	// TransferQueueProcessor settings
-	TransferTaskBatchSize              int
-	TransferProcessorMaxPollRPS        int
-	TransferProcessorMaxPollInterval   time.Duration
-	TransferProcessorUpdateAckInterval time.Duration
-	TransferTaskWorkerCount            int
+	TransferTaskBatchSize                int
+	TransferProcessorMaxPollRPS          int
+	TransferProcessorMaxPollInterval     time.Duration
+	TransferProcessorUpdateAckInterval   time.Duration
+	TransferProcessorForceUpdateInterval time.Duration
+	TransferTaskWorkerCount              int
 }
 
 // NewConfig returns new service config with default values
@@ -79,10 +81,12 @@ func NewConfig(numberOfShards int) *Config {
 		TimerProcessorUpdateFailureRetryCount:       5,
 		TimerProcessorGetFailureRetryCount:          5,
 		TimerProcessorUpdateAckInterval:             10 * time.Second,
+		TimerProcessorForceUpdateInterval:           10 * time.Minute,
 		TransferTaskBatchSize:                       10,
 		TransferProcessorMaxPollRPS:                 100,
-		TransferProcessorMaxPollInterval:            10 * time.Second,
+		TransferProcessorMaxPollInterval:            60 * time.Second,
 		TransferProcessorUpdateAckInterval:          10 * time.Second,
+		TransferProcessorForceUpdateInterval:        10 * time.Minute,
 		TransferTaskWorkerCount:                     10,
 	}
 }

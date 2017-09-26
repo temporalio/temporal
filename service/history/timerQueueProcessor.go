@@ -81,6 +81,8 @@ type (
 		readLevel        SequenceID
 		ackLevel         time.Time
 		metricsClient    metrics.Client
+		lastUpdated      time.Time
+		config           *Config
 	}
 )
 
@@ -890,6 +892,7 @@ func (t timerTaskIDs) Less(i, j int) bool {
 func newTimerAckMgr(processor *timerQueueProcessorImpl, shard ShardContext, executionMgr persistence.ExecutionManager,
 	logger bark.Logger) *timerAckMgr {
 	ackLevel := shard.GetTimerAckLevel()
+	config := shard.GetConfig()
 	return &timerAckMgr{
 		processor:        processor,
 		shard:            shard,
@@ -899,6 +902,8 @@ func newTimerAckMgr(processor *timerQueueProcessorImpl, shard ShardContext, exec
 		ackLevel:         ackLevel,
 		metricsClient:    processor.metricsClient,
 		logger:           logger,
+		lastUpdated:      time.Now(),
+		config:           config,
 	}
 }
 
@@ -957,6 +962,7 @@ func (t *timerAckMgr) completeTimerTask(taskID SequenceID) {
 
 func (t *timerAckMgr) updateAckLevel() {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateCounter)
+	initialAckLevel := t.ackLevel
 	updatedAckLevel := t.ackLevel
 	t.Lock()
 
@@ -981,6 +987,11 @@ MoveAckLevelLoop:
 		}
 	}
 	t.Unlock()
+
+	// Do not update Acklevel if nothing changed upto force update interval
+	if initialAckLevel == updatedAckLevel && time.Since(t.lastUpdated) > t.config.TimerProcessorForceUpdateInterval {
+		return
+	}
 
 	t.logger.Debugf("Updating timer ack level: %v", updatedAckLevel)
 

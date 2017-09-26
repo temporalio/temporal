@@ -73,6 +73,8 @@ type (
 		executionMgr  persistence.ExecutionManager
 		logger        bark.Logger
 		metricsClient metrics.Client
+		lastUpdated   time.Time
+		config        *Config
 
 		sync.RWMutex
 		outstandingTasks map[int64]bool
@@ -112,6 +114,7 @@ func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.Vis
 func newAckManager(processor *transferQueueProcessorImpl, shard ShardContext, executionMgr persistence.ExecutionManager,
 	logger bark.Logger, metricsClient metrics.Client) *ackManager {
 	ackLevel := shard.GetTransferAckLevel()
+	config := shard.GetConfig()
 	return &ackManager{
 		processor:        processor,
 		shard:            shard,
@@ -121,6 +124,8 @@ func newAckManager(processor *transferQueueProcessorImpl, shard ShardContext, ex
 		ackLevel:         ackLevel,
 		logger:           logger,
 		metricsClient:    metricsClient,
+		lastUpdated:      time.Now(),
+		config:           config,
 	}
 }
 
@@ -912,6 +917,7 @@ func (a *ackManager) completeTask(taskID int64) {
 
 func (a *ackManager) updateAckLevel() {
 	a.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AckLevelUpdateCounter)
+	initialAckLevel := a.ackLevel
 	updatedAckLevel := a.ackLevel
 	a.Lock()
 MoveAckLevelLoop:
@@ -934,6 +940,11 @@ MoveAckLevelLoop:
 		}
 	}
 	a.Unlock()
+
+	// Do not update Acklevel if nothing changed upto force update interval
+	if initialAckLevel == updatedAckLevel && time.Since(a.lastUpdated) > a.config.TransferProcessorForceUpdateInterval {
+		return
+	}
 
 	// Always update ackLevel to detect if the shared is stolen
 	if err := a.shard.UpdateTransferAckLevel(updatedAckLevel); err != nil {
