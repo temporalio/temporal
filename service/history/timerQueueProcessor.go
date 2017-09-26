@@ -989,7 +989,7 @@ MoveAckLevelLoop:
 	t.Unlock()
 
 	// Do not update Acklevel if nothing changed upto force update interval
-	if initialAckLevel == updatedAckLevel && time.Since(t.lastUpdated) > t.config.TimerProcessorForceUpdateInterval {
+	if initialAckLevel == updatedAckLevel && time.Since(t.lastUpdated) < t.config.TimerProcessorForceUpdateInterval {
 		return
 	}
 
@@ -999,5 +999,7 @@ MoveAckLevelLoop:
 	if err := t.shard.UpdateTimerAckLevel(updatedAckLevel); err != nil {
 		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
 		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
+	} else {
+		t.lastUpdated = time.Now()
 	}
 }
