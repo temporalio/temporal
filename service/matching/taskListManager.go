@@ -476,9 +476,6 @@ getTasksPumpLoop:
 			{
 				tasks, err := c.getTaskBatch()
 				if err != nil {
-					logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetTasks, err,
-						fmt.Sprintf("{taskType: %v, taskList: %v}",
-							c.taskListID.taskType, c.taskListID.taskListName))
 					c.signalNewTask() // re-enqueue the event
 					// TODO: Should we ever stop retrying on db errors?
 					continue getTasksPumpLoop
@@ -511,7 +508,8 @@ getTasksPumpLoop:
 						// This indicates the task list may have moved to another host.
 						c.Stop()
 					} else {
-						logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err, "Persist AckLevel failed")
+						logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateTaskList, err,
+							"Persist AckLevel failed")
 					}
 					// keep going as saving ack is not critical
 				}

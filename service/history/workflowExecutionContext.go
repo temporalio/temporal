@@ -79,7 +79,9 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 		Execution: c.workflowExecution,
 	})
 	if err != nil {
-		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetWorkflowExecution, err, "")
+		if common.IsPersistenceTransientError(err) {
+			logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationGetWorkflowExecution, err, "")
+		}
 		return nil, err
 	}
 
@@ -232,8 +234,8 @@ func (c *workflowExecutionContext) deleteWorkflowExecution() error {
 	err := c.deleteWorkflowExecutionWithRetry(&persistence.DeleteWorkflowExecutionRequest{
 		ExecutionInfo: c.msBuilder.executionInfo,
 	})
-	if err != nil {
-		// We cannot return an error back to client at this stage.  For now just log and move on.
+	if err != nil && common.IsPersistenceTransientError(err) {
+		// Log the error for debugging.  Transfer queue will keep on retrying on the error unless it can delete execution
 		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationDeleteWorkflowExecution, err,
 			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 	}

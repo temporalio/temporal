@@ -269,8 +269,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			})
 		}
 
-		logging.LogPersistantStoreErrorEvent(e.logger, logging.TagValueStoreOperationCreateWorkflowExecution, err,
-			fmt.Sprintf("{WorkflowID: %v, RunID: %v}", executionID, runID))
 		return nil, err
 	}
 

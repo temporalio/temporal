@@ -358,11 +358,13 @@ func (s *shardContextImpl) renewRangeLocked(isStealing bool) error {
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID})
 	if err != nil {
-		logging.LogPersistantStoreErrorEvent(s.logger, logging.TagValueStoreOperationUpdateShard, err,
-			fmt.Sprintf("{RangeID: %v}", s.shardInfo.RangeID))
 		// Shard is stolen, trigger history engine shutdown
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
 			s.closeShard()
+		} else {
+			// Failure in updating shard to grab new RangeID
+			logging.LogPersistantStoreErrorEvent(s.logger, logging.TagValueStoreOperationUpdateShard, err,
+				fmt.Sprintf("{PreviousRangeID: %v, NewRangeID: %v}", s.shardInfo.RangeID, updatedShardInfo.RangeID))
 		}
 		return err
 	}
