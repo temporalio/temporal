@@ -50,3 +50,8 @@ func (_m *ExecutionManagerFactory) CreateExecutionManager(shardID int) (persiste
 
 	return r0, r1
 }
+
+// Close is mock implementation for Close of ExecutionManagerFactory
+func (_m *ExecutionManagerFactory) Close() {
+	_m.Called()
+}

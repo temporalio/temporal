@@ -531,20 +531,8 @@ func NewCassandraShardPersistence(hosts string, port int, user, password, dc str
 }
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewCassandraWorkflowExecutionPersistence(hosts string, port int, user, password, dc string, keyspace string,
-	shardID int, logger bark.Logger) (ExecutionManager, error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
-	cluster.Keyspace = keyspace
-	cluster.ProtoVersion = cassandraProtoVersion
-	cluster.Consistency = gocql.LocalQuorum
-	cluster.SerialConsistency = gocql.LocalSerial
-	cluster.Timeout = defaultSessionTimeout
-
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, err
-	}
-
+func NewCassandraWorkflowExecutionPersistence(shardID int, session *gocql.Session,
+	logger bark.Logger) (ExecutionManager, error) {
 	return &cassandraPersistence{shardID: shardID, session: session, lowConslevel: gocql.One, logger: logger}, nil
 }
 

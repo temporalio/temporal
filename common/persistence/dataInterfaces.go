@@ -650,6 +650,7 @@ type (
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
 	ExecutionManagerFactory interface {
+		Closeable
 		CreateExecutionManager(shardID int) (ExecutionManager, error)
 	}
 

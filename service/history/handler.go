@@ -120,6 +120,7 @@ func (h *Handler) Stop() {
 	h.controller.Stop()
 	h.shardManager.Close()
 	h.historyMgr.Close()
+	h.executionMgrFactory.Close()
 	h.metadataMgr.Close()
 	h.visibilityMgr.Close()
 	h.Service.Stop()

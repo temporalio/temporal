@@ -188,7 +188,10 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 		service := service.New(params)
-		handler := history.NewHandler(service, history.NewConfig(c.numberOfHistoryShards), shardMgr, metadataMgr,
+		historyConfig := history.NewConfig(c.numberOfHistoryShards)
+		historyConfig.HistoryMgrNumConns = c.numberOfHistoryShards
+		historyConfig.ExecutionMgrNumConns = c.numberOfHistoryShards
+		handler := history.NewHandler(service, historyConfig, shardMgr, metadataMgr,
 			visibilityMgr, historyMgr, executionMgrFactory)
 		handler.Start()
 		c.historyHandlers = append(c.historyHandlers, handler)

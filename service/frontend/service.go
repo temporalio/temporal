@@ -31,6 +31,9 @@ type Config struct {
 	DefaultVisibilityMaxPageSize int32
 	DefaultHistoryMaxPageSize    int32
 	RPS                          int
+
+	// Persistence settings
+	HistoryMgrNumConns int
 }
 
 // NewConfig returns new service config with default values
@@ -38,7 +41,8 @@ func NewConfig() *Config {
 	return &Config{
 		DefaultVisibilityMaxPageSize: 1000,
 		DefaultHistoryMaxPageSize:    1000,
-		RPS: 1200, // This limit is based on experimental runs.
+		RPS:                1200, // This limit is based on experimental runs.
+		HistoryMgrNumConns: 10,
 	}
 }
 
@@ -99,6 +103,7 @@ func (s *Service) Start() {
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
+		s.config.HistoryMgrNumConns,
 		p.Logger)
 
 	if err != nil {

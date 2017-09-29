@@ -97,21 +97,6 @@ type (
 	}
 )
 
-func newTestExecutionMgrFactory(options TestBaseOptions, cassandra CassandraTestCluster,
-	logger bark.Logger) ExecutionManagerFactory {
-	return &testExecutionMgrFactory{
-		options:   options,
-		cassandra: cassandra,
-		logger:    logger,
-	}
-}
-
-func (f *testExecutionMgrFactory) CreateExecutionManager(shardID int) (ExecutionManager, error) {
-	return NewCassandraWorkflowExecutionPersistence(f.options.ClusterHost, f.options.ClusterPort, f.options.ClusterUser,
-		f.options.ClusterPassword, f.options.Datacenter, f.cassandra.keyspace,
-		shardID, f.logger)
-}
-
 func (g *testTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 	return atomic.AddInt64(&g.seqNum, 1), nil
 }
@@ -128,7 +113,11 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.ExecutionMgrFactory = newTestExecutionMgrFactory(options, s.CassandraTestCluster, log)
+	s.ExecutionMgrFactory, err = NewCassandraPersistenceClientFactory(options.ClusterHost, options.ClusterPort,
+		options.ClusterUser, options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, 2, log, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Create an ExecutionManager for the shard for use in unit tests
 	s.WorkflowMgr, err = s.ExecutionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
@@ -142,7 +131,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	}
 
 	s.HistoryMgr, err = NewCassandraHistoryPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
-		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, 2, log)
 	if err != nil {
 		log.Fatal(err)
 	}

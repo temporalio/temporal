@@ -62,6 +62,10 @@ type Config struct {
 	TransferProcessorUpdateAckInterval   time.Duration
 	TransferProcessorForceUpdateInterval time.Duration
 	TransferTaskWorkerCount              int
+
+	// Persistence settings
+	ExecutionMgrNumConns int
+	HistoryMgrNumConns   int
 }
 
 // NewConfig returns new service config with default values
@@ -88,6 +92,8 @@ func NewConfig(numberOfShards int) *Config {
 		TransferProcessorUpdateAckInterval:          10 * time.Second,
 		TransferProcessorForceUpdateInterval:        10 * time.Minute,
 		TransferTaskWorkerCount:                     10,
+		ExecutionMgrNumConns:                        100,
+		HistoryMgrNumConns:                          100,
 	}
 }
 
@@ -181,14 +187,26 @@ func (s *Service) Start() {
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
+		s.config.HistoryMgrNumConns,
 		p.Logger)
 
 	if err != nil {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
 	}
-
 	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
-	execMgrFactory := NewExecutionManagerFactory(&p.CassandraConfig, p.Logger, base.GetMetricsClient())
+
+	execMgrFactory, err := persistence.NewCassandraPersistenceClientFactory(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
+		p.CassandraConfig.Datacenter,
+		p.CassandraConfig.Keyspace,
+		s.config.ExecutionMgrNumConns,
+		p.Logger,
+		base.GetMetricsClient())
+	if err != nil {
+		log.Fatalf("Creating Cassandra execution manager persistence factory failed: %v", err)
+	}
 
 	handler := NewHandler(base,
 		s.config,

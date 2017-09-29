@@ -339,9 +339,9 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		PersistenceCreateShardScope:                    {operation: "CreateShard"},
-		PersistenceGetShardScope:                       {operation: "GetShard"},
-		PersistenceUpdateShardScope:                    {operation: "UpdateShard"},
+		PersistenceCreateShardScope:                    {operation: "CreateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceGetShardScope:                       {operation: "GetShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceUpdateShardScope:                    {operation: "UpdateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceCreateWorkflowExecutionScope:        {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:           {operation: "GetWorkflowExecution"},
 		PersistenceUpdateWorkflowExecutionScope:        {operation: "UpdateWorkflowExecution"},
