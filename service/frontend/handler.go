@@ -436,7 +436,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 		})
 		// We can do much if this call fails.  Just log the error and move on
 		if err != nil {
-			wh.Service.GetLogger().Errorf("Failed to cancel outstanding poller.  Tasklist: %v, Error: %v,",
+			wh.Service.GetLogger().Warnf("Failed to cancel outstanding poller.  Tasklist: %v, Error: %v,",
 				taskList.GetName(), err)
 		}
 
@@ -509,8 +509,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		CompleteRequest: completeRequest,
 	})
 	if err != nil {
-		logger := wh.getLoggerForTask(completeRequest.TaskToken)
-		logger.Errorf("RespondActivityTaskCompleted. Error: %v", err)
 		return wh.error(err, scope)
 	}
 	return nil
@@ -544,8 +542,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		FailedRequest: failedRequest,
 	})
 	if err != nil {
-		logger := wh.getLoggerForTask(failedRequest.TaskToken)
-		logger.Errorf("RespondActivityTaskFailed. Error: %v", err)
 		return wh.error(err, scope)
 	}
 	return nil
@@ -580,8 +576,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 		CancelRequest: cancelRequest,
 	})
 	if err != nil {
-		logger := wh.getLoggerForTask(cancelRequest.TaskToken)
-		logger.Errorf("RespondActivityTaskCanceled. Error: %v", err)
 		return wh.error(err, scope)
 	}
 	return nil
@@ -616,8 +610,6 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		CompleteRequest: completeRequest,
 	})
 	if err != nil {
-		logger := wh.getLoggerForTask(completeRequest.TaskToken)
-		logger.Errorf("RespondDecisionTaskCompleted. Error: %v", err)
 		return wh.error(err, scope)
 	}
 	return nil
@@ -720,8 +712,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		StartRequest: startRequest,
 	})
 	if err != nil {
-		wh.Service.GetLogger().Errorf("StartWorkflowExecution failed. WorkflowID: %v. Error: %v",
-			*startRequest.WorkflowId, err)
 		return nil, wh.error(err, scope)
 	}
 	return resp, nil
