@@ -621,7 +621,7 @@ func (h *Handler) convertError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
 		info, err := h.hServiceResolver.Lookup(string(shardID))
-		if err != nil {
+		if err == nil {
 			return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
