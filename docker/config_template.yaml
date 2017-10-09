@@ -1,3 +1,7 @@
+log:
+  stdout: true
+  level: "${LOG_LEVEL}"
+
 cassandra:
   hosts: "${CASSANDRA_SEEDS}"
   keyspace: "${KEYSPACE}"
@@ -8,7 +12,7 @@ cassandra:
 ringpop:
   name: cadence
   bootstrapMode: hosts
-  bootstrapHosts: ["${RINGPOP_SEEDS}"]
+  bootstrapHosts: ${RINGPOP_SEEDS_JSON_ARRAY}
   maxJoinDuration: 30s
 
 services:

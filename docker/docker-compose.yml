@@ -1,7 +1,7 @@
 version: '3'
 services:
   cassandra:
-    image: cassandra:3.9
+    image: cassandra:3.11
     ports:
       - "9042:9042"
   statsd:
@@ -12,8 +12,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   cadence:
-    build: .
-    image: ubercadence/server:master
+    image: ubercadence/server:0.3.2
     ports:
      - "7933:7933"
      - "7934:7934"

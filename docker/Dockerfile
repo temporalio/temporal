@@ -20,6 +20,11 @@
 
 FROM debian:jessie
 
+# Specify the cadence version to be built into this docker image
+# See https://github.com/uber/cadence/tags
+ARG git_branch
+RUN if [ -z "$git_branch" ]; then echo "ERROR: git_branch NOT SET. Usage: docker build . --build-arg git_branch=YOUR_CHECKOUT_BRANCH"; exit 1; else : ; fi
+
 # get golang 1.8.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		g++ \
@@ -30,6 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 		libev4 libev-dev \
 		gettext-base \
 		wget \
+		vim \
+		tcpdump \
+		netcat \
 		python-pip \
 		git-all \
 	&& rm -rf /var/lib/apt/lists/*
@@ -57,7 +65,7 @@ RUN go get -u github.com/Masterminds/glide
 RUN go get -u github.com/golang/lint/golint
 
 RUN git clone --depth=50 https://github.com/uber/cadence.git $CADENCE_HOME
-RUN cd $CADENCE_HOME; make bins_nothrift
+RUN cd $CADENCE_HOME; git checkout $git_branch; make bins_nothrift
 
 EXPOSE 7933 7934 7935
 
