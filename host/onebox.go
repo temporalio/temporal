@@ -54,6 +54,7 @@ type Cadence interface {
 	Stop()
 	GetFrontendClient() workflowserviceclient.Interface
 	FrontendAddress() string
+	GetFrontendService() service.Service
 }
 
 type (
