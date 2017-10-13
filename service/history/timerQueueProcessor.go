@@ -274,6 +274,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- *persistence.
 	updateAckChan := time.NewTicker(t.config.TimerProcessorUpdateAckInterval).C
 	var nextKeyTask *persistence.TimerTaskInfo
 
+continueProcessor:
 	for {
 		isWokeByNewTimer := false
 
@@ -301,6 +302,7 @@ func (t *timerQueueProcessorImpl) internalProcessor(tasksCh chan<- *persistence.
 
 			case <-updateAckChan:
 				t.ackMgr.updateAckLevel()
+				continue continueProcessor
 			}
 		}
 

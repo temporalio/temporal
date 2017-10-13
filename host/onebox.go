@@ -153,6 +153,11 @@ func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
 	return fecli.New(c.frontEndService.GetDispatcher())
 }
 
+// For integration tests to get hold of FE instance.
+func (c *cadenceImpl) GetFrontendService() service.Service {
+	return c.frontEndService
+}
+
 func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.Name = common.FrontendServiceName
