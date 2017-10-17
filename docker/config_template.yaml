@@ -23,7 +23,7 @@ services:
     metrics:
       statsd:
         hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence"
+        prefix: "cadence-frontend"
 
   matching:
     rpc:
@@ -32,7 +32,7 @@ services:
     metrics:
       statsd:
         hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence"
+        prefix: "cadence-matching"
 
   history:
     rpc:
@@ -41,4 +41,4 @@ services:
     metrics:
       statsd:
         hostPort: "${STATSD_ENDPOINT}"
-        prefix: "cadence"
+        prefix: "cadence-history"
