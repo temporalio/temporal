@@ -280,15 +280,16 @@ func (v *AddActivityTaskRequest) GetScheduleToStartTimeoutSeconds() (o int32) {
 }
 
 type AddDecisionTaskRequest struct {
-	DomainUUID *string                   `json:"domainUUID,omitempty"`
-	Execution  *shared.WorkflowExecution `json:"execution,omitempty"`
-	TaskList   *shared.TaskList          `json:"taskList,omitempty"`
-	ScheduleId *int64                    `json:"scheduleId,omitempty"`
+	DomainUUID                    *string                   `json:"domainUUID,omitempty"`
+	Execution                     *shared.WorkflowExecution `json:"execution,omitempty"`
+	TaskList                      *shared.TaskList          `json:"taskList,omitempty"`
+	ScheduleId                    *int64                    `json:"scheduleId,omitempty"`
+	ScheduleToStartTimeoutSeconds *int32                    `json:"scheduleToStartTimeoutSeconds,omitempty"`
 }
 
 func (v *AddDecisionTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -323,6 +324,14 @@ func (v *AddDecisionTaskRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.ScheduleToStartTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
@@ -364,6 +373,15 @@ func (v *AddDecisionTaskRequest) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 50:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ScheduleToStartTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -373,7 +391,7 @@ func (v *AddDecisionTaskRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -389,6 +407,10 @@ func (v *AddDecisionTaskRequest) String() string {
 	}
 	if v.ScheduleId != nil {
 		fields[i] = fmt.Sprintf("ScheduleId: %v", *(v.ScheduleId))
+		i++
+	}
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("ScheduleToStartTimeoutSeconds: %v", *(v.ScheduleToStartTimeoutSeconds))
 		i++
 	}
 	return fmt.Sprintf("AddDecisionTaskRequest{%v}", strings.Join(fields[:i], ", "))
@@ -407,6 +429,9 @@ func (v *AddDecisionTaskRequest) Equals(rhs *AddDecisionTaskRequest) bool {
 	if !_I64_EqualsPtr(v.ScheduleId, rhs.ScheduleId) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.ScheduleToStartTimeoutSeconds, rhs.ScheduleToStartTimeoutSeconds) {
+		return false
+	}
 	return true
 }
 
@@ -420,6 +445,13 @@ func (v *AddDecisionTaskRequest) GetDomainUUID() (o string) {
 func (v *AddDecisionTaskRequest) GetScheduleId() (o int64) {
 	if v.ScheduleId != nil {
 		return *v.ScheduleId
+	}
+	return
+}
+
+func (v *AddDecisionTaskRequest) GetScheduleToStartTimeoutSeconds() (o int32) {
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		return *v.ScheduleToStartTimeoutSeconds
 	}
 	return
 }

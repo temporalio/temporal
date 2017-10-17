@@ -196,10 +196,11 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 		return err
 	}
 	taskInfo := &persistence.TaskInfo{
-		DomainID:   domainID,
-		RunID:      *addRequest.Execution.RunId,
-		WorkflowID: *addRequest.Execution.WorkflowId,
-		ScheduleID: *addRequest.ScheduleId,
+		DomainID:               domainID,
+		RunID:                  *addRequest.Execution.RunId,
+		WorkflowID:             *addRequest.Execution.WorkflowId,
+		ScheduleID:             *addRequest.ScheduleId,
+		ScheduleToStartTimeout: *addRequest.ScheduleToStartTimeoutSeconds,
 	}
 	return tlMgr.AddTask(addRequest.Execution, taskInfo)
 }

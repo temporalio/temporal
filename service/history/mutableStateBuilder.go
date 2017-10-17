@@ -485,6 +485,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(domainID string, 
 	e.executionInfo.RunID = *execution.RunId
 	e.executionInfo.TaskList = *request.TaskList.Name
 	e.executionInfo.WorkflowTypeName = *request.WorkflowType.Name
+	e.executionInfo.WorkflowTimeout = *request.ExecutionStartToCloseTimeoutSeconds
 	e.executionInfo.DecisionTimeoutValue = *request.TaskStartToCloseTimeoutSeconds
 
 	e.executionInfo.State = persistence.WorkflowStateCreated
@@ -1070,6 +1071,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		InitiatedID:          initiatedID,
 		TaskList:             newStateBuilder.executionInfo.TaskList,
 		WorkflowTypeName:     newStateBuilder.executionInfo.WorkflowTypeName,
+		WorkflowTimeout:      newStateBuilder.executionInfo.WorkflowTimeout,
 		DecisionTimeoutValue: newStateBuilder.executionInfo.DecisionTimeoutValue,
 		ExecutionContext:     nil,
 		NextEventID:          newStateBuilder.GetNextEventID(),

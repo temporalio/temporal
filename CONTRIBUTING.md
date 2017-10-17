@@ -61,4 +61,12 @@ Run all the tests:
 
 ```bash
 make test
+
+# or go to folder with *_test.go, e.g
+cd service/history/ 
+go test -v
+# run single test
+go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
+# example:
+go test -v github.com/uber/cadence/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```

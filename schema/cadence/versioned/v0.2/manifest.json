@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.2",
+  "MinCompatibleVersion": "0.2",
+  "Description": "add workflow timeout to mutable state",
+  "SchemaUpdateCqlFiles": [
+    "add_wf_timeout.cql"
+  ]
+}

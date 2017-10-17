@@ -202,7 +202,7 @@ func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) er
 
 // CreateWorkflowExecution is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
-	wType string, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []Task) (string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
@@ -210,6 +210,7 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 		Execution:            workflowExecution,
 		TaskList:             taskList,
 		WorkflowTypeName:     wType,
+		WorkflowTimeout:      wTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		ExecutionContext:     executionContext,
 		NextEventID:          nextEventID,
@@ -287,7 +288,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 // CreateChildWorkflowExecution is a utility method to create child workflow executions
 func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution,
 	parentDomainID string, parentExecution *workflow.WorkflowExecution, initiatedID int64, taskList, wType string,
-	decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
+	wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
 	decisionScheduleID int64, timerTasks []Task) (string, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
@@ -298,6 +299,7 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 		InitiatedID:          initiatedID,
 		TaskList:             taskList,
 		WorkflowTypeName:     wType,
+		WorkflowTimeout:      wTimeout,
 		DecisionTimeoutValue: decisionTimeout,
 		ExecutionContext:     executionContext,
 		NextEventID:          nextEventID,
@@ -379,6 +381,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *WorkflowExecutionInfo, co
 			Execution:                   newExecution,
 			TaskList:                    updatedInfo.TaskList,
 			WorkflowTypeName:            updatedInfo.WorkflowTypeName,
+			WorkflowTimeout:             updatedInfo.WorkflowTimeout,
 			DecisionTimeoutValue:        updatedInfo.DecisionTimeoutValue,
 			ExecutionContext:            nil,
 			NextEventID:                 nextEventID,

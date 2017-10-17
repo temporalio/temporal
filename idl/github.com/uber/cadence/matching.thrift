@@ -48,6 +48,7 @@ struct AddDecisionTaskRequest {
   20: optional shared.WorkflowExecution execution
   30: optional shared.TaskList taskList
   40: optional i64 (js.type = "Long") scheduleId
+  50: optional i32 scheduleToStartTimeoutSeconds
 }
 
 struct AddActivityTaskRequest {

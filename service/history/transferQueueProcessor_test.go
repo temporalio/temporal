@@ -99,7 +99,7 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -109,7 +109,7 @@ workerPump:
 	for {
 		select {
 		case task := <-tasksCh:
-			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 0)).Once().Return(nil)
+			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 20)).Once().Return(nil)
 			if task.ScheduleID == firstEventID+1 {
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 			}
@@ -127,7 +127,7 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	taskList := "many-transfertasks-queue"
 	activityCount := 5
 	timeoutSeconds := int32(10)
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 2, 0, 1, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 2, 0, 1, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
@@ -180,7 +180,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	}
 	taskList := "delete-execution-transfertasks-queue"
 	identity := "delete-execution-transfertasks-test"
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -223,7 +223,7 @@ workerPump:
 		}
 	}
 
-	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
 }
@@ -238,7 +238,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotE
 	}
 	taskList := "delete-execution-transfertasks-domain-queue"
 	identity := "delete-execution-transfertasks-domain-test"
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -277,7 +277,7 @@ workerPump:
 		}
 	}
 
-	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err3, "No error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
 }
@@ -292,7 +292,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 	targetDomain := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -351,7 +351,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -404,7 +404,7 @@ func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("complete-task-execution-deleted-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "complete-task-execution-deleted-queue"
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
@@ -492,7 +492,7 @@ workerPump:
 
 func (s *transferQueueProcessorSuite) createChildExecutionState(domain, domainID string,
 	workflowExecution workflow.WorkflowExecution, taskList, identity string) chan *persistence.TransferTaskInfo {
-	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 10, nil, 3, 0, 2, nil)
+	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
 	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
@@ -546,10 +546,11 @@ func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStar
 		}
 	} else if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 		res = &m.AddDecisionTaskRequest{
-			DomainUUID: common.StringPtr(domainID),
-			Execution:  &execution,
-			TaskList:   taskList,
-			ScheduleId: &task.ScheduleID,
+			DomainUUID:                    common.StringPtr(domainID),
+			Execution:                     &execution,
+			TaskList:                      taskList,
+			ScheduleId:                    &task.ScheduleID,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
 		}
 	}
 	return res

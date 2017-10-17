@@ -122,6 +122,7 @@ type (
 		CompletionEvent      []byte
 		TaskList             string
 		WorkflowTypeName     string
+		WorkflowTimeout      int32
 		DecisionTimeoutValue int32
 		ExecutionContext     []byte
 		State                int
@@ -347,6 +348,7 @@ type (
 		InitiatedID                 int64
 		TaskList                    string
 		WorkflowTypeName            string
+		WorkflowTimeout             int32
 		DecisionTimeoutValue        int32
 		ExecutionContext            []byte
 		NextEventID                 int64

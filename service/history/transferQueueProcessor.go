@@ -361,15 +361,36 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
-
 	taskList := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
+
+	// get workflow timeout
+	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	if err != nil {
+		return err
+	}
+	var mb *mutableStateBuilder
+	mb, err = context.loadWorkflowExecution()
+	if err != nil {
+		release()
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
+		return err
+	}
+	timeout := mb.executionInfo.WorkflowTimeout
+	wfTypeName := mb.executionInfo.WorkflowTypeName
+	startTimestamp := mb.executionInfo.StartTimestamp
+	release()
+
 	err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
-		DomainUUID: common.StringPtr(domainID),
-		Execution:  &execution,
-		TaskList:   taskList,
-		ScheduleId: &task.ScheduleID,
+		DomainUUID:                    common.StringPtr(domainID),
+		Execution:                     &execution,
+		TaskList:                      taskList,
+		ScheduleId:                    &task.ScheduleID,
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(timeout),
 	})
 
 	if err != nil {
@@ -377,7 +398,7 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	}
 
 	if task.ScheduleID == firstEventID+1 {
-		err = t.recordWorkflowExecutionStarted(execution, task)
+		err = t.recordWorkflowExecutionStarted(execution, task, wfTypeName, startTimestamp)
 	}
 
 	if err != nil {
@@ -674,22 +695,13 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 }
 
 func (t *transferQueueProcessorImpl) recordWorkflowExecutionStarted(
-	execution workflow.WorkflowExecution, task *persistence.TransferTaskInfo) error {
-	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
-	if err != nil {
-		return err
-	}
-	defer release()
-	mb, err := context.loadWorkflowExecution()
-	if err != nil {
-		return err
-	}
+	execution workflow.WorkflowExecution, task *persistence.TransferTaskInfo, wfTypeName string, startTimestamp time.Time) error {
 
-	err = t.visibilityManager.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
+	err := t.visibilityManager.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID:       task.DomainID,
 		Execution:        execution,
-		WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
-		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTypeName: wfTypeName,
+		StartTimestamp:   startTimestamp.UnixNano(),
 	})
 
 	return err

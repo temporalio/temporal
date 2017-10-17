@@ -110,6 +110,7 @@ const (
 		`completion_event: ?, ` +
 		`task_list: ?, ` +
 		`workflow_type_name: ?, ` +
+		`workflow_timeout: ?, ` +
 		`decision_task_timeout: ?, ` +
 		`execution_context: ?, ` +
 		`state: ?, ` +
@@ -854,6 +855,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		nil,
 		request.TaskList,
 		request.WorkflowTypeName,
+		request.WorkflowTimeout,
 		request.DecisionTimeoutValue,
 		request.ExecutionContext,
 		WorkflowStateCreated,
@@ -959,6 +961,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.CompletionEvent,
 		executionInfo.TaskList,
 		executionInfo.WorkflowTypeName,
+		executionInfo.WorkflowTimeout,
 		executionInfo.DecisionTimeoutValue,
 		executionInfo.ExecutionContext,
 		executionInfo.State,
@@ -1882,6 +1885,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.TaskList = v.(string)
 		case "workflow_type_name":
 			info.WorkflowTypeName = v.(string)
+		case "workflow_timeout":
+			info.WorkflowTimeout = int32(v.(int))
 		case "decision_task_timeout":
 			info.DecisionTimeoutValue = int32(v.(int))
 		case "execution_context":

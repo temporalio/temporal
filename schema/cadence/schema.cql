@@ -23,6 +23,7 @@ CREATE TYPE workflow_execution (
   completion_event       blob,   -- Completion event used to communicate result to parent workflow execution
   task_list              text,
   workflow_type_name     text,
+  workflow_timeout       int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
   decision_task_timeout  int,
   execution_context      blob,
   state                  int,  -- enum WorkflowState {Created, Running, Completed}

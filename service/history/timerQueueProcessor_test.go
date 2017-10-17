@@ -118,7 +118,7 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 
 	createState := createMutableState(builder)
 	info := createState.ExecutionInfo
-	task0, err0 := s.CreateWorkflowExecution(domainID, we, tl, info.WorkflowTypeName, info.DecisionTimeoutValue,
+	task0, err0 := s.CreateWorkflowExecution(domainID, we, tl, info.WorkflowTypeName, info.WorkflowTimeout, info.DecisionTimeoutValue,
 		info.ExecutionContext, info.NextEventID, info.LastProcessedEvent, info.DecisionScheduleID, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
