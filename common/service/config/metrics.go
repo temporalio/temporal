@@ -23,7 +23,8 @@ package config
 import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/uber-go/tally"
-	statsdreporter "github.com/uber-go/tally/statsd"
+	tallystatsdreporter "github.com/uber-go/tally/statsd"
+	statsdreporter "github.com/uber/cadence/common/metrics/tally/statsd"
 	"log"
 	"time"
 )
@@ -72,7 +73,9 @@ func (c *Metrics) newStatsdScope() tally.Scope {
 	if err != nil {
 		log.Fatalf("error creating statsd client, err=%v", err)
 	}
-	reporter := statsdreporter.NewReporter(statter, statsdreporter.Options{})
+	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
+	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
+	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
 		Tags:     c.Tags,
 		Reporter: reporter,
