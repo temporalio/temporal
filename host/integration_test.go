@@ -1603,7 +1603,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	for i := 0; i < 10; i++ {
 		err := poller.pollAndProcessDecisionTask(false, false)
 		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
-		s.Nil(err, string(i))
+		s.Nil(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
