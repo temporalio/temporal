@@ -715,7 +715,6 @@ struct PollForActivityTaskResponse {
   30:  optional string activityId
   40:  optional ActivityType activityType
   50:  optional binary input
-  60:  optional i64 (js.type = "Long") startedEventId
   70:  optional i64 (js.type = "Long") scheduledTimestamp
   80:  optional i32 scheduleToCloseTimeoutSeconds
   90:  optional i64 (js.type = "Long") startedTimestamp

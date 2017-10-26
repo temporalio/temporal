@@ -511,7 +511,6 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.ActivityId = attributes.ActivityId
 	response.ActivityType = attributes.ActivityType
 	response.Input = attributes.Input
-	response.StartedEventId = common.Int64Ptr(*startedEvent.EventId)
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
 	response.ScheduledTimestamp = common.Int64Ptr(*scheduledEvent.Timestamp)
 	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(*attributes.ScheduleToCloseTimeoutSeconds)

@@ -408,7 +408,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(activityID, *result.ActivityId)
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
 		s.Equal(true, validateTimeRange(time.Unix(0, *result.ScheduledTimestamp), time.Minute))
 		s.Equal(int32(100), *result.ScheduleToCloseTimeoutSeconds)
@@ -526,7 +525,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityID, *result.ActivityId)
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(startedID, *result.StartedEventId)
 		s.EqualValues(workflowExecution, *result.WorkflowExecution)
 		token := &common.TaskToken{
 			DomainID:   domainID,
@@ -646,7 +644,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 				s.EqualValues(activityID, *result.ActivityId)
 				s.EqualValues(activityType, result.ActivityType)
 				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(startedID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
 					DomainID:   domainID,
@@ -944,7 +941,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityID, *result.ActivityId)
 				s.EqualValues(activityType, result.ActivityType)
 				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(startedID, *result.StartedEventId)
 				s.EqualValues(workflowExecution, *result.WorkflowExecution)
 				token := &common.TaskToken{
 					DomainID:   domainID,

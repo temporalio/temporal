@@ -8778,7 +8778,6 @@ type PollForActivityTaskResponse struct {
 	ActivityId                    *string            `json:"activityId,omitempty"`
 	ActivityType                  *ActivityType      `json:"activityType,omitempty"`
 	Input                         []byte             `json:"input"`
-	StartedEventId                *int64             `json:"startedEventId,omitempty"`
 	ScheduledTimestamp            *int64             `json:"scheduledTimestamp,omitempty"`
 	ScheduleToCloseTimeoutSeconds *int32             `json:"scheduleToCloseTimeoutSeconds,omitempty"`
 	StartedTimestamp              *int64             `json:"startedTimestamp,omitempty"`
@@ -8788,7 +8787,7 @@ type PollForActivityTaskResponse struct {
 
 func (v *PollForActivityTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -8831,14 +8830,6 @@ func (v *PollForActivityTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
-		i++
-	}
-	if v.StartedEventId != nil {
-		w, err = wire.NewValueI64(*(v.StartedEventId)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 	if v.ScheduledTimestamp != nil {
@@ -8925,15 +8916,6 @@ func (v *PollForActivityTaskResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
-		case 60:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.StartedEventId = &x
-				if err != nil {
-					return err
-				}
-			}
 		case 70:
 			if field.Value.Type() == wire.TI64 {
 				var x int64
@@ -8988,7 +8970,7 @@ func (v *PollForActivityTaskResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [11]string
+	var fields [10]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -9008,10 +8990,6 @@ func (v *PollForActivityTaskResponse) String() string {
 	}
 	if v.Input != nil {
 		fields[i] = fmt.Sprintf("Input: %v", v.Input)
-		i++
-	}
-	if v.StartedEventId != nil {
-		fields[i] = fmt.Sprintf("StartedEventId: %v", *(v.StartedEventId))
 		i++
 	}
 	if v.ScheduledTimestamp != nil {
@@ -9053,9 +9031,6 @@ func (v *PollForActivityTaskResponse) Equals(rhs *PollForActivityTaskResponse) b
 	if !((v.Input == nil && rhs.Input == nil) || (v.Input != nil && rhs.Input != nil && bytes.Equal(v.Input, rhs.Input))) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.StartedEventId, rhs.StartedEventId) {
-		return false
-	}
 	if !_I64_EqualsPtr(v.ScheduledTimestamp, rhs.ScheduledTimestamp) {
 		return false
 	}
@@ -9077,13 +9052,6 @@ func (v *PollForActivityTaskResponse) Equals(rhs *PollForActivityTaskResponse) b
 func (v *PollForActivityTaskResponse) GetActivityId() (o string) {
 	if v.ActivityId != nil {
 		return *v.ActivityId
-	}
-	return
-}
-
-func (v *PollForActivityTaskResponse) GetStartedEventId() (o int64) {
-	if v.StartedEventId != nil {
-		return *v.StartedEventId
 	}
 	return
 }

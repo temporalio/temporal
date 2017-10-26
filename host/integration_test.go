@@ -73,7 +73,7 @@ type (
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision)
 	activityTaskHandler func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, takeToken []byte) ([]byte, bool, error)
+		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
 
@@ -270,7 +270,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
@@ -431,7 +431,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 
 	expectedActivity := int32(1)
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		id, _ := strconv.Atoi(activityID)
@@ -648,7 +648,7 @@ retry:
 		p.logger.Debugf("Received Activity task: %v", response)
 
 		result, cancel, err2 := p.activityHandler(response.WorkflowExecution, response.ActivityType, *response.ActivityId,
-			*response.StartedEventId, response.Input, response.TaskToken)
+			response.Input, response.TaskToken)
 		if cancel {
 			p.logger.Info("Executing RespondActivityTaskCanceled")
 			return p.engine.RespondActivityTaskCanceled(createContext(), &workflow.RespondActivityTaskCanceledRequest{
@@ -744,7 +744,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		s.logger.Infof("Activity ID: %v", activityID)
@@ -849,7 +849,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		for i := 0; i < 10; i++ {
@@ -957,7 +957,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		// Timing out more than HB time.
@@ -1142,7 +1142,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 
 	activityExecutedCount := 0
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		for i := 0; i < 10; i++ {
@@ -1282,7 +1282,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 
 	// activity handler
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
@@ -1577,7 +1577,7 @@ func (s *integrationSuite) TestQueryWorkflow() {
 
 	// activity handler
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 
 		return []byte("Activity Result."), false, nil
 	}
@@ -1907,7 +1907,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -2059,7 +2059,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -2280,7 +2280,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -2415,7 +2415,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, startedEventID int64, input []byte, taskToken []byte) ([]byte, bool, error) {
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
 		s.Equal(activityName, *activityType.Name)
 		s.logger.Infof("Activity ID: %v", activityID)
