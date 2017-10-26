@@ -67,10 +67,7 @@ func (rpConfig *Ringpop) validate() error {
 	if len(rpConfig.Name) == 0 {
 		return fmt.Errorf("ringpop config missing `name` param")
 	}
-	if err := validateBootstrapMode(rpConfig); err != nil {
-		return err
-	}
-	return nil
+	return validateBootstrapMode(rpConfig)
 }
 
 // UnmarshalYAML is called by the yaml package to convert

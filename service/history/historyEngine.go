@@ -573,7 +573,7 @@ Update_History_Loop:
 		var failCause workflow.DecisionTaskFailedCause
 		var err error
 		completedID := *completedEvent.EventId
-		hasUnhandledEvents := ((completedID - startedID) > 1)
+		hasUnhandledEvents := msBuilder.HasBufferedEvents()
 		isComplete := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
@@ -857,6 +857,9 @@ Update_History_Loop:
 			hasUnhandledEvents = true
 			continueAsNewBuilder = nil
 		}
+
+		// flush event if needed after processing decisions
+		msBuilder.FlushBufferedEvents()
 
 		if tt := tBuilder.GetUserTimerTaskIfNeeded(msBuilder); tt != nil {
 			timerTasks = append(timerTasks, tt)

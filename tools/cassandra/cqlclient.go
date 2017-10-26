@@ -23,14 +23,14 @@ package cassandra
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 	"time"
 
-	"fmt"
 	"github.com/gocql/gocql"
-	"log"
 )
 
 type (
@@ -189,10 +189,7 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 	if err := client.Exec(createSchemaVersionTableCQL); err != nil {
 		return err
 	}
-	if err := client.Exec(createSchemaUpdateHistoryTableCQL); err != nil {
-		return err
-	}
-	return nil
+	return client.Exec(createSchemaUpdateHistoryTableCQL)
 }
 
 // ReadSchemaVersion returns the current schema version for the keyspace

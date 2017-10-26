@@ -228,8 +228,9 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{Config: &persistence.DomainConfig{Retention: 1}}, nil).Once()
 	s.mockExecutionMgr.On("CompleteTimerTask", mock.Anything).Return(nil).Once()
-	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Run(func(arguments mock.Arguments) {
+		request := arguments.Get(0).(*persistence.UpdateWorkflowExecutionRequest)
+		s.NotNil(request.NewBufferedEvents)
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()

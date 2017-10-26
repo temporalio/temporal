@@ -112,9 +112,20 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 }
 
 func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64) error {
+	timerTasks []persistence.Task, transactionID int64) (errRet error) {
+
+	defer func() {
+		if errRet != nil {
+			// Clear all cached state in case of error
+			c.clear()
+		}
+	}()
+
 	// Take a snapshot of all updates we have accumulated for this execution
-	updates := c.msBuilder.CloseUpdateSession()
+	updates, err := c.msBuilder.CloseUpdateSession()
+	if err != nil {
+		return err
+	}
 
 	builder := updates.newEventsBuilder
 	if builder.history != nil && len(builder.history) > 0 {
@@ -133,9 +144,6 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			FirstEventID:  *firstEvent.EventId,
 			Events:        serializedHistory,
 		}); err0 != nil {
-			// Clear all cached state in case of error
-			c.clear()
-
 			switch err0.(type) {
 			case *persistence.ConditionFailedError:
 				return ErrConflict
@@ -145,7 +153,6 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 				fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 			return err0
 		}
-
 	}
 
 	continueAsNew := updates.continueAsNew
@@ -167,12 +174,11 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		DeleteTimerInfos:          updates.deleteTimerInfos,
 		UpsertChildExecutionInfos: updates.updateChildExecutionInfos,
 		DeleteChildExecutionInfo:  updates.deleteChildExecutionInfo,
+		NewBufferedEvents:         updates.newBufferedEvents,
+		ClearBufferedEvents:       updates.clearBufferedEvents,
 		ContinueAsNew:             continueAsNew,
 		CloseExecution:            deleteExecution,
 	}); err1 != nil {
-		// Clear all cached state in case of error
-		c.clear()
-
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
 			return ErrConflict

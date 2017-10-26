@@ -25,18 +25,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber-go/tally"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -173,6 +172,7 @@ func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow
 	timerTasks := []persistence.Task{timeOutTask}
 
 	s.updateTimerSeqNumbers(timerTasks)
+
 	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, condition, timerTasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 	return timerTasks

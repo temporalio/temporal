@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.2",
   "MinCompatibleVersion": "0.2",
-  "Description": "add workflow timeout to mutable state",
+  "Description": "add workflow_timeout and buffered_events_list to mutable state",
   "SchemaUpdateCqlFiles": [
-    "add_wf_timeout.cql"
+    "add_wf_timeout.cql",
+    "add_buffered_events.cql"
   ]
 }

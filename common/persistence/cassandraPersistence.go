@@ -268,7 +268,7 @@ const (
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, activity_map, timer_map, child_executions_map, request_cancel_map ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, activity_map, timer_map, child_executions_map, request_cancel_map, buffered_events_list ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -334,6 +334,28 @@ const (
 
 	templateUpdateRequestCancelInfoQuery = `UPDATE executions ` +
 		`SET request_cancel_map[ ? ] =` + templateRequestCancelInfoType + ` ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
+	templateAppendBufferedEventsQuery = `UPDATE executions ` +
+		`SET buffered_events_list = buffered_events_list + ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
+	templateDeleteBufferedEventsQuery = `UPDATE executions ` +
+		`SET buffered_events_list = [] ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -942,6 +964,14 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 	}
 	state.RequestCancelInfos = requestCancelInfos
 
+	eList := result["buffered_events_list"].([]map[string]interface{})
+	bufferedEvents := make([]*SerializedHistoryEventBatch, 0, len(eList))
+	for _, v := range eList {
+		eventBatch := createSerializedHistoryEventBatch(v)
+		bufferedEvents = append(bufferedEvents, eventBatch)
+	}
+	state.BufferedEvents = bufferedEvents
+
 	return &GetWorkflowExecutionResponse{State: state}, nil
 }
 
@@ -1003,6 +1033,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	d.updateRequestCancelInfos(batch, request.UpsertRequestCancelInfos, request.DeleteRequestCancelInfo,
+		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
+
+	d.updateBufferedEvents(batch, request.NewBufferedEvents, request.ClearBufferedEvents,
 		executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	if request.ContinueAsNew != nil {
@@ -1837,6 +1870,38 @@ func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requ
 	}
 }
 
+func (d *cassandraPersistence) updateBufferedEvents(batch *gocql.Batch, newBufferedEvents *SerializedHistoryEventBatch,
+	clearBufferedEvents bool, domainID, workflowID, runID string, condition int64, rangeID int64) {
+
+	if clearBufferedEvents {
+		batch.Query(templateDeleteBufferedEventsQuery,
+			d.shardID,
+			rowTypeExecution,
+			domainID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			condition)
+	} else if newBufferedEvents != nil {
+		values := make(map[string]interface{})
+		values["encoding_type"] = newBufferedEvents.EncodingType
+		values["version"] = newBufferedEvents.Version
+		values["data"] = newBufferedEvents.Data
+		newEventValues := []map[string]interface{}{values}
+		batch.Query(templateAppendBufferedEventsQuery,
+			newEventValues,
+			d.shardID,
+			rowTypeExecution,
+			domainID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			condition)
+	}
+}
+
 func createShardInfo(result map[string]interface{}) *ShardInfo {
 	info := &ShardInfo{}
 	for k, v := range result {
@@ -2046,6 +2111,21 @@ func createRequestCancelInfo(result map[string]interface{}) *RequestCancelInfo {
 	}
 
 	return info
+}
+
+func createSerializedHistoryEventBatch(result map[string]interface{}) *SerializedHistoryEventBatch {
+	// TODO: default to JSON, update this when we support different encoding types.
+	eventBatch := &SerializedHistoryEventBatch{EncodingType: common.EncodingTypeJSON}
+	for k, v := range result {
+		switch k {
+		case "version":
+			eventBatch.Version = v.(int)
+		case "data":
+			eventBatch.Data = v.([]byte)
+		}
+	}
+
+	return eventBatch
 }
 
 func createTaskInfo(result map[string]interface{}) *TaskInfo {

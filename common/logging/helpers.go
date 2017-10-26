@@ -84,6 +84,14 @@ func LogHistorySerializationErrorEvent(logger bark.Logger, err error, msg string
 	}).Errorf("Error serializing workflow execution history.  Msg: %v", msg)
 }
 
+// LogHistoryDeserializationErrorEvent is used to log errors deserializing execution history
+func LogHistoryDeserializationErrorEvent(logger bark.Logger, err error, msg string) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: HistoryDeserializationErrorEventID,
+		TagWorkflowErr:     err,
+	}).Errorf("Error deserializing workflow execution history.  Msg: %v", msg)
+}
+
 // LogHistoryEngineStartingEvent is used to log history engine starting
 func LogHistoryEngineStartingEvent(logger bark.Logger) {
 	logger.WithFields(bark.Fields{

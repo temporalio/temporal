@@ -271,6 +271,7 @@ type (
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
 		ExecutionInfo       *WorkflowExecutionInfo
+		BufferedEvents      []*SerializedHistoryEventBatch
 	}
 
 	// ActivityInfo details.
@@ -409,6 +410,8 @@ type (
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
+		NewBufferedEvents         *SerializedHistoryEventBatch
+		ClearBufferedEvents       bool
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

@@ -34,6 +34,7 @@ const (
 	HistoryEngineShutdown              = 2003
 	PersistentStoreErrorEventID        = 2010
 	HistorySerializationErrorEventID   = 2020
+	HistoryDeserializationErrorEventID = 2021
 	DuplicateTaskEventID               = 2030
 	MultipleCompletionDecisionsEventID = 2040
 	DuplicateTransferTaskEventID       = 2050

@@ -138,6 +138,12 @@ CREATE TYPE domain_config (
   emit_metric boolean
 );
 
+CREATE TYPE serialized_event_batch (
+  encoding_type text,
+  version       int,
+  data          blob,
+);
+
 CREATE TABLE executions (
   shard_id             int,
   type                 int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
@@ -157,6 +163,7 @@ CREATE TABLE executions (
   timer_map            map<text, frozen<timer_info>>,
   child_executions_map map<bigint, frozen<child_execution_info>>,
   request_cancel_map   map<bigint, frozen<request_cancel_info>>,
+  buffered_events_list list<frozen<serialized_event_batch>>,
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
