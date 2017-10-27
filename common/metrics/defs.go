@@ -543,6 +543,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrExecutionAlreadyStartedCounter:      {metricName: "cadence.errors.execution-already-started", metricType: Counter},
 		CadenceErrDomainAlreadyExistsCounter:          {metricName: "cadence.errors.domain-already-exists", metricType: Counter},
 		CadenceErrCancellationAlreadyRequestedCounter: {metricName: "cadence.errors.cancellation-already-requested", metricType: Counter},
+		CadenceErrQueryFailedCounter:                  {metricName: "cadence.errors.query-failed", metricType: Counter},
 		PersistenceRequests:                           {metricName: "persistence.requests", metricType: Counter},
 		PersistenceFailures:                           {metricName: "persistence.errors", metricType: Counter},
 		PersistenceLatency:                            {metricName: "persistence.latency", metricType: Timer},
