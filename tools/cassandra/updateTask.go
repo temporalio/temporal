@@ -357,7 +357,6 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 // sets up a temporary dryrun keyspace for
 // executing the cassandra schema update
 func setupDryrunKeyspace(config *UpdateSchemaConfig) error {
-
 	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, systemKeyspace)
 	if err != nil {
 		return err
@@ -372,6 +371,7 @@ func setupDryrunKeyspace(config *UpdateSchemaConfig) error {
 	setupConfig := &SetupSchemaConfig{
 		BaseConfig: BaseConfig{
 			CassHosts:    config.CassHosts,
+			CassPort:     config.CassPort,
 			CassKeyspace: dryrunKeyspace,
 		},
 		Overwrite:      true,

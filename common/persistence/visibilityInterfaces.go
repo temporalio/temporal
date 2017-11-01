@@ -36,6 +36,7 @@ type (
 		Execution        s.WorkflowExecution
 		WorkflowTypeName string
 		StartTimestamp   int64
+		WorkflowTimeout  int64
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a newly

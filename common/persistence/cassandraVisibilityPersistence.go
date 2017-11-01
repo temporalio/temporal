@@ -35,12 +35,13 @@ import (
 const (
 	domainPartition        = 0
 	defaultCloseTTLSeconds = 86400
+	openExecutionTTLBuffer = int64(20)
 )
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
 		`domain_id, domain_partition, workflow_id, run_id, start_time, workflow_type_name) ` +
-		`VALUES (?, ?, ?, ?, ?, ?)`
+		`VALUES (?, ?, ?, ?, ?, ?) using TTL ?`
 
 	templateDeleteWorkflowExecutionStarted = `DELETE FROM open_executions ` +
 		`WHERE domain_id = ? ` +
@@ -149,6 +150,7 @@ func (v *cassandraVisibilityPersistence) Close() {
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *RecordWorkflowExecutionStartedRequest) error {
+	ttl := request.WorkflowTimeout + openExecutionTTLBuffer
 	query := v.session.Query(templateCreateWorkflowExecutionStarted,
 		request.DomainUUID,
 		domainPartition,
@@ -156,6 +158,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		*request.Execution.RunId,
 		common.UnixNanoToCQLTimestamp(request.StartTimestamp),
 		request.WorkflowTypeName,
+		ttl,
 	)
 	query = query.WithTimestamp(common.UnixNanoToCQLTimestamp(request.StartTimestamp))
 	err := query.Exec()

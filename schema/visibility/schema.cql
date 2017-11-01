@@ -8,9 +8,10 @@ CREATE TABLE open_executions (
   PRIMARY KEY  ((domain_id, domain_partition), start_time, run_id)
 ) WITH CLUSTERING ORDER BY (start_time DESC)
   AND COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy',
+    'tombstone_threshold': 0.6
   }
-  AND GC_GRACE_SECONDS = 172800;
+  AND GC_GRACE_SECONDS = 60;
 
 
 CREATE INDEX open_by_workflow_id ON open_executions (workflow_id);
