@@ -35,7 +35,7 @@ import (
 const (
 	domainPartition        = 0
 	defaultCloseTTLSeconds = 86400
-	openExecutionTTLBuffer = int64(20)
+	openExecutionTTLBuffer = int64(86400) // setting it to a day to account for shard going down
 )
 
 const (
