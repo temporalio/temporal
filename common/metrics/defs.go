@@ -517,6 +517,8 @@ const (
 	GetEngineForShardErrorCounter
 	GetEngineForShardLatency
 	RemoveEngineForShardLatency
+	CompleteDecisionWithStickyEnabledCounter
+	CompleteDecisionWithStickyDisabledCounter
 )
 
 // Matching metrics enum
@@ -593,6 +595,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		GetEngineForShardErrorCounter:             {metricName: "get-engine-for-shard-errors", metricType: Counter},
 		GetEngineForShardLatency:                  {metricName: "get-engine-for-shard-latency", metricType: Timer},
 		RemoveEngineForShardLatency:               {metricName: "remove-engine-for-shard-latency", metricType: Timer},
+		CompleteDecisionWithStickyEnabledCounter:  {metricName: "complete-decision-sticky-enabled-count", metricType: Counter},
+		CompleteDecisionWithStickyDisabledCounter: {metricName: "complete-decision-sticky-disabled-count", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

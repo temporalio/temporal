@@ -135,9 +135,18 @@ func newTimerBuilder(config *Config, logger bark.Logger, timeSource common.TimeS
 // AddDecisionTimeoutTask - Add a decision timeout task.
 func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID int64,
 	startToCloseTimeout int32) *persistence.DecisionTimeoutTask {
-	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID)
+	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID, w.TimeoutTypeStartToClose)
 	tb.logger.Debugf("Adding Decision Timeout: with timeout: %v sec, EventID: %v",
 		startToCloseTimeout, timeOutTask.EventID)
+	return timeOutTask
+}
+
+// AddDecisionScheduleToStartTimoutTask - Add a decision schedule to start timeout task.
+func (tb *timerBuilder) AddScheduleToStartDecisionTimoutTask(scheduleID int64,
+	scheduleToStartTimeout int32) *persistence.DecisionTimeoutTask {
+	timeOutTask := tb.createDecisionTimeoutTask(scheduleToStartTimeout, scheduleID, w.TimeoutTypeScheduleToStart)
+	tb.logger.Debugf("Adding Decision ScheduleToStartTimeout: with timeout: %v sec, EventID: %v",
+		scheduleToStartTimeout, timeOutTask.EventID)
 	return timeOutTask
 }
 
@@ -335,10 +344,11 @@ func (tb *timerBuilder) createDeleteHistoryEventTimerTask(d time.Duration) *pers
 }
 
 // createDecisionTimeoutTask - Creates a decision timeout task.
-func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int64) *persistence.DecisionTimeoutTask {
+func (tb *timerBuilder) createDecisionTimeoutTask(fireTimeOut int32, eventID int64, timeoutType w.TimeoutType) *persistence.DecisionTimeoutTask {
 	expiryTime := tb.timeSource.Now().Add(time.Duration(fireTimeOut) * time.Second)
 	return &persistence.DecisionTimeoutTask{
 		VisibilityTimestamp: expiryTime,
+		TimeoutType:         int(timeoutType),
 		EventID:             eventID,
 	}
 }

@@ -25,6 +25,7 @@ package historyservicetest
 
 import (
 	"context"
+
 	"github.com/golang/mock/gomock"
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"

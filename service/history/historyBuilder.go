@@ -91,8 +91,8 @@ func (b *historyBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, startedE
 }
 
 func (b *historyBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64,
-	startedEventID int64) *workflow.HistoryEvent {
-	event := b.newDecisionTaskTimedOutEvent(scheduleEventID, startedEventID)
+	startedEventID int64, timeoutType workflow.TimeoutType) *workflow.HistoryEvent {
+	event := b.newDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType)
 
 	return b.addEventToHistory(event)
 }
@@ -439,12 +439,12 @@ func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedE
 	return historyEvent
 }
 
-func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64) *workflow.HistoryEvent {
+func (b *historyBuilder) newDecisionTaskTimedOutEvent(scheduleEventID int64, startedEventID int64, timeoutType workflow.TimeoutType) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskTimedOut)
 	attributes := &workflow.DecisionTaskTimedOutEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
-	attributes.TimeoutType = common.TimeoutTypePtr(workflow.TimeoutTypeStartToClose)
+	attributes.TimeoutType = common.TimeoutTypePtr(timeoutType)
 	historyEvent.DecisionTaskTimedOutEventAttributes = attributes
 
 	return historyEvent

@@ -25,6 +25,7 @@ package matchingserviceserver
 
 import (
 	"context"
+
 	"github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"

@@ -112,32 +112,34 @@ type (
 
 	// WorkflowExecutionInfo describes a workflow execution
 	WorkflowExecutionInfo struct {
-		DomainID             string
-		WorkflowID           string
-		RunID                string
-		ParentDomainID       string
-		ParentWorkflowID     string
-		ParentRunID          string
-		InitiatedID          int64
-		CompletionEvent      []byte
-		TaskList             string
-		WorkflowTypeName     string
-		WorkflowTimeout      int32
-		DecisionTimeoutValue int32
-		ExecutionContext     []byte
-		State                int
-		CloseStatus          int
-		NextEventID          int64
-		LastProcessedEvent   int64
-		StartTimestamp       time.Time
-		LastUpdatedTimestamp time.Time
-		CreateRequestID      string
-		DecisionScheduleID   int64
-		DecisionStartedID    int64
-		DecisionRequestID    string
-		DecisionTimeout      int32
-		CancelRequested      bool
-		CancelRequestID      string
+		DomainID                     string
+		WorkflowID                   string
+		RunID                        string
+		ParentDomainID               string
+		ParentWorkflowID             string
+		ParentRunID                  string
+		InitiatedID                  int64
+		CompletionEvent              []byte
+		TaskList                     string
+		WorkflowTypeName             string
+		WorkflowTimeout              int32
+		DecisionTimeoutValue         int32
+		ExecutionContext             []byte
+		State                        int
+		CloseStatus                  int
+		NextEventID                  int64
+		LastProcessedEvent           int64
+		StartTimestamp               time.Time
+		LastUpdatedTimestamp         time.Time
+		CreateRequestID              string
+		DecisionScheduleID           int64
+		DecisionStartedID            int64
+		DecisionRequestID            string
+		DecisionTimeout              int32
+		CancelRequested              bool
+		CancelRequestID              string
+		StickyTaskList               string
+		StickyScheduleToStartTimeout int32
 	}
 
 	// TransferTaskInfo describes a transfer task
@@ -224,6 +226,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+		TimeoutType         int
 	}
 
 	// WorkflowTimeoutTask identifies a timeout task.

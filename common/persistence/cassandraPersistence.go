@@ -125,7 +125,9 @@ const (
 		`decision_request_id: ?, ` +
 		`decision_timeout: ?, ` +
 		`cancel_requested: ?, ` +
-		`cancel_request_id: ?` +
+		`cancel_request_id: ?, ` +
+		`sticky_task_list: ?, ` +
+		`sticky_schedule_to_start_timeout: ?` +
 		`}`
 
 	templateTransferTaskType = `{` +
@@ -893,6 +895,8 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		request.DecisionStartToCloseTimeout,
 		false,
 		"",
+		"", // sticky_task_list (no sticky tasklist for new workflow execution)
+		0,  // sticky_schedule_to_start_timeout
 		request.NextEventID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
@@ -1007,6 +1011,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.DecisionTimeout,
 		executionInfo.CancelRequested,
 		executionInfo.CancelRequestID,
+		executionInfo.StickyTaskList,
+		executionInfo.StickyScheduleToStartTimeout,
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
@@ -1678,6 +1684,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		switch task.GetType() {
 		case TaskTypeDecisionTimeout:
 			eventID = task.(*DecisionTimeoutTask).EventID
+			timeoutType = task.(*DecisionTimeoutTask).TimeoutType
 
 		case TaskTypeActivityTimeout:
 			eventID = task.(*ActivityTimeoutTask).EventID
@@ -1982,6 +1989,10 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.CancelRequested = v.(bool)
 		case "cancel_request_id":
 			info.CancelRequestID = v.(string)
+		case "sticky_task_list":
+			info.StickyTaskList = v.(string)
+		case "sticky_schedule_to_start_timeout":
+			info.StickyScheduleToStartTimeout = int32(v.(int))
 		}
 	}
 

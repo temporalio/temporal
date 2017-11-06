@@ -199,6 +199,9 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimer - Notify the processor about the new timer arrival.
 func (t *timerQueueProcessorImpl) NotifyNewTimer(timerTasks []persistence.Task) {
+	if len(timerTasks) == 0 {
+		return
+	}
 	t.metricsClient.AddCounter(metrics.TimerQueueProcessorScope, metrics.NewTimerCounter, int64(len(timerTasks)))
 
 	updatedMinTimer := false
@@ -742,15 +745,33 @@ Update_History_Loop:
 		}
 
 		scheduleNewDecision := false
-		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
-		if isRunning && msBuilder.isWorkflowExecutionRunning() {
-			// Add a decision task timeout event.
-			timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
-			if timeoutEvent == nil {
-				// Unable to add DecisionTaskTimedout event to history
-				return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskTimedout event to history."}
-			}
+		switch task.TimeoutType {
+		case int(workflow.TimeoutTypeStartToClose):
+			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
+			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
+			if isRunning && msBuilder.isWorkflowExecutionRunning() {
+				// Add a decision task timeout event.
+				timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
+				if timeoutEvent == nil {
+					// Unable to add DecisionTaskTimedout event to history
+					return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskTimedout event to history."}
+				}
 
+				scheduleNewDecision = true
+			}
+		case int(workflow.TimeoutTypeScheduleToStart):
+			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+			// decision schedule to start timeout only apply to sticky decision
+			// check if scheduled decision still pending and not started yet
+			if msBuilder.isStickyTaskListEnabled() &&
+				msBuilder.executionInfo.DecisionScheduleID == scheduleID &&
+				msBuilder.executionInfo.DecisionStartedID == emptyEventID {
+				// remove pending decision, and clear stickiness
+				msBuilder.executionInfo.StickyTaskList = ""
+				msBuilder.executionInfo.StickyScheduleToStartTimeout = 0
+				msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+			}
+			// reschedule decision, which will be on its original task list
 			scheduleNewDecision = true
 		}
 
@@ -830,6 +851,11 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 			TaskList:   *newDecisionEvent.DecisionTaskScheduledEventAttributes.TaskList.Name,
 			ScheduleID: *newDecisionEvent.EventId,
 		}}
+		if msBuilder.isStickyTaskListEnabled() {
+			tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
+			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(*newDecisionEvent.EventId, msBuilder.executionInfo.StickyScheduleToStartTimeout)
+			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+		}
 	}
 
 	if createDeletionTask {
@@ -855,6 +881,7 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 			t.Stop()
 		}
 	}
+	t.NotifyNewTimer(timerTasks)
 	return err
 }
 

@@ -26,9 +26,10 @@ package history
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
-	"strings"
 )
 
 type HistoryService_TerminateWorkflowExecution_Args struct {

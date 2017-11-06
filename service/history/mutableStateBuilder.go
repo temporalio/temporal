@@ -319,6 +319,10 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 	}
 }
 
+func (e *mutableStateBuilder) isStickyTaskListEnabled() bool {
+	return len(e.executionInfo.StickyTaskList) > 0
+}
+
 func (e *mutableStateBuilder) createNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent {
 	eventID := e.executionInfo.NextEventID
 	if e.HasInFlightDecisionTask() &&
@@ -698,6 +702,9 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(domainID string, 
 func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() (*workflow.HistoryEvent, *decisionInfo) {
 	// Tasklist and decision timeout should already be set from workflow execution started event
 	taskList := e.executionInfo.TaskList
+	if e.isStickyTaskListEnabled() {
+		taskList = e.executionInfo.StickyTaskList
+	}
 	startToCloseTimeoutSeconds := e.executionInfo.DecisionTimeoutValue
 	if e.HasPendingDecisionTask() {
 		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionDecisionTaskScheduled, e.GetNextEventID(), fmt.Sprintf(
@@ -765,7 +772,21 @@ func (e *mutableStateBuilder) AddDecisionTaskTimedOutEvent(scheduleEventID int64
 		return nil
 	}
 
-	event := e.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID)
+	event := e.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, startedEventID, workflow.TimeoutTypeStartToClose)
+
+	e.DeleteDecision()
+	return event
+}
+
+func (e *mutableStateBuilder) AddDecisionTaskScheduleToStartTimeoutEvent(scheduleEventID int64) *workflow.HistoryEvent {
+	if e.executionInfo.DecisionScheduleID != scheduleEventID || e.executionInfo.DecisionStartedID > 0 {
+		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionDecisionTaskTimedOut, e.GetNextEventID(),
+			fmt.Sprintf("{DecisionScheduleID: %v, DecisionStartedID: %v, ScheduleEventID: %v}",
+				e.executionInfo.DecisionScheduleID, e.executionInfo.DecisionStartedID, scheduleEventID))
+		return nil
+	}
+
+	event := e.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, workflow.TimeoutTypeScheduleToStart)
 
 	e.DeleteDecision()
 	return event

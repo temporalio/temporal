@@ -26,9 +26,10 @@ package matching
 import (
 	"bytes"
 	"fmt"
+	"strings"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
-	"strings"
 )
 
 type AddActivityTaskRequest struct {

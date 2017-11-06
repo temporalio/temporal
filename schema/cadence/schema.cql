@@ -13,32 +13,34 @@ CREATE TYPE shard (
 
 --- Workflow execution and mutable state ---
 CREATE TYPE workflow_execution (
-  domain_id              uuid,
-  workflow_id            text,
-  run_id                 uuid,
-  parent_domain_id       uuid,   -- Domain ID of parent workflow which started the workflow execution
-  parent_workflow_id     text,   -- ID of parent workflow which started the workflow execution
-  parent_run_id          uuid,   -- RunID of parent workflow which started the workflow execution
-  initiated_id           bigint, -- Initiated event ID of parent workflow which started this execution
-  completion_event       blob,   -- Completion event used to communicate result to parent workflow execution
-  task_list              text,
-  workflow_type_name     text,
-  workflow_timeout       int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
-  decision_task_timeout  int,
-  execution_context      blob,
-  state                  int,  -- enum WorkflowState {Created, Running, Completed}
-  close_status           int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
-  next_event_id          bigint,
-  last_processed_event   bigint,
-  start_time             timestamp,
-  last_updated_time      timestamp,
-  create_request_id      uuid,
-  decision_schedule_id   bigint,
-  decision_started_id    bigint,
-  decision_request_id    text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
-  decision_timeout       int,
-  cancel_requested       boolean,
-  cancel_request_id      text,
+  domain_id                        uuid,
+  workflow_id                      text,
+  run_id                           uuid,
+  parent_domain_id                 uuid,   -- Domain ID of parent workflow which started the workflow execution
+  parent_workflow_id               text,   -- ID of parent workflow which started the workflow execution
+  parent_run_id                    uuid,   -- RunID of parent workflow which started the workflow execution
+  initiated_id                     bigint, -- Initiated event ID of parent workflow which started this execution
+  completion_event                 blob,   -- Completion event used to communicate result to parent workflow execution
+  task_list                        text,
+  workflow_type_name               text,
+  workflow_timeout                 int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
+  decision_task_timeout            int,
+  execution_context                blob,
+  state                            int,  -- enum WorkflowState {Created, Running, Completed}
+  close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
+  next_event_id                    bigint,
+  last_processed_event             bigint,
+  start_time                       timestamp,
+  last_updated_time                timestamp,
+  create_request_id                uuid,
+  decision_schedule_id             bigint,
+  decision_started_id              bigint,
+  decision_request_id              text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
+  decision_timeout                 int,
+  cancel_requested                 boolean,
+  cancel_request_id                text,
+  sticky_task_list                 text,   -- sticky worker task list
+  sticky_schedule_to_start_timeout int,
 );
 
 -- TODO: Remove fields that are left over from activity and workflow tasks.

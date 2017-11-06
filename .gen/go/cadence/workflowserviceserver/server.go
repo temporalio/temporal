@@ -25,6 +25,7 @@ package workflowserviceserver
 
 import (
 	"context"
+
 	"github.com/uber/cadence/.gen/go/cadence"
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"

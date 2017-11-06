@@ -101,12 +101,10 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 
 	historyCache := newHistoryCache(s.mockShard, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
-	txProcessor := newTransferQueueProcessor(s.mockShard, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, historyCache, domainCache)
 	h := &historyEngineImpl{
 		shard:              s.mockShard,
 		historyMgr:         s.mockHistoryMgr,
 		executionManager:   s.mockExecutionMgr,
-		txProcessor:        txProcessor,
 		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
@@ -114,6 +112,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		domainCache:        domainCache,
 	}
+	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{})
 	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
 }

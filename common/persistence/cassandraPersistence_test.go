@@ -647,7 +647,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	tasks := []Task{&DecisionTimeoutTask{time.Now(), 1, 2}, &WorkflowTimeoutTask{time.Now(), 2}, &DeleteHistoryEventTask{time.Now(), 3}}
+	tasks := []Task{&DecisionTimeoutTask{time.Now(), 1, 2, int(gen.TimeoutTypeStartToClose)}, &WorkflowTimeoutTask{time.Now(), 2}, &DeleteHistoryEventTask{time.Now(), 3}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 

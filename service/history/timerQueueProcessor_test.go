@@ -73,11 +73,9 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	historyCache.disabled = true
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
-	txProcessor := newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{}, historyCache, domainCache)
 	s.engineImpl = &historyEngineImpl{
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
-		txProcessor:        txProcessor,
 		historyCache:       historyCache,
 		domainCache:        domainCache,
 		logger:             s.logger,
@@ -85,6 +83,8 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
+	s.engineImpl.txProcessor = newTransferQueueProcessor(s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{})
+
 }
 
 func (s *timerQueueProcessorSuite) TearDownSuite() {

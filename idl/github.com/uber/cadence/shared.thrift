@@ -696,11 +696,17 @@ struct PollForDecisionTaskResponse {
   80: optional WorkflowQuery query
 }
 
+struct StickyExecutionAttributes {
+  10: optional TaskList workerTaskList
+  20: optional i32 scheduleToStartTimeoutSeconds
+}
+
 struct RespondDecisionTaskCompletedRequest {
   10: optional binary taskToken
   20: optional list<Decision> decisions
   30: optional binary executionContext
   40: optional string identity
+  50: optional StickyExecutionAttributes stickyAttributes
 }
 
 struct PollForActivityTaskRequest {

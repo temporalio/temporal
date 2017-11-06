@@ -28,10 +28,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/thriftrw/wire"
 	"math"
 	"strconv"
 	"strings"
+
+	"go.uber.org/thriftrw/wire"
 )
 
 type ActivityTaskCancelRequestedEventAttributes struct {
@@ -11488,10 +11489,11 @@ func (v *RespondActivityTaskFailedRequest) GetIdentity() (o string) {
 }
 
 type RespondDecisionTaskCompletedRequest struct {
-	TaskToken        []byte      `json:"taskToken"`
-	Decisions        []*Decision `json:"decisions"`
-	ExecutionContext []byte      `json:"executionContext"`
-	Identity         *string     `json:"identity,omitempty"`
+	TaskToken        []byte                     `json:"taskToken"`
+	Decisions        []*Decision                `json:"decisions"`
+	ExecutionContext []byte                     `json:"executionContext"`
+	Identity         *string                    `json:"identity,omitempty"`
+	StickyAttributes *StickyExecutionAttributes `json:"stickyAttributes,omitempty"`
 }
 
 type _List_Decision_ValueList []*Decision
@@ -11526,7 +11528,7 @@ func (_List_Decision_ValueList) Close() {
 
 func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -11563,6 +11565,14 @@ func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
+	if v.StickyAttributes != nil {
+		w, err = v.StickyAttributes.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
@@ -11587,6 +11597,12 @@ func _List_Decision_Read(l wire.ValueList) ([]*Decision, error) {
 	})
 	l.Close()
 	return o, err
+}
+
+func _StickyExecutionAttributes_Read(w wire.Value) (*StickyExecutionAttributes, error) {
+	var v StickyExecutionAttributes
+	err := v.FromWire(w)
+	return &v, err
 }
 
 func (v *RespondDecisionTaskCompletedRequest) FromWire(w wire.Value) error {
@@ -11623,6 +11639,13 @@ func (v *RespondDecisionTaskCompletedRequest) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.StickyAttributes, err = _StickyExecutionAttributes_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -11632,7 +11655,7 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -11648,6 +11671,10 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 	}
 	if v.Identity != nil {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+	if v.StickyAttributes != nil {
+		fields[i] = fmt.Sprintf("StickyAttributes: %v", v.StickyAttributes)
 		i++
 	}
 	return fmt.Sprintf("RespondDecisionTaskCompletedRequest{%v}", strings.Join(fields[:i], ", "))
@@ -11677,6 +11704,9 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 		return false
 	}
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+	if !((v.StickyAttributes == nil && rhs.StickyAttributes == nil) || (v.StickyAttributes != nil && rhs.StickyAttributes != nil && v.StickyAttributes.Equals(rhs.StickyAttributes))) {
 		return false
 	}
 	return true
@@ -13819,6 +13849,96 @@ func (v *StartWorkflowExecutionResponse) Equals(rhs *StartWorkflowExecutionRespo
 func (v *StartWorkflowExecutionResponse) GetRunId() (o string) {
 	if v.RunId != nil {
 		return *v.RunId
+	}
+	return
+}
+
+type StickyExecutionAttributes struct {
+	WorkerTaskList                *TaskList `json:"workerTaskList,omitempty"`
+	ScheduleToStartTimeoutSeconds *int32    `json:"scheduleToStartTimeoutSeconds,omitempty"`
+}
+
+func (v *StickyExecutionAttributes) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.WorkerTaskList != nil {
+		w, err = v.WorkerTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.ScheduleToStartTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *StickyExecutionAttributes) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkerTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ScheduleToStartTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *StickyExecutionAttributes) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [2]string
+	i := 0
+	if v.WorkerTaskList != nil {
+		fields[i] = fmt.Sprintf("WorkerTaskList: %v", v.WorkerTaskList)
+		i++
+	}
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("ScheduleToStartTimeoutSeconds: %v", *(v.ScheduleToStartTimeoutSeconds))
+		i++
+	}
+	return fmt.Sprintf("StickyExecutionAttributes{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *StickyExecutionAttributes) Equals(rhs *StickyExecutionAttributes) bool {
+	if !((v.WorkerTaskList == nil && rhs.WorkerTaskList == nil) || (v.WorkerTaskList != nil && rhs.WorkerTaskList != nil && v.WorkerTaskList.Equals(rhs.WorkerTaskList))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ScheduleToStartTimeoutSeconds, rhs.ScheduleToStartTimeoutSeconds) {
+		return false
+	}
+	return true
+}
+
+func (v *StickyExecutionAttributes) GetScheduleToStartTimeoutSeconds() (o int32) {
+	if v.ScheduleToStartTimeoutSeconds != nil {
+		return *v.ScheduleToStartTimeoutSeconds
 	}
 	return
 }

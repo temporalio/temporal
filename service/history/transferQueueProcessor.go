@@ -61,6 +61,7 @@ type (
 		config            *Config
 		logger            bark.Logger
 		metricsClient     metrics.Client
+		historyService    *historyEngineImpl
 	}
 
 	// ackManager is created by transferQueueProcessor to keep track of the transfer queue ackLevel for the shard.
@@ -84,19 +85,20 @@ type (
 	}
 )
 
-func newTransferQueueProcessor(shard ShardContext, visibilityMgr persistence.VisibilityManager, matching matching.Client,
-	historyClient hc.Client, cache *historyCache, domainCache cache.DomainCache) transferQueueProcessor {
+func newTransferQueueProcessor(shard ShardContext, historyService *historyEngineImpl,
+	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
 	logger := shard.GetLogger()
 	config := shard.GetConfig()
 	processor := &transferQueueProcessorImpl{
+		historyService:    historyService,
 		shard:             shard,
 		executionManager:  executionManager,
 		matchingClient:    matching,
 		historyClient:     historyClient,
 		visibilityManager: visibilityMgr,
-		cache:             cache,
-		domainCache:       domainCache,
+		cache:             historyService.historyCache,
+		domainCache:       historyService.domainCache,
 		rateLimiter:       common.NewTokenBucket(config.TransferProcessorMaxPollRPS, common.NewRealTimeSource()),
 		appendCh:          make(chan struct{}, 1),
 		shutdownCh:        make(chan struct{}),
@@ -383,6 +385,10 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	timeout := mb.executionInfo.WorkflowTimeout
 	wfTypeName := mb.executionInfo.WorkflowTypeName
 	startTimestamp := mb.executionInfo.StartTimestamp
+	if mb.isStickyTaskListEnabled() {
+		taskList.Name = common.StringPtr(mb.executionInfo.StickyTaskList)
+		timeout = mb.executionInfo.StickyScheduleToStartTimeout
+	}
 	release()
 
 	err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
@@ -843,6 +849,7 @@ Update_History_Loop:
 		}
 
 		var transferTasks []persistence.Task
+		var timerTasks []persistence.Task
 		if err := action(msBuilder); err != nil {
 			return err
 		}
@@ -856,6 +863,15 @@ Update_History_Loop:
 					TaskList:   *newDecisionEvent.DecisionTaskScheduledEventAttributes.TaskList.Name,
 					ScheduleID: *newDecisionEvent.EventId,
 				})
+				if msBuilder.isStickyTaskListEnabled() {
+					lg := t.logger.WithFields(bark.Fields{
+						logging.TagWorkflowExecutionID: context.workflowExecution.WorkflowId,
+						logging.TagWorkflowRunID:       context.workflowExecution.RunId,
+					})
+					tBuilder := newTimerBuilder(t.shard.GetConfig(), lg, common.NewRealTimeSource())
+					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(*newDecisionEvent.EventId, msBuilder.executionInfo.StickyScheduleToStartTimeout)
+					timerTasks = []persistence.Task{stickyTaskTimeoutTimer}
+				}
 			}
 		}
 
@@ -867,12 +883,14 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
-		if err := context.updateWorkflowExecution(transferTasks, nil, transactionID); err != nil {
+		if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
 			return err
 		}
+
+		t.historyService.timerProcessor.NotifyNewTimer(timerTasks)
 
 		return nil
 	}

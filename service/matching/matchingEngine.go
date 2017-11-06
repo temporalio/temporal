@@ -188,8 +188,8 @@ func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
 func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
 	domainID := *addRequest.DomainUUID
 	taskListName := *addRequest.TaskList.Name
-	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v",
-		addRequest.TaskList.Name, addRequest.Execution.WorkflowId, addRequest.Execution.RunId)
+	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
+		addRequest.TaskList.GetName(), addRequest.Execution.GetWorkflowId(), addRequest.Execution.GetRunId(), addRequest.GetScheduleToStartTimeoutSeconds())
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	tlMgr, err := e.getTaskListManager(taskList)
 	if err != nil {

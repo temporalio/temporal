@@ -4,6 +4,7 @@
   "Description": "add workflow_timeout and buffered_events_list to mutable state",
   "SchemaUpdateCqlFiles": [
     "add_wf_timeout.cql",
-    "add_buffered_events.cql"
+    "add_buffered_events.cql",
+    "add_sticky_tasklist.cql"
   ]
 }

@@ -30,10 +30,12 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -90,8 +92,24 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
-	s.processor = newTransferQueueProcessor(s.ShardContext, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient,
-		historyCache, domainCache).(*transferQueueProcessorImpl)
+	h := &historyEngineImpl{
+		shard:              s.ShardContext,
+		historyMgr:         s.HistoryMgr,
+		historyCache:       historyCache,
+		domainCache:        domainCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
+	}
+
+	mockExecutionMgr := &mocks.ExecutionManager{}
+	txProcesser := newTransferQueueProcessor(s.ShardContext, h, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient).(*transferQueueProcessorImpl)
+	timerProcessor := newTimerQueueProcessor(s.ShardContext, h, mockExecutionMgr, s.logger)
+	s.processor = txProcesser
+	h.txProcessor = txProcesser
+	h.timerProcessor = timerProcessor
+
 }
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {

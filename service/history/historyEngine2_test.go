@@ -112,12 +112,10 @@ func (s *engine2Suite) SetupTest() {
 
 	historyCache := newHistoryCache(mockShard, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
-	txProcessor := newTransferQueueProcessor(mockShard, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, historyCache, domainCache)
 	h := &historyEngineImpl{
 		shard:              mockShard,
 		executionManager:   s.mockExecutionMgr,
 		historyMgr:         s.mockHistoryMgr,
-		txProcessor:        txProcessor,
 		historyCache:       historyCache,
 		domainCache:        domainCache,
 		logger:             s.logger,
@@ -125,6 +123,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
+	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
 	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockExecutionMgr, s.logger)
 	s.historyEngine = h
 }
