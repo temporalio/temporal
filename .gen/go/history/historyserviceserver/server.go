@@ -25,7 +25,6 @@ package historyserviceserver
 
 import (
 	"context"
-
 	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"

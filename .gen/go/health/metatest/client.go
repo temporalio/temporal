@@ -25,7 +25,6 @@ package metatest
 
 import (
 	"context"
-
 	"github.com/golang/mock/gomock"
 	"github.com/uber/cadence/.gen/go/health"
 	"github.com/uber/cadence/.gen/go/health/metaclient"

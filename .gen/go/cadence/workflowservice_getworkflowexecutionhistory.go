@@ -26,10 +26,9 @@ package cadence
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
+	"strings"
 )
 
 type WorkflowService_GetWorkflowExecutionHistory_Args struct {

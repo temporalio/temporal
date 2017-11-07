@@ -26,10 +26,9 @@ package matching
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
+	"strings"
 )
 
 type MatchingService_PollForActivityTask_Args struct {

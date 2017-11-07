@@ -26,9 +26,8 @@ package health
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"go.uber.org/thriftrw/wire"
+	"strings"
 )
 
 type HealthStatus struct {

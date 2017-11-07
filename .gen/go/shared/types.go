@@ -28,11 +28,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/thriftrw/wire"
 	"math"
 	"strconv"
 	"strings"
-
-	"go.uber.org/thriftrw/wire"
 )
 
 type ActivityTaskCancelRequestedEventAttributes struct {

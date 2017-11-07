@@ -25,7 +25,6 @@ package matchingservicetest
 
 import (
 	"context"
-
 	"github.com/golang/mock/gomock"
 	"github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
