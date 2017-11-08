@@ -748,8 +748,8 @@ Update_History_Loop:
 		switch task.TimeoutType {
 		case int(workflow.TimeoutTypeStartToClose):
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
-			di, isRunning := msBuilder.GetPendingDecision(scheduleID)
-			if isRunning && msBuilder.isWorkflowExecutionRunning() {
+			di, isPending := msBuilder.GetPendingDecision(scheduleID)
+			if isPending && msBuilder.isWorkflowExecutionRunning() {
 				// Add a decision task timeout event.
 				timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 				if timeoutEvent == nil {
@@ -763,16 +763,20 @@ Update_History_Loop:
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
-			if msBuilder.isStickyTaskListEnabled() &&
-				msBuilder.executionInfo.DecisionScheduleID == scheduleID &&
-				msBuilder.executionInfo.DecisionStartedID == emptyEventID {
+			di, isPending := msBuilder.GetPendingDecision(scheduleID)
+			if isPending && di.StartedID == emptyEventID && msBuilder.isStickyTaskListEnabled() {
 				// remove pending decision, and clear stickiness
 				msBuilder.executionInfo.StickyTaskList = ""
 				msBuilder.executionInfo.StickyScheduleToStartTimeout = 0
-				msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
+				if timeoutEvent == nil {
+					// Unable to add DecisionTaskTimedout event to history
+					return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskScheduleToStartTimeout event to history."}
+				}
+
+				// reschedule decision, which will be on its original task list
+				scheduleNewDecision = true
 			}
-			// reschedule decision, which will be on its original task list
-			scheduleNewDecision = true
 		}
 
 		if scheduleNewDecision {
