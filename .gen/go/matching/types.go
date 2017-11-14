@@ -872,12 +872,13 @@ type PollForDecisionTaskResponse struct {
 	WorkflowType           *shared.WorkflowType      `json:"workflowType,omitempty"`
 	PreviousStartedEventId *int64                    `json:"previousStartedEventId,omitempty"`
 	StartedEventId         *int64                    `json:"startedEventId,omitempty"`
+	StickyExecutionEnabled *bool                     `json:"stickyExecutionEnabled,omitempty"`
 	Query                  *shared.WorkflowQuery     `json:"query,omitempty"`
 }
 
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -920,6 +921,14 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.StickyExecutionEnabled != nil {
+		w, err = wire.NewValueBool(*(v.StickyExecutionEnabled)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 55, Value: w}
 		i++
 	}
 	if v.Query != nil {
@@ -988,6 +997,15 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 55:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.StickyExecutionEnabled = &x
+				if err != nil {
+					return err
+				}
+			}
 		case 60:
 			if field.Value.Type() == wire.TStruct {
 				v.Query, err = _WorkflowQuery_Read(field.Value)
@@ -1004,7 +1022,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -1026,11 +1044,24 @@ func (v *PollForDecisionTaskResponse) String() string {
 		fields[i] = fmt.Sprintf("StartedEventId: %v", *(v.StartedEventId))
 		i++
 	}
+	if v.StickyExecutionEnabled != nil {
+		fields[i] = fmt.Sprintf("StickyExecutionEnabled: %v", *(v.StickyExecutionEnabled))
+		i++
+	}
 	if v.Query != nil {
 		fields[i] = fmt.Sprintf("Query: %v", v.Query)
 		i++
 	}
 	return fmt.Sprintf("PollForDecisionTaskResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Bool_EqualsPtr(lhs, rhs *bool) bool {
+	if lhs != nil && rhs != nil {
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) bool {
@@ -1049,6 +1080,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !_I64_EqualsPtr(v.StartedEventId, rhs.StartedEventId) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.StickyExecutionEnabled, rhs.StickyExecutionEnabled) {
+		return false
+	}
 	if !((v.Query == nil && rhs.Query == nil) || (v.Query != nil && rhs.Query != nil && v.Query.Equals(rhs.Query))) {
 		return false
 	}
@@ -1065,6 +1099,13 @@ func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
 func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
 	if v.StartedEventId != nil {
 		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *PollForDecisionTaskResponse) GetStickyExecutionEnabled() (o bool) {
+	if v.StickyExecutionEnabled != nil {
+		return *v.StickyExecutionEnabled
 	}
 	return
 }

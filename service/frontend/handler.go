@@ -391,9 +391,14 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	if matchingResp.WorkflowExecution != nil {
 		// Non-empty response. Get the history
 		nextEventID := common.Int64Default(matchingResp.StartedEventId) + 1
+		firstEventID := common.FirstEventID
+		if matchingResp.GetStickyExecutionEnabled() {
+			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
+		}
 		history, persistenceToken, err = wh.getHistory(
 			info.ID,
 			*matchingResp.WorkflowExecution,
+			firstEventID,
 			nextEventID,
 			wh.config.DefaultHistoryMaxPageSize,
 			nil)
@@ -787,7 +792,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		RunId:      common.StringPtr(token.RunID),
 	}
 	history, persistenceToken, err :=
-		wh.getHistory(info.ID, we, token.NextEventID, *getRequest.MaximumPageSize, token.PersistenceToken)
+		wh.getHistory(info.ID, we, common.FirstEventID, token.NextEventID, *getRequest.MaximumPageSize, token.PersistenceToken)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1138,7 +1143,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 		matchingRequest.TaskList = response.Tasklist
 	} else {
 		// Get the TaskList from history (first event)
-		history, _, err := wh.getHistory(domainInfo.ID, *queryRequest.Execution, 2, 1, nil)
+		history, _, err := wh.getHistory(domainInfo.ID, *queryRequest.Execution, common.FirstEventID, common.FirstEventID+1, 1, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1163,7 +1168,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 }
 
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
-	nextEventID int64, pageSize int32, nextPageToken []byte) (*gen.History, []byte, error) {
+	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte) (*gen.History, []byte, error) {
 
 	if nextPageToken == nil {
 		nextPageToken = []byte{}
@@ -1173,6 +1178,7 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 	response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
 		Execution:     execution,
+		FirstEventID:  firstEventID,
 		NextEventID:   nextEventID,
 		PageSize:      int(pageSize),
 		NextPageToken: nextPageToken,

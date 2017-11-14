@@ -1565,6 +1565,7 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 		response.PreviousStartedEventId = common.Int64Ptr(msBuilder.previousDecisionStartedEvent())
 	}
 	response.StartedEventId = common.Int64Ptr(startedEventID)
+	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.isStickyTaskListEnabled())
 
 	return response
 }

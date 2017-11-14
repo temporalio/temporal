@@ -488,6 +488,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
 	response.StartedEventId = historyResponse.StartedEventId
+	response.StickyExecutionEnabled = historyResponse.StickyExecutionEnabled
 
 	return response
 }

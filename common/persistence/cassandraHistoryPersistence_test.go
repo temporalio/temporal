@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"fmt"
 	"github.com/pborman/uuid"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -104,13 +105,63 @@ func (s *historyPersistenceSuite) TestGetHistoryEvents() {
 	err0 := s.AppendHistoryEvents(domainID, workflowExecution, 1, 1, 1, serializedHistory, false)
 	s.Nil(err0)
 
-	history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 2, 10, nil)
+	history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 0, 2, 10, nil)
 	s.Nil(err1)
 	s.Equal([]byte{}, token)
 	s.Equal(1, len(history))
 	s.Equal(1, history[0].Version)
 	s.Equal(common.EncodingTypeJSON, history[0].EncodingType)
 	s.Equal(events, history[0].Data)
+}
+
+func (s *historyPersistenceSuite) TestGetHistoryEventsCompatibility() {
+	domainID := "373de9d6-e41e-42d4-bee9-9e06968e4d0d"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-history-events-compatibility-test"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	events := []*SerializedHistoryEventBatch{
+		NewSerializedHistoryEventBatch([]byte("event1;event2"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event3"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event4;event5"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event6"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event7"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event8;event9"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event10"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event11;event12"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event13"), common.EncodingTypeGob, 1),
+		NewSerializedHistoryEventBatch([]byte("event14"), common.EncodingTypeGob, 1),
+	}
+	for i := 0; i < 10; i++ {
+		err0 := s.AppendHistoryEvents(domainID, workflowExecution, int64(i), 1, int64(i), events[i], false)
+		s.Nil(err0)
+	}
+
+	var firstEventID int64
+	for firstEventID = 0; firstEventID < 10; firstEventID++ {
+
+		var eventsResult []SerializedHistoryEventBatch
+		var nexttoken []byte
+		for {
+			fmt.Println(int(firstEventID))
+			gotHistoryList, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, firstEventID, 10, 3, nexttoken)
+			s.Nil(err1)
+			eventsResult = append(eventsResult, gotHistoryList...)
+			if len(token) == 0 {
+				break
+			}
+			nexttoken = token
+		}
+
+		s.Equal(len(events)-int(firstEventID), len(eventsResult))
+		for i := 0; i < len(eventsResult); i++ {
+			var eventsIndex = i + int(firstEventID)
+			s.Equal(events[eventsIndex].Data, eventsResult[i].Data)
+			s.Equal(events[eventsIndex].Version, eventsResult[i].Version)
+			s.Equal(events[eventsIndex].EncodingType, eventsResult[i].EncodingType)
+		}
+	}
 }
 
 func (s *historyPersistenceSuite) TestDeleteHistoryEvents() {
@@ -137,7 +188,7 @@ func (s *historyPersistenceSuite) TestDeleteHistoryEvents() {
 		s.Nil(err0)
 	}
 
-	gotHistoryList, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 10, 11, nil)
+	gotHistoryList, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 0, 10, 11, nil)
 	s.Nil(err1)
 	s.Equal([]byte{}, token)
 	s.Equal(len(events), len(gotHistoryList))
@@ -150,7 +201,7 @@ func (s *historyPersistenceSuite) TestDeleteHistoryEvents() {
 	err2 := s.DeleteWorkflowExecutionHistory(domainID, workflowExecution)
 	s.Nil(err2)
 
-	data1, token1, err3 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 10, 11, nil)
+	data1, token1, err3 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 0, 10, 11, nil)
 	s.NotNil(err3)
 	s.IsType(&gen.EntityNotExistsError{}, err3)
 	s.Nil(token1)
@@ -175,7 +226,7 @@ func (s *historyPersistenceSuite) TestAppendAndGet() {
 		err0 := s.AppendHistoryEvents(domainID, workflowExecution, int64(i), 1, int64(i), historyList[i], false)
 		s.Nil(err0)
 
-		gotHistoryList, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 10, 11, nil)
+		gotHistoryList, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 0, 10, 11, nil)
 		s.Nil(err1)
 		s.Equal([]byte{}, token)
 		s.Equal(i+1, len(gotHistoryList))
@@ -203,11 +254,12 @@ func (s *historyPersistenceSuite) AppendHistoryEvents(domainID string, workflowE
 }
 
 func (s *historyPersistenceSuite) GetWorkflowExecutionHistory(domainID string, workflowExecution gen.WorkflowExecution,
-	nextEventID int64, pageSize int, token []byte) ([]SerializedHistoryEventBatch, []byte, error) {
+	firstEventID, nextEventID int64, pageSize int, token []byte) ([]SerializedHistoryEventBatch, []byte, error) {
 
 	response, err := s.HistoryMgr.GetWorkflowExecutionHistory(&GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
 		Execution:     workflowExecution,
+		FirstEventID:  firstEventID,
 		NextEventID:   nextEventID,
 		PageSize:      pageSize,
 		NextPageToken: token,

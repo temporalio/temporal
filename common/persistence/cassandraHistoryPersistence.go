@@ -44,6 +44,7 @@ const (
 		`WHERE domain_id = ? ` +
 		`AND workflow_id = ? ` +
 		`AND run_id = ? ` +
+		`AND first_event_id >= ? ` +
 		`AND first_event_id < ?`
 
 	templateDeleteWorkflowExecutionHistory = `DELETE FROM events ` +
@@ -147,6 +148,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 		request.DomainID,
 		*execution.WorkflowId,
 		*execution.RunId,
+		request.FirstEventID,
 		request.NextEventID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -175,7 +177,9 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 		}
 	}
 
-	if !found {
+	if !found && len(request.NextPageToken) == 0 {
+		// adding the check of request next token being not nil, since
+		// there can be case when found == false at the very end of pagination.
 		return nil, &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("Workflow execution history not found.  WorkflowId: %v, RunId: %v",
 				*execution.WorkflowId, *execution.RunId),
