@@ -35,7 +35,7 @@ brew install cassandra
 
 * Start the service:
 ```bash
-./cadence
+./cadence start
 ```
 
 ### Using Docker
