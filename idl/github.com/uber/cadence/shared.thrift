@@ -191,6 +191,13 @@ struct WorkflowExecutionInfo {
   60: optional i64 (js.type = "Long") historyLength
 }
 
+struct WorkflowExecutionConfiguration {
+  10: optional TaskList taskList
+  20: optional i32 executionStartToCloseTimeoutSeconds
+  30: optional i32 taskStartToCloseTimeoutSeconds
+  40: optional ChildPolicy childPolicy
+}
+
 struct ScheduleActivityTaskDecisionAttributes {
   10: optional string activityId
   20: optional ActivityType activityType
@@ -841,4 +848,14 @@ struct RespondQueryTaskCompletedRequest {
   20: optional QueryTaskCompletedType completedType
   30: optional binary queryResult
   40: optional string errorMessage
+}
+
+struct DescribeWorkflowExecutionRequest {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+}
+
+struct DescribeWorkflowExecutionResponse {
+  10: optional WorkflowExecutionConfiguration executionConfiguration
+  20: optional WorkflowExecutionInfo workflowExecutionInfo
 }

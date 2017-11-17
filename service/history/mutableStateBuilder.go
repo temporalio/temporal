@@ -351,6 +351,17 @@ func (e *mutableStateBuilder) getWorkflowType() *workflow.WorkflowType {
 	return wType
 }
 
+func (e *mutableStateBuilder) getLastUpdatedTimestamp() int64 {
+	lastUpdated := e.executionInfo.LastUpdatedTimestamp.UnixNano()
+	if e.executionInfo.StartTimestamp.UnixNano() >= lastUpdated {
+		// This could happen due to clock skews
+		// ensure that the lastUpdatedTimestamp is always greater than the StartTimestamp
+		lastUpdated = e.executionInfo.StartTimestamp.UnixNano() + 1
+	}
+
+	return lastUpdated
+}
+
 func (e *mutableStateBuilder) previousDecisionStartedEvent() int64 {
 	return e.executionInfo.LastProcessedEvent
 }

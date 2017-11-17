@@ -175,6 +175,8 @@ const (
 	HistoryClientRespondActivityTaskCanceledScope
 	// HistoryClientGetWorkflowExecutionNextEventIDScope tracks RPC calls to history service
 	HistoryClientGetWorkflowExecutionNextEventIDScope
+	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
+	HistoryClientDescribeWorkflowExecutionScope
 	// HistoryClientRecordDecisionTaskStartedScope tracks RPC calls to history service
 	HistoryClientRecordDecisionTaskStartedScope
 	// HistoryClientRecordActivityTaskStartedScope tracks RPC calls to history service
@@ -249,6 +251,8 @@ const (
 	FrontendDeprecateDomainScope
 	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
 	FrontendQueryWorkflowScope
+	// FrontendDescribeWorkflowExecutionScope is the metric scope for frontend.DescribeWorkflowExecution
+	FrontendDescribeWorkflowExecutionScope
 
 	NumFrontendScopes
 )
@@ -269,6 +273,8 @@ const (
 	HistoryRespondActivityTaskCanceledScope
 	// HistoryGetWorkflowExecutionNextEventIDScope tracks GetWorkflowExecutionHistory API calls received by service
 	HistoryGetWorkflowExecutionNextEventIDScope
+	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
+	HistoryDescribeWorkflowExecutionScope
 	// HistoryRecordDecisionTaskStartedScope tracks RecordDecisionTaskStarted API calls received by service
 	HistoryRecordDecisionTaskStartedScope
 	// HistoryRecordActivityTaskStartedScope tracks RecordActivityTaskStarted API calls received by service
@@ -291,8 +297,8 @@ const (
 	TransferTaskActivityScope
 	// TransferTaskDecisionScope is the scope used for decision task processing by transfer queue processor
 	TransferTaskDecisionScope
-	// TransferTaskDeleteExecutionScope is the scope used for delete execution task processing by transfer queue processor
-	TransferTaskDeleteExecutionScope
+	// TransferTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
+	TransferTaskCloseExecutionScope
 	// TransferTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
 	TransferTaskCancelExecutionScope
 	// TransferTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
@@ -372,6 +378,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRespondActivityTaskFailedScope:       {operation: "HistoryClientRespondActivityTaskFailed"},
 		HistoryClientRespondActivityTaskCanceledScope:     {operation: "HistoryClientRespondActivityTaskCanceled"},
 		HistoryClientGetWorkflowExecutionNextEventIDScope: {operation: "HistoryClientGetWorkflowExecutionNextEventId"},
+		HistoryClientDescribeWorkflowExecutionScope:       {operation: "HistoryClientDescribeWorkflowExecution"},
 		HistoryClientRecordDecisionTaskStartedScope:       {operation: "HistoryClientRecordDecisionTaskStarted"},
 		HistoryClientRecordActivityTaskStartedScope:       {operation: "HistoryClientRecordActivityTaskStarted"},
 		HistoryClientRequestCancelWorkflowExecutionScope:  {operation: "HistoryClientRequestCancelWorkflowExecution"},
@@ -409,6 +416,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendUpdateDomainScope:                   {operation: "UpdateDomain"},
 		FrontendDeprecateDomainScope:                {operation: "DeprecateDomain"},
 		FrontendQueryWorkflowScope:                  {operation: "QueryWorkflow"},
+		FrontendDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
 	},
 	// History Scope Names
 	History: {
@@ -418,7 +426,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRespondActivityTaskCompletedScope:    {operation: "RespondActivityTaskCompleted"},
 		HistoryRespondActivityTaskFailedScope:       {operation: "RespondActivityTaskFailed"},
 		HistoryRespondActivityTaskCanceledScope:     {operation: "RespondActivityTaskCanceled"},
-		HistoryGetWorkflowExecutionNextEventIDScope: {operation: "GetWorkflowExecutionNextEventIDScope"},
+		HistoryGetWorkflowExecutionNextEventIDScope: {operation: "GetWorkflowExecutionNextEventID"},
+		HistoryDescribeWorkflowExecutionScope:       {operation: "DescribeWorkflowExecution"},
 		HistoryRecordDecisionTaskStartedScope:       {operation: "RecordDecisionTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:       {operation: "RecordActivityTaskStarted"},
 		HistorySignalWorkflowExecutionScope:         {operation: "SignalWorkflowExecution"},
@@ -430,7 +439,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
 		TransferTaskActivityScope:                   {operation: "TransferTaskActivity"},
 		TransferTaskDecisionScope:                   {operation: "TransferTaskDecision"},
-		TransferTaskDeleteExecutionScope:            {operation: "TransferTaskDeleteExecution"},
+		TransferTaskCloseExecutionScope:             {operation: "TransferTaskCloseExecution"},
 		TransferTaskCancelExecutionScope:            {operation: "TransferTaskCancelExecution"},
 		TransferTaskStartChildExecutionScope:        {operation: "TransferTaskStartChildExecution"},
 		TimerQueueProcessorScope:                    {operation: "TimerQueueProcessor"},

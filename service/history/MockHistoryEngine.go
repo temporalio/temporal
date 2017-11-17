@@ -85,6 +85,29 @@ func (_m *MockHistoryEngine) GetWorkflowExecutionNextEventID(request *gohistory.
 	return r0, r1
 }
 
+// DescribeWorkflowExecution is mock implementation for DescribeWorkflowExecution of HistoryEngine
+func (_m *MockHistoryEngine) DescribeWorkflowExecution(request *gohistory.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *shared.DescribeWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.DescribeWorkflowExecutionRequest) *shared.DescribeWorkflowExecutionResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.DescribeWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*gohistory.DescribeWorkflowExecutionRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RecordDecisionTaskStarted is mock implementation for RecordDecisionTaskStarted of HistoryEngine
 func (_m *MockHistoryEngine) RecordDecisionTaskStarted(request *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 	ret := _m.Called(request)

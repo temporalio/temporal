@@ -286,4 +286,14 @@ service WorkflowService {
 	  4: shared.QueryFailedError queryFailedError,
 	)
 
+  /**
+  * DescribeWorkflowExecution returns information about the specified workflow execution.
+  **/
+  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: shared.DescribeWorkflowExecutionRequest describeRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
 }

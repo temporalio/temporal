@@ -126,6 +126,39 @@ func (mr *_MockClientRecorder) DescribeDomain(
 	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeDomain", args...)
 }
 
+// DescribeWorkflowExecution responds to a DescribeWorkflowExecution call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().DescribeWorkflowExecution(gomock.Any(), ...).Return(...)
+// 	... := client.DescribeWorkflowExecution(...)
+func (m *MockClient) DescribeWorkflowExecution(
+	ctx context.Context,
+	_DescribeRequest *shared.DescribeWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeWorkflowExecutionResponse, err error) {
+
+	args := []interface{}{ctx, _DescribeRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "DescribeWorkflowExecution", args...)
+	success, _ = ret[i].(*shared.DescribeWorkflowExecutionResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) DescribeWorkflowExecution(
+	ctx interface{},
+	_DescribeRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _DescribeRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeWorkflowExecution", args...)
+}
+
 // GetWorkflowExecutionHistory responds to a GetWorkflowExecutionHistory call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

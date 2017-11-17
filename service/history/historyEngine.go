@@ -313,6 +313,51 @@ func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
 	return result, nil
 }
 
+// DescribeWorkflowExecution returns information about the specified workflow execution.
+func (e *historyEngineImpl) DescribeWorkflowExecution(
+	request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error) {
+	domainID, err := getDomainUUID(request.DomainUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	execution := *request.Request.Execution
+
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	if err0 != nil {
+		return nil, err0
+	}
+	defer release()
+
+	msBuilder, err1 := context.loadWorkflowExecution()
+	if err1 != nil {
+		return nil, err1
+	}
+
+	result := &workflow.DescribeWorkflowExecutionResponse{
+		ExecutionConfiguration: &workflow.WorkflowExecutionConfiguration{
+			TaskList: &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.TaskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(msBuilder.executionInfo.WorkflowTimeout),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(msBuilder.executionInfo.DecisionTimeoutValue),
+			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
+		},
+		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
+			Execution:     request.Request.Execution,
+			Type:          &workflow.WorkflowType{Name: common.StringPtr(msBuilder.executionInfo.WorkflowTypeName)},
+			StartTime:     common.Int64Ptr(msBuilder.executionInfo.StartTimestamp.UnixNano()),
+			HistoryLength: common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
+		},
+	}
+	if msBuilder.executionInfo.State == persistence.WorkflowStateCompleted {
+		// for closed workflow
+		closeStatus := getWorkflowExecutionCloseStatus(msBuilder.executionInfo.CloseStatus)
+		result.WorkflowExecutionInfo.CloseStatus = &closeStatus
+		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(msBuilder.getLastUpdatedTimestamp())
+	}
+
+	return result, nil
+}
+
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
 	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
 	domainID, err := getDomainUUID(request.DomainUUID)
@@ -1539,8 +1584,8 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
 
-	// Create a transfer task to delete workflow execution
-	deleteTask := &persistence.DeleteExecutionTask{}
+	// Create a transfer task to close workflow execution
+	closeTask := &persistence.CloseExecutionTask{}
 
 	// Generate a timer task to cleanup history events for this workflow execution
 	var retentionInDays int32
@@ -1554,7 +1599,7 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 	}
 	cleanupTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
 
-	return deleteTask, cleanupTask, nil
+	return closeTask, cleanupTask, nil
 }
 
 func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder *mutableStateBuilder,

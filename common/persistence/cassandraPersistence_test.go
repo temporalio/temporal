@@ -459,7 +459,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(domainID, task3.DomainID)
 	s.Equal(*workflowExecution.WorkflowId, task3.WorkflowID)
 	s.Equal(*workflowExecution.RunId, task3.RunID)
-	s.Equal(TransferTaskTypeDeleteExecution, task3.TaskType)
+	s.Equal(TransferTaskTypeCloseExecution, task3.TaskType)
 
 	err8 := s.DeleteWorkflowExecution(info1)
 	s.Nil(err8)

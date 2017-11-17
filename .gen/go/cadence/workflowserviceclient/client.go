@@ -48,6 +48,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeDomainResponse, error)
 
+	DescribeWorkflowExecution(
+		ctx context.Context,
+		DescribeRequest *shared.DescribeWorkflowExecutionRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeWorkflowExecutionResponse, error)
+
 	GetWorkflowExecutionHistory(
 		ctx context.Context,
 		GetRequest *shared.GetWorkflowExecutionHistoryRequest,
@@ -224,6 +230,29 @@ func (c client) DescribeDomain(
 	}
 
 	success, err = cadence.WorkflowService_DescribeDomain_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) DescribeWorkflowExecution(
+	ctx context.Context,
+	_DescribeRequest *shared.DescribeWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeWorkflowExecutionResponse, err error) {
+
+	args := cadence.WorkflowService_DescribeWorkflowExecution_Helper.Args(_DescribeRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_DescribeWorkflowExecution_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
 	return
 }
 

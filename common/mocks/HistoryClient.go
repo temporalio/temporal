@@ -54,6 +54,29 @@ func (_m *HistoryClient) GetWorkflowExecutionNextEventID(ctx context.Context, ge
 	return r0, r1
 }
 
+// DescribeWorkflowExecution provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) DescribeWorkflowExecution(ctx context.Context, request *history.DescribeWorkflowExecutionRequest, opts ...yarpc.CallOption) (*shared.DescribeWorkflowExecutionResponse, error) {
+	ret := _m.Called(ctx, request)
+
+	var r0 *shared.DescribeWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *history.DescribeWorkflowExecutionRequest) *shared.DescribeWorkflowExecutionResponse); ok {
+		r0 = rf(ctx, request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.DescribeWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *history.DescribeWorkflowExecutionRequest) error); ok {
+		r1 = rf(ctx, request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RecordActivityTaskHeartbeat provides a mock function with given fields: ctx, heartbeatRequest
 func (_m *HistoryClient) RecordActivityTaskHeartbeat(ctx context.Context, heartbeatRequest *history.RecordActivityTaskHeartbeatRequest, opts ...yarpc.CallOption) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	ret := _m.Called(ctx, heartbeatRequest)

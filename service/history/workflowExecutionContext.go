@@ -236,19 +236,6 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	return err2
 }
 
-func (c *workflowExecutionContext) deleteWorkflowExecution() error {
-	err := c.deleteWorkflowExecutionWithRetry(&persistence.DeleteWorkflowExecutionRequest{
-		ExecutionInfo: c.msBuilder.executionInfo,
-	})
-	if err != nil && common.IsPersistenceTransientError(err) {
-		// Log the error for debugging.  Transfer queue will keep on retrying on the error unless it can delete execution
-		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationDeleteWorkflowExecution, err,
-			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
-	}
-
-	return err
-}
-
 func (c *workflowExecutionContext) getWorkflowExecutionWithRetry(
 	request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
 	var response *persistence.GetWorkflowExecutionResponse

@@ -1170,6 +1170,41 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	return matchingResp, nil
 }
 
+// DescribeWorkflowExecution returns information about the specified workflow execution.
+func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, request *gen.DescribeWorkflowExecutionRequest) (*gen.DescribeWorkflowExecutionResponse, error) {
+
+	scope := metrics.FrontendDescribeWorkflowExecutionScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if request.Domain == nil {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	domainInfo, _, err := wh.domainCache.GetDomain(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if err := wh.validateExecution(request.Execution, scope); err != nil {
+		return nil, err
+	}
+
+	response, err := wh.history.DescribeWorkflowExecution(ctx, &h.DescribeWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainInfo.ID),
+		Request:    request,
+	})
+
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return response, nil
+}
+
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
 	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte) (*gen.History, []byte, error) {
 

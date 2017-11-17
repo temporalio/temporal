@@ -234,7 +234,7 @@ workerPump:
 						},
 					)).Once().Return(nil)
 				}
-			} else if task.TaskType == persistence.TransferTaskTypeDeleteExecution {
+			} else if task.TaskType == persistence.TransferTaskTypeCloseExecution {
 				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(&persistence.GetDomainResponse{
 					Config: &persistence.DomainConfig{
 						Retention: 1,
@@ -293,7 +293,7 @@ workerPump:
 				if task.ScheduleID == firstEventID+1 {
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
-			} else if task.TaskType == persistence.TransferTaskTypeDeleteExecution {
+			} else if task.TaskType == persistence.TransferTaskTypeCloseExecution {
 				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(nil, &workflow.EntityNotExistsError{})
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
 			}

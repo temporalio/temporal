@@ -36,6 +36,8 @@ type (
 			error)
 		GetWorkflowExecutionNextEventID(
 			request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error)
+		DescribeWorkflowExecution(
+			request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
 		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
 		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
 		RespondDecisionTaskCompleted(request *h.RespondDecisionTaskCompletedRequest) error

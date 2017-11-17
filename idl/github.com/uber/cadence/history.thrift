@@ -131,6 +131,11 @@ struct ScheduleDecisionTaskRequest {
   20: optional shared.WorkflowExecution workflowExecution
 }
 
+struct DescribeWorkflowExecutionRequest {
+  10: optional string domainUUID
+  20: optional shared.DescribeWorkflowExecutionRequest request
+}
+
 /**
 * RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
 * execution which started it.  When a child execution is completed it creates this request and calls the
@@ -345,4 +350,16 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
     )
+
+  /**
+  * DescribeWorkflowExecution returns information about the specified workflow execution.
+  **/
+  shared.DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest describeRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
 }

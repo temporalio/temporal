@@ -703,8 +703,21 @@ func (t *timerQueueProcessorImpl) processDeleteHistoryEvent(task *persistence.Ti
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskDeleteHistoryEvent, metrics.TaskLatency)
 	defer sw.Stop()
 
-	domainID, workflowExecution := getDomainIDAndWorkflowExecution(task)
 	op := func() error {
+		return t.executionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
+			DomainID:   task.DomainID,
+			WorkflowID: task.WorkflowID,
+			RunID:      task.RunID,
+		})
+	}
+
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	domainID, workflowExecution := getDomainIDAndWorkflowExecution(task)
+	op = func() error {
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{
 				DomainID:  domainID,

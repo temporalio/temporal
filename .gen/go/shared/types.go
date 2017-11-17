@@ -5094,6 +5094,189 @@ func (v *DescribeDomainResponse) Equals(rhs *DescribeDomainResponse) bool {
 	return true
 }
 
+type DescribeWorkflowExecutionRequest struct {
+	Domain    *string            `json:"domain,omitempty"`
+	Execution *WorkflowExecution `json:"execution,omitempty"`
+}
+
+func (v *DescribeWorkflowExecutionRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *DescribeWorkflowExecutionRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *DescribeWorkflowExecutionRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [2]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+	return fmt.Sprintf("DescribeWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *DescribeWorkflowExecutionRequest) Equals(rhs *DescribeWorkflowExecutionRequest) bool {
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+	return true
+}
+
+func (v *DescribeWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+	return
+}
+
+type DescribeWorkflowExecutionResponse struct {
+	ExecutionConfiguration *WorkflowExecutionConfiguration `json:"executionConfiguration,omitempty"`
+	WorkflowExecutionInfo  *WorkflowExecutionInfo          `json:"workflowExecutionInfo,omitempty"`
+}
+
+func (v *DescribeWorkflowExecutionResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.ExecutionConfiguration != nil {
+		w, err = v.ExecutionConfiguration.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowExecutionInfo != nil {
+		w, err = v.WorkflowExecutionInfo.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _WorkflowExecutionConfiguration_Read(w wire.Value) (*WorkflowExecutionConfiguration, error) {
+	var v WorkflowExecutionConfiguration
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _WorkflowExecutionInfo_Read(w wire.Value) (*WorkflowExecutionInfo, error) {
+	var v WorkflowExecutionInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func (v *DescribeWorkflowExecutionResponse) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.ExecutionConfiguration, err = _WorkflowExecutionConfiguration_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecutionInfo, err = _WorkflowExecutionInfo_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *DescribeWorkflowExecutionResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [2]string
+	i := 0
+	if v.ExecutionConfiguration != nil {
+		fields[i] = fmt.Sprintf("ExecutionConfiguration: %v", v.ExecutionConfiguration)
+		i++
+	}
+	if v.WorkflowExecutionInfo != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecutionInfo: %v", v.WorkflowExecutionInfo)
+		i++
+	}
+	return fmt.Sprintf("DescribeWorkflowExecutionResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *DescribeWorkflowExecutionResponse) Equals(rhs *DescribeWorkflowExecutionResponse) bool {
+	if !((v.ExecutionConfiguration == nil && rhs.ExecutionConfiguration == nil) || (v.ExecutionConfiguration != nil && rhs.ExecutionConfiguration != nil && v.ExecutionConfiguration.Equals(rhs.ExecutionConfiguration))) {
+		return false
+	}
+	if !((v.WorkflowExecutionInfo == nil && rhs.WorkflowExecutionInfo == nil) || (v.WorkflowExecutionInfo != nil && rhs.WorkflowExecutionInfo != nil && v.WorkflowExecutionInfo.Equals(rhs.WorkflowExecutionInfo))) {
+		return false
+	}
+	return true
+}
+
 type DomainAlreadyExistsError struct {
 	Message string `json:"message,required"`
 }
@@ -8168,12 +8351,6 @@ func (v *ListClosedWorkflowExecutionsResponse) ToWire() (wire.Value, error) {
 		i++
 	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _WorkflowExecutionInfo_Read(w wire.Value) (*WorkflowExecutionInfo, error) {
-	var v WorkflowExecutionInfo
-	err := v.FromWire(w)
-	return &v, err
 }
 
 func _List_WorkflowExecutionInfo_Read(l wire.ValueList) ([]*WorkflowExecutionInfo, error) {
@@ -15662,6 +15839,160 @@ func (v *WorkflowExecutionCompletedEventAttributes) Equals(rhs *WorkflowExecutio
 func (v *WorkflowExecutionCompletedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
 	if v.DecisionTaskCompletedEventId != nil {
 		return *v.DecisionTaskCompletedEventId
+	}
+	return
+}
+
+type WorkflowExecutionConfiguration struct {
+	TaskList                            *TaskList    `json:"taskList,omitempty"`
+	ExecutionStartToCloseTimeoutSeconds *int32       `json:"executionStartToCloseTimeoutSeconds,omitempty"`
+	TaskStartToCloseTimeoutSeconds      *int32       `json:"taskStartToCloseTimeoutSeconds,omitempty"`
+	ChildPolicy                         *ChildPolicy `json:"childPolicy,omitempty"`
+}
+
+func (v *WorkflowExecutionConfiguration) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.ExecutionStartToCloseTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.TaskStartToCloseTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ChildPolicy != nil {
+		w, err = v.ChildPolicy.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *WorkflowExecutionConfiguration) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ExecutionStartToCloseTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 30:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.TaskStartToCloseTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 40:
+			if field.Value.Type() == wire.TI32 {
+				var x ChildPolicy
+				x, err = _ChildPolicy_Read(field.Value)
+				v.ChildPolicy = &x
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *WorkflowExecutionConfiguration) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [4]string
+	i := 0
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("ExecutionStartToCloseTimeoutSeconds: %v", *(v.ExecutionStartToCloseTimeoutSeconds))
+		i++
+	}
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("TaskStartToCloseTimeoutSeconds: %v", *(v.TaskStartToCloseTimeoutSeconds))
+		i++
+	}
+	if v.ChildPolicy != nil {
+		fields[i] = fmt.Sprintf("ChildPolicy: %v", *(v.ChildPolicy))
+		i++
+	}
+	return fmt.Sprintf("WorkflowExecutionConfiguration{%v}", strings.Join(fields[:i], ", "))
+}
+
+func (v *WorkflowExecutionConfiguration) Equals(rhs *WorkflowExecutionConfiguration) bool {
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ExecutionStartToCloseTimeoutSeconds, rhs.ExecutionStartToCloseTimeoutSeconds) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.TaskStartToCloseTimeoutSeconds, rhs.TaskStartToCloseTimeoutSeconds) {
+		return false
+	}
+	if !_ChildPolicy_EqualsPtr(v.ChildPolicy, rhs.ChildPolicy) {
+		return false
+	}
+	return true
+}
+
+func (v *WorkflowExecutionConfiguration) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionConfiguration) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+	return
+}
+
+func (v *WorkflowExecutionConfiguration) GetChildPolicy() (o ChildPolicy) {
+	if v.ChildPolicy != nil {
+		return *v.ChildPolicy
 	}
 	return
 }

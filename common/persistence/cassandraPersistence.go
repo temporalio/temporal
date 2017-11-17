@@ -1152,14 +1152,12 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 }
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
-	info := request.ExecutionInfo
-
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
 		rowTypeExecution,
-		info.DomainID,
-		info.WorkflowID,
-		info.RunID,
+		request.DomainID,
+		request.WorkflowID,
+		request.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 

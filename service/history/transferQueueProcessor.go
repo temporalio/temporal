@@ -270,9 +270,9 @@ ProcessRetryLoop:
 			case persistence.TransferTaskTypeDecisionTask:
 				scope = metrics.TransferTaskDecisionScope
 				err = t.processDecisionTask(task)
-			case persistence.TransferTaskTypeDeleteExecution:
-				scope = metrics.TransferTaskDeleteExecutionScope
-				err = t.processDeleteExecution(task)
+			case persistence.TransferTaskTypeCloseExecution:
+				scope = metrics.TransferTaskCloseExecutionScope
+				err = t.processCloseExecution(task)
 			case persistence.TransferTaskTypeCancelExecution:
 				scope = metrics.TransferTaskCancelExecutionScope
 				err = t.processCancelExecution(task)
@@ -416,9 +416,9 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	return err
 }
 
-func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskDeleteExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskDeleteExecutionScope, metrics.TaskLatency)
+func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TransferTaskCloseExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferTaskCloseExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -432,8 +432,6 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		return err
 	}
 
-	// TODO: We need to keep completed executions for auditing purpose.  Need a design for keeping them around
-	// for visibility purpose.
 	var mb *mutableStateBuilder
 	mb, err = context.loadWorkflowExecution()
 	if err != nil {
@@ -485,30 +483,16 @@ func (t *transferQueueProcessorImpl) processDeleteExecution(task *persistence.Tr
 		retentionSeconds = int64(domainConfig.Retention) * 24 * 60 * 60
 	}
 
-	closeTimestamp := mb.executionInfo.LastUpdatedTimestamp.UnixNano()
-	if mb.executionInfo.StartTimestamp.UnixNano() >= closeTimestamp {
-		// This could happen due to clock skews
-		// ensure that the used CloseTimestamp is always greater than the StartTimestamp
-		closeTimestamp = mb.executionInfo.StartTimestamp.UnixNano() + 1
-	}
-
-	err = t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
+	return t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       task.DomainID,
 		Execution:        execution,
 		WorkflowTypeName: mb.executionInfo.WorkflowTypeName,
 		StartTimestamp:   mb.executionInfo.StartTimestamp.UnixNano(),
-		CloseTimestamp:   closeTimestamp,
+		CloseTimestamp:   mb.getLastUpdatedTimestamp(),
 		Status:           getWorkflowExecutionCloseStatus(mb.executionInfo.CloseStatus),
 		HistoryLength:    mb.GetNextEventID(),
 		RetentionSeconds: retentionSeconds,
 	})
-	if err != nil {
-		return err
-	}
-
-	err = context.deleteWorkflowExecution()
-
-	return err
 }
 
 func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) error {

@@ -410,7 +410,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 // UpdateWorkflowExecutionAndDelete is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecutionInfo, condition int64) error {
 	transferTasks := []Task{}
-	transferTasks = append(transferTasks, &DeleteExecutionTask{TaskID: s.GetNextSequenceNumber()})
+	transferTasks = append(transferTasks, &CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
 		ExecutionInfo:       updatedInfo,
 		TransferTasks:       transferTasks,
@@ -539,7 +539,9 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 	return s.WorkflowMgr.DeleteWorkflowExecution(&DeleteWorkflowExecutionRequest{
-		ExecutionInfo: info,
+		DomainID:   info.DomainID,
+		WorkflowID: info.WorkflowID,
+		RunID:      info.RunID,
 	})
 }
 

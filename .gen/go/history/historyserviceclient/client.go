@@ -36,6 +36,12 @@ import (
 
 // Interface is a client for the HistoryService service.
 type Interface interface {
+	DescribeWorkflowExecution(
+		ctx context.Context,
+		DescribeRequest *history.DescribeWorkflowExecutionRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeWorkflowExecutionResponse, error)
+
 	GetWorkflowExecutionNextEventID(
 		ctx context.Context,
 		GetRequest *history.GetWorkflowExecutionNextEventIDRequest,
@@ -143,6 +149,29 @@ func init() {
 
 type client struct {
 	c thrift.Client
+}
+
+func (c client) DescribeWorkflowExecution(
+	ctx context.Context,
+	_DescribeRequest *history.DescribeWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeWorkflowExecutionResponse, err error) {
+
+	args := history.HistoryService_DescribeWorkflowExecution_Helper.Args(_DescribeRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_DescribeWorkflowExecution_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
 }
 
 func (c client) GetWorkflowExecutionNextEventID(

@@ -31,6 +31,111 @@ import (
 	"strings"
 )
 
+type DescribeWorkflowExecutionRequest struct {
+	DomainUUID *string                                  `json:"domainUUID,omitempty"`
+	Request    *shared.DescribeWorkflowExecutionRequest `json:"request,omitempty"`
+}
+
+func (v *DescribeWorkflowExecutionRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*shared.DescribeWorkflowExecutionRequest, error) {
+	var v shared.DescribeWorkflowExecutionRequest
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func (v *DescribeWorkflowExecutionRequest) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Request, err = _DescribeWorkflowExecutionRequest_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *DescribeWorkflowExecutionRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [2]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
+		i++
+	}
+	return fmt.Sprintf("DescribeWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _String_EqualsPtr(lhs, rhs *string) bool {
+	if lhs != nil && rhs != nil {
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func (v *DescribeWorkflowExecutionRequest) Equals(rhs *DescribeWorkflowExecutionRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
+		return false
+	}
+	return true
+}
+
+func (v *DescribeWorkflowExecutionRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+	return
+}
+
 type EventAlreadyStartedError struct {
 	Message string `json:"message,required"`
 }
@@ -171,15 +276,6 @@ func (v *GetWorkflowExecutionNextEventIDRequest) String() string {
 		i++
 	}
 	return fmt.Sprintf("GetWorkflowExecutionNextEventIDRequest{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _String_EqualsPtr(lhs, rhs *string) bool {
-	if lhs != nil && rhs != nil {
-		x := *lhs
-		y := *rhs
-		return (x == y)
-	}
-	return lhs == nil && rhs == nil
 }
 
 func (v *GetWorkflowExecutionNextEventIDRequest) Equals(rhs *GetWorkflowExecutionNextEventIDRequest) bool {

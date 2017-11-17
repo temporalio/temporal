@@ -448,6 +448,33 @@ func (h *Handler) GetWorkflowExecutionNextEventID(ctx context.Context,
 	return resp, nil
 }
 
+// DescribeWorkflowExecution returns information about the specified workflow execution.
+func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *hist.DescribeWorkflowExecutionRequest) (*gen.DescribeWorkflowExecutionResponse, error) {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryDescribeWorkflowExecutionScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryDescribeWorkflowExecutionScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if request.DomainUUID == nil {
+		return nil, errDomainNotSet
+	}
+
+	workflowExecution := request.Request.Execution
+	engine, err1 := h.controller.GetEngine(*workflowExecution.WorkflowId)
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryDescribeWorkflowExecutionScope, err1)
+		return nil, err1
+	}
+
+	resp, err2 := engine.DescribeWorkflowExecution(request)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryDescribeWorkflowExecutionScope, h.convertError(err2))
+		return nil, h.convertError(err2)
+	}
+	return resp, nil
+}
+
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context,
 	request *hist.RequestCancelWorkflowExecutionRequest) error {

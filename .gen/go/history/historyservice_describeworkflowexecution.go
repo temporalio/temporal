@@ -31,19 +31,19 @@ import (
 	"strings"
 )
 
-type HistoryService_GetWorkflowExecutionNextEventID_Args struct {
-	GetRequest *GetWorkflowExecutionNextEventIDRequest `json:"getRequest,omitempty"`
+type HistoryService_DescribeWorkflowExecution_Args struct {
+	DescribeRequest *DescribeWorkflowExecutionRequest `json:"describeRequest,omitempty"`
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) ToWire() (wire.Value, error) {
+func (v *HistoryService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
-	if v.GetRequest != nil {
-		w, err = v.GetRequest.ToWire()
+	if v.DescribeRequest != nil {
+		w, err = v.DescribeRequest.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -53,19 +53,19 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) ToWire() (wire.Val
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _GetWorkflowExecutionNextEventIDRequest_Read(w wire.Value) (*GetWorkflowExecutionNextEventIDRequest, error) {
-	var v GetWorkflowExecutionNextEventIDRequest
+func _DescribeWorkflowExecutionRequest_1_Read(w wire.Value) (*DescribeWorkflowExecutionRequest, error) {
+	var v DescribeWorkflowExecutionRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) FromWire(w wire.Value) error {
+func (v *HistoryService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) error {
 	var err error
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.GetRequest, err = _GetWorkflowExecutionNextEventIDRequest_Read(field.Value)
+				v.DescribeRequest, err = _DescribeWorkflowExecutionRequest_1_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -75,46 +75,46 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) FromWire(w wire.Va
 	return nil
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) String() string {
+func (v *HistoryService_DescribeWorkflowExecution_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 	var fields [1]string
 	i := 0
-	if v.GetRequest != nil {
-		fields[i] = fmt.Sprintf("GetRequest: %v", v.GetRequest)
+	if v.DescribeRequest != nil {
+		fields[i] = fmt.Sprintf("DescribeRequest: %v", v.DescribeRequest)
 		i++
 	}
-	return fmt.Sprintf("HistoryService_GetWorkflowExecutionNextEventID_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_DescribeWorkflowExecution_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) Equals(rhs *HistoryService_GetWorkflowExecutionNextEventID_Args) bool {
-	if !((v.GetRequest == nil && rhs.GetRequest == nil) || (v.GetRequest != nil && rhs.GetRequest != nil && v.GetRequest.Equals(rhs.GetRequest))) {
+func (v *HistoryService_DescribeWorkflowExecution_Args) Equals(rhs *HistoryService_DescribeWorkflowExecution_Args) bool {
+	if !((v.DescribeRequest == nil && rhs.DescribeRequest == nil) || (v.DescribeRequest != nil && rhs.DescribeRequest != nil && v.DescribeRequest.Equals(rhs.DescribeRequest))) {
 		return false
 	}
 	return true
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) MethodName() string {
-	return "GetWorkflowExecutionNextEventID"
+func (v *HistoryService_DescribeWorkflowExecution_Args) MethodName() string {
+	return "DescribeWorkflowExecution"
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_DescribeWorkflowExecution_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-var HistoryService_GetWorkflowExecutionNextEventID_Helper = struct {
-	Args           func(getRequest *GetWorkflowExecutionNextEventIDRequest) *HistoryService_GetWorkflowExecutionNextEventID_Args
+var HistoryService_DescribeWorkflowExecution_Helper = struct {
+	Args           func(describeRequest *DescribeWorkflowExecutionRequest) *HistoryService_DescribeWorkflowExecution_Args
 	IsException    func(error) bool
-	WrapResponse   func(*GetWorkflowExecutionNextEventIDResponse, error) (*HistoryService_GetWorkflowExecutionNextEventID_Result, error)
-	UnwrapResponse func(*HistoryService_GetWorkflowExecutionNextEventID_Result) (*GetWorkflowExecutionNextEventIDResponse, error)
+	WrapResponse   func(*shared.DescribeWorkflowExecutionResponse, error) (*HistoryService_DescribeWorkflowExecution_Result, error)
+	UnwrapResponse func(*HistoryService_DescribeWorkflowExecution_Result) (*shared.DescribeWorkflowExecutionResponse, error)
 }{}
 
 func init() {
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.Args = func(getRequest *GetWorkflowExecutionNextEventIDRequest) *HistoryService_GetWorkflowExecutionNextEventID_Args {
-		return &HistoryService_GetWorkflowExecutionNextEventID_Args{GetRequest: getRequest}
+	HistoryService_DescribeWorkflowExecution_Helper.Args = func(describeRequest *DescribeWorkflowExecutionRequest) *HistoryService_DescribeWorkflowExecution_Args {
+		return &HistoryService_DescribeWorkflowExecution_Args{DescribeRequest: describeRequest}
 	}
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.IsException = func(err error) bool {
+	HistoryService_DescribeWorkflowExecution_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
@@ -128,35 +128,35 @@ func init() {
 			return false
 		}
 	}
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.WrapResponse = func(success *GetWorkflowExecutionNextEventIDResponse, err error) (*HistoryService_GetWorkflowExecutionNextEventID_Result, error) {
+	HistoryService_DescribeWorkflowExecution_Helper.WrapResponse = func(success *shared.DescribeWorkflowExecutionResponse, err error) (*HistoryService_DescribeWorkflowExecution_Result, error) {
 		if err == nil {
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{Success: success}, nil
+			return &HistoryService_DescribeWorkflowExecution_Result{Success: success}, nil
 		}
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.BadRequestError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{BadRequestError: e}, nil
+			return &HistoryService_DescribeWorkflowExecution_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.InternalServiceError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{InternalServiceError: e}, nil
+			return &HistoryService_DescribeWorkflowExecution_Result{InternalServiceError: e}, nil
 		case *shared.EntityNotExistsError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.EntityNotExistError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.EntityNotExistError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{EntityNotExistError: e}, nil
+			return &HistoryService_DescribeWorkflowExecution_Result{EntityNotExistError: e}, nil
 		case *ShardOwnershipLostError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.ShardOwnershipLostError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.ShardOwnershipLostError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{ShardOwnershipLostError: e}, nil
+			return &HistoryService_DescribeWorkflowExecution_Result{ShardOwnershipLostError: e}, nil
 		}
 		return nil, err
 	}
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.UnwrapResponse = func(result *HistoryService_GetWorkflowExecutionNextEventID_Result) (success *GetWorkflowExecutionNextEventIDResponse, err error) {
+	HistoryService_DescribeWorkflowExecution_Helper.UnwrapResponse = func(result *HistoryService_DescribeWorkflowExecution_Result) (success *shared.DescribeWorkflowExecutionResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -182,15 +182,15 @@ func init() {
 	}
 }
 
-type HistoryService_GetWorkflowExecutionNextEventID_Result struct {
-	Success                 *GetWorkflowExecutionNextEventIDResponse `json:"success,omitempty"`
-	BadRequestError         *shared.BadRequestError                  `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError             `json:"internalServiceError,omitempty"`
-	EntityNotExistError     *shared.EntityNotExistsError             `json:"entityNotExistError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError                 `json:"shardOwnershipLostError,omitempty"`
+type HistoryService_DescribeWorkflowExecution_Result struct {
+	Success                 *shared.DescribeWorkflowExecutionResponse `json:"success,omitempty"`
+	BadRequestError         *shared.BadRequestError                   `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError              `json:"internalServiceError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError              `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError                  `json:"shardOwnershipLostError,omitempty"`
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) ToWire() (wire.Value, error) {
+func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
 		fields [5]wire.Field
 		i      int = 0
@@ -238,24 +238,48 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) ToWire() (wire.V
 		i++
 	}
 	if i != 1 {
-		return wire.Value{}, fmt.Errorf("HistoryService_GetWorkflowExecutionNextEventID_Result should have exactly one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", i)
 	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _GetWorkflowExecutionNextEventIDResponse_Read(w wire.Value) (*GetWorkflowExecutionNextEventIDResponse, error) {
-	var v GetWorkflowExecutionNextEventIDResponse
+func _DescribeWorkflowExecutionResponse_Read(w wire.Value) (*shared.DescribeWorkflowExecutionResponse, error) {
+	var v shared.DescribeWorkflowExecutionResponse
 	err := v.FromWire(w)
 	return &v, err
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) FromWire(w wire.Value) error {
+func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
+	var v shared.BadRequestError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
+	var v shared.InternalServiceError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
+	var v shared.EntityNotExistsError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _ShardOwnershipLostError_Read(w wire.Value) (*ShardOwnershipLostError, error) {
+	var v ShardOwnershipLostError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) error {
 	var err error
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _GetWorkflowExecutionNextEventIDResponse_Read(field.Value)
+				v.Success, err = _DescribeWorkflowExecutionResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -307,12 +331,12 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) FromWire(w wire.
 		count++
 	}
 	if count != 1 {
-		return fmt.Errorf("HistoryService_GetWorkflowExecutionNextEventID_Result should have exactly one field: got %v fields", count)
+		return fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
 	return nil
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) String() string {
+func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -338,10 +362,10 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) String() string 
 		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
 		i++
 	}
-	return fmt.Sprintf("HistoryService_GetWorkflowExecutionNextEventID_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_DescribeWorkflowExecution_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) Equals(rhs *HistoryService_GetWorkflowExecutionNextEventID_Result) bool {
+func (v *HistoryService_DescribeWorkflowExecution_Result) Equals(rhs *HistoryService_DescribeWorkflowExecution_Result) bool {
 	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
 		return false
 	}
@@ -360,10 +384,10 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) Equals(rhs *Hist
 	return true
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) MethodName() string {
-	return "GetWorkflowExecutionNextEventID"
+func (v *HistoryService_DescribeWorkflowExecution_Result) MethodName() string {
+	return "DescribeWorkflowExecution"
 }
 
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_DescribeWorkflowExecution_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

@@ -108,6 +108,29 @@ func (c *clientImpl) GetWorkflowExecutionNextEventID(
 	return response, nil
 }
 
+func (c *clientImpl) DescribeWorkflowExecution(
+	ctx context.Context,
+	request *h.DescribeWorkflowExecutionRequest,
+	opts ...yarpc.CallOption) (*workflow.DescribeWorkflowExecutionResponse, error) {
+	client, err := c.getHostForRequest(*request.Request.Execution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	var response *workflow.DescribeWorkflowExecutionResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DescribeWorkflowExecution(ctx, request)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) RecordDecisionTaskStarted(
 	ctx context.Context,
 	request *h.RecordDecisionTaskStartedRequest,

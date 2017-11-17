@@ -63,7 +63,7 @@ const (
 const (
 	TransferTaskTypeDecisionTask = iota
 	TransferTaskTypeActivityTask
-	TransferTaskTypeDeleteExecution
+	TransferTaskTypeCloseExecution
 	TransferTaskTypeCancelExecution
 	TransferTaskTypeStartChildExecution
 )
@@ -210,8 +210,8 @@ type (
 		ScheduleID int64
 	}
 
-	// DeleteExecutionTask identifies a transfer task for deletion of execution
-	DeleteExecutionTask struct {
+	// CloseExecutionTask identifies a transfer task for deletion of execution
+	CloseExecutionTask struct {
 		TaskID int64
 	}
 
@@ -419,7 +419,9 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
-		ExecutionInfo *WorkflowExecutionInfo
+		DomainID   string
+		WorkflowID string
+		RunID      string
 	}
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
@@ -741,18 +743,18 @@ func (d *DecisionTask) SetTaskID(id int64) {
 	d.TaskID = id
 }
 
-// GetType returns the type of the delete execution task
-func (a *DeleteExecutionTask) GetType() int {
-	return TransferTaskTypeDeleteExecution
+// GetType returns the type of the close execution task
+func (a *CloseExecutionTask) GetType() int {
+	return TransferTaskTypeCloseExecution
 }
 
-// GetTaskID returns the sequence ID of the delete execution task
-func (a *DeleteExecutionTask) GetTaskID() int64 {
+// GetTaskID returns the sequence ID of the close execution task
+func (a *CloseExecutionTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
-// SetTaskID sets the sequence ID of the delete execution task
-func (a *DeleteExecutionTask) SetTaskID(id int64) {
+// SetTaskID sets the sequence ID of the close execution task
+func (a *CloseExecutionTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
