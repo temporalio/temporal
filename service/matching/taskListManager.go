@@ -166,7 +166,6 @@ func (c *taskListManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
 		return
 	}
-	logging.LogTaskListUnloadingEvent(c.logger)
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
@@ -263,7 +262,7 @@ func (c *taskListManagerImpl) persistAckLevel() error {
 }
 
 // newTaskIDs taskID to use to persist the task
-func (c *taskListManagerImpl) newTaskIDs(count int) (taskID []int64, err error) {
+func (c *taskListManagerImpl) newTaskIDs(count int) (taskIDs []int64, err error) {
 	c.Lock()
 	defer c.Unlock()
 	for i := 0; i < count; i++ {
@@ -271,7 +270,7 @@ func (c *taskListManagerImpl) newTaskIDs(count int) (taskID []int64, err error) 
 		if err != nil {
 			return nil, err
 		}
-		taskID = append(taskID, c.taskSequenceNumber)
+		taskIDs = append(taskIDs, c.taskSequenceNumber)
 		c.taskSequenceNumber++
 	}
 	return
@@ -358,7 +357,30 @@ func (c *taskListManagerImpl) CancelPoller(pollerID string) {
 }
 
 // Returns a batch of tasks from persistence starting form current read level.
-func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
+// Also return a number that can be used to update readLevel
+func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, error) {
+	var tasks []*persistence.TaskInfo
+	readLevel := c.taskAckManager.getReadLevel()
+	maxReadLevel := c.taskWriter.GetMaxReadLevel()
+	for readLevel < maxReadLevel {
+		upper := readLevel + c.config.RangeSize
+		if upper > maxReadLevel {
+			upper = maxReadLevel
+		}
+		tasks, err := c.getTaskBatchWithRange(readLevel, upper)
+		if err != nil {
+			return nil, readLevel, err
+		}
+		// return as long as it grabs any tasks
+		if len(tasks) > 0 {
+			return tasks, upper, nil
+		}
+		readLevel = upper
+	}
+	return tasks, readLevel, nil // caller will update readLevel when no task grabbed
+}
+
+func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
 	response, err := c.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		c.Lock()
 		request := &persistence.GetTasksRequest{
@@ -367,8 +389,8 @@ func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, error) {
 			TaskType:     c.taskListID.taskType,
 			BatchSize:    c.config.GetTasksBatchSize,
 			RangeID:      rangeID,
-			ReadLevel:    c.taskAckManager.getReadLevel(),
-			MaxReadLevel: c.taskWriter.GetMaxReadLevel(),
+			ReadLevel:    readLevel,    // exclusive
+			MaxReadLevel: maxReadLevel, // inclusive
 		}
 		c.Unlock()
 		return c.engine.taskManager.GetTasks(request)
@@ -414,7 +436,6 @@ func (c *taskListManagerImpl) updateRangeIfNeededLocked(e *matchingEngineImpl) e
 	c.rangeID = tli.RangeID // Starts from 1
 	c.taskAckManager.setAckLevel(tli.AckLevel)
 	c.taskSequenceNumber = (tli.RangeID-1)*e.config.RangeSize + 1
-
 	c.nextRangeSequenceNumber = (tli.RangeID)*e.config.RangeSize + 1
 	c.logger.Debugf("updateRangeLocked rangeID=%v, c.taskSequenceNumber=%v, c.nextRangeSequenceNumber=%v",
 		c.rangeID, c.taskSequenceNumber, c.nextRangeSequenceNumber)
@@ -474,15 +495,19 @@ getTasksPumpLoop:
 			break getTasksPumpLoop
 		case <-c.notifyCh:
 			{
-				tasks, err := c.getTaskBatch()
+				tasks, readLevel, err := c.getTaskBatch()
 				if err != nil {
 					c.signalNewTask() // re-enqueue the event
 					// TODO: Should we ever stop retrying on db errors?
 					continue getTasksPumpLoop
 				}
 				c.Lock()
-				for _, t := range tasks {
-					c.taskAckManager.addTask(t.TaskID)
+				if len(tasks) == 0 {
+					c.taskAckManager.setReadLevel(readLevel)
+				} else {
+					for _, t := range tasks {
+						c.taskAckManager.addTask(t.TaskID)
+					}
 				}
 				c.Unlock()
 				for _, t := range tasks {
@@ -618,8 +643,7 @@ func (c *taskContext) completeTask(err error) {
 
 	if err != nil {
 		// failed to start the task.
-		// We cannot just remove it from persistence because then it will be lost,
-		// which is criticial for decision tasks since there have no ScheduleToStart timeout.
+		// We cannot just remove it from persistence because then it will be lost.
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.

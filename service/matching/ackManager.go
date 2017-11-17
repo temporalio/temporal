@@ -52,6 +52,10 @@ func (m *ackManager) getReadLevel() int64 {
 	return m.readLevel
 }
 
+func (m *ackManager) setReadLevel(readLevel int64) {
+	m.readLevel = readLevel
+}
+
 func (m *ackManager) getAckLevel() int64 {
 	return m.ackLevel
 }
