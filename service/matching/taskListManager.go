@@ -84,6 +84,7 @@ type taskContext struct {
 	syncResponseCh    chan<- *syncMatchResponse
 	workflowExecution s.WorkflowExecution
 	queryTaskInfo     *queryTaskInfo
+	backlogCountHint  int64
 }
 
 type queryTaskInfo struct {
@@ -226,6 +227,7 @@ func (c *taskListManagerImpl) GetTaskContext(ctx context.Context) (*taskContext,
 		tlMgr:             c,
 		syncResponseCh:    result.C,         // nil if task is loaded from persistence
 		queryTaskInfo:     result.queryTask, // non-nil for query task
+		backlogCountHint:  c.taskAckManager.getBacklogCountHint(),
 	}
 	return tCtx, nil
 }

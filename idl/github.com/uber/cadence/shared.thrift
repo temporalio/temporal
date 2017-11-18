@@ -698,6 +698,7 @@ struct PollForDecisionTaskResponse {
   30: optional WorkflowType workflowType
   40: optional i64 (js.type = "Long") previousStartedEventId
   50: optional i64 (js.type = "Long") startedEventId
+  54: optional i64 (js.type = "Long") backlogCountHint
   60: optional History history
   70: optional binary nextPageToken
   80: optional WorkflowQuery query

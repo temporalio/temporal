@@ -20,7 +20,10 @@
 
 package matching
 
-import "github.com/uber-common/bark"
+import (
+	"github.com/uber-common/bark"
+	"go.uber.org/atomic"
+)
 
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
@@ -29,6 +32,7 @@ type ackManager struct {
 	outstandingTasks map[int64]bool // key->TaskID, value->(true for acked, false->for non acked)
 	readLevel        int64          // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64          // Maximum TaskID below which all tasks are acked
+	backlogCounter   atomic.Int64
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
@@ -42,6 +46,7 @@ func (m *ackManager) addTask(taskID int64) {
 		m.logger.Fatalf("Already present in outstanding tasks: taskID=%v", taskID)
 	}
 	m.outstandingTasks[taskID] = false // true is for acked
+	m.backlogCounter.Inc()
 }
 
 func newAckManager(logger bark.Logger) ackManager {
@@ -72,8 +77,9 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 }
 
 func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
-	if _, ok := m.outstandingTasks[taskID]; ok {
+	if completed, ok := m.outstandingTasks[taskID]; ok && !completed {
 		m.outstandingTasks[taskID] = true
+		m.backlogCounter.Dec()
 	}
 	// Update ackLevel
 	for current := m.ackLevel + 1; current <= m.readLevel; current++ {
@@ -87,4 +93,8 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 		}
 	}
 	return m.ackLevel
+}
+
+func (m *ackManager) getBacklogCountHint() int64 {
+	return m.backlogCounter.Load()
 }

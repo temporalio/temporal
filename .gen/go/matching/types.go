@@ -872,13 +872,14 @@ type PollForDecisionTaskResponse struct {
 	WorkflowType           *shared.WorkflowType      `json:"workflowType,omitempty"`
 	PreviousStartedEventId *int64                    `json:"previousStartedEventId,omitempty"`
 	StartedEventId         *int64                    `json:"startedEventId,omitempty"`
+	BacklogCountHint       *int64                    `json:"backlogCountHint,omitempty"`
 	StickyExecutionEnabled *bool                     `json:"stickyExecutionEnabled,omitempty"`
 	Query                  *shared.WorkflowQuery     `json:"query,omitempty"`
 }
 
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -921,6 +922,14 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.BacklogCountHint != nil {
+		w, err = wire.NewValueI64(*(v.BacklogCountHint)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 54, Value: w}
 		i++
 	}
 	if v.StickyExecutionEnabled != nil {
@@ -997,6 +1006,15 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 54:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.BacklogCountHint = &x
+				if err != nil {
+					return err
+				}
+			}
 		case 55:
 			if field.Value.Type() == wire.TBool {
 				var x bool
@@ -1022,7 +1040,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -1042,6 +1060,10 @@ func (v *PollForDecisionTaskResponse) String() string {
 	}
 	if v.StartedEventId != nil {
 		fields[i] = fmt.Sprintf("StartedEventId: %v", *(v.StartedEventId))
+		i++
+	}
+	if v.BacklogCountHint != nil {
+		fields[i] = fmt.Sprintf("BacklogCountHint: %v", *(v.BacklogCountHint))
 		i++
 	}
 	if v.StickyExecutionEnabled != nil {
@@ -1080,6 +1102,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !_I64_EqualsPtr(v.StartedEventId, rhs.StartedEventId) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.BacklogCountHint, rhs.BacklogCountHint) {
+		return false
+	}
 	if !_Bool_EqualsPtr(v.StickyExecutionEnabled, rhs.StickyExecutionEnabled) {
 		return false
 	}
@@ -1099,6 +1124,13 @@ func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
 func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
 	if v.StartedEventId != nil {
 		return *v.StartedEventId
+	}
+	return
+}
+
+func (v *PollForDecisionTaskResponse) GetBacklogCountHint() (o int64) {
+	if v.BacklogCountHint != nil {
+		return *v.BacklogCountHint
 	}
 	return
 }
