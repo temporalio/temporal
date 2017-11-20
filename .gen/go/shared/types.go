@@ -8828,14 +8828,15 @@ func (v *MarkerRecordedEventAttributes) GetDecisionTaskCompletedEventId() (o int
 }
 
 type PollForActivityTaskRequest struct {
-	Domain   *string   `json:"domain,omitempty"`
-	TaskList *TaskList `json:"taskList,omitempty"`
-	Identity *string   `json:"identity,omitempty"`
+	Domain           *string           `json:"domain,omitempty"`
+	TaskList         *TaskList         `json:"taskList,omitempty"`
+	Identity         *string           `json:"identity,omitempty"`
+	TaskListMetadata *TaskListMetadata `json:"taskListMetadata,omitempty"`
 }
 
 func (v *PollForActivityTaskRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -8864,7 +8865,21 @@ func (v *PollForActivityTaskRequest) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
+	if v.TaskListMetadata != nil {
+		w, err = v.TaskListMetadata.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _TaskListMetadata_Read(w wire.Value) (*TaskListMetadata, error) {
+	var v TaskListMetadata
+	err := v.FromWire(w)
+	return &v, err
 }
 
 func (v *PollForActivityTaskRequest) FromWire(w wire.Value) error {
@@ -8896,6 +8911,13 @@ func (v *PollForActivityTaskRequest) FromWire(w wire.Value) error {
 					return err
 				}
 			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskListMetadata, err = _TaskListMetadata_Read(field.Value)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -8905,7 +8927,7 @@ func (v *PollForActivityTaskRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -8919,6 +8941,10 @@ func (v *PollForActivityTaskRequest) String() string {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
 		i++
 	}
+	if v.TaskListMetadata != nil {
+		fields[i] = fmt.Sprintf("TaskListMetadata: %v", v.TaskListMetadata)
+		i++
+	}
 	return fmt.Sprintf("PollForActivityTaskRequest{%v}", strings.Join(fields[:i], ", "))
 }
 
@@ -8930,6 +8956,9 @@ func (v *PollForActivityTaskRequest) Equals(rhs *PollForActivityTaskRequest) boo
 		return false
 	}
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+	if !((v.TaskListMetadata == nil && rhs.TaskListMetadata == nil) || (v.TaskListMetadata != nil && rhs.TaskListMetadata != nil && v.TaskListMetadata.Equals(rhs.TaskListMetadata))) {
 		return false
 	}
 	return true
@@ -14214,6 +14243,82 @@ func (v *TaskList) Equals(rhs *TaskList) bool {
 func (v *TaskList) GetName() (o string) {
 	if v.Name != nil {
 		return *v.Name
+	}
+	return
+}
+
+type TaskListMetadata struct {
+	MaxTasksPerSecond *float64 `json:"maxTasksPerSecond,omitempty"`
+}
+
+func (v *TaskListMetadata) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+	if v.MaxTasksPerSecond != nil {
+		w, err = wire.NewValueDouble(*(v.MaxTasksPerSecond)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func (v *TaskListMetadata) FromWire(w wire.Value) error {
+	var err error
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TDouble {
+				var x float64
+				x, err = field.Value.GetDouble(), error(nil)
+				v.MaxTasksPerSecond = &x
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *TaskListMetadata) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+	var fields [1]string
+	i := 0
+	if v.MaxTasksPerSecond != nil {
+		fields[i] = fmt.Sprintf("MaxTasksPerSecond: %v", *(v.MaxTasksPerSecond))
+		i++
+	}
+	return fmt.Sprintf("TaskListMetadata{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Double_EqualsPtr(lhs, rhs *float64) bool {
+	if lhs != nil && rhs != nil {
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func (v *TaskListMetadata) Equals(rhs *TaskListMetadata) bool {
+	if !_Double_EqualsPtr(v.MaxTasksPerSecond, rhs.MaxTasksPerSecond) {
+		return false
+	}
+	return true
+}
+
+func (v *TaskListMetadata) GetMaxTasksPerSecond() (o float64) {
+	if v.MaxTasksPerSecond != nil {
+		return *v.MaxTasksPerSecond
 	}
 	return
 }

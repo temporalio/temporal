@@ -177,6 +177,10 @@ struct TaskList {
   10: optional string name
 }
 
+struct TaskListMetadata {
+  10: optional double maxTasksPerSecond
+}
+
 struct WorkflowExecution {
   10: optional string workflowId
   20: optional string runId
@@ -721,6 +725,7 @@ struct PollForActivityTaskRequest {
   10: optional string domain
   20: optional TaskList taskList
   30: optional string identity
+  40: optional TaskListMetadata taskListMetadata
 }
 
 struct PollForActivityTaskResponse {
