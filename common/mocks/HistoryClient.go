@@ -202,6 +202,20 @@ func (_m *HistoryClient) RespondDecisionTaskCompleted(ctx context.Context, compl
 	return r0
 }
 
+// RespondDecisionTaskFailed provides a mock function with given fields: ctx, failedRequest
+func (_m *HistoryClient) RespondDecisionTaskFailed(ctx context.Context, failedRequest *history.RespondDecisionTaskFailedRequest, opts ...yarpc.CallOption) error {
+	ret := _m.Called(ctx, failedRequest)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *history.RespondDecisionTaskFailedRequest) error); ok {
+		r0 = rf(ctx, failedRequest)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SignalWorkflowExecution provides a mock function with given fields: ctx, signalRequest
 func (_m *HistoryClient) SignalWorkflowExecution(ctx context.Context, signalRequest *history.SignalWorkflowExecutionRequest, opts ...yarpc.CallOption) error {
 	ret := _m.Called(ctx, signalRequest)

@@ -737,6 +737,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 			return &gohistory.RecordDecisionTaskStartedResponse{
 				PreviousStartedEventId: &startedEventID,
 				StartedEventId:         &startedEventID,
+				ScheduledEventId:       &scheduleID,
 				WorkflowType:           workflowType,
 			}
 		}, nil)
@@ -1056,6 +1057,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 			return &gohistory.RecordDecisionTaskStartedResponse{
 				PreviousStartedEventId: &startedEventID,
 				StartedEventId:         &startedEventID,
+				ScheduledEventId:       &scheduleID,
 				WorkflowType:           workflowType,
 			}
 		},

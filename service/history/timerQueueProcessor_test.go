@@ -113,7 +113,7 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 	// Generate first decision task event.
 	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	addWorkflowExecutionStartedEvent(builder, we, "wType", tl, []byte("input"), 100, 200, identity)
-	scheduleEvent, _ := addDecisionTaskScheduledEvent(builder)
+	di := addDecisionTaskScheduledEvent(builder)
 
 	createState := createMutableState(builder)
 	info := createState.ExecutionInfo
@@ -127,8 +127,8 @@ func (s *timerQueueProcessorSuite) createExecutionWithTimers(domainID string, we
 
 	builder = newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	builder.Load(state0)
-	startedEvent := addDecisionTaskStartedEvent(builder, *scheduleEvent.EventId, tl, identity)
-	addDecisionTaskCompletedEvent(builder, *scheduleEvent.EventId, *startedEvent.EventId, nil, identity)
+	startedEvent := addDecisionTaskStartedEvent(builder, di.ScheduleID, tl, identity)
+	addDecisionTaskCompletedEvent(builder, di.ScheduleID, *startedEvent.EventId, nil, identity)
 	timerTasks := []persistence.Task{}
 	timerInfos := []*persistence.TimerInfo{}
 	decisionCompletedID := int64(4)
@@ -165,10 +165,10 @@ func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow
 	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
 	builder.Load(state)
 
-	scheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
-	addDecisionTaskStartedEvent(builder, *scheduledEvent.EventId, state.ExecutionInfo.TaskList, "identity")
+	di := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, di.ScheduleID, state.ExecutionInfo.TaskList, "identity")
 
-	timeOutTask := tb.AddDecisionTimoutTask(*scheduledEvent.EventId, 1)
+	timeOutTask := tb.AddDecisionTimoutTask(di.ScheduleID, di.Attempt, 1)
 	timerTasks := []persistence.Task{timeOutTask}
 
 	s.updateTimerSeqNumbers(timerTasks)

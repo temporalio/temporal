@@ -11,19 +11,19 @@ import (
 	"strings"
 )
 
-type WorkflowService_DeprecateDomain_Args struct {
-	DeprecateRequest *shared.DeprecateDomainRequest `json:"deprecateRequest,omitempty"`
+type WorkflowService_RespondDecisionTaskFailed_Args struct {
+	FailedRequest *shared.RespondDecisionTaskFailedRequest `json:"failedRequest,omitempty"`
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) ToWire() (wire.Value, error) {
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
-	if v.DeprecateRequest != nil {
-		w, err = v.DeprecateRequest.ToWire()
+	if v.FailedRequest != nil {
+		w, err = v.FailedRequest.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -33,19 +33,19 @@ func (v *WorkflowService_DeprecateDomain_Args) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DeprecateDomainRequest_Read(w wire.Value) (*shared.DeprecateDomainRequest, error) {
-	var v shared.DeprecateDomainRequest
+func _RespondDecisionTaskFailedRequest_Read(w wire.Value) (*shared.RespondDecisionTaskFailedRequest, error) {
+	var v shared.RespondDecisionTaskFailedRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) FromWire(w wire.Value) error {
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) FromWire(w wire.Value) error {
 	var err error
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.DeprecateRequest, err = _DeprecateDomainRequest_Read(field.Value)
+				v.FailedRequest, err = _RespondDecisionTaskFailedRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -55,46 +55,46 @@ func (v *WorkflowService_DeprecateDomain_Args) FromWire(w wire.Value) error {
 	return nil
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) String() string {
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 	var fields [1]string
 	i := 0
-	if v.DeprecateRequest != nil {
-		fields[i] = fmt.Sprintf("DeprecateRequest: %v", v.DeprecateRequest)
+	if v.FailedRequest != nil {
+		fields[i] = fmt.Sprintf("FailedRequest: %v", v.FailedRequest)
 		i++
 	}
-	return fmt.Sprintf("WorkflowService_DeprecateDomain_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("WorkflowService_RespondDecisionTaskFailed_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) Equals(rhs *WorkflowService_DeprecateDomain_Args) bool {
-	if !((v.DeprecateRequest == nil && rhs.DeprecateRequest == nil) || (v.DeprecateRequest != nil && rhs.DeprecateRequest != nil && v.DeprecateRequest.Equals(rhs.DeprecateRequest))) {
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) Equals(rhs *WorkflowService_RespondDecisionTaskFailed_Args) bool {
+	if !((v.FailedRequest == nil && rhs.FailedRequest == nil) || (v.FailedRequest != nil && rhs.FailedRequest != nil && v.FailedRequest.Equals(rhs.FailedRequest))) {
 		return false
 	}
 	return true
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) MethodName() string {
-	return "DeprecateDomain"
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) MethodName() string {
+	return "RespondDecisionTaskFailed"
 }
 
-func (v *WorkflowService_DeprecateDomain_Args) EnvelopeType() wire.EnvelopeType {
+func (v *WorkflowService_RespondDecisionTaskFailed_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-var WorkflowService_DeprecateDomain_Helper = struct {
-	Args           func(deprecateRequest *shared.DeprecateDomainRequest) *WorkflowService_DeprecateDomain_Args
+var WorkflowService_RespondDecisionTaskFailed_Helper = struct {
+	Args           func(failedRequest *shared.RespondDecisionTaskFailedRequest) *WorkflowService_RespondDecisionTaskFailed_Args
 	IsException    func(error) bool
-	WrapResponse   func(error) (*WorkflowService_DeprecateDomain_Result, error)
-	UnwrapResponse func(*WorkflowService_DeprecateDomain_Result) error
+	WrapResponse   func(error) (*WorkflowService_RespondDecisionTaskFailed_Result, error)
+	UnwrapResponse func(*WorkflowService_RespondDecisionTaskFailed_Result) error
 }{}
 
 func init() {
-	WorkflowService_DeprecateDomain_Helper.Args = func(deprecateRequest *shared.DeprecateDomainRequest) *WorkflowService_DeprecateDomain_Args {
-		return &WorkflowService_DeprecateDomain_Args{DeprecateRequest: deprecateRequest}
+	WorkflowService_RespondDecisionTaskFailed_Helper.Args = func(failedRequest *shared.RespondDecisionTaskFailedRequest) *WorkflowService_RespondDecisionTaskFailed_Args {
+		return &WorkflowService_RespondDecisionTaskFailed_Args{FailedRequest: failedRequest}
 	}
-	WorkflowService_DeprecateDomain_Helper.IsException = func(err error) bool {
+	WorkflowService_RespondDecisionTaskFailed_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
@@ -106,30 +106,30 @@ func init() {
 			return false
 		}
 	}
-	WorkflowService_DeprecateDomain_Helper.WrapResponse = func(err error) (*WorkflowService_DeprecateDomain_Result, error) {
+	WorkflowService_RespondDecisionTaskFailed_Helper.WrapResponse = func(err error) (*WorkflowService_RespondDecisionTaskFailed_Result, error) {
 		if err == nil {
-			return &WorkflowService_DeprecateDomain_Result{}, nil
+			return &WorkflowService_RespondDecisionTaskFailed_Result{}, nil
 		}
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DeprecateDomain_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RespondDecisionTaskFailed_Result.BadRequestError")
 			}
-			return &WorkflowService_DeprecateDomain_Result{BadRequestError: e}, nil
+			return &WorkflowService_RespondDecisionTaskFailed_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DeprecateDomain_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RespondDecisionTaskFailed_Result.InternalServiceError")
 			}
-			return &WorkflowService_DeprecateDomain_Result{InternalServiceError: e}, nil
+			return &WorkflowService_RespondDecisionTaskFailed_Result{InternalServiceError: e}, nil
 		case *shared.EntityNotExistsError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DeprecateDomain_Result.EntityNotExistError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RespondDecisionTaskFailed_Result.EntityNotExistError")
 			}
-			return &WorkflowService_DeprecateDomain_Result{EntityNotExistError: e}, nil
+			return &WorkflowService_RespondDecisionTaskFailed_Result{EntityNotExistError: e}, nil
 		}
 		return nil, err
 	}
-	WorkflowService_DeprecateDomain_Helper.UnwrapResponse = func(result *WorkflowService_DeprecateDomain_Result) (err error) {
+	WorkflowService_RespondDecisionTaskFailed_Helper.UnwrapResponse = func(result *WorkflowService_RespondDecisionTaskFailed_Result) (err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -146,13 +146,13 @@ func init() {
 	}
 }
 
-type WorkflowService_DeprecateDomain_Result struct {
+type WorkflowService_RespondDecisionTaskFailed_Result struct {
 	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 }
 
-func (v *WorkflowService_DeprecateDomain_Result) ToWire() (wire.Value, error) {
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) ToWire() (wire.Value, error) {
 	var (
 		fields [3]wire.Field
 		i      int = 0
@@ -184,30 +184,12 @@ func (v *WorkflowService_DeprecateDomain_Result) ToWire() (wire.Value, error) {
 		i++
 	}
 	if i > 1 {
-		return wire.Value{}, fmt.Errorf("WorkflowService_DeprecateDomain_Result should have at most one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("WorkflowService_RespondDecisionTaskFailed_Result should have at most one field: got %v fields", i)
 	}
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
-	var v shared.BadRequestError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
-	var v shared.InternalServiceError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
-	var v shared.EntityNotExistsError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func (v *WorkflowService_DeprecateDomain_Result) FromWire(w wire.Value) error {
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) FromWire(w wire.Value) error {
 	var err error
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
@@ -245,12 +227,12 @@ func (v *WorkflowService_DeprecateDomain_Result) FromWire(w wire.Value) error {
 		count++
 	}
 	if count > 1 {
-		return fmt.Errorf("WorkflowService_DeprecateDomain_Result should have at most one field: got %v fields", count)
+		return fmt.Errorf("WorkflowService_RespondDecisionTaskFailed_Result should have at most one field: got %v fields", count)
 	}
 	return nil
 }
 
-func (v *WorkflowService_DeprecateDomain_Result) String() string {
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -268,10 +250,10 @@ func (v *WorkflowService_DeprecateDomain_Result) String() string {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
 		i++
 	}
-	return fmt.Sprintf("WorkflowService_DeprecateDomain_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("WorkflowService_RespondDecisionTaskFailed_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-func (v *WorkflowService_DeprecateDomain_Result) Equals(rhs *WorkflowService_DeprecateDomain_Result) bool {
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) Equals(rhs *WorkflowService_RespondDecisionTaskFailed_Result) bool {
 	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
 		return false
 	}
@@ -284,10 +266,10 @@ func (v *WorkflowService_DeprecateDomain_Result) Equals(rhs *WorkflowService_Dep
 	return true
 }
 
-func (v *WorkflowService_DeprecateDomain_Result) MethodName() string {
-	return "DeprecateDomain"
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) MethodName() string {
+	return "RespondDecisionTaskFailed"
 }
 
-func (v *WorkflowService_DeprecateDomain_Result) EnvelopeType() wire.EnvelopeType {
+func (v *WorkflowService_RespondDecisionTaskFailed_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

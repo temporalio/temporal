@@ -71,7 +71,7 @@ type (
 	}
 
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision)
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error)
 	activityTaskHandler func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
@@ -86,6 +86,7 @@ type (
 		activityHandler activityTaskHandler
 		queryHandler    queryHandler
 		logger          bark.Logger
+		suite           *integrationSuite
 	}
 )
 
@@ -239,7 +240,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -257,7 +258,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -266,7 +267,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -283,6 +284,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err := poller.pollAndProcessDecisionTask(false, false)
@@ -399,7 +401,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	activityCount := int32(10)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -417,7 +419,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -426,7 +428,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	expectedActivity := int32(1)
@@ -453,6 +455,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	for i := 0; i < 10; i++ {
@@ -470,6 +473,11 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 }
 
 func (p *taskPoller) pollAndProcessDecisionTask(dumpHistory bool, dropTask bool) error {
+	return p.pollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, int64(0))
+}
+
+func (p *taskPoller) pollAndProcessDecisionTaskWithAttempt(dumpHistory bool, dropTask bool,
+	decisionAttempt int64) error {
 retry:
 	for attempt := 0; attempt < 5; attempt++ {
 		response, err1 := p.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
@@ -518,18 +526,39 @@ retry:
 			nextPageToken = resp.NextPageToken
 		}
 
-		if dropTask {
-			p.logger.Info("Dropping Decision task: ")
-			return nil
-		}
-
 		if dumpHistory {
 			common.PrettyPrintHistory(response.History, p.logger)
 		}
 
-		executionCtx, decisions := p.decisionHandler(response.WorkflowExecution, response.WorkflowType,
-			common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
+		var lastDecisionScheduleEvent *workflow.HistoryEvent
+		for _, e := range events {
+			if e.GetEventType() == workflow.EventTypeDecisionTaskScheduled {
+				lastDecisionScheduleEvent = e
+			}
+		}
 
+		if lastDecisionScheduleEvent != nil {
+			p.suite.Equal(decisionAttempt, lastDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt())
+		}
+
+		if dropTask {
+			p.logger.Info("Dropping Decision task...")
+			return nil
+		}
+
+		executionCtx, decisions, err := p.decisionHandler(response.WorkflowExecution, response.WorkflowType,
+			common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
+		if err != nil {
+			p.logger.Infof("Failing Decision. Decision handler failed with error: %v", err)
+			return p.engine.RespondDecisionTaskFailed(createContext(), &workflow.RespondDecisionTaskFailedRequest{
+				TaskToken: response.TaskToken,
+				Cause:     common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure),
+				Details:   []byte(err.Error()),
+				Identity:  common.StringPtr(p.identity),
+			})
+		}
+
+		p.logger.Infof("Completing Decision.  Decisions: %v", decisions)
 		return p.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
 			TaskToken:        response.TaskToken,
 			Identity:         common.StringPtr(p.identity),
@@ -711,7 +740,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -729,7 +758,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 				},
-			}}
+			}}, nil
 		}
 
 		s.logger.Info("Completing Workflow.")
@@ -740,7 +769,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -759,13 +788,31 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	for i := 0; i < 8; i++ {
 		dropDecisionTask := (i%2 == 0)
 		s.logger.Infof("Calling Decision Task: %d", i)
-		err := poller.pollAndProcessDecisionTask(false, dropDecisionTask)
-		s.True(err == nil || err == matching.ErrNoTasks)
+		var err error
+		if dropDecisionTask {
+			err = poller.pollAndProcessDecisionTask(true, true)
+		} else {
+			err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, int64(1))
+		}
+		if err != nil {
+			historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+				Domain: common.StringPtr(s.domainName),
+				Execution: &workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(id),
+					RunId:      common.StringPtr(*we.RunId),
+				},
+			})
+			s.Nil(err)
+			history := historyResponse.History
+			common.PrettyPrintHistory(history, s.logger)
+		}
+		s.True(err == nil || err == matching.ErrNoTasks, "Error: %v", err)
 		if !dropDecisionTask {
 			s.logger.Infof("Calling Activity Task: %d", i)
 			err = poller.pollAndProcessActivityTask(i%4 == 0)
@@ -815,7 +862,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -833,7 +880,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 				},
-			}}
+			}}, nil
 		}
 
 		s.logger.Info("Completing Workflow.")
@@ -844,7 +891,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	activityExecutedCount := 0
@@ -871,6 +918,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err := poller.pollAndProcessDecisionTask(false, false)
@@ -922,7 +970,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 
 		s.logger.Infof("Calling DecisionTask Handler: %d, %d.", activityCounter, activityCount)
 
@@ -943,7 +991,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -952,7 +1000,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	activityExecutedCount := 0
@@ -974,6 +1022,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err := poller.pollAndProcessDecisionTask(false, false)
@@ -1021,7 +1070,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	timerCount := int32(4)
 	timerCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
@@ -1032,7 +1081,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 					TimerId:                   common.StringPtr(fmt.Sprintf("timer-id-%d", timerCounter)),
 					StartToFireTimeoutSeconds: common.Int64Ptr(1),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -1041,7 +1090,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	poller := &taskPoller{
@@ -1052,6 +1101,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		decisionHandler: dtHandler,
 		activityHandler: nil,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	for i := 0; i < 4; i++ {
@@ -1100,7 +1150,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 	requestCancellation := false
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -1118,7 +1168,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(0),
 				},
-			}}
+			}}, nil
 		}
 
 		if requestCancellation {
@@ -1127,7 +1177,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 				RequestCancelActivityTaskDecisionAttributes: &workflow.RequestCancelActivityTaskDecisionAttributes{
 					ActivityId: common.StringPtr(strconv.Itoa(int(activityCounter))),
 				},
-			}}
+			}}, nil
 		}
 
 		s.logger.Info("Completing Workflow.")
@@ -1137,7 +1187,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	activityExecutedCount := 0
@@ -1168,6 +1218,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err := poller.pollAndProcessDecisionTask(false, false)
@@ -1242,7 +1293,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	activityData := int32(1)
 	var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -1261,12 +1312,12 @@ func (s *integrationSuite) TestSignalWorkflow() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
 					signalEvent = event
-					return nil, []*workflow.Decision{}
+					return nil, []*workflow.Decision{}, nil
 				}
 			}
 		}
@@ -1277,7 +1328,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	// activity handler
@@ -1295,6 +1346,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Make first decision to schedule activity
@@ -1413,7 +1465,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	signalSent := false
 	var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if !signalSent {
 			signalSent = true
 
@@ -1441,7 +1493,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		} else if previousStartedEventID > 0 && signalEvent == nil {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
@@ -1456,7 +1508,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	poller := &taskPoller{
@@ -1467,6 +1519,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		decisionHandler: dtHandler,
 		activityHandler: nil,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// first decision, which sends signal and the signal event should be buffered to append after first decision closed
@@ -1537,7 +1590,7 @@ func (s *integrationSuite) TestQueryWorkflow() {
 	activityData := int32(1)
 	var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 
 		if !activityScheduled {
 			activityScheduled = true
@@ -1556,12 +1609,12 @@ func (s *integrationSuite) TestQueryWorkflow() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		} else if previousStartedEventID > 0 {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
 					signalEvent = event
-					return nil, []*workflow.Decision{}
+					return nil, []*workflow.Decision{}, nil
 				}
 			}
 		}
@@ -1572,7 +1625,7 @@ func (s *integrationSuite) TestQueryWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	// activity handler
@@ -1601,6 +1654,7 @@ func (s *integrationSuite) TestQueryWorkflow() {
 		activityHandler: atHandler,
 		queryHandler:    queryHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Make first decision to schedule activity
@@ -1694,7 +1748,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	signalSent := false
 	var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if !signalSent {
 			signalSent = true
 
@@ -1711,7 +1765,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		} else if previousStartedEventID > 0 && signalEvent == nil {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
@@ -1726,7 +1780,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	poller := &taskPoller{
@@ -1737,6 +1791,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		decisionHandler: dtHandler,
 		activityHandler: nil,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// first decision to schedule new activity
@@ -1812,7 +1867,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
@@ -1827,7 +1882,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -1836,7 +1891,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	poller := &taskPoller{
@@ -1846,6 +1901,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		identity:        identity,
 		decisionHandler: dtHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	for i := 0; i < 10; i++ {
@@ -1907,13 +1963,13 @@ func (s *integrationSuite) TestVisibility() {
 
 	// Now complete one of the executions
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		return []byte{}, []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	poller := &taskPoller{
@@ -1924,6 +1980,7 @@ func (s *integrationSuite) TestVisibility() {
 		decisionHandler: dtHandler,
 		activityHandler: nil,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err2 := poller.pollAndProcessDecisionTask(false, false)
@@ -2007,7 +2064,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -2025,7 +2082,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		workflowComplete = true
@@ -2034,7 +2091,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
 				Details: []byte("Cancelled"),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -2050,6 +2107,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	err := poller.pollAndProcessDecisionTask(false, false)
@@ -2158,7 +2216,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -2176,7 +2234,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
@@ -2186,7 +2244,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 				WorkflowId: common.StringPtr(id),
 				RunId:      common.StringPtr(*we2.RunId),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -2202,13 +2260,14 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	foreginWorkflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	foreignDtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if foreignActivityCounter < foreignActivityCount {
 			foreignActivityCounter++
 			buf := new(bytes.Buffer)
@@ -2226,7 +2285,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		foreginWorkflowComplete = true
@@ -2235,7 +2294,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
 				Details: []byte("Cancelled"),
 			},
-		}}
+		}}, nil
 	}
 
 	foreignPoller := &taskPoller{
@@ -2246,6 +2305,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		decisionHandler: foreignDtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Start both current and foreign workflows to make some progress.
@@ -2379,7 +2439,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -2397,7 +2457,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
-			}}
+			}}, nil
 		}
 
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
@@ -2407,7 +2467,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 				WorkflowId: common.StringPtr("workflow_not_exist"),
 				RunId:      common.StringPtr(*we.RunId),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -2423,6 +2483,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Start both current and foreign workflows to make some progress.
@@ -2513,7 +2574,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 	activityCounter := int32(0)
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
@@ -2531,7 +2592,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 					StartToCloseTimeoutSeconds:    common.Int32Ptr(10),
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(10),
 				},
-			}}
+			}}, nil
 		}
 
 		s.logger.Info("Completing Workflow.")
@@ -2542,7 +2603,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 				Result: []byte("Done."),
 			},
-		}}
+		}}, nil
 	}
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
@@ -2561,10 +2622,12 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 		decisionHandler: dtHandler,
 		activityHandler: atHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	upgradeRollbackStep := 2
 	testDecisionPollFailStep := 3
+	decisionFailed := false
 
 	for i := 0; i < int(activityCount)+1; i++ {
 
@@ -2575,7 +2638,12 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 		}
 
 		s.logger.Infof("Calling Decision Task: %d", i)
-		err := poller.pollAndProcessDecisionTask(false, false)
+		var err error
+		if decisionFailed {
+			err = poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(1))
+		} else {
+			err = poller.pollAndProcessDecisionTask(false, false)
+		}
 
 		if i == testDecisionPollFailStep {
 			// make sure we get an error due to history version
@@ -2585,6 +2653,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 			// polls / activities to succeed
 			persistence.SetMaxSupportedHistoryVersion(prevMaxVersion + 1)
 			persistence.SetDefaultHistoryVersion(prevMaxVersion + 1)
+			decisionFailed = true
 			continue
 		}
 
@@ -2649,7 +2718,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		s.logger.Infof("Processing decision task for WorkflowID: %v", *execution.WorkflowId)
 
 		// Child Decider Logic
@@ -2660,7 +2729,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Child Done."),
 				},
-			}}
+			}}, nil
 		}
 
 		// Parent Decider Logic
@@ -2682,12 +2751,12 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 						Control:                             nil,
 					},
-				}}
+				}}, nil
 			} else if previousStartedEventID > 0 {
 				for _, event := range history.Events[previousStartedEventID:] {
 					if *event.EventType == workflow.EventTypeChildWorkflowExecutionStarted {
 						startedEvent = event
-						return nil, []*workflow.Decision{}
+						return nil, []*workflow.Decision{}, nil
 					}
 
 					if *event.EventType == workflow.EventTypeChildWorkflowExecutionCompleted {
@@ -2698,13 +2767,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 							CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 								Result: []byte("Done."),
 							},
-						}}
+						}}, nil
 					}
 				}
 			}
 		}
 
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	poller := &taskPoller{
@@ -2714,6 +2783,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		identity:        identity,
 		decisionHandler: dtHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Make first decision to start child execution
@@ -2798,7 +2868,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision) {
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		s.logger.Infof("Processing decision task for WorkflowID: %v", *execution.WorkflowId)
 
 		// Child Decider Logic
@@ -2817,7 +2887,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 					},
-				}}
+				}}, nil
 			}
 
 			childComplete = true
@@ -2826,7 +2896,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 					Result: []byte("Child Done."),
 				},
-			}}
+			}}, nil
 		}
 
 		// Parent Decider Logic
@@ -2850,12 +2920,12 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 						Control:                             nil,
 					},
-				}}
+				}}, nil
 			} else if previousStartedEventID > 0 {
 				for _, event := range history.Events[previousStartedEventID:] {
 					if *event.EventType == workflow.EventTypeChildWorkflowExecutionStarted {
 						startedEvent = event
-						return nil, []*workflow.Decision{}
+						return nil, []*workflow.Decision{}, nil
 					}
 
 					if *event.EventType == workflow.EventTypeChildWorkflowExecutionCompleted {
@@ -2866,13 +2936,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 							CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
 								Result: []byte("Done."),
 							},
-						}}
+						}}, nil
 					}
 				}
 			}
 		}
 
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	poller := &taskPoller{
@@ -2882,6 +2952,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		identity:        identity,
 		decisionHandler: dtHandler,
 		logger:          s.logger,
+		suite:           s,
 	}
 
 	// Make first decision to start child execution
@@ -3014,6 +3085,187 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
+func (s *integrationSuite) TestDecisionTaskFailed() {
+	id := "integration-decisiontask-failed-test"
+	wt := "integration-decisiontask-failed-test-type"
+	tl := "integration-decisiontask-failed-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	workflowExecution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      common.StringPtr(*we.RunId),
+	}
+
+	// decider logic
+	workflowComplete := false
+	activityScheduled := false
+	activityData := int32(1)
+	failureCount := 10
+	signalCount := 0
+	sendSignal := false
+	//var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		// Count signals
+		for _, event := range history.Events[previousStartedEventID:] {
+			if event.GetEventType() == workflow.EventTypeWorkflowExecutionSignaled {
+				signalCount++
+			}
+		}
+		// Some signals received on this decision
+		if signalCount == 1 {
+			return nil, []*workflow.Decision{}, nil
+		}
+
+		// Send signals during decision
+		if sendSignal {
+			s.sendSignal(s.domainName, workflowExecution, "signalC", nil, identity)
+			s.sendSignal(s.domainName, workflowExecution, "signalD", nil, identity)
+			s.sendSignal(s.domainName, workflowExecution, "signalE", nil, identity)
+			sendSignal = false
+		}
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		} else if failureCount > 0 {
+			// Otherwise decrement failureCount and keep failing decisions
+			failureCount--
+			return nil, nil, errors.New("Decider Panic")
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Make first decision to schedule activity
+	err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// process activity
+	err = poller.pollAndProcessActivityTask(false)
+	s.logger.Infof("pollAndProcessActivityTask: %v", err)
+	s.Nil(err)
+
+	// fail decision 5 times
+	for i := 0; i < 5; i++ {
+		err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(i))
+		s.Nil(err)
+	}
+
+	err = s.sendSignal(s.domainName, workflowExecution, "signalA", nil, identity)
+	s.Nil(err, "failed to send signal to execution")
+
+	// process signal
+	err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.Equal(1, signalCount)
+
+	// send another signal to trigger decision
+	err = s.sendSignal(s.domainName, workflowExecution, "signalB", nil, identity)
+	s.Nil(err, "failed to send signal to execution")
+
+	// fail decision 2 more times
+	for i := 0; i < 2; i++ {
+		err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(i))
+		s.Nil(err)
+	}
+	s.Equal(3, signalCount)
+
+	// now send a signal during failed decision
+	sendSignal = true
+	err = poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(2))
+	s.Nil(err)
+	s.Equal(4, signalCount)
+
+	// fail decision 1 more times
+	for i := 0; i < 2; i++ {
+		err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(i))
+		s.Nil(err)
+	}
+	s.Equal(12, signalCount)
+
+	// Make complete workflow decision
+	err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, int64(2))
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(workflowComplete)
+	s.Equal(16, signalCount)
+
+	s.printWorkflowHistory(s.domainName, workflowExecution)
+
+	events := s.getHistory(s.domainName, workflowExecution)
+	var lastEvent *workflow.HistoryEvent
+	for _, e := range events {
+		lastEvent = e
+	}
+	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, lastEvent.GetEventType())
+}
+
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
@@ -3024,7 +3276,7 @@ func (s *integrationSuite) setupShards() {
 	}
 }
 
-func (s *integrationSuite) printWorkflowHistory(domain string, execution *workflow.WorkflowExecution) {
+func (s *integrationSuite) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 		Domain:          common.StringPtr(domain),
 		Execution:       execution,
@@ -3032,7 +3284,6 @@ func (s *integrationSuite) printWorkflowHistory(domain string, execution *workfl
 	})
 	s.Nil(err)
 
-	history := historyResponse.History
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
 		historyResponse, err = s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
@@ -3043,6 +3294,24 @@ func (s *integrationSuite) printWorkflowHistory(domain string, execution *workfl
 		s.Nil(err)
 		events = append(events, historyResponse.History.Events...)
 	}
+
+	return events
+}
+
+func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,
+	input []byte, identity string) error {
+	return s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain:            common.StringPtr(domainName),
+		WorkflowExecution: execution,
+		SignalName:        common.StringPtr(signalName),
+		Input:             input,
+		Identity:          common.StringPtr(identity),
+	})
+}
+
+func (s *integrationSuite) printWorkflowHistory(domain string, execution *workflow.WorkflowExecution) {
+	events := s.getHistory(domain, execution)
+	history := &workflow.History{}
 	history.Events = events
 	common.PrettyPrintHistory(history, s.logger)
 }

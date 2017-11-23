@@ -179,12 +179,16 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info0.DecisionStartedID)
 	s.Equal(int32(1), info0.DecisionTimeout)
+	s.Equal(int64(0), info0.DecisionAttempt)
+	s.Equal(int64(0), info0.DecisionTimestamp)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.DecisionAttempt = int64(123)
+	updatedInfo.DecisionTimestamp = int64(321)
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
@@ -207,12 +211,16 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info1.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info1.DecisionStartedID)
 	s.Equal(int32(1), info1.DecisionTimeout)
+	s.Equal(int64(123), info1.DecisionAttempt)
+	s.Equal(int64(321), info1.DecisionTimestamp)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
 	failedUpdatedInfo := copyWorkflowExecutionInfo(info0)
 	failedUpdatedInfo.NextEventID = int64(6)
 	failedUpdatedInfo.LastProcessedEvent = int64(3)
+	failedUpdatedInfo.DecisionAttempt = int64(555)
+	failedUpdatedInfo.DecisionTimestamp = int64(55)
 	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.NotNil(err4, "expected non nil error.")
 	s.IsType(&ConditionFailedError{}, err4)
@@ -237,12 +245,16 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info2.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info2.DecisionStartedID)
 	s.Equal(int32(1), info2.DecisionTimeout)
+	s.Equal(int64(123), info1.DecisionAttempt)
+	s.Equal(int64(321), info1.DecisionTimestamp)
 
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
 	failedUpdatedInfo2 := copyWorkflowExecutionInfo(info1)
 	failedUpdatedInfo2.NextEventID = int64(6)
 	failedUpdatedInfo2.LastProcessedEvent = int64(3)
+	failedUpdatedInfo.DecisionAttempt = int64(666)
+	failedUpdatedInfo.DecisionTimestamp = int64(66)
 	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.NotNil(err5, "expected non nil error.")
 	s.IsType(&ShardOwnershipLostError{}, err5)
@@ -267,6 +279,8 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int64(2), info3.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info3.DecisionStartedID)
 	s.Equal(int32(1), info1.DecisionTimeout)
+	s.Equal(int64(123), info1.DecisionAttempt)
+	s.Equal(int64(321), info1.DecisionTimestamp)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 }
@@ -565,6 +579,7 @@ func (s *cassandraPersistenceSuite) TestGetDecisionTasks() {
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
+	s.Equal(int64(5), tasks1Response.Tasks[0].ScheduleID)
 }
 
 func (s *cassandraPersistenceSuite) TestCompleteDecisionTask() {
@@ -647,7 +662,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	tasks := []Task{&DecisionTimeoutTask{time.Now(), 1, 2, int(gen.TimeoutTypeStartToClose)}, &WorkflowTimeoutTask{time.Now(), 2}, &DeleteHistoryEventTask{time.Now(), 3}}
+	tasks := []Task{&DecisionTimeoutTask{time.Now(), 1, 2, 3, int(gen.TimeoutTypeStartToClose)}, &WorkflowTimeoutTask{time.Now(), 2}, &DeleteHistoryEventTask{time.Now(), 3}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 

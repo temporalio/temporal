@@ -747,10 +747,11 @@ Update_History_Loop:
 		}
 
 		scheduleID := task.EventID
+		di, isPending := msBuilder.GetPendingDecision(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
-		if scheduleID >= msBuilder.GetNextEventID() {
+		if !isPending && scheduleID >= msBuilder.GetNextEventID() {
 			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
 			// Reload workflow execution history
 			context.clear()
@@ -761,26 +762,17 @@ Update_History_Loop:
 		switch task.TimeoutType {
 		case int(workflow.TimeoutTypeStartToClose):
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
-			di, isPending := msBuilder.GetPendingDecision(scheduleID)
-			if isPending && msBuilder.isWorkflowExecutionRunning() {
+			if isPending && di.Attempt == task.ScheduleAttempt && msBuilder.isWorkflowExecutionRunning() {
 				// Add a decision task timeout event.
-				timeoutEvent := msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
-				if timeoutEvent == nil {
-					// Unable to add DecisionTaskTimedout event to history
-					return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskTimedout event to history."}
-				}
-
+				msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 				scheduleNewDecision = true
 			}
 		case int(workflow.TimeoutTypeScheduleToStart):
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
-			di, isPending := msBuilder.GetPendingDecision(scheduleID)
-			if isPending && di.StartedID == emptyEventID && msBuilder.isStickyTaskListEnabled() {
-				// remove pending decision, and clear stickiness
-				msBuilder.executionInfo.StickyTaskList = ""
-				msBuilder.executionInfo.StickyScheduleToStartTimeout = 0
+			if isPending && di.Attempt == task.ScheduleAttempt && di.StartedID == emptyEventID &&
+				msBuilder.isStickyTaskListEnabled() {
 				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 				if timeoutEvent == nil {
 					// Unable to add DecisionTaskTimedout event to history
@@ -862,15 +854,16 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 	var transferTasks []persistence.Task
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
+		di := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
 			DomainID:   msBuilder.executionInfo.DomainID,
-			TaskList:   *newDecisionEvent.DecisionTaskScheduledEventAttributes.TaskList.Name,
-			ScheduleID: *newDecisionEvent.EventId,
+			TaskList:   di.Tasklist,
+			ScheduleID: di.ScheduleID,
 		}}
 		if msBuilder.isStickyTaskListEnabled() {
 			tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
-			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(*newDecisionEvent.EventId, msBuilder.executionInfo.StickyScheduleToStartTimeout)
+			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
+				msBuilder.executionInfo.StickyScheduleToStartTimeout)
 			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 		}
 	}

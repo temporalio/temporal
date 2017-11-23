@@ -66,10 +66,11 @@ type (
 	}
 
 	getHistoryContinuationToken struct {
-		RunID            string
-		FirstEventID     int64
-		NextEventID      int64
-		PersistenceToken []byte
+		RunID             string
+		FirstEventID      int64
+		NextEventID       int64
+		PersistenceToken  []byte
+		TransientDecision *gen.TransientDecisionInfo
 	}
 )
 
@@ -391,7 +392,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	var continuation []byte
 	if matchingResp.WorkflowExecution != nil {
 		// Non-empty response. Get the history
-		nextEventID := common.Int64Default(matchingResp.StartedEventId) + 1
+		nextEventID := matchingResp.GetNextEventId()
 		firstEventID := common.FirstEventID
 		if matchingResp.GetStickyExecutionEnabled() {
 			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
@@ -402,7 +403,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 			firstEventID,
 			nextEventID,
 			wh.config.DefaultHistoryMaxPageSize,
-			nil)
+			nil,
+			matchingResp.DecisionInfo)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -420,7 +422,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 				*matchingResp.WorkflowExecution.RunId,
 				history,
 				firstEventID,
-				nextEventID)
+				nextEventID,
+				matchingResp.DecisionInfo)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -622,6 +625,39 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	return nil
 }
 
+// RespondDecisionTaskFailed - failed response to a decision task
+func (wh *WorkflowHandler) RespondDecisionTaskFailed(
+	ctx context.Context,
+	failedRequest *gen.RespondDecisionTaskFailedRequest) error {
+
+	scope := metrics.FrontendRespondDecisionTaskFailedScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	if failedRequest.TaskToken == nil {
+		return wh.error(errTaskTokenNotSet, scope)
+	}
+	taskToken, err := wh.tokenSerializer.Deserialize(failedRequest.TaskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	if taskToken.DomainID == "" {
+		return wh.error(errDomainNotSet, scope)
+	}
+
+	err = wh.history.RespondDecisionTaskFailed(ctx, &h.RespondDecisionTaskFailedRequest{
+		DomainUUID:    common.StringPtr(taskToken.DomainID),
+		FailedRequest: failedRequest,
+	})
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
+}
+
 // RespondQueryTaskCompleted - response to a query task
 func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	ctx context.Context,
@@ -795,12 +831,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		RunId:      common.StringPtr(token.RunID),
 	}
 	history, persistenceToken, err :=
-		wh.getHistory(info.ID, we, token.FirstEventID, token.NextEventID, *getRequest.MaximumPageSize, token.PersistenceToken)
+		wh.getHistory(info.ID, we, token.FirstEventID, token.NextEventID, *getRequest.MaximumPageSize,
+			token.PersistenceToken, token.TransientDecision)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
-	nextToken, err := getSerializedGetHistoryToken(persistenceToken, token.RunID, history, token.FirstEventID, token.NextEventID)
+	nextToken, err := getSerializedGetHistoryToken(persistenceToken, token.RunID, history, token.FirstEventID,
+		token.NextEventID, token.TransientDecision)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1146,7 +1184,8 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 		matchingRequest.TaskList = response.Tasklist
 	} else {
 		// Get the TaskList from history (first event)
-		history, _, err := wh.getHistory(domainInfo.ID, *queryRequest.Execution, common.FirstEventID, common.FirstEventID+1, 1, nil)
+		history, _, err := wh.getHistory(domainInfo.ID, *queryRequest.Execution, common.FirstEventID, common.FirstEventID+1,
+			1, nil, nil)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1206,7 +1245,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 }
 
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
-	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte) (*gen.History, []byte, error) {
+	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte,
+	transientDecision *gen.TransientDecisionInfo) (*gen.History, []byte, error) {
 
 	if nextPageToken == nil {
 		nextPageToken = []byte{}
@@ -1237,6 +1277,10 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 	}
 
 	nextPageToken = response.NextPageToken
+	if len(nextPageToken) == 0 && transientDecision != nil {
+		// Append the transient decision events once we are done enumerating everything from the events table
+		historyEvents = append(historyEvents, transientDecision.ScheduledEvent, transientDecision.StartedEvent)
+	}
 
 	executionHistory := &gen.History{}
 	executionHistory.Events = historyEvents
@@ -1425,18 +1469,20 @@ func deserializeGetHistoryToken(data []byte) (*getHistoryContinuationToken, erro
 	return &token, err
 }
 
-func getSerializedGetHistoryToken(persistenceToken []byte, runID string, history *gen.History, firstEventID, nextEventID int64) ([]byte, error) {
+func getSerializedGetHistoryToken(persistenceToken []byte, runID string, history *gen.History, firstEventID, nextEventID int64,
+	transientDecision *gen.TransientDecisionInfo) ([]byte, error) {
 	// create token if there are more events to read
 	if history == nil {
 		return nil, nil
 	}
-	events := history.Events
-	if len(persistenceToken) > 0 && len(events) > 0 && *events[len(events)-1].EventId < nextEventID-1 {
+
+	if len(persistenceToken) > 0 {
 		token := &getHistoryContinuationToken{
-			RunID:            runID,
-			FirstEventID:     firstEventID,
-			NextEventID:      nextEventID,
-			PersistenceToken: persistenceToken,
+			RunID:             runID,
+			FirstEventID:      firstEventID,
+			NextEventID:       nextEventID,
+			PersistenceToken:  persistenceToken,
+			TransientDecision: transientDecision,
 		}
 		data, err := json.Marshal(token)
 

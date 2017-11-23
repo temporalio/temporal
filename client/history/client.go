@@ -198,6 +198,27 @@ func (c *clientImpl) RespondDecisionTaskCompleted(
 	return err
 }
 
+func (c *clientImpl) RespondDecisionTaskFailed(
+	ctx context.Context,
+	request *h.RespondDecisionTaskFailedRequest,
+	opts ...yarpc.CallOption) error {
+	taskToken, err := c.tokenSerializer.Deserialize(request.FailedRequest.TaskToken)
+	if err != nil {
+		return err
+	}
+	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	if err != nil {
+		return err
+	}
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.RespondDecisionTaskFailed(ctx, request)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *h.RespondActivityTaskCompletedRequest,

@@ -131,6 +131,19 @@ service WorkflowService {
     )
 
   /**
+  * RespondDecisionTaskFailed is called by application worker to indicate failure.  This results in
+  * DecisionTaskFailedEvent written to the history and a new DecisionTask created.  This API can be used by client to
+  * either clear sticky tasklist or report any panics during DecisionTask processing.  Cadence will only append first
+  * DecisionTaskFailed event to the history of workflow execution for consecutive failures.
+  **/
+  void RespondDecisionTaskFailed(1: shared.RespondDecisionTaskFailedRequest failedRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * PollForActivityTask is called by application worker to process ActivityTask from a specific taskList.  ActivityTask
   * is dispatched to callers whenever a ScheduleTask decision is made for a workflow execution.
   * Application is expected to call 'RespondActivityTaskCompleted' or 'RespondActivityTaskFailed' once it is done

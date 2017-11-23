@@ -124,6 +124,8 @@ const (
 		`decision_started_id: ?, ` +
 		`decision_request_id: ?, ` +
 		`decision_timeout: ?, ` +
+		`decision_attempt: ?, ` +
+		`decision_timestamp: ?, ` +
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
 		`sticky_task_list: ?, ` +
@@ -151,7 +153,8 @@ const (
 		`task_id: ?, ` +
 		`type: ?, ` +
 		`timeout_type: ?, ` +
-		`event_id: ?` +
+		`event_id: ?, ` +
+		`schedule_attempt: ?` +
 		`}`
 
 	templateActivityInfoType = `{` +
@@ -893,6 +896,8 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		request.DecisionStartedID,
 		"", // Decision Start Request ID
 		request.DecisionStartToCloseTimeout,
+		0,
+		0,
 		false,
 		"",
 		"", // sticky_task_list (no sticky tasklist for new workflow execution)
@@ -1009,6 +1014,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.DecisionStartedID,
 		executionInfo.DecisionRequestID,
 		executionInfo.DecisionTimeout,
+		executionInfo.DecisionAttempt,
+		executionInfo.DecisionTimestamp,
 		executionInfo.CancelRequested,
 		executionInfo.CancelRequestID,
 		executionInfo.StickyTaskList,
@@ -1676,20 +1683,20 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 
 	for _, task := range timerTasks {
 		var eventID int64
+		var attempt int64
 
 		timeoutType := 0
 
-		switch task.GetType() {
-		case TaskTypeDecisionTimeout:
-			eventID = task.(*DecisionTimeoutTask).EventID
-			timeoutType = task.(*DecisionTimeoutTask).TimeoutType
-
-		case TaskTypeActivityTimeout:
-			eventID = task.(*ActivityTimeoutTask).EventID
-			timeoutType = task.(*ActivityTimeoutTask).TimeoutType
-
-		case TaskTypeUserTimer:
-			eventID = task.(*UserTimerTask).EventID
+		switch t := task.(type) {
+		case *DecisionTimeoutTask:
+			eventID = t.EventID
+			timeoutType = t.TimeoutType
+			attempt = t.ScheduleAttempt
+		case *ActivityTimeoutTask:
+			eventID = t.EventID
+			timeoutType = t.TimeoutType
+		case *UserTimerTask:
+			eventID = t.EventID
 		}
 
 		ts := common.UnixNanoToCQLTimestamp(GetVisibilityTSFrom(task).UnixNano())
@@ -1708,6 +1715,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 			task.GetType(),
 			timeoutType,
 			eventID,
+			attempt,
 			ts,
 			task.GetTaskID())
 	}
@@ -1983,6 +1991,10 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.DecisionRequestID = v.(string)
 		case "decision_timeout":
 			info.DecisionTimeout = int32(v.(int))
+		case "decision_attempt":
+			info.DecisionAttempt = v.(int64)
+		case "decision_timestamp":
+			info.DecisionTimestamp = v.(int64)
 		case "cancel_requested":
 			info.CancelRequested = v.(bool)
 		case "cancel_request_id":
@@ -2175,6 +2187,8 @@ func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
 			info.TimeoutType = v.(int)
 		case "event_id":
 			info.EventID = v.(int64)
+		case "schedule_attempt":
+			info.ScheduleAttempt = v.(int64)
 		}
 	}
 

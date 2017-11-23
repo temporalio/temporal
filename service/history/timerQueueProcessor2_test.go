@@ -140,8 +140,8 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	})
 
-	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
-	addDecisionTaskStartedEvent(builder, *decisionScheduledEvent.EventId, taskList, uuid.New())
+	di := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
 
 	waitCh := make(chan struct{})
 
@@ -151,7 +151,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
 		TaskType: persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: mockTS.Now(),
-		EventID:             *decisionScheduledEvent.EventId}
+		EventID:             di.ScheduleID}
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
@@ -204,8 +204,8 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
 	})
 
-	decisionScheduledEvent, _ := addDecisionTaskScheduledEvent(builder)
-	addDecisionTaskStartedEvent(builder, *decisionScheduledEvent.EventId, taskList, uuid.New())
+	di := addDecisionTaskScheduledEvent(builder)
+	addDecisionTaskStartedEvent(builder, di.ScheduleID, taskList, uuid.New())
 
 	waitCh := make(chan struct{})
 
@@ -215,7 +215,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	timerTask := &persistence.TimerTaskInfo{WorkflowID: "wid", RunID: "rid", TaskID: taskID,
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
 		VisibilityTimestamp: mockTS.Now(),
-		EventID:             *decisionScheduledEvent.EventId}
+		EventID:             di.ScheduleID}
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()

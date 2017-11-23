@@ -189,7 +189,8 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 	domainID := *addRequest.DomainUUID
 	taskListName := *addRequest.TaskList.Name
 	e.logger.Debugf("Received AddDecisionTask for taskList=%v, WorkflowID=%v, RunID=%v, ScheduleToStartTimeout=%v",
-		addRequest.TaskList.GetName(), addRequest.Execution.GetWorkflowId(), addRequest.Execution.GetRunId(), addRequest.GetScheduleToStartTimeoutSeconds())
+		addRequest.TaskList.GetName(), addRequest.Execution.GetWorkflowId(), addRequest.Execution.GetRunId(),
+		addRequest.GetScheduleToStartTimeoutSeconds())
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	tlMgr, err := e.getTaskListManager(taskList)
 	if err != nil {
@@ -274,10 +275,9 @@ pollLoop:
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
-			var lastEventID = *nextIDResp.EventId - 1
 			resp := &h.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId: &lastEventID,
-				StartedEventId:         &lastEventID,
+				PreviousStartedEventId: nextIDResp.EventId,
+				NextEventId:            nextIDResp.EventId,
 			}
 			tCtx.completeTask(nil)
 			return e.createPollForDecisionTaskResponse(tCtx, resp), nil
@@ -476,10 +476,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 		response.Query = context.queryTaskInfo.queryRequest.QueryRequest.Query
 	} else {
 		token := &common.TaskToken{
-			DomainID:   task.DomainID,
-			WorkflowID: task.WorkflowID,
-			RunID:      task.RunID,
-			ScheduleID: task.ScheduleID,
+			DomainID:        task.DomainID,
+			WorkflowID:      task.WorkflowID,
+			RunID:           task.RunID,
+			ScheduleID:      historyResponse.GetScheduledEventId(),
+			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		response.TaskToken, _ = e.tokenSerializer.Serialize(token)
 		response.WorkflowType = historyResponse.WorkflowType
@@ -490,6 +491,8 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 	response.StartedEventId = historyResponse.StartedEventId
 	response.StickyExecutionEnabled = historyResponse.StickyExecutionEnabled
 	response.BacklogCountHint = common.Int64Ptr(context.backlogCountHint)
+	response.NextEventId = historyResponse.NextEventId
+	response.DecisionInfo = historyResponse.DecisionInfo
 
 	return response
 }

@@ -145,6 +145,23 @@ func (c *metricClient) RespondDecisionTaskCompleted(
 	return err
 }
 
+func (c *metricClient) RespondDecisionTaskFailed(
+	context context.Context,
+	request *h.RespondDecisionTaskFailedRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.CadenceLatency)
+	err := c.client.RespondDecisionTaskFailed(context, request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.CadenceFailures)
+	}
+
+	return err
+}
+
 func (c *metricClient) RespondActivityTaskCompleted(
 	context context.Context,
 	request *h.RespondActivityTaskCompletedRequest,

@@ -5,6 +5,7 @@
   "SchemaUpdateCqlFiles": [
     "add_wf_timeout.cql",
     "add_buffered_events.cql",
-    "add_sticky_tasklist.cql"
+    "add_sticky_tasklist.cql",
+    "fail_decision_mutable_state.cql"
   ]
 }

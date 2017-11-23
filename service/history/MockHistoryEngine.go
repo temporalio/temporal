@@ -168,6 +168,20 @@ func (_m *MockHistoryEngine) RespondDecisionTaskCompleted(request *gohistory.Res
 	return r0
 }
 
+// RespondDecisionTaskFailed is mock implementation for RespondDecisionTaskFailed of HistoryEngine
+func (_m *MockHistoryEngine) RespondDecisionTaskFailed(request *gohistory.RespondDecisionTaskFailedRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(failedRequest *gohistory.RespondDecisionTaskFailedRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RespondActivityTaskCompleted is mock implementation for RespondActivityTaskCompleted of HistoryEngine
 func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *gohistory.RespondActivityTaskCompletedRequest) error {
 	ret := _m.Called(request)

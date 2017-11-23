@@ -167,6 +167,8 @@ const (
 	HistoryClientRecordActivityTaskHeartbeatScope
 	// HistoryClientRespondDecisionTaskCompletedScope tracks RPC calls to history service
 	HistoryClientRespondDecisionTaskCompletedScope
+	// HistoryClientRespondDecisionTaskFailedScope tracks RPC calls to history service
+	HistoryClientRespondDecisionTaskFailedScope
 	// HistoryClientRespondActivityTaskCompletedScope tracks RPC calls to history service
 	HistoryClientRespondActivityTaskCompletedScope
 	// HistoryClientRespondActivityTaskFailedScope tracks RPC calls to history service
@@ -221,6 +223,8 @@ const (
 	FrontendRecordActivityTaskHeartbeatScope
 	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
 	FrontendRespondDecisionTaskCompletedScope
+	// FrontendRespondDecisionTaskFailedScope is the metric scope for frontend.RespondDecisionTaskFailed
+	FrontendRespondDecisionTaskFailedScope
 	// FrontendRespondQueryTaskCompletedScope is the metric scope for frontend.RespondQueryTaskCompleted
 	FrontendRespondQueryTaskCompletedScope
 	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompleted
@@ -265,6 +269,8 @@ const (
 	HistoryRecordActivityTaskHeartbeatScope
 	// HistoryRespondDecisionTaskCompletedScope tracks RespondDecisionTaskCompleted API calls received by service
 	HistoryRespondDecisionTaskCompletedScope
+	// HistoryRespondDecisionTaskFailedScope tracks RespondDecisionTaskFailed API calls received by service
+	HistoryRespondDecisionTaskFailedScope
 	// HistoryRespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
 	HistoryRespondActivityTaskCompletedScope
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
@@ -374,6 +380,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientStartWorkflowExecutionScope:          {operation: "HistoryClientStartWorkflowExecution"},
 		HistoryClientRecordActivityTaskHeartbeatScope:     {operation: "HistoryClientRecordActivityTaskHeartbeat"},
 		HistoryClientRespondDecisionTaskCompletedScope:    {operation: "HistoryClientRespondDecisionTaskCompleted"},
+		HistoryClientRespondDecisionTaskFailedScope:       {operation: "HistoryClientRespondDecisionTaskFailed"},
 		HistoryClientRespondActivityTaskCompletedScope:    {operation: "HistoryClientRespondActivityTaskCompleted"},
 		HistoryClientRespondActivityTaskFailedScope:       {operation: "HistoryClientRespondActivityTaskFailed"},
 		HistoryClientRespondActivityTaskCanceledScope:     {operation: "HistoryClientRespondActivityTaskCanceled"},
@@ -401,6 +408,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendPollForActivityTaskScope:            {operation: "PollForActivityTask"},
 		FrontendRecordActivityTaskHeartbeatScope:    {operation: "RecordActivityTaskHeartbeat"},
 		FrontendRespondDecisionTaskCompletedScope:   {operation: "RespondDecisionTaskCompleted"},
+		FrontendRespondDecisionTaskFailedScope:      {operation: "RespondDecisionTaskFailed"},
 		FrontendRespondQueryTaskCompletedScope:      {operation: "RespondQueryTaskCompleted"},
 		FrontendRespondActivityTaskCompletedScope:   {operation: "RespondActivityTaskCompleted"},
 		FrontendRespondActivityTaskFailedScope:      {operation: "RespondActivityTaskFailed"},
@@ -423,6 +431,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryStartWorkflowExecutionScope:          {operation: "StartWorkflowExecution"},
 		HistoryRecordActivityTaskHeartbeatScope:     {operation: "RecordActivityTaskHeartbeat"},
 		HistoryRespondDecisionTaskCompletedScope:    {operation: "RespondDecisionTaskCompleted"},
+		HistoryRespondDecisionTaskFailedScope:       {operation: "RespondDecisionTaskFailed"},
 		HistoryRespondActivityTaskCompletedScope:    {operation: "RespondActivityTaskCompleted"},
 		HistoryRespondActivityTaskFailedScope:       {operation: "RespondActivityTaskFailed"},
 		HistoryRespondActivityTaskCanceledScope:     {operation: "RespondActivityTaskCanceled"},

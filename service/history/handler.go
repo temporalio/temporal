@@ -391,6 +391,48 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 	return nil
 }
 
+// RespondDecisionTaskFailed - failed response to decision task
+func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
+	wrappedRequest *hist.RespondDecisionTaskFailedRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskFailedScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryRespondDecisionTaskFailedScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if wrappedRequest.DomainUUID == nil {
+		return errDomainNotSet
+	}
+
+	failedRequest := wrappedRequest.FailedRequest
+	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
+	if err0 != nil {
+		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
+		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, err0)
+		return err0
+	}
+
+	h.Service.GetLogger().Debugf("RespondDecisionTaskFailed. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
+		token.DomainID,
+		token.WorkflowID,
+		token.RunID,
+		token.ScheduleID)
+
+	engine, err1 := h.controller.GetEngine(token.WorkflowID)
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, err1)
+		return err1
+	}
+
+	err2 := engine.RespondDecisionTaskFailed(wrappedRequest)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
 // StartWorkflowExecution - creates a new workflow execution
 func (h *Handler) StartWorkflowExecution(ctx context.Context,
 	wrappedRequest *hist.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {

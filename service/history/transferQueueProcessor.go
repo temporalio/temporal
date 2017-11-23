@@ -841,11 +841,11 @@ Update_History_Loop:
 		if createDecisionTask {
 			// Create a transfer task to schedule a decision task
 			if !msBuilder.HasPendingDecisionTask() {
-				newDecisionEvent, _ := msBuilder.AddDecisionTaskScheduledEvent()
+				di := msBuilder.AddDecisionTaskScheduledEvent()
 				transferTasks = append(transferTasks, &persistence.DecisionTask{
 					DomainID:   domainID,
-					TaskList:   *newDecisionEvent.DecisionTaskScheduledEventAttributes.TaskList.Name,
-					ScheduleID: *newDecisionEvent.EventId,
+					TaskList:   di.Tasklist,
+					ScheduleID: di.ScheduleID,
 				})
 				if msBuilder.isStickyTaskListEnabled() {
 					lg := t.logger.WithFields(bark.Fields{
@@ -853,7 +853,8 @@ Update_History_Loop:
 						logging.TagWorkflowRunID:       context.workflowExecution.RunId,
 					})
 					tBuilder := newTimerBuilder(t.shard.GetConfig(), lg, common.NewRealTimeSource())
-					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(*newDecisionEvent.EventId, msBuilder.executionInfo.StickyScheduleToStartTimeout)
+					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
+						msBuilder.executionInfo.StickyScheduleToStartTimeout)
 					timerTasks = []persistence.Task{stickyTaskTimeoutTimer}
 				}
 			}

@@ -37,6 +37,8 @@ CREATE TYPE workflow_execution (
   decision_started_id              bigint,
   decision_request_id              text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
   decision_timeout                 int,
+  decision_attempt                 bigint,
+  decision_timestamp               bigint,
   cancel_requested                 boolean,
   cancel_request_id                text,
   sticky_task_list                 text,   -- sticky worker task list
@@ -66,6 +68,7 @@ CREATE TYPE timer_task (
   type             int,  -- enum TaskType {DecisionTaskTimeout, ActivityTaskTimeout, UserTimer}
   timeout_type     int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
   event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
+  schedule_attempt bigint, -- Used to retry failed decision tasks using mutable state
 );
 
 -- Workflow activity in progress mutable state

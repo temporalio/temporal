@@ -619,9 +619,9 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	startDecision bool) *mutableStateBuilder {
 	msBuilder := newMutableStateBuilder(s.config, s.logger)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
-	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
+	di := addDecisionTaskScheduledEvent(msBuilder)
 	if startDecision {
-		addDecisionTaskStartedEvent(msBuilder, *scheduleEvent.EventId, tl, identity)
+		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
 
 	return msBuilder
@@ -655,8 +655,8 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 
 	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
-	scheduleEvent, _ := addDecisionTaskScheduledEvent(msBuilder)
-	addDecisionTaskStartedEvent(msBuilder, *scheduleEvent.EventId, tl, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
 	decisions := []*workflow.Decision{{
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),

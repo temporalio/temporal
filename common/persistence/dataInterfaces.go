@@ -136,6 +136,8 @@ type (
 		DecisionStartedID            int64
 		DecisionRequestID            string
 		DecisionTimeout              int32
+		DecisionAttempt              int64
+		DecisionTimestamp            int64
 		CancelRequested              bool
 		CancelRequestID              string
 		StickyTaskList               string
@@ -166,6 +168,7 @@ type (
 		TaskType            int
 		TimeoutType         int
 		EventID             int64
+		ScheduleAttempt     int64
 	}
 
 	// TaskListInfo describes a state of a task list implementation.
@@ -226,6 +229,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+		ScheduleAttempt     int64
 		TimeoutType         int
 	}
 
