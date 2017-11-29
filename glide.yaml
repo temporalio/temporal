@@ -23,6 +23,7 @@ import:
 - package: github.com/urfave/cli
 - package: gopkg.in/yaml.v2
 - package: gopkg.in/validator.v2
+- package: golang.org/x/time/rate
 - package: github.com/cactus/go-statsd-client/statsd
 - package: go.uber.org/thriftrw
   version: ^1.6
