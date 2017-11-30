@@ -37,8 +37,8 @@ type Params struct {
 	Provider yarpc.ClientConfig
 }
 
-// Result defines the output of this Fx module. It provides a MatchingService client
-// to an Fx application.
+// Result defines the output of the MatchingService client module. It provides a
+// MatchingService client to an Fx application.
 type Result struct {
 	fx.Out
 

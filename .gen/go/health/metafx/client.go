@@ -37,8 +37,8 @@ type Params struct {
 	Provider yarpc.ClientConfig
 }
 
-// Result defines the output of this Fx module. It provides a Meta client
-// to an Fx application.
+// Result defines the output of the Meta client module. It provides a
+// Meta client to an Fx application.
 type Result struct {
 	fx.Out
 
