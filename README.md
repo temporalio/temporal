@@ -28,9 +28,11 @@ brew install cassandra
 * Setup the cassandra schema:
 ```bash
 ./cadence-cassandra-tool --ep 127.0.0.1 create -k "cadence" --rf 1
-./cadence-cassandra-tool --ep 127.0.0.1 -k "cadence" setup-schema -d -f ./schema/cadence/schema.cql
+./cadence-cassandra-tool -ep 127.0.0.1 -k cadence setup-schema -v 0.0
+./cadence-cassandra-tool -ep 127.0.0.1 -k cadence update-schema -d ./schema/cadence/versioned
 ./cadence-cassandra-tool --ep 127.0.0.1 create -k "cadence_visibility" --rf 1
-./cadence-cassandra-tool --ep 127.0.0.1 -k "cadence_visibility" setup-schema -d -f ./schema/visibility/schema.cql
+./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility setup-schema -v 0.0
+./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility update-schema -d ./schema/visibility/versioned
 ```
 
 * Start the service:

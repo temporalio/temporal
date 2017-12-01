@@ -21,11 +21,14 @@
 package main
 
 import (
-	"github.com/uber/cadence/common/service/config"
-	"github.com/urfave/cli"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/tools/cassandra"
+
+	"github.com/urfave/cli"
 )
 
 // validServices is the list of all valid cadence services
@@ -49,6 +52,17 @@ func startHandler(c *cli.Context) {
 	config.Load(env, configDir, zone, &cfg)
 	log.Printf("config=\n%v\n", cfg.String())
 
+	cassCfg := cfg.Cassandra
+	if err := cassandra.CheckCompatibleVersion(
+		cassCfg, cassCfg.Keyspace, "./schema/cadence/versioned",
+	); err != nil {
+		log.Fatalf("Incompatible versions", err)
+	}
+	if err := cassandra.CheckCompatibleVersion(
+		cassCfg, cassCfg.VisibilityKeyspace, "./schema/visibility/versioned",
+	); err != nil {
+		log.Fatalf("Incompatible versions", err)
+	}
 	for _, svc := range getServices(c) {
 		if _, ok := cfg.Services[svc]; !ok {
 			log.Fatalf("`%v` service missing config", svc)

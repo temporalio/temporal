@@ -21,9 +21,17 @@
 package cassandra
 
 import (
+	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"os"
+	"testing"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -116,4 +124,113 @@ func (s *VersionTestSuite) execParseTest(input string, expMajor int, expMinor in
 	s.Nil(err)
 	s.Equal(expMajor, maj)
 	s.Equal(expMinor, min)
+}
+
+func (s *VersionTestSuite) TestGetExpectedVersion() {
+	s.T().Skip()
+	flags := []struct {
+		dirs     []string
+		expected string
+		err      string
+	}{
+		{[]string{"1.0"}, "1.0", ""},
+		{[]string{"1.0", "2.0"}, "2.0", ""},
+		{[]string{"abc"}, "", "no valid schemas"},
+	}
+	for _, flag := range flags {
+		s.expectedVersionTest(flag.expected, flag.dirs, flag.err)
+	}
+}
+
+func (s *VersionTestSuite) expectedVersionTest(expected string, dirs []string, errStr string) {
+	tmpDir, err := ioutil.TempDir("", "version_test")
+	s.NoError(err)
+	defer os.RemoveAll(tmpDir)
+
+	for _, dir := range dirs {
+		s.createSchemaForVersion(tmpDir, dir)
+	}
+	v, err := getExpectedVersion(tmpDir)
+	if len(errStr) == 0 {
+		s.Equal(expected, v)
+	} else {
+		s.Error(err)
+		s.Contains(err.Error(), errStr)
+	}
+}
+
+func (s *VersionTestSuite) TestCheckCompatibleVersion() {
+	flags := []struct {
+		expectedVersion string
+		actualVersion   string
+		errStr          string
+		expectedFail    bool
+	}{
+		{"2.0", "1.0", "version mismatch", false},
+		{"1.0", "1.0", "", false},
+		{"1.0", "2.0", "", false},
+		{"1.0", "abc", "unable to read cassandra schema version", false},
+		{"abc", "1.0", "unable to read expected schema version", true},
+	}
+	for _, flag := range flags {
+		s.checkCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
+	}
+}
+
+func (s *VersionTestSuite) checkCompatibleVersion(
+	expected string, actual string, errStr string, expectedFail bool,
+) {
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
+	s.NoError(err)
+	defer client.Close()
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	keyspace := fmt.Sprintf("version_test_%v", r.Int63())
+	err = client.CreateKeyspace(keyspace, 1)
+	if err != nil {
+		log.Fatalf("error creating keyspace, err=%v", err)
+	}
+	defer client.DropKeyspace(keyspace)
+
+	dir := "check_version"
+	tmpDir, err := ioutil.TempDir("", dir)
+	s.NoError(err)
+	defer os.RemoveAll(tmpDir)
+
+	subdir := tmpDir + "/" + keyspace
+	s.NoError(os.Mkdir(subdir, os.FileMode(0744)))
+
+	s.createSchemaForVersion(subdir, actual)
+	if expected != actual {
+		s.createSchemaForVersion(subdir, expected)
+	}
+
+	cqlFile := subdir + "/v" + actual + "/tmp.cql"
+	RunTool([]string{
+		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", actual, "-o",
+	})
+	if expectedFail {
+		os.RemoveAll(subdir + "/v" + actual)
+	}
+
+	cfg := config.Cassandra{
+		Hosts:    "127.0.0.1",
+		Port:     defaultCassandraPort,
+		User:     "",
+		Password: "",
+	}
+	err = CheckCompatibleVersion(cfg, keyspace, subdir)
+	if len(errStr) > 0 {
+		s.Error(err)
+		s.Contains(err.Error(), errStr)
+	} else {
+		s.NoError(err)
+	}
+}
+
+func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
+	vDir := subdir + "/v" + v
+	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
+	cqlFile := vDir + "/tmp.cql"
+	s.NoError(ioutil.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

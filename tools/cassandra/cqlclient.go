@@ -113,7 +113,9 @@ func newCQLClient(hostsCsv string, port int, user, password, keyspace string) (C
 		return nil, errNoHosts
 	}
 	clusterCfg := gocql.NewCluster(hosts...)
-	clusterCfg.Port = port
+	if port > 0 {
+		clusterCfg.Port = port
+	}
 	if user != "" && password != "" {
 		clusterCfg.Authenticator = gocql.PasswordAuthenticator{
 			Username: user,
