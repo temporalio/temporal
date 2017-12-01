@@ -78,10 +78,12 @@ var (
 	errDomainNotSet               = &gen.BadRequestError{Message: "Domain not set on request."}
 	errTaskTokenNotSet            = &gen.BadRequestError{Message: "Task token not set on request."}
 	errInvalidTaskToken           = &gen.BadRequestError{Message: "Invalid TaskToken."}
+	errInvalidRequestType         = &gen.BadRequestError{Message: "Invalid request type."}
 	errTaskListNotSet             = &gen.BadRequestError{Message: "TaskList is not set on request."}
 	errExecutionNotSet            = &gen.BadRequestError{Message: "Execution is not set on request."}
 	errWorkflowIDNotSet           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
 	errRunIDNotSet                = &gen.BadRequestError{Message: "RunId is not set on request."}
+	errActivityIDNotSet           = &gen.BadRequestError{Message: "ActivityID is not set on request."}
 	errInvalidRunID               = &gen.BadRequestError{Message: "Invalid RunId."}
 	errInvalidNextPageToken       = &gen.BadRequestError{Message: "Invalid NextPageToken."}
 	errNextPageTokenRunIDMismatch = &gen.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
@@ -524,12 +526,67 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	return nil
 }
 
+// RespondActivityTaskCompletedByID - response to an activity task
+func (wh *WorkflowHandler) RespondActivityTaskCompletedByID(
+	ctx context.Context,
+	completeRequest *gen.RespondActivityTaskCompletedByIDRequest) error {
+
+	scope := metrics.FrontendRespondActivityTaskCompletedByIDScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	domainID := completeRequest.GetDomainID()
+	workflowID := completeRequest.GetWorkflowID()
+	runID := completeRequest.GetRunID() // runID is optional so can be empty
+	activityID := completeRequest.GetActivityID()
+
+	if domainID == "" {
+		return wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return wh.error(errActivityIDNotSet, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+
+	req := &gen.RespondActivityTaskCompletedRequest{
+		TaskToken: token,
+		Result:    completeRequest.Result,
+		Identity:  completeRequest.Identity,
+	}
+
+	err = wh.history.RespondActivityTaskCompleted(ctx, &h.RespondActivityTaskCompletedRequest{
+		DomainUUID:      common.StringPtr(taskToken.DomainID),
+		CompleteRequest: req,
+	})
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
+}
+
 // RespondActivityTaskFailed - response to an activity task failure
 func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx context.Context,
 	failedRequest *gen.RespondActivityTaskFailedRequest) error {
 
-	scope := metrics.FrontendRespondActivityTaskFailedScope
+	scope := metrics.FrontendRespondActivityTaskFailedByIDScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
@@ -555,7 +612,62 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return wh.error(err, scope)
 	}
 	return nil
+}
 
+// RespondActivityTaskFailedByID - response to an activity task failure
+func (wh *WorkflowHandler) RespondActivityTaskFailedByID(
+	ctx context.Context,
+	failedRequest *gen.RespondActivityTaskFailedByIDRequest) error {
+
+	scope := metrics.FrontendRespondActivityTaskFailedByIDScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	domainID := failedRequest.GetDomainID()
+	workflowID := failedRequest.GetWorkflowID()
+	runID := failedRequest.GetRunID() // runID is optional so can be empty
+	activityID := failedRequest.GetActivityID()
+
+	if domainID == "" {
+		return wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return wh.error(errActivityIDNotSet, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+
+	req := &gen.RespondActivityTaskFailedRequest{
+		TaskToken: token,
+		Reason:    failedRequest.Reason,
+		Details:   failedRequest.Details,
+		Identity:  failedRequest.Identity,
+	}
+
+	err = wh.history.RespondActivityTaskFailed(ctx, &h.RespondActivityTaskFailedRequest{
+		DomainUUID:    common.StringPtr(taskToken.DomainID),
+		FailedRequest: req,
+	})
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
 }
 
 // RespondActivityTaskCanceled - called to cancel an activity task
@@ -589,7 +701,61 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(
 		return wh.error(err, scope)
 	}
 	return nil
+}
 
+// RespondActivityTaskCanceledByID - called to cancel an activity task
+func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
+	ctx context.Context,
+	cancelRequest *gen.RespondActivityTaskCanceledByIDRequest) error {
+
+	scope := metrics.FrontendRespondActivityTaskCanceledScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	domainID := cancelRequest.GetDomainID()
+	workflowID := cancelRequest.GetWorkflowID()
+	runID := cancelRequest.GetRunID() // runID is optional so can be empty
+	activityID := cancelRequest.GetActivityID()
+
+	if domainID == "" {
+		return wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return wh.error(errActivityIDNotSet, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+
+	req := &gen.RespondActivityTaskCanceledRequest{
+		TaskToken: token,
+		Details:   cancelRequest.Details,
+		Identity:  cancelRequest.Identity,
+	}
+
+	err = wh.history.RespondActivityTaskCanceled(ctx, &h.RespondActivityTaskCanceledRequest{
+		DomainUUID:    common.StringPtr(taskToken.DomainID),
+		CancelRequest: req,
+	})
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
 }
 
 // RespondDecisionTaskCompleted - response to a decision task

@@ -409,6 +409,12 @@ func (e *mutableStateBuilder) GetActivityByActivityID(activityID string) (*persi
 	return ai, ok
 }
 
+// GetScheduleIDByActivityID return scheduleID given activityID
+func (e *mutableStateBuilder) GetScheduleIDByActivityID(activityID string) (int64, bool) {
+	scheduleID, ok := e.pendingActivityInfoByActivityID[activityID]
+	return scheduleID, ok
+}
+
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (e *mutableStateBuilder) GetChildExecutionInfo(initiatedEventID int64) (*persistence.ChildExecutionInfo, bool) {
 	ci, ok := e.pendingChildExecutionInfoIDs[initiatedEventID]

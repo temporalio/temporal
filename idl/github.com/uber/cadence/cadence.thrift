@@ -188,6 +188,20 @@ service WorkflowService {
     )
 
   /**
+  * RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
+  * It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
+  * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
+  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+  * anymore due to activity timeout.
+  **/
+  void  RespondActivityTaskCompletedByID(1: shared.RespondActivityTaskCompletedByIDRequest completeRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
   * result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
   * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
@@ -202,6 +216,20 @@ service WorkflowService {
     )
 
   /**
+  * RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
+  * It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
+  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+  * anymore due to activity timeout.
+  **/
+  void  RespondActivityTaskFailedByID(1: shared.RespondActivityTaskFailedByIDRequest failRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
   * result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
   * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
@@ -209,6 +237,20 @@ service WorkflowService {
   * anymore due to activity timeout.
   **/
   void RespondActivityTaskCanceled(1: shared.RespondActivityTaskCanceledRequest canceledRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
+  * RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
+  * It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
+  * created for the workflow instance so new decisions could be made.  Use the 'taskToken' provided as response of
+  * PollForActivityTask API call for completion. It fails with 'EntityNotExistsError' if the taskToken is not valid
+  * anymore due to activity timeout.
+  **/
+  void RespondActivityTaskCanceledByID(1: shared.RespondActivityTaskCanceledByIDRequest canceledRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

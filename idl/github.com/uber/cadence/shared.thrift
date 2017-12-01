@@ -786,6 +786,34 @@ struct RespondActivityTaskCanceledRequest {
   30: optional string identity
 }
 
+struct RespondActivityTaskCompletedByIDRequest {
+  10: optional string domainID
+  20: optional string workflowID
+  30: optional string runID
+  40: optional string activityID
+  50: optional binary result
+  60: optional string identity
+}
+
+struct RespondActivityTaskFailedByIDRequest {
+  10: optional string domainID
+  20: optional string workflowID
+  30: optional string runID
+  40: optional string activityID
+  50: optional string reason
+  60: optional binary details
+  70: optional string identity
+}
+
+struct RespondActivityTaskCanceledByIDRequest {
+  10: optional string domainID
+  20: optional string workflowID
+  30: optional string runID
+  40: optional string activityID
+  50: optional binary details
+  60: optional string identity
+}
+
 struct RequestCancelWorkflowExecutionRequest {
   10: optional string domain
   20: optional WorkflowExecution workflowExecution

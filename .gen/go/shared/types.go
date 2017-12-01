@@ -15439,6 +15439,290 @@ func (v *RequestCancelWorkflowExecutionRequest) GetRequestId() (o string) {
 	return
 }
 
+type RespondActivityTaskCanceledByIDRequest struct {
+	DomainID   *string `json:"domainID,omitempty"`
+	WorkflowID *string `json:"workflowID,omitempty"`
+	RunID      *string `json:"runID,omitempty"`
+	ActivityID *string `json:"activityID,omitempty"`
+	Details    []byte  `json:"details,omitempty"`
+	Identity   *string `json:"identity,omitempty"`
+}
+
+// ToWire translates a RespondActivityTaskCanceledByIDRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RespondActivityTaskCanceledByIDRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainID != nil {
+		w, err = wire.NewValueString(*(v.DomainID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowID != nil {
+		w, err = wire.NewValueString(*(v.WorkflowID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunID != nil {
+		w, err = wire.NewValueString(*(v.RunID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ActivityID != nil {
+		w, err = wire.NewValueString(*(v.ActivityID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Details != nil {
+		w, err = wire.NewValueBinary(v.Details), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a RespondActivityTaskCanceledByIDRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RespondActivityTaskCanceledByIDRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RespondActivityTaskCanceledByIDRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RespondActivityTaskCanceledByIDRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActivityID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				v.Details, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RespondActivityTaskCanceledByIDRequest
+// struct.
+func (v *RespondActivityTaskCanceledByIDRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.DomainID != nil {
+		fields[i] = fmt.Sprintf("DomainID: %v", *(v.DomainID))
+		i++
+	}
+	if v.WorkflowID != nil {
+		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
+		i++
+	}
+	if v.RunID != nil {
+		fields[i] = fmt.Sprintf("RunID: %v", *(v.RunID))
+		i++
+	}
+	if v.ActivityID != nil {
+		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
+		i++
+	}
+	if v.Details != nil {
+		fields[i] = fmt.Sprintf("Details: %v", v.Details)
+		i++
+	}
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+
+	return fmt.Sprintf("RespondActivityTaskCanceledByIDRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RespondActivityTaskCanceledByIDRequest match the
+// provided RespondActivityTaskCanceledByIDRequest.
+//
+// This function performs a deep comparison.
+func (v *RespondActivityTaskCanceledByIDRequest) Equals(rhs *RespondActivityTaskCanceledByIDRequest) bool {
+	if !_String_EqualsPtr(v.DomainID, rhs.DomainID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowID, rhs.WorkflowID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunID, rhs.RunID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ActivityID, rhs.ActivityID) {
+		return false
+	}
+	if !((v.Details == nil && rhs.Details == nil) || (v.Details != nil && rhs.Details != nil && bytes.Equal(v.Details, rhs.Details))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomainID returns the value of DomainID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCanceledByIDRequest) GetDomainID() (o string) {
+	if v.DomainID != nil {
+		return *v.DomainID
+	}
+
+	return
+}
+
+// GetWorkflowID returns the value of WorkflowID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCanceledByIDRequest) GetWorkflowID() (o string) {
+	if v.WorkflowID != nil {
+		return *v.WorkflowID
+	}
+
+	return
+}
+
+// GetRunID returns the value of RunID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCanceledByIDRequest) GetRunID() (o string) {
+	if v.RunID != nil {
+		return *v.RunID
+	}
+
+	return
+}
+
+// GetActivityID returns the value of ActivityID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCanceledByIDRequest) GetActivityID() (o string) {
+	if v.ActivityID != nil {
+		return *v.ActivityID
+	}
+
+	return
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCanceledByIDRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
 type RespondActivityTaskCanceledRequest struct {
 	TaskToken []byte  `json:"taskToken,omitempty"`
 	Details   []byte  `json:"details,omitempty"`
@@ -15603,6 +15887,290 @@ func (v *RespondActivityTaskCanceledRequest) GetIdentity() (o string) {
 	return
 }
 
+type RespondActivityTaskCompletedByIDRequest struct {
+	DomainID   *string `json:"domainID,omitempty"`
+	WorkflowID *string `json:"workflowID,omitempty"`
+	RunID      *string `json:"runID,omitempty"`
+	ActivityID *string `json:"activityID,omitempty"`
+	Result     []byte  `json:"result,omitempty"`
+	Identity   *string `json:"identity,omitempty"`
+}
+
+// ToWire translates a RespondActivityTaskCompletedByIDRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RespondActivityTaskCompletedByIDRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainID != nil {
+		w, err = wire.NewValueString(*(v.DomainID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowID != nil {
+		w, err = wire.NewValueString(*(v.WorkflowID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunID != nil {
+		w, err = wire.NewValueString(*(v.RunID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ActivityID != nil {
+		w, err = wire.NewValueString(*(v.ActivityID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Result != nil {
+		w, err = wire.NewValueBinary(v.Result), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a RespondActivityTaskCompletedByIDRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RespondActivityTaskCompletedByIDRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RespondActivityTaskCompletedByIDRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RespondActivityTaskCompletedByIDRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActivityID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				v.Result, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RespondActivityTaskCompletedByIDRequest
+// struct.
+func (v *RespondActivityTaskCompletedByIDRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.DomainID != nil {
+		fields[i] = fmt.Sprintf("DomainID: %v", *(v.DomainID))
+		i++
+	}
+	if v.WorkflowID != nil {
+		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
+		i++
+	}
+	if v.RunID != nil {
+		fields[i] = fmt.Sprintf("RunID: %v", *(v.RunID))
+		i++
+	}
+	if v.ActivityID != nil {
+		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
+		i++
+	}
+	if v.Result != nil {
+		fields[i] = fmt.Sprintf("Result: %v", v.Result)
+		i++
+	}
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+
+	return fmt.Sprintf("RespondActivityTaskCompletedByIDRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RespondActivityTaskCompletedByIDRequest match the
+// provided RespondActivityTaskCompletedByIDRequest.
+//
+// This function performs a deep comparison.
+func (v *RespondActivityTaskCompletedByIDRequest) Equals(rhs *RespondActivityTaskCompletedByIDRequest) bool {
+	if !_String_EqualsPtr(v.DomainID, rhs.DomainID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowID, rhs.WorkflowID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunID, rhs.RunID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ActivityID, rhs.ActivityID) {
+		return false
+	}
+	if !((v.Result == nil && rhs.Result == nil) || (v.Result != nil && rhs.Result != nil && bytes.Equal(v.Result, rhs.Result))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomainID returns the value of DomainID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCompletedByIDRequest) GetDomainID() (o string) {
+	if v.DomainID != nil {
+		return *v.DomainID
+	}
+
+	return
+}
+
+// GetWorkflowID returns the value of WorkflowID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCompletedByIDRequest) GetWorkflowID() (o string) {
+	if v.WorkflowID != nil {
+		return *v.WorkflowID
+	}
+
+	return
+}
+
+// GetRunID returns the value of RunID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCompletedByIDRequest) GetRunID() (o string) {
+	if v.RunID != nil {
+		return *v.RunID
+	}
+
+	return
+}
+
+// GetActivityID returns the value of ActivityID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCompletedByIDRequest) GetActivityID() (o string) {
+	if v.ActivityID != nil {
+		return *v.ActivityID
+	}
+
+	return
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskCompletedByIDRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
 type RespondActivityTaskCompletedRequest struct {
 	TaskToken []byte  `json:"taskToken,omitempty"`
 	Result    []byte  `json:"result,omitempty"`
@@ -15760,6 +16328,326 @@ func (v *RespondActivityTaskCompletedRequest) Equals(rhs *RespondActivityTaskCom
 // GetIdentity returns the value of Identity if it is set or its
 // zero value if it is unset.
 func (v *RespondActivityTaskCompletedRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
+type RespondActivityTaskFailedByIDRequest struct {
+	DomainID   *string `json:"domainID,omitempty"`
+	WorkflowID *string `json:"workflowID,omitempty"`
+	RunID      *string `json:"runID,omitempty"`
+	ActivityID *string `json:"activityID,omitempty"`
+	Reason     *string `json:"reason,omitempty"`
+	Details    []byte  `json:"details,omitempty"`
+	Identity   *string `json:"identity,omitempty"`
+}
+
+// ToWire translates a RespondActivityTaskFailedByIDRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RespondActivityTaskFailedByIDRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [7]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainID != nil {
+		w, err = wire.NewValueString(*(v.DomainID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowID != nil {
+		w, err = wire.NewValueString(*(v.WorkflowID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunID != nil {
+		w, err = wire.NewValueString(*(v.RunID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ActivityID != nil {
+		w, err = wire.NewValueString(*(v.ActivityID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Reason != nil {
+		w, err = wire.NewValueString(*(v.Reason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Details != nil {
+		w, err = wire.NewValueBinary(v.Details), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a RespondActivityTaskFailedByIDRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RespondActivityTaskFailedByIDRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RespondActivityTaskFailedByIDRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RespondActivityTaskFailedByIDRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActivityID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Reason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				v.Details, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RespondActivityTaskFailedByIDRequest
+// struct.
+func (v *RespondActivityTaskFailedByIDRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [7]string
+	i := 0
+	if v.DomainID != nil {
+		fields[i] = fmt.Sprintf("DomainID: %v", *(v.DomainID))
+		i++
+	}
+	if v.WorkflowID != nil {
+		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
+		i++
+	}
+	if v.RunID != nil {
+		fields[i] = fmt.Sprintf("RunID: %v", *(v.RunID))
+		i++
+	}
+	if v.ActivityID != nil {
+		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
+		i++
+	}
+	if v.Reason != nil {
+		fields[i] = fmt.Sprintf("Reason: %v", *(v.Reason))
+		i++
+	}
+	if v.Details != nil {
+		fields[i] = fmt.Sprintf("Details: %v", v.Details)
+		i++
+	}
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+
+	return fmt.Sprintf("RespondActivityTaskFailedByIDRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RespondActivityTaskFailedByIDRequest match the
+// provided RespondActivityTaskFailedByIDRequest.
+//
+// This function performs a deep comparison.
+func (v *RespondActivityTaskFailedByIDRequest) Equals(rhs *RespondActivityTaskFailedByIDRequest) bool {
+	if !_String_EqualsPtr(v.DomainID, rhs.DomainID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowID, rhs.WorkflowID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunID, rhs.RunID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ActivityID, rhs.ActivityID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Reason, rhs.Reason) {
+		return false
+	}
+	if !((v.Details == nil && rhs.Details == nil) || (v.Details != nil && rhs.Details != nil && bytes.Equal(v.Details, rhs.Details))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomainID returns the value of DomainID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetDomainID() (o string) {
+	if v.DomainID != nil {
+		return *v.DomainID
+	}
+
+	return
+}
+
+// GetWorkflowID returns the value of WorkflowID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetWorkflowID() (o string) {
+	if v.WorkflowID != nil {
+		return *v.WorkflowID
+	}
+
+	return
+}
+
+// GetRunID returns the value of RunID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetRunID() (o string) {
+	if v.RunID != nil {
+		return *v.RunID
+	}
+
+	return
+}
+
+// GetActivityID returns the value of ActivityID if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetActivityID() (o string) {
+	if v.ActivityID != nil {
+		return *v.ActivityID
+	}
+
+	return
+}
+
+// GetReason returns the value of Reason if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetReason() (o string) {
+	if v.Reason != nil {
+		return *v.Reason
+	}
+
+	return
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *RespondActivityTaskFailedByIDRequest) GetIdentity() (o string) {
 	if v.Identity != nil {
 		return *v.Identity
 	}

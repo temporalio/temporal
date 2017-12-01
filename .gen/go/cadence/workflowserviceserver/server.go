@@ -99,14 +99,29 @@ type Interface interface {
 		CanceledRequest *shared.RespondActivityTaskCanceledRequest,
 	) error
 
+	RespondActivityTaskCanceledByID(
+		ctx context.Context,
+		CanceledRequest *shared.RespondActivityTaskCanceledByIDRequest,
+	) error
+
 	RespondActivityTaskCompleted(
 		ctx context.Context,
 		CompleteRequest *shared.RespondActivityTaskCompletedRequest,
 	) error
 
+	RespondActivityTaskCompletedByID(
+		ctx context.Context,
+		CompleteRequest *shared.RespondActivityTaskCompletedByIDRequest,
+	) error
+
 	RespondActivityTaskFailed(
 		ctx context.Context,
 		FailRequest *shared.RespondActivityTaskFailedRequest,
+	) error
+
+	RespondActivityTaskFailedByID(
+		ctx context.Context,
+		FailRequest *shared.RespondActivityTaskFailedByIDRequest,
 	) error
 
 	RespondDecisionTaskCompleted(
@@ -300,6 +315,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RespondActivityTaskCanceledByID",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RespondActivityTaskCanceledByID),
+				},
+				Signature:    "RespondActivityTaskCanceledByID(CanceledRequest *shared.RespondActivityTaskCanceledByIDRequest)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RespondActivityTaskCompleted",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -311,6 +337,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RespondActivityTaskCompletedByID",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RespondActivityTaskCompletedByID),
+				},
+				Signature:    "RespondActivityTaskCompletedByID(CompleteRequest *shared.RespondActivityTaskCompletedByIDRequest)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RespondActivityTaskFailed",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -318,6 +355,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.RespondActivityTaskFailed),
 				},
 				Signature:    "RespondActivityTaskFailed(FailRequest *shared.RespondActivityTaskFailedRequest)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "RespondActivityTaskFailedByID",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RespondActivityTaskFailedByID),
+				},
+				Signature:    "RespondActivityTaskFailedByID(FailRequest *shared.RespondActivityTaskFailedByIDRequest)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -400,7 +448,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 22)
+	procedures := make([]transport.Procedure, 0, 25)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -654,6 +702,25 @@ func (h handler) RespondActivityTaskCanceled(ctx context.Context, body wire.Valu
 	return response, err
 }
 
+func (h handler) RespondActivityTaskCanceledByID(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_RespondActivityTaskCanceledByID_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RespondActivityTaskCanceledByID(ctx, args.CanceledRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_RespondActivityTaskCanceledByID_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) RespondActivityTaskCompleted(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args cadence.WorkflowService_RespondActivityTaskCompleted_Args
 	if err := args.FromWire(body); err != nil {
@@ -673,6 +740,25 @@ func (h handler) RespondActivityTaskCompleted(ctx context.Context, body wire.Val
 	return response, err
 }
 
+func (h handler) RespondActivityTaskCompletedByID(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_RespondActivityTaskCompletedByID_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RespondActivityTaskCompletedByID(ctx, args.CompleteRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_RespondActivityTaskCompletedByID_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
 func (h handler) RespondActivityTaskFailed(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args cadence.WorkflowService_RespondActivityTaskFailed_Args
 	if err := args.FromWire(body); err != nil {
@@ -683,6 +769,25 @@ func (h handler) RespondActivityTaskFailed(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_RespondActivityTaskFailed_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RespondActivityTaskFailedByID(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_RespondActivityTaskFailedByID_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RespondActivityTaskFailedByID(ctx, args.FailRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_RespondActivityTaskFailedByID_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

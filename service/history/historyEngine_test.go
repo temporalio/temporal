@@ -920,6 +920,27 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 	s.IsType(&workflow.EntityNotExistsError{}, err)
 }
 
+func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCompleted(&history.RespondActivityTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondActivityTaskCompletedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.EntityNotExistsError{}, err)
+}
+
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 	domainID := "domainId"
 	taskToken, _ := json.Marshal(&common.TaskToken{
@@ -939,6 +960,59 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 		},
 	})
 	s.EqualError(err, "FAILED")
+}
+
+func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCompleted(&history.RespondActivityTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondActivityTaskCompletedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+}
+
+func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+		ActivityID: "aid",
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCompleted(&history.RespondActivityTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondActivityTaskCompletedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
@@ -1255,6 +1329,66 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.Equal(emptyEventID, di.StartedID)
 }
 
+func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+	activityResult := []byte("activity result")
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	})
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
+		activityType, tl, activityInput, 100, 10, 5)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: *we.RunId}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCompleted(&history.RespondActivityTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondActivityTaskCompletedRequest{
+			TaskToken: taskToken,
+			Result:    activityResult,
+			Identity:  &identity,
+		},
+	})
+	s.Nil(err, s.printHistory(msBuilder))
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(9), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+
+	s.True(executionBuilder.HasPendingDecisionTask())
+	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(ok)
+	s.Equal(int32(200), di.DecisionTimeout)
+	s.Equal(int64(8), di.ScheduleID)
+	s.Equal(emptyEventID, di.StartedID)
+}
+
 func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 	domainID := "domainId"
 	invalidToken, _ := json.Marshal("bad token")
@@ -1295,6 +1429,28 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 	s.IsType(&workflow.EntityNotExistsError{}, err)
 }
 
+func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil,
+		&workflow.EntityNotExistsError{}).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskFailed(&history.RespondActivityTaskFailedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		FailedRequest: &workflow.RespondActivityTaskFailedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.EntityNotExistsError{}, err)
+}
+
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 	domainID := "domainId"
 	taskToken, _ := json.Marshal(&common.TaskToken{
@@ -1315,6 +1471,59 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 		},
 	})
 	s.EqualError(err, "FAILED")
+}
+
+func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskFailed(&history.RespondActivityTaskFailedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		FailedRequest: &workflow.RespondActivityTaskFailedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+}
+
+func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+		ActivityID: "aid",
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskFailed(&history.RespondActivityTaskFailedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		FailedRequest: &workflow.RespondActivityTaskFailedRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
@@ -1636,6 +1845,68 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Equal(emptyEventID, di.StartedID)
 }
 
+func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+	failReason := "failed"
+	failDetails := []byte("fail details.")
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	})
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
+		activityType, tl, activityInput, 100, 10, 5)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: *we.RunId}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskFailed(&history.RespondActivityTaskFailedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		FailedRequest: &workflow.RespondActivityTaskFailedRequest{
+			TaskToken: taskToken,
+			Reason:    &failReason,
+			Details:   failDetails,
+			Identity:  &identity,
+		},
+	})
+	s.Nil(err)
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(9), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+
+	s.True(executionBuilder.HasPendingDecisionTask())
+	di, ok := executionBuilder.GetPendingDecision(int64(8))
+	s.True(ok)
+	s.Equal(int32(200), di.DecisionTimeout)
+	s.Equal(int64(8), di.ScheduleID)
+	s.Equal(emptyEventID, di.StartedID)
+}
+
 func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	domainID := "domainId"
 	we := workflow.WorkflowExecution{
@@ -1832,6 +2103,139 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.Equal(int32(200), di.DecisionTimeout)
 	s.Equal(int64(9), di.ScheduleID)
 	s.Equal(emptyEventID, di.StartedID)
+}
+
+func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	})
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	decisionScheduledEvent := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, decisionScheduledEvent.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, decisionScheduledEvent.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
+		activityType, tl, activityInput, 100, 10, 1)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+	msBuilder.AddActivityTaskCancelRequestedEvent(*decisionCompletedEvent.EventId, activityID, identity)
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: *we.RunId}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&history.RespondActivityTaskCanceledRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+			Details:   []byte("details"),
+		},
+	})
+	s.Nil(err)
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(10), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+
+	s.True(executionBuilder.HasPendingDecisionTask())
+	di, ok := executionBuilder.GetPendingDecision(int64(9))
+	s.True(ok)
+	s.Equal(int32(200), di.DecisionTimeout)
+	s.Equal(int64(9), di.ScheduleID)
+	s.Equal(emptyEventID, di.StartedID)
+}
+
+func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&history.RespondActivityTaskCanceledRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.NotNil(err)
+	s.IsType(&workflow.EntityNotExistsError{}, err)
+}
+
+func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&history.RespondActivityTaskCanceledRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: Neither ActivityID nor ScheduleID is provided}")
+}
+
+func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
+	domainID := "domainId"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: "wId",
+		ScheduleID: common.EmptyEventID,
+		ActivityID: "aid",
+	})
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: "rid"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err := s.mockHistoryEngine.RespondActivityTaskCanceled(&history.RespondActivityTaskCanceledRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CancelRequest: &workflow.RespondActivityTaskCanceledRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+		},
+	})
+	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotScheduled() {

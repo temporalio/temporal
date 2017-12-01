@@ -483,6 +483,37 @@ func (mr *_MockClientRecorder) RespondActivityTaskCanceled(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskCanceled", args...)
 }
 
+// RespondActivityTaskCanceledByID responds to a RespondActivityTaskCanceledByID call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RespondActivityTaskCanceledByID(gomock.Any(), ...).Return(...)
+// 	... := client.RespondActivityTaskCanceledByID(...)
+func (m *MockClient) RespondActivityTaskCanceledByID(
+	ctx context.Context,
+	_CanceledRequest *shared.RespondActivityTaskCanceledByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _CanceledRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RespondActivityTaskCanceledByID", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RespondActivityTaskCanceledByID(
+	ctx interface{},
+	_CanceledRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _CanceledRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskCanceledByID", args...)
+}
+
 // RespondActivityTaskCompleted responds to a RespondActivityTaskCompleted call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -514,6 +545,37 @@ func (mr *_MockClientRecorder) RespondActivityTaskCompleted(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskCompleted", args...)
 }
 
+// RespondActivityTaskCompletedByID responds to a RespondActivityTaskCompletedByID call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RespondActivityTaskCompletedByID(gomock.Any(), ...).Return(...)
+// 	... := client.RespondActivityTaskCompletedByID(...)
+func (m *MockClient) RespondActivityTaskCompletedByID(
+	ctx context.Context,
+	_CompleteRequest *shared.RespondActivityTaskCompletedByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _CompleteRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RespondActivityTaskCompletedByID", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RespondActivityTaskCompletedByID(
+	ctx interface{},
+	_CompleteRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _CompleteRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskCompletedByID", args...)
+}
+
 // RespondActivityTaskFailed responds to a RespondActivityTaskFailed call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.
@@ -543,6 +605,37 @@ func (mr *_MockClientRecorder) RespondActivityTaskFailed(
 ) *gomock.Call {
 	args := append([]interface{}{ctx, _FailRequest}, opts...)
 	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskFailed", args...)
+}
+
+// RespondActivityTaskFailedByID responds to a RespondActivityTaskFailedByID call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RespondActivityTaskFailedByID(gomock.Any(), ...).Return(...)
+// 	... := client.RespondActivityTaskFailedByID(...)
+func (m *MockClient) RespondActivityTaskFailedByID(
+	ctx context.Context,
+	_FailRequest *shared.RespondActivityTaskFailedByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _FailRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RespondActivityTaskFailedByID", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RespondActivityTaskFailedByID(
+	ctx interface{},
+	_FailRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _FailRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RespondActivityTaskFailedByID", args...)
 }
 
 // RespondDecisionTaskCompleted responds to a RespondDecisionTaskCompleted call based on the mock expectations. This

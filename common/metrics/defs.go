@@ -233,6 +233,12 @@ const (
 	FrontendRespondActivityTaskFailedScope
 	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
 	FrontendRespondActivityTaskCanceledScope
+	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedByID
+	FrontendRespondActivityTaskCompletedByIDScope
+	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedByID
+	FrontendRespondActivityTaskFailedByIDScope
+	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledByID
+	FrontendRespondActivityTaskCanceledByIDScope
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
 	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
@@ -403,28 +409,31 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
-		FrontendStartWorkflowExecutionScope:         {operation: "StartWorkflowExecution"},
-		FrontendPollForDecisionTaskScope:            {operation: "PollForDecisionTask"},
-		FrontendPollForActivityTaskScope:            {operation: "PollForActivityTask"},
-		FrontendRecordActivityTaskHeartbeatScope:    {operation: "RecordActivityTaskHeartbeat"},
-		FrontendRespondDecisionTaskCompletedScope:   {operation: "RespondDecisionTaskCompleted"},
-		FrontendRespondDecisionTaskFailedScope:      {operation: "RespondDecisionTaskFailed"},
-		FrontendRespondQueryTaskCompletedScope:      {operation: "RespondQueryTaskCompleted"},
-		FrontendRespondActivityTaskCompletedScope:   {operation: "RespondActivityTaskCompleted"},
-		FrontendRespondActivityTaskFailedScope:      {operation: "RespondActivityTaskFailed"},
-		FrontendRespondActivityTaskCanceledScope:    {operation: "RespondActivityTaskCanceled"},
-		FrontendGetWorkflowExecutionHistoryScope:    {operation: "GetWorkflowExecutionHistory"},
-		FrontendSignalWorkflowExecutionScope:        {operation: "SignalWorkflowExecution"},
-		FrontendTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
-		FrontendRequestCancelWorkflowExecutionScope: {operation: "RequestCancelWorkflowExecution"},
-		FrontendListOpenWorkflowExecutionsScope:     {operation: "ListOpenWorkflowExecutions"},
-		FrontendListClosedWorkflowExecutionsScope:   {operation: "ListClosedWorkflowExecutions"},
-		FrontendRegisterDomainScope:                 {operation: "RegisterDomain"},
-		FrontendDescribeDomainScope:                 {operation: "DescribeDomain"},
-		FrontendUpdateDomainScope:                   {operation: "UpdateDomain"},
-		FrontendDeprecateDomainScope:                {operation: "DeprecateDomain"},
-		FrontendQueryWorkflowScope:                  {operation: "QueryWorkflow"},
-		FrontendDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
+		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
+		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},
+		FrontendPollForActivityTaskScope:              {operation: "PollForActivityTask"},
+		FrontendRecordActivityTaskHeartbeatScope:      {operation: "RecordActivityTaskHeartbeat"},
+		FrontendRespondDecisionTaskCompletedScope:     {operation: "RespondDecisionTaskCompleted"},
+		FrontendRespondDecisionTaskFailedScope:        {operation: "RespondDecisionTaskFailed"},
+		FrontendRespondQueryTaskCompletedScope:        {operation: "RespondQueryTaskCompleted"},
+		FrontendRespondActivityTaskCompletedScope:     {operation: "RespondActivityTaskCompleted"},
+		FrontendRespondActivityTaskFailedScope:        {operation: "RespondActivityTaskFailed"},
+		FrontendRespondActivityTaskCanceledScope:      {operation: "RespondActivityTaskCanceled"},
+		FrontendRespondActivityTaskCompletedByIDScope: {operation: "RespondActivityTaskCompletedByID"},
+		FrontendRespondActivityTaskFailedByIDScope:    {operation: "RespondActivityTaskFailedByID"},
+		FrontendRespondActivityTaskCanceledByIDScope:  {operation: "RespondActivityTaskCanceledByID"},
+		FrontendGetWorkflowExecutionHistoryScope:      {operation: "GetWorkflowExecutionHistory"},
+		FrontendSignalWorkflowExecutionScope:          {operation: "SignalWorkflowExecution"},
+		FrontendTerminateWorkflowExecutionScope:       {operation: "TerminateWorkflowExecution"},
+		FrontendRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
+		FrontendListOpenWorkflowExecutionsScope:       {operation: "ListOpenWorkflowExecutions"},
+		FrontendListClosedWorkflowExecutionsScope:     {operation: "ListClosedWorkflowExecutions"},
+		FrontendRegisterDomainScope:                   {operation: "RegisterDomain"},
+		FrontendDescribeDomainScope:                   {operation: "DescribeDomain"},
+		FrontendUpdateDomainScope:                     {operation: "UpdateDomain"},
+		FrontendDeprecateDomainScope:                  {operation: "DeprecateDomain"},
+		FrontendQueryWorkflowScope:                    {operation: "QueryWorkflow"},
+		FrontendDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 	},
 	// History Scope Names
 	History: {

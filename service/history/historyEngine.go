@@ -1054,6 +1054,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
+		if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
+			scheduleID, err0 = getScheduleID(token.ActivityID, msBuilder)
+			if err0 != nil {
+				return err0
+			}
+		}
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -1147,6 +1153,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
+		if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
+			scheduleID, err0 = getScheduleID(token.ActivityID, msBuilder)
+			if err0 != nil {
+				return err0
+			}
+		}
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -1241,6 +1253,12 @@ Update_History_Loop:
 		}
 
 		scheduleID := token.ScheduleID
+		if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
+			scheduleID, err0 = getScheduleID(token.ActivityID, msBuilder)
+			if err0 != nil {
+				return err0
+			}
+		}
 		ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
@@ -1880,4 +1898,15 @@ func getDomainUUID(domainUUID *string) (string, error) {
 		return "", &workflow.BadRequestError{Message: "Missing domain UUID."}
 	}
 	return *domainUUID, nil
+}
+
+func getScheduleID(activityID string, msBuilder *mutableStateBuilder) (int64, error) {
+	if activityID == "" {
+		return 0, &workflow.BadRequestError{Message: "Neither ActivityID nor ScheduleID is provided"}
+	}
+	scheduleID, ok := msBuilder.GetScheduleIDByActivityID(activityID)
+	if !ok {
+		return 0, &workflow.BadRequestError{Message: fmt.Sprintf("No such activityID: %d\n", activityID)}
+	}
+	return scheduleID, nil
 }

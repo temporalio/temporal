@@ -36,6 +36,7 @@ type (
 		RunID           string `json:"runId"`
 		ScheduleID      int64  `json:"scheduleId"`
 		ScheduleAttempt int64  `json:"scheduleAttempt"`
+		ActivityID      string `json:"activityId"`
 	}
 
 	// QueryTaskToken identifies a query task

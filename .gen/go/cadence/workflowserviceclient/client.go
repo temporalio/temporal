@@ -114,15 +114,33 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	RespondActivityTaskCanceledByID(
+		ctx context.Context,
+		CanceledRequest *shared.RespondActivityTaskCanceledByIDRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RespondActivityTaskCompleted(
 		ctx context.Context,
 		CompleteRequest *shared.RespondActivityTaskCompletedRequest,
 		opts ...yarpc.CallOption,
 	) error
 
+	RespondActivityTaskCompletedByID(
+		ctx context.Context,
+		CompleteRequest *shared.RespondActivityTaskCompletedByIDRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RespondActivityTaskFailed(
 		ctx context.Context,
 		FailRequest *shared.RespondActivityTaskFailedRequest,
+		opts ...yarpc.CallOption,
+	) error
+
+	RespondActivityTaskFailedByID(
+		ctx context.Context,
+		FailRequest *shared.RespondActivityTaskFailedByIDRequest,
 		opts ...yarpc.CallOption,
 	) error
 
@@ -492,6 +510,29 @@ func (c client) RespondActivityTaskCanceled(
 	return
 }
 
+func (c client) RespondActivityTaskCanceledByID(
+	ctx context.Context,
+	_CanceledRequest *shared.RespondActivityTaskCanceledByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := cadence.WorkflowService_RespondActivityTaskCanceledByID_Helper.Args(_CanceledRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_RespondActivityTaskCanceledByID_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = cadence.WorkflowService_RespondActivityTaskCanceledByID_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) RespondActivityTaskCompleted(
 	ctx context.Context,
 	_CompleteRequest *shared.RespondActivityTaskCompletedRequest,
@@ -515,6 +556,29 @@ func (c client) RespondActivityTaskCompleted(
 	return
 }
 
+func (c client) RespondActivityTaskCompletedByID(
+	ctx context.Context,
+	_CompleteRequest *shared.RespondActivityTaskCompletedByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := cadence.WorkflowService_RespondActivityTaskCompletedByID_Helper.Args(_CompleteRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_RespondActivityTaskCompletedByID_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = cadence.WorkflowService_RespondActivityTaskCompletedByID_Helper.UnwrapResponse(&result)
+	return
+}
+
 func (c client) RespondActivityTaskFailed(
 	ctx context.Context,
 	_FailRequest *shared.RespondActivityTaskFailedRequest,
@@ -535,6 +599,29 @@ func (c client) RespondActivityTaskFailed(
 	}
 
 	err = cadence.WorkflowService_RespondActivityTaskFailed_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RespondActivityTaskFailedByID(
+	ctx context.Context,
+	_FailRequest *shared.RespondActivityTaskFailedByIDRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := cadence.WorkflowService_RespondActivityTaskFailedByID_Helper.Args(_FailRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_RespondActivityTaskFailedByID_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = cadence.WorkflowService_RespondActivityTaskFailedByID_Helper.UnwrapResponse(&result)
 	return
 }
 
