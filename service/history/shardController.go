@@ -162,7 +162,7 @@ func (c *shardController) Stop() {
 }
 
 func (c *shardController) GetEngine(workflowID string) (Engine, error) {
-	shardID := common.WorkflowIDToHistoryShard(workflowID, c.config.NumberOfShards)
+	shardID := c.config.GetShardID(workflowID)
 	return c.getEngineForShard(shardID)
 }
 

@@ -826,6 +826,7 @@ struct GetWorkflowExecutionHistoryRequest {
   20: optional WorkflowExecution execution
   30: optional i32 maximumPageSize
   40: optional binary nextPageToken
+  50: optional bool waitForNewEvent
 }
 
 struct GetWorkflowExecutionHistoryResponse {

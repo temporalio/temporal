@@ -20,9 +20,13 @@
 
 package history
 
-import "github.com/stretchr/testify/mock"
-import gohistory "github.com/uber/cadence/.gen/go/history"
-import "github.com/uber/cadence/.gen/go/shared"
+import (
+	"context"
+
+	"github.com/stretchr/testify/mock"
+	gohistory "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/shared"
+)
 
 // MockHistoryEngine is used as mock implementation for HistoryEngine
 type MockHistoryEngine struct {
@@ -63,8 +67,8 @@ func (_m *MockHistoryEngine) StartWorkflowExecution(request *gohistory.StartWork
 }
 
 // GetWorkflowExecutionNextEventID is mock implementation for GetWorkflowExecutionNextEventID of HistoryEngine
-func (_m *MockHistoryEngine) GetWorkflowExecutionNextEventID(request *gohistory.GetWorkflowExecutionNextEventIDRequest) (*gohistory.GetWorkflowExecutionNextEventIDResponse, error) {
-	ret := _m.Called(request)
+func (_m *MockHistoryEngine) GetWorkflowExecutionNextEventID(ctx context.Context, request *gohistory.GetWorkflowExecutionNextEventIDRequest) (*gohistory.GetWorkflowExecutionNextEventIDResponse, error) {
+	ret := _m.Called(ctx, request)
 
 	var r0 *gohistory.GetWorkflowExecutionNextEventIDResponse
 	if rf, ok := ret.Get(0).(func(*gohistory.GetWorkflowExecutionNextEventIDRequest) *gohistory.GetWorkflowExecutionNextEventIDResponse); ok {

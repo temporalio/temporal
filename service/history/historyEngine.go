@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -47,26 +48,28 @@ const (
 
 type (
 	historyEngineImpl struct {
-		shard              ShardContext
-		metadataMgr        persistence.MetadataManager
-		historyMgr         persistence.HistoryManager
-		executionManager   persistence.ExecutionManager
-		txProcessor        transferQueueProcessor
-		timerProcessor     timerQueueProcessor
-		tokenSerializer    common.TaskTokenSerializer
-		hSerializerFactory persistence.HistorySerializerFactory
-		metricsReporter    metrics.Client
-		historyCache       *historyCache
-		domainCache        cache.DomainCache
-		metricsClient      metrics.Client
-		logger             bark.Logger
+		shard                ShardContext
+		metadataMgr          persistence.MetadataManager
+		historyMgr           persistence.HistoryManager
+		executionManager     persistence.ExecutionManager
+		txProcessor          transferQueueProcessor
+		timerProcessor       timerQueueProcessor
+		historyEventNotifier historyEventNotifier
+		tokenSerializer      common.TaskTokenSerializer
+		hSerializerFactory   persistence.HistorySerializerFactory
+		metricsReporter      metrics.Client
+		historyCache         *historyCache
+		domainCache          cache.DomainCache
+		metricsClient        metrics.Client
+		logger               bark.Logger
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
 	// TODO: use to notify timerQueueProcessor as well.
 	shardContextWrapper struct {
 		ShardContext
-		txProcessor transferQueueProcessor
+		txProcessor          transferQueueProcessor
+		historyEventNotifier historyEventNotifier
 	}
 )
 
@@ -83,8 +86,12 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.MetadataManager,
-	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client) Engine {
-	shardWrapper := &shardContextWrapper{ShardContext: shard}
+	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client,
+	historyEventNotifier historyEventNotifier) Engine {
+	shardWrapper := &shardContextWrapper{
+		ShardContext:         shard,
+		historyEventNotifier: historyEventNotifier,
+	}
 	shard = shardWrapper
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
@@ -103,7 +110,8 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
 		}),
-		metricsClient: shard.GetMetricsClient(),
+		metricsClient:        shard.GetMetricsClient(),
+		historyEventNotifier: historyEventNotifier,
 	}
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, executionManager, logger)
@@ -281,7 +289,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 }
 
 // GetWorkflowExecutionNextEventID retrieves the nextEventId of the workflow execution history
-func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
+func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(ctx context.Context,
 	request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
 
 	domainID, err := getDomainUUID(request.DomainUUID)
@@ -293,6 +301,60 @@ func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
 		WorkflowId: request.Execution.WorkflowId,
 		RunId:      request.Execution.RunId,
 	}
+
+	response, err := e.getWorkflowExecutionNextEventID(domainID, execution)
+	if err != nil {
+		return nil, err
+	}
+
+	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
+	expectedNextEventID := common.FirstEventID
+	if request.ExpectedNextEventId != nil {
+		expectedNextEventID = request.GetExpectedNextEventId()
+	}
+
+	// if caller decide to long poll on workflow execution
+	// and the event ID we are looking for is smaller than current next event ID
+	if expectedNextEventID >= response.GetEventId() && response.GetIsWorkflowRunning() {
+		subscriberID, channel, err := e.historyEventNotifier.WatchHistoryEvent(newWorkflowIdentifier(domainID, &execution))
+		if err != nil {
+			return nil, err
+		}
+		defer e.historyEventNotifier.UnwatchHistoryEvent(newWorkflowIdentifier(domainID, &execution), subscriberID)
+
+		// check again in case the next event ID is updated
+		response, err = e.getWorkflowExecutionNextEventID(domainID, execution)
+		if err != nil {
+			return nil, err
+		}
+
+		if expectedNextEventID < response.GetEventId() || !response.GetIsWorkflowRunning() {
+			return response, nil
+		}
+
+		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval)
+		defer timer.Stop()
+		for {
+			select {
+			case event := <-channel:
+				response.EventId = common.Int64Ptr(event.nextEventID)
+				response.IsWorkflowRunning = common.BoolPtr(event.isWorkflowRunning)
+				if expectedNextEventID < response.GetEventId() || !response.GetIsWorkflowRunning() {
+					return response, nil
+				}
+			case <-timer.C:
+				return response, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+
+	return response, nil
+}
+
+func (e *historyEngineImpl) getWorkflowExecutionNextEventID(
+	domainID string, execution workflow.WorkflowExecution) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
@@ -309,7 +371,7 @@ func (e *historyEngineImpl) GetWorkflowExecutionNextEventID(
 	result.EventId = common.Int64Ptr(msBuilder.GetNextEventID())
 	result.RunId = context.workflowExecution.RunId
 	result.Tasklist = &workflow.TaskList{Name: common.StringPtr(context.msBuilder.executionInfo.TaskList)}
-
+	result.IsWorkflowRunning = common.BoolPtr(msBuilder.isWorkflowExecutionRunning())
 	return result, nil
 }
 
@@ -1748,6 +1810,12 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 		}
 	}
 	return resp, err
+}
+
+func (s *shardContextWrapper) NotifyNewHistoryEvent(event *historyEventNotification) error {
+	s.historyEventNotifier.NotifyNewHistoryEvent(event)
+	err := s.ShardContext.NotifyNewHistoryEvent(event)
+	return err
 }
 
 func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTaskDecisionAttributes) error {

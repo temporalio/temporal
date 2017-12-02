@@ -106,9 +106,9 @@ func (m *ClientImpl) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 }
 
 // UpdateGauge reports Gauge type metric
-func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, delta float64) {
+func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 	name := string(m.metricDefs[gaugeIdx].metricName)
-	m.childScopes[scopeIdx].Gauge(name).Update(delta)
+	m.childScopes[scopeIdx].Gauge(name).Update(value)
 }
 
 // Tagged returns a client that adds the given tags to all metrics

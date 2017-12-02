@@ -60,6 +60,8 @@ type (
 	}
 )
 
+var _ ShardContext = (*TestShardContext)(nil)
+
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64, historyMgr persistence.HistoryManager,
 	executionMgr persistence.ExecutionManager, config *Config, logger bark.Logger) *TestShardContext {
 	return &TestShardContext{
@@ -148,6 +150,11 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 // AppendHistoryEvents test implementation
 func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error {
 	return s.historyMgr.AppendHistoryEvents(request)
+}
+
+// NotifyNewHistoryEvent test implementation
+func (s *TestShardContext) NotifyNewHistoryEvent(event *historyEventNotification) error {
+	return nil
 }
 
 // GetConfig test implementation

@@ -40,23 +40,26 @@ import (
 )
 
 // Handler - Thrift handler inteface for history service
-type Handler struct {
-	numberOfShards        int
-	shardManager          persistence.ShardManager
-	metadataMgr           persistence.MetadataManager
-	visibilityMgr         persistence.VisibilityManager
-	historyMgr            persistence.HistoryManager
-	executionMgrFactory   persistence.ExecutionManagerFactory
-	historyServiceClient  hc.Client
-	matchingServiceClient matching.Client
-	hServiceResolver      membership.ServiceResolver
-	controller            *shardController
-	tokenSerializer       common.TaskTokenSerializer
-	startWG               sync.WaitGroup
-	metricsClient         metrics.Client
-	config                *Config
-	service.Service
-}
+type (
+	Handler struct {
+		numberOfShards        int
+		shardManager          persistence.ShardManager
+		metadataMgr           persistence.MetadataManager
+		visibilityMgr         persistence.VisibilityManager
+		historyMgr            persistence.HistoryManager
+		executionMgrFactory   persistence.ExecutionManagerFactory
+		historyServiceClient  hc.Client
+		matchingServiceClient matching.Client
+		hServiceResolver      membership.ServiceResolver
+		controller            *shardController
+		tokenSerializer       common.TaskTokenSerializer
+		startWG               sync.WaitGroup
+		metricsClient         metrics.Client
+		config                *Config
+		historyEventNotifier  historyEventNotifier
+		service.Service
+	}
+)
 
 var _ historyserviceserver.Interface = (*Handler)(nil)
 var _ EngineFactory = (*Handler)(nil)
@@ -80,6 +83,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
 	}
+
 	// prevent us from trying to serve requests before shard controller is started and ready
 	handler.startWG.Add(1)
 	return handler
@@ -109,8 +113,11 @@ func (h *Handler) Start() error {
 	h.hServiceResolver = hServiceResolver
 	h.controller = newShardController(h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
 		h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
-	h.controller.Start()
 	h.metricsClient = h.GetMetricsClient()
+	h.historyEventNotifier = newHistoryEventNotifier(h.GetMetricsClient(), h.config.GetShardID)
+	// events notifier must starts before controller
+	h.historyEventNotifier.Start()
+	h.controller.Start()
 	h.startWG.Done()
 	return nil
 }
@@ -124,11 +131,13 @@ func (h *Handler) Stop() {
 	h.metadataMgr.Close()
 	h.visibilityMgr.Close()
 	h.Service.Stop()
+	h.historyEventNotifier.Stop()
 }
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient)
+	return NewEngineWithShardContext(context, h.metadataMgr, h.visibilityMgr,
+		h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier)
 }
 
 // Health is for health check
@@ -482,7 +491,7 @@ func (h *Handler) GetWorkflowExecutionNextEventID(ctx context.Context,
 		return nil, err1
 	}
 
-	resp, err2 := engine.GetWorkflowExecutionNextEventID(getRequest)
+	resp, err2 := engine.GetWorkflowExecutionNextEventID(ctx, getRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionNextEventIDScope, h.convertError(err2))
 		return nil, h.convertError(err2)

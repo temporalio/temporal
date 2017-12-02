@@ -69,6 +69,7 @@ type (
 		RunID             string
 		FirstEventID      int64
 		NextEventID       int64
+		IsWorkflowRunning bool
 		PersistenceToken  []byte
 		TransientDecision *gen.TransientDecisionInfo
 	}
@@ -418,16 +419,17 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 			return nil, wh.error(errRunIDNotSet, scope)
 		}
 
-		continuation, err =
-			getSerializedGetHistoryToken(
-				persistenceToken,
-				*matchingResp.WorkflowExecution.RunId,
-				history,
-				firstEventID,
-				nextEventID,
-				matchingResp.DecisionInfo)
-		if err != nil {
-			return nil, wh.error(err, scope)
+		if len(persistenceToken) != 0 {
+			continuation, err = serializeHistoryToken(&getHistoryContinuationToken{
+				RunID:             *matchingResp.WorkflowExecution.RunId,
+				FirstEventID:      firstEventID,
+				NextEventID:       nextEventID,
+				PersistenceToken:  persistenceToken,
+				TransientDecision: matchingResp.DecisionInfo,
+			})
+			if err != nil {
+				return nil, wh.error(err, scope)
+			}
 		}
 	}
 
@@ -951,64 +953,114 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		getRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultHistoryMaxPageSize)
 	}
 
-	info, _, err := wh.domainCache.GetDomain(*getRequest.Domain)
+	domainInfo, _, err := wh.domainCache.GetDomain(*getRequest.Domain)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
 
+	// this function return the following 3 things,
+	// 1. the workflow run ID
+	// 2. the next event ID
+	// 3. whether the workflow is closed
+	getNextEventID := func(domainUUID string, execution *gen.WorkflowExecution, expectedNextEventID *int64) (string, int64, bool, error) {
+		response, err := wh.history.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
+			DomainUUID:          common.StringPtr(domainUUID),
+			Execution:           execution,
+			ExpectedNextEventId: expectedNextEventID,
+		})
+
+		if err == nil {
+			return response.GetRunId(), response.GetEventId(), response.GetIsWorkflowRunning(), nil
+		}
+
+		if _, ok := err.(*gen.EntityNotExistsError); !ok || execution.RunId == nil {
+			return "", 0, false, err
+		}
+		// here we have error == EntityNotExistsError && run ID != nil
+		// (validateExecution guaranee that when run ID != nil, run ID is a valid UUID)
+
+		// It is possible that we still have the events in the table even though the mutable state is gone
+		// Get the nextEventID from visibility store if we still have it.
+		visibilityResp, err := wh.visibitiltyMgr.GetClosedWorkflowExecution(&persistence.GetClosedWorkflowExecutionRequest{
+			DomainUUID: domainUUID,
+			Execution:  *execution,
+		})
+		if err != nil {
+			return "", 0, false, err
+		}
+		return *visibilityResp.Execution.Execution.RunId, *visibilityResp.Execution.HistoryLength, false, nil
+	}
+
+	isLongPoll := getRequest.GetWaitForNewEvent()
+	execution := getRequest.Execution
 	token := &getHistoryContinuationToken{}
+
+	// process the token for paging
 	if getRequest.NextPageToken != nil {
-		token, err = deserializeGetHistoryToken(getRequest.NextPageToken)
+		token, err = deserializeHistoryToken(getRequest.NextPageToken)
 		if err != nil {
 			return nil, wh.error(errInvalidNextPageToken, scope)
 		}
-		if getRequest.Execution.RunId != nil && *getRequest.Execution.RunId != token.RunID {
+		if execution.RunId != nil && *execution.RunId != token.RunID {
 			return nil, wh.error(errNextPageTokenRunIDMismatch, scope)
 		}
-	} else {
-		response, err := wh.history.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
-			DomainUUID: common.StringPtr(info.ID),
-			Execution:  getRequest.Execution,
-		})
-		token.FirstEventID = common.FirstEventID
-		if err == nil {
-			token.NextEventID = *response.EventId
-			token.RunID = *response.RunId
-		} else {
-			if _, ok := err.(*gen.EntityNotExistsError); !ok || getRequest.Execution.RunId == nil {
-				return nil, wh.error(err, scope)
-			}
-			// It is possible that we still have the events in the table even though the mutable state is gone
-			// Get the nextEventID from visibility store if we still have it.
-			visibilityResp, err := wh.visibitiltyMgr.GetClosedWorkflowExecution(&persistence.GetClosedWorkflowExecutionRequest{
-				DomainUUID: info.ID,
-				Execution:  *getRequest.Execution,
-			})
+
+		execution.RunId = common.StringPtr(token.RunID)
+
+		// we need to update the current next event ID and whether workflow is running
+		if len(token.PersistenceToken) == 0 && isLongPoll && token.IsWorkflowRunning {
+			token.FirstEventID = token.NextEventID
+			_, nextEventID, isRunning, err := getNextEventID(domainInfo.ID, execution, &token.NextEventID)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
-			token.NextEventID = *visibilityResp.Execution.HistoryLength
-			token.RunID = *visibilityResp.Execution.Execution.RunId
+
+			token.NextEventID = nextEventID
+			token.IsWorkflowRunning = isRunning
+		}
+	} else {
+		runID, nextEventID, isRunning, err := getNextEventID(domainInfo.ID, execution, nil)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+
+		execution.RunId = &runID
+
+		token.RunID = runID
+		token.FirstEventID = 0
+		token.NextEventID = nextEventID
+		token.IsWorkflowRunning = isRunning
+		token.PersistenceToken = nil
+	}
+
+	history := &gen.History{}
+	if token.FirstEventID >= token.NextEventID {
+		// currently there is no new event
+		events := []*gen.HistoryEvent{}
+		history.Events = events
+		if !token.IsWorkflowRunning {
+			token = nil
+		}
+	} else {
+		history, token.PersistenceToken, err =
+			wh.getHistory(domainInfo.ID, *execution, token.FirstEventID, token.NextEventID,
+				*getRequest.MaximumPageSize, token.PersistenceToken, token.TransientDecision)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+
+		// here, for long pull on history events, we need to intercept the paging token from cassandra
+		// and do something clever
+		if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
+			// meaning, there is no more history to be returned
+			token = nil
 		}
 	}
 
-	we := gen.WorkflowExecution{
-		WorkflowId: getRequest.Execution.WorkflowId,
-		RunId:      common.StringPtr(token.RunID),
-	}
-	history, persistenceToken, err :=
-		wh.getHistory(info.ID, we, token.FirstEventID, token.NextEventID, *getRequest.MaximumPageSize,
-			token.PersistenceToken, token.TransientDecision)
+	nextToken, err := serializeHistoryToken(token)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
-
-	nextToken, err := getSerializedGetHistoryToken(persistenceToken, token.RunID, history, token.FirstEventID,
-		token.NextEventID, token.TransientDecision)
-	if err != nil {
-		return nil, wh.error(err, scope)
-	}
-
 	return createGetWorkflowExecutionHistoryResponse(history, nextToken), nil
 }
 
@@ -1414,9 +1466,6 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte,
 	transientDecision *gen.TransientDecisionInfo) (*gen.History, []byte, error) {
 
-	if nextPageToken == nil {
-		nextPageToken = []byte{}
-	}
 	historyEvents := []*gen.HistoryEvent{}
 
 	response, err := wh.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
@@ -1628,33 +1677,19 @@ func createGetWorkflowExecutionHistoryResponse(
 	return resp
 }
 
-func deserializeGetHistoryToken(data []byte) (*getHistoryContinuationToken, error) {
-	var token getHistoryContinuationToken
-	err := json.Unmarshal(data, &token)
-
-	return &token, err
+func deserializeHistoryToken(bytes []byte) (*getHistoryContinuationToken, error) {
+	token := &getHistoryContinuationToken{}
+	err := json.Unmarshal(bytes, token)
+	return token, err
 }
 
-func getSerializedGetHistoryToken(persistenceToken []byte, runID string, history *gen.History, firstEventID, nextEventID int64,
-	transientDecision *gen.TransientDecisionInfo) ([]byte, error) {
-	// create token if there are more events to read
-	if history == nil {
+func serializeHistoryToken(token *getHistoryContinuationToken) ([]byte, error) {
+	if token == nil {
 		return nil, nil
 	}
 
-	if len(persistenceToken) > 0 {
-		token := &getHistoryContinuationToken{
-			RunID:             runID,
-			FirstEventID:      firstEventID,
-			NextEventID:       nextEventID,
-			PersistenceToken:  persistenceToken,
-			TransientDecision: transientDecision,
-		}
-		data, err := json.Marshal(token)
-
-		return data, err
-	}
-	return nil, nil
+	bytes, err := json.Marshal(token)
+	return bytes, err
 }
 
 func createServiceBusyError() *gen.ServiceBusyError {

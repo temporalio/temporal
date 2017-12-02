@@ -21,10 +21,12 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -56,6 +58,7 @@ type (
 		mockExecutionMgr   *mocks.ExecutionManager
 		mockHistoryMgr     *mocks.HistoryManager
 		mockShardManager   *mocks.ShardManager
+		mockMetricClient   metrics.Client
 		shardClosedCh      chan int
 		eventSerializer    historyEventSerializer
 		config             *Config
@@ -95,7 +98,14 @@ func (s *engineSuite) SetupTest() {
 	s.mockShardManager = &mocks.ShardManager{}
 	s.shardClosedCh = make(chan int, 100)
 	s.eventSerializer = newJSONHistoryEventSerializer()
+	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.History)
 
+	historyEventNotifier := newHistoryEventNotifier(
+		s.mockMetricClient,
+		func(workflowID string) int {
+			return len(workflowID)
+		},
+	)
 	mockShard := &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
@@ -108,31 +118,160 @@ func (s *engineSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
+	shardContextWrapper := &shardContextWrapper{
+		ShardContext:         mockShard,
+		historyEventNotifier: historyEventNotifier,
+	}
 
-	historyCache := newHistoryCache(mockShard, s.logger)
+	historyCache := newHistoryCache(shardContextWrapper, s.logger)
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	h := &historyEngineImpl{
-		shard:              mockShard,
-		executionManager:   s.mockExecutionMgr,
-		historyMgr:         s.mockHistoryMgr,
-		historyCache:       historyCache,
-		domainCache:        domainCache,
-		logger:             s.logger,
-		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		shard:                shardContextWrapper,
+		executionManager:     s.mockExecutionMgr,
+		historyMgr:           s.mockHistoryMgr,
+		historyCache:         historyCache,
+		domainCache:          domainCache,
+		logger:               s.logger,
+		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
+		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
+		hSerializerFactory:   persistence.NewHistorySerializerFactory(),
+		historyEventNotifier: historyEventNotifier,
 	}
-	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
-	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockExecutionMgr, s.logger)
+	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
+	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockExecutionMgr, s.logger)
+	h.historyEventNotifier.Start()
+	shardContextWrapper.txProcessor = h.txProcessor
 	s.mockHistoryEngine = h
 }
 
 func (s *engineSuite) TearDownTest() {
+	s.mockHistoryEngine.historyEventNotifier.Stop()
 	s.mockMatchingClient.AssertExpectations(s.T())
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockShardManager.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionNextEventIDSync() {
+	ctx := context.Background()
+	domainID := "domainId"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		RunId:      common.StringPtr(uuid.NewUUID().String()),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+
+	// test get the next event ID instantly
+	response, err := s.mockHistoryEngine.GetWorkflowExecutionNextEventID(ctx, &history.GetWorkflowExecutionNextEventIDRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  &execution,
+	})
+	s.Nil(err)
+	s.Equal(int64(4), *response.EventId)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionNextEventIDLongPoll() {
+	ctx := context.Background()
+	domainID := "domainId"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		RunId:      common.StringPtr(uuid.NewUUID().String()),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+
+	// test long poll on next event ID change
+	asycWorkflowUpdate := func(delay time.Duration) {
+		taskToken, _ := json.Marshal(&common.TaskToken{
+			WorkflowID: *execution.WorkflowId,
+			RunID:      *execution.RunId,
+			ScheduleID: 2,
+		})
+		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+		s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+		timer := time.NewTimer(delay)
+
+		<-timer.C
+		s.mockHistoryEngine.RespondDecisionTaskCompleted(&history.RespondDecisionTaskCompletedRequest{
+			DomainUUID: common.StringPtr(domainID),
+			CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+				TaskToken: taskToken,
+				Identity:  &identity,
+			},
+		})
+		// right now the next event ID is 5
+	}
+
+	// return immediately, since the expected next event ID appears
+	response, err := s.mockHistoryEngine.GetWorkflowExecutionNextEventID(ctx, &history.GetWorkflowExecutionNextEventIDRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		Execution:           &execution,
+		ExpectedNextEventId: common.Int64Ptr(4),
+	})
+	s.Nil(err)
+	s.Equal(int64(4), *response.EventId)
+
+	// long poll, new event happen before long poll timeout
+	go asycWorkflowUpdate(time.Second * 10)
+	start := time.Now()
+	response, err = s.mockHistoryEngine.GetWorkflowExecutionNextEventID(ctx, &history.GetWorkflowExecutionNextEventIDRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		Execution:           &execution,
+		ExpectedNextEventId: common.Int64Ptr(5),
+	})
+	s.True(time.Now().After(start.Add(time.Second * 5)))
+	s.Nil(err)
+	s.Equal(int64(5), *response.EventId)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionNextEventIDLongPollTimeout() {
+	ctx := context.Background()
+	domainID := "domainId"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-get-workflow-execution-event-id"),
+		RunId:      common.StringPtr(uuid.NewUUID().String()),
+	}
+	tasklist := "testTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", tasklist, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tasklist, identity)
+	ms := createMutableState(msBuilder)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gweResponse, nil).Once()
+
+	// long poll, no event happen after long poll timeout
+	response, err := s.mockHistoryEngine.GetWorkflowExecutionNextEventID(ctx, &history.GetWorkflowExecutionNextEventIDRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		Execution:           &execution,
+		ExpectedNextEventId: common.Int64Ptr(5),
+	})
+	s.Nil(err)
+	s.Equal(int64(4), *response.EventId)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {

@@ -192,6 +192,15 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	// Update went through so update the condition for new updates
 	c.updateCondition = c.msBuilder.GetNextEventID()
 	c.msBuilder.executionInfo.LastUpdatedTimestamp = time.Now()
+
+	// for any change in the workflow, send a event
+	c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
+		c.domainID,
+		&c.workflowExecution,
+		c.msBuilder.GetNextEventID(),
+		c.msBuilder.isWorkflowExecutionRunning(),
+	))
+
 	return nil
 }
 

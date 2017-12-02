@@ -49,6 +49,7 @@ type (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error
+		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
@@ -292,6 +293,13 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	}
 
 	return err0
+}
+
+func (s *shardContextImpl) NotifyNewHistoryEvent(event *historyEventNotification) error {
+	// in theory, this function should call persistence layer, such as
+	// Kafka to actually sent out the notification, here, just make this
+	// function do nothing, to we can actually override this function
+	return nil
 }
 
 func (s *shardContextImpl) GetConfig() *Config {

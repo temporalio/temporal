@@ -66,6 +66,10 @@ type Config struct {
 	// Persistence settings
 	ExecutionMgrNumConns int
 	HistoryMgrNumConns   int
+
+	// Time to hold a poll request before returning an empty response
+	// right now only used by GetWorkflowExecutionNextEventID
+	LongPollExpirationInterval time.Duration
 }
 
 // NewConfig returns new service config with default values
@@ -94,7 +98,14 @@ func NewConfig(numberOfShards int) *Config {
 		TransferTaskWorkerCount:                     10,
 		ExecutionMgrNumConns:                        100,
 		HistoryMgrNumConns:                          100,
+		// history client: client/history/client.go set the client timeout 30s
+		LongPollExpirationInterval: time.Second * 20,
 	}
+}
+
+// GetShardID return the corresponding shard ID for a given workflow ID
+func (config *Config) GetShardID(workflowID string) int {
+	return common.WorkflowIDToHistoryShard(workflowID, config.NumberOfShards)
 }
 
 // Service represents the cadence-history service

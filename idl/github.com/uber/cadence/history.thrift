@@ -46,12 +46,14 @@ struct StartWorkflowExecutionRequest {
 struct GetWorkflowExecutionNextEventIDRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") expectedNextEventId
 }
 
 struct GetWorkflowExecutionNextEventIDResponse {
   10: optional i64 (js.type = "Long") eventId
   20: optional string runId
   30: optional shared.TaskList tasklist
+  40: optional bool isWorkflowRunning
 }
 
 struct RespondDecisionTaskCompletedRequest {
