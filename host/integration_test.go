@@ -2805,6 +2805,16 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	// Process ChildExecution completed event and complete parent execution
 	err = poller.pollAndProcessDecisionTask(false, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	if err != nil {
+		s.logger.Info("Parent Workflow Execution History: ")
+		s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(parentID),
+			RunId:      common.StringPtr(*we.RunId),
+		})
+		s.logger.Info("Child Workflow Execution History: ")
+		s.printWorkflowHistory(s.domainName,
+			startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowExecution)
+	}
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
