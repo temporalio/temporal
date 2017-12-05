@@ -119,10 +119,9 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 			return &gen.InternalServiceError{
 				Message: "Unable to watch on workflow execution.",
 			}
-		} else {
-			subscribers[subscriberID] = channel
-			return nil
 		}
+		subscribers[subscriberID] = channel
+		return nil
 	})
 
 	if err != nil {

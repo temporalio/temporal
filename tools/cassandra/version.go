@@ -21,7 +21,6 @@
 package cassandra
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"regexp"
@@ -120,34 +119,35 @@ func getExpectedVersion(dir string) (string, error) {
 		}
 	}
 	if len(result) == 0 {
-		return "", errors.New(fmt.Sprintf("no valid schemas found in dir: %s", dir))
+		return "", fmt.Errorf("no valid schemas found in dir: %s", dir)
 	}
 	return result, nil
 }
 
+// CheckCompatibleVersion check the version compatibility
 func CheckCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
 	cqlClient, err := newCQLClient(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, keyspace)
 	if err != nil {
-		return errors.New(fmt.Sprintf("unable to create CQL Client: %v", err.Error()))
+		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
 	}
 	defer cqlClient.Close()
 	version, err := cqlClient.ReadSchemaVersion()
 	if err != nil {
-		return errors.New(fmt.Sprintf("unable to read cassandra schema version: %v", err.Error()))
+		return fmt.Errorf("unable to read cassandra schema version: %v", err.Error())
 	}
 	expectedVersion, err := getExpectedVersion(dirPath)
 	if err != nil {
-		return errors.New(fmt.Sprintf("unable to read expected schema version: %v", err.Error()))
+		return fmt.Errorf("unable to read expected schema version: %v", err.Error())
 	}
 	// In most cases, the versions should match. However if after a schema upgrade there is a code
 	// rollback, the code version (expected version) would fall lower than the actual version in
 	// cassandra. This check is to allow such rollbacks since we only make backwards compatible schema
 	// changes
 	if cmpVersion(version, expectedVersion) < 0 {
-		return errors.New(fmt.Sprintf(
+		return fmt.Errorf(
 			"version mismatch for keyspace: %q. Expected version: %s cannot be greater than "+
 				"Actual version: %s", keyspace, expectedVersion, version,
-		))
+		)
 	}
 	return nil
 }
