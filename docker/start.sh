@@ -21,12 +21,14 @@
 # THE SOFTWARE.
 
 setup_schema() {
-    SCHEMA_FILE=$CADENCE_HOME/schema/cadence/schema.cql
+    SCHEMA_DIR=$CADENCE_HOME/schema/cadence/versioned
     $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
-    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -d -f $SCHEMA_FILE
-    VISIBILITY_SCHEMA_FILE=$CADENCE_HOME/schema/visibility/schema.cql
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE setup-schema -v 0.0
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $KEYSPACE update-schema -d $SCHEMA_DIR
+    VISIBILITY_SCHEMA_DIR=$CADENCE_HOME/schema/visibility/versioned
     $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS create -k $VISIBILITY_KEYSPACE --rf $RF
-    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -d -f $VISIBILITY_SCHEMA_FILE
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE setup-schema -v 0.0
+    $CADENCE_HOME/cadence-cassandra-tool --ep $CASSANDRA_SEEDS -k $VISIBILITY_KEYSPACE update-schema -d $VISIBILITY_SCHEMA_DIR
 }
 
 wait_for_cassandra() {
