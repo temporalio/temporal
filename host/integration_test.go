@@ -3264,13 +3264,13 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// fail decision 1 more times
 	for i := 0; i < 2; i++ {
-		err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, int64(i))
+		err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, 3+int64(i))
 		s.Nil(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow decision
-	err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, int64(2))
+	err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, int64(5))
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(workflowComplete)

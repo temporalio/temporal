@@ -977,9 +977,6 @@ Update_History_Loop:
 			continueAsNewBuilder = nil
 		}
 
-		// flush event if needed after processing decisions
-		msBuilder.FlushBufferedEvents()
-
 		if tt := tBuilder.GetUserTimerTaskIfNeeded(msBuilder); tt != nil {
 			timerTasks = append(timerTasks, tt)
 		}

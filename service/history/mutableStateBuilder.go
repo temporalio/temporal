@@ -782,6 +782,12 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		return nil
 	}
 
+	// Flush any buffered events before creating the decision, otherwise it will result in invalid IDs for transient
+	// decision and will cause in timeout processing to not work for transient decisions
+	if err := e.FlushBufferedEvents(); err != nil {
+		return nil
+	}
+
 	var newDecisionEvent *workflow.HistoryEvent
 	scheduleID := e.GetNextEventID() // we will generate the schedule event later for repeatedly failing decisions
 	// Avoid creating new history events when decisions are continuously failing
@@ -817,11 +823,12 @@ func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64,
 	var event *workflow.HistoryEvent
 	scheduleID := di.ScheduleID
 	startedID := scheduleID + 1
+	tasklist := request.TaskList.GetName()
 	timestamp := time.Now().UnixNano()
 	// First check to see if new events came since transient decision was scheduled
 	if di.Attempt > 0 && di.ScheduleID != e.GetNextEventID() {
 		// Also create a new DecisionTaskScheduledEvent since new events came in when it was scheduled
-		scheduleEvent := e.hBuilder.AddDecisionTaskScheduledEvent(di.Tasklist, di.DecisionTimeout, 0)
+		scheduleEvent := e.hBuilder.AddDecisionTaskScheduledEvent(tasklist, di.DecisionTimeout, 0)
 		scheduleID = scheduleEvent.GetEventId()
 		di.Attempt = 0
 	}

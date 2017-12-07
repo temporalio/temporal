@@ -67,6 +67,7 @@ var _ EngineFactory = (*Handler)(nil)
 var (
 	errDomainNotSet            = &gen.BadRequestError{Message: "Domain not set on request."}
 	errWorkflowExecutionNotSet = &gen.BadRequestError{Message: "WorkflowExecution not set on request."}
+	errTaskListNotSet          = &gen.BadRequestError{Message: "Tasklist not set."}
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -227,6 +228,11 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 
 	if recordRequest.DomainUUID == nil {
 		return nil, errDomainNotSet
+	}
+
+	if recordRequest.PollRequest == nil || recordRequest.PollRequest.TaskList == nil ||
+		recordRequest.PollRequest.TaskList.GetName() == "" {
+		return nil, errTaskListNotSet
 	}
 
 	workflowExecution := recordRequest.WorkflowExecution
