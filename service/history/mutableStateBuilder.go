@@ -235,6 +235,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	e.updateRequestCancelInfos = []*persistence.RequestCancelInfo{}
 	e.deleteRequestCancelInfo = nil
 	e.continueAsNew = nil
+	e.clearBufferedEvents = false
 	if e.updateBufferedEvents != nil {
 		e.bufferedEvents = append(e.bufferedEvents, e.updateBufferedEvents)
 		e.updateBufferedEvents = nil
@@ -328,17 +329,37 @@ func (e *mutableStateBuilder) isStickyTaskListEnabled() bool {
 
 func (e *mutableStateBuilder) createNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent {
 	eventID := e.executionInfo.NextEventID
-	if e.HasInFlightDecisionTask() &&
-		eventType != workflow.EventTypeDecisionTaskCompleted &&
-		eventType != workflow.EventTypeDecisionTaskFailed &&
-		eventType != workflow.EventTypeDecisionTaskTimedOut {
+	if e.shouldBufferEvent(eventType) {
 		eventID = bufferedEventID
 	} else {
-		// only increase NextEventID if there is no in-flight decision task
+		// only increase NextEventID if event is not buffered
 		e.executionInfo.NextEventID++
 	}
 
 	return e.createNewHistoryEventWithTimestamp(eventID, eventType, time.Now().UnixNano())
+}
+
+func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bool {
+	if !e.HasInFlightDecisionTask() {
+		// do not buffer event if there is no in-flight decision
+		return false
+	}
+
+	switch eventType {
+	case workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeDecisionTaskFailed,
+		workflow.EventTypeDecisionTaskTimedOut,
+		workflow.EventTypeWorkflowExecutionCompleted,
+		workflow.EventTypeWorkflowExecutionFailed,
+		workflow.EventTypeWorkflowExecutionTimedOut,
+		workflow.EventTypeWorkflowExecutionTerminated,
+		workflow.EventTypeWorkflowExecutionContinuedAsNew,
+		workflow.EventTypeWorkflowExecutionCanceled:
+		// do not buffer event if it is any type of close decision or close workflow
+		return false
+	}
+
+	return true
 }
 
 func (e *mutableStateBuilder) createNewHistoryEventWithTimestamp(eventID int64, eventType workflow.EventType,
