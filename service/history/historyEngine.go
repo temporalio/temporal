@@ -192,7 +192,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		// DecisionTask is only created when it is not a Child Workflow Execution
 		di := msBuilder.AddDecisionTaskScheduledEvent()
 		if di == nil {
-			return nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
+			return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
 		}
 
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
