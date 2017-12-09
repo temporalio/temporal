@@ -218,8 +218,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		EventID:             di.ScheduleID}
 	timerIndexResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{timerTask}}
 
-	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
-
 	ms := createMutableState(builder)
 	wfResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
@@ -234,9 +232,16 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	}).Once()
 
 	// Start timer Processor.
+	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
+		// Done.
+		waitCh <- struct{}{}
+	}).Once()
 	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
+	<-waitCh
 
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil)
 	processor.NotifyNewTimer([]persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: timerTask.VisibilityTimestamp,
 	}})
