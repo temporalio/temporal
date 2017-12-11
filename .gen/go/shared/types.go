@@ -23098,6 +23098,8 @@ type WorkflowExecutionConfiguration struct {
 	ExecutionStartToCloseTimeoutSeconds *int32       `json:"executionStartToCloseTimeoutSeconds,omitempty"`
 	TaskStartToCloseTimeoutSeconds      *int32       `json:"taskStartToCloseTimeoutSeconds,omitempty"`
 	ChildPolicy                         *ChildPolicy `json:"childPolicy,omitempty"`
+	StickyTaskList                      *TaskList    `json:"stickyTaskList,omitempty"`
+	StickyScheduleToStartTimeoutSeconds *int32       `json:"stickyScheduleToStartTimeoutSeconds,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionConfiguration struct into a Thrift-level intermediate
@@ -23117,7 +23119,7 @@ type WorkflowExecutionConfiguration struct {
 //   }
 func (v *WorkflowExecutionConfiguration) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -23153,6 +23155,22 @@ func (v *WorkflowExecutionConfiguration) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.StickyTaskList != nil {
+		w, err = v.StickyTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.StickyScheduleToStartTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.StickyScheduleToStartTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 
@@ -23219,6 +23237,24 @@ func (v *WorkflowExecutionConfiguration) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.StickyTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.StickyScheduleToStartTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -23232,7 +23268,7 @@ func (v *WorkflowExecutionConfiguration) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [6]string
 	i := 0
 	if v.TaskList != nil {
 		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
@@ -23248,6 +23284,14 @@ func (v *WorkflowExecutionConfiguration) String() string {
 	}
 	if v.ChildPolicy != nil {
 		fields[i] = fmt.Sprintf("ChildPolicy: %v", *(v.ChildPolicy))
+		i++
+	}
+	if v.StickyTaskList != nil {
+		fields[i] = fmt.Sprintf("StickyTaskList: %v", v.StickyTaskList)
+		i++
+	}
+	if v.StickyScheduleToStartTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("StickyScheduleToStartTimeoutSeconds: %v", *(v.StickyScheduleToStartTimeoutSeconds))
 		i++
 	}
 
@@ -23269,6 +23313,12 @@ func (v *WorkflowExecutionConfiguration) Equals(rhs *WorkflowExecutionConfigurat
 		return false
 	}
 	if !_ChildPolicy_EqualsPtr(v.ChildPolicy, rhs.ChildPolicy) {
+		return false
+	}
+	if !((v.StickyTaskList == nil && rhs.StickyTaskList == nil) || (v.StickyTaskList != nil && rhs.StickyTaskList != nil && v.StickyTaskList.Equals(rhs.StickyTaskList))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.StickyScheduleToStartTimeoutSeconds, rhs.StickyScheduleToStartTimeoutSeconds) {
 		return false
 	}
 
@@ -23300,6 +23350,16 @@ func (v *WorkflowExecutionConfiguration) GetTaskStartToCloseTimeoutSeconds() (o 
 func (v *WorkflowExecutionConfiguration) GetChildPolicy() (o ChildPolicy) {
 	if v.ChildPolicy != nil {
 		return *v.ChildPolicy
+	}
+
+	return
+}
+
+// GetStickyScheduleToStartTimeoutSeconds returns the value of StickyScheduleToStartTimeoutSeconds if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionConfiguration) GetStickyScheduleToStartTimeoutSeconds() (o int32) {
+	if v.StickyScheduleToStartTimeoutSeconds != nil {
+		return *v.StickyScheduleToStartTimeoutSeconds
 	}
 
 	return
