@@ -783,8 +783,8 @@ Update_History_Loop:
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
-			if isPending && di.Attempt == task.ScheduleAttempt && di.StartedID == emptyEventID &&
-				msBuilder.isStickyTaskListEnabled() {
+			if isPending && di.Attempt == task.ScheduleAttempt && msBuilder.isWorkflowExecutionRunning() &&
+				di.StartedID == emptyEventID && msBuilder.isStickyTaskListEnabled() {
 				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 				if timeoutEvent == nil {
 					// Unable to add DecisionTaskTimedout event to history
