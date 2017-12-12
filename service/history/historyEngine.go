@@ -402,8 +402,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(msBuilder.executionInfo.WorkflowTimeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(msBuilder.executionInfo.DecisionTimeoutValue),
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
-			StickyTaskList:                      &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.StickyTaskList)},
-			StickyScheduleToStartTimeoutSeconds: common.Int32Ptr(msBuilder.executionInfo.StickyScheduleToStartTimeout),
 		},
 		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
 			Execution:     request.Request.Execution,
@@ -1042,6 +1040,7 @@ Update_History_Loop:
 
 		// Inform timer about the new ones.
 		e.timerProcessor.NotifyNewTimer(timerTasks)
+
 		return err
 	}
 

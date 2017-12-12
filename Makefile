@@ -91,7 +91,7 @@ test: vendor/glide.updated bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
-		go test -race -coverprofile=$@ "$$dir" | tee -a test.log; \
+		go test -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
@@ -99,7 +99,7 @@ cover_profile: clean bins_nothrift
 	@echo "mode: atomic" > $(BUILD)/cover.out
 
 	@echo Running integration test
-	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
+	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR) 
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
 

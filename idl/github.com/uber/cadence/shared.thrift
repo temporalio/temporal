@@ -202,8 +202,6 @@ struct WorkflowExecutionConfiguration {
   20: optional i32 executionStartToCloseTimeoutSeconds
   30: optional i32 taskStartToCloseTimeoutSeconds
   40: optional ChildPolicy childPolicy
-  50: optional TaskList stickyTaskList
-  60: optional i32 stickyScheduleToStartTimeoutSeconds
 }
 
 struct TransientDecisionInfo {

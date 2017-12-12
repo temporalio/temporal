@@ -258,12 +258,9 @@ pollLoop:
 		if tCtx.queryTaskInfo != nil {
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
-			describeResp, err := e.historyService.DescribeWorkflowExecution(ctx, &h.DescribeWorkflowExecutionRequest{
+			nextIDResp, err := e.historyService.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
 				DomainUUID: req.DomainUUID,
-				Request: &workflow.DescribeWorkflowExecutionRequest{
-					Domain:    req.PollRequest.Domain,
-					Execution: &tCtx.workflowExecution,
-				},
+				Execution:  &tCtx.workflowExecution,
 			})
 			if err != nil {
 				// will notify query client that the query task failed
@@ -278,15 +275,9 @@ pollLoop:
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
-			isStickyEnabled := false
-			if describeResp.ExecutionConfiguration.StickyTaskList != nil && len(describeResp.ExecutionConfiguration.StickyTaskList.GetName()) != 0 {
-				isStickyEnabled = true
-			}
 			resp := &h.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId: describeResp.WorkflowExecutionInfo.HistoryLength,
-				NextEventId:            describeResp.WorkflowExecutionInfo.HistoryLength,
-				WorkflowType:           describeResp.WorkflowExecutionInfo.Type,
-				StickyExecutionEnabled: common.BoolPtr(isStickyEnabled),
+				PreviousStartedEventId: nextIDResp.EventId,
+				NextEventId:            nextIDResp.EventId,
 			}
 			tCtx.completeTask(nil)
 			return e.createPollForDecisionTaskResponse(tCtx, resp), nil
@@ -492,11 +483,11 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
 		response.TaskToken, _ = e.tokenSerializer.Serialize(token)
+		response.WorkflowType = historyResponse.WorkflowType
 	}
 	if historyResponse.GetPreviousStartedEventId() != common.EmptyEventID {
 		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
-	response.WorkflowType = historyResponse.WorkflowType
 	response.StartedEventId = historyResponse.StartedEventId
 	response.StickyExecutionEnabled = historyResponse.StickyExecutionEnabled
 	response.BacklogCountHint = common.Int64Ptr(context.backlogCountHint)
