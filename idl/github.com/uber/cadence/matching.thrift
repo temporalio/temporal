@@ -34,6 +34,7 @@ struct PollForDecisionTaskResponse {
   30: optional shared.WorkflowType workflowType
   40: optional i64 (js.type = "Long") previousStartedEventId
   50: optional i64 (js.type = "Long") startedEventId
+  51: optional i64 (js.type = "Long") attempt
   60: optional i64 (js.type = "Long") nextEventId
   65: optional i64 (js.type = "Long") backlogCountHint
   70: optional bool stickyExecutionEnabled

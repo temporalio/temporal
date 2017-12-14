@@ -1630,6 +1630,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context
 		resp.StartedEventId = matchingResponse.StartedEventId
 		resp.Query = matchingResponse.Query
 		resp.BacklogCountHint = matchingResponse.BacklogCountHint
+		resp.Attempt = matchingResponse.Attempt
 	}
 
 	if matchingResponse.Query != nil && resp.WorkflowType == nil {

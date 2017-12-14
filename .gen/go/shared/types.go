@@ -12739,6 +12739,7 @@ type PollForDecisionTaskResponse struct {
 	WorkflowType           *WorkflowType      `json:"workflowType,omitempty"`
 	PreviousStartedEventId *int64             `json:"previousStartedEventId,omitempty"`
 	StartedEventId         *int64             `json:"startedEventId,omitempty"`
+	Attempt                *int64             `json:"attempt,omitempty"`
 	BacklogCountHint       *int64             `json:"backlogCountHint,omitempty"`
 	History                *History           `json:"history,omitempty"`
 	NextPageToken          []byte             `json:"nextPageToken,omitempty"`
@@ -12762,7 +12763,7 @@ type PollForDecisionTaskResponse struct {
 //   }
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -12806,6 +12807,14 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Attempt != nil {
+		w, err = wire.NewValueI64(*(v.Attempt)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 51, Value: w}
 		i++
 	}
 	if v.BacklogCountHint != nil {
@@ -12916,6 +12925,16 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 51:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Attempt = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 54:
 			if field.Value.Type() == wire.TI64 {
 				var x int64
@@ -12963,7 +12982,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [10]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -12983,6 +13002,10 @@ func (v *PollForDecisionTaskResponse) String() string {
 	}
 	if v.StartedEventId != nil {
 		fields[i] = fmt.Sprintf("StartedEventId: %v", *(v.StartedEventId))
+		i++
+	}
+	if v.Attempt != nil {
+		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
 		i++
 	}
 	if v.BacklogCountHint != nil {
@@ -13025,6 +13048,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !_I64_EqualsPtr(v.StartedEventId, rhs.StartedEventId) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.Attempt, rhs.Attempt) {
+		return false
+	}
 	if !_I64_EqualsPtr(v.BacklogCountHint, rhs.BacklogCountHint) {
 		return false
 	}
@@ -13056,6 +13082,16 @@ func (v *PollForDecisionTaskResponse) GetPreviousStartedEventId() (o int64) {
 func (v *PollForDecisionTaskResponse) GetStartedEventId() (o int64) {
 	if v.StartedEventId != nil {
 		return *v.StartedEventId
+	}
+
+	return
+}
+
+// GetAttempt returns the value of Attempt if it is set or its
+// zero value if it is unset.
+func (v *PollForDecisionTaskResponse) GetAttempt() (o int64) {
+	if v.Attempt != nil {
+		return *v.Attempt
 	}
 
 	return
