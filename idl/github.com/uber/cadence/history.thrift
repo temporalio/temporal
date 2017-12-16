@@ -43,17 +43,23 @@ struct StartWorkflowExecutionRequest {
   30: optional ParentExecutionInfo parentExecutionInfo
 }
 
-struct GetWorkflowExecutionNextEventIDRequest {
+struct GetMutableStateRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution execution
   30: optional i64 (js.type = "Long") expectedNextEventId
 }
 
-struct GetWorkflowExecutionNextEventIDResponse {
-  10: optional i64 (js.type = "Long") eventId
-  20: optional string runId
-  30: optional shared.TaskList tasklist
-  40: optional bool isWorkflowRunning
+struct GetMutableStateResponse {
+  10: optional shared.WorkflowExecution execution
+  20: optional shared.WorkflowType workflowType
+  30: optional i64 (js.type = "Long") NextEventId
+  40: optional i64 (js.type = "Long") LastFirstEventId
+  50: optional shared.TaskList taskList
+  60: optional shared.TaskList stickyTaskList
+  70: optional string clientLibraryVersion
+  80: optional string clientFeatureVersion
+  90: optional string clientImpl
+  100: optional bool isWorkflowRunning
 }
 
 struct RespondDecisionTaskCompletedRequest {
@@ -182,11 +188,10 @@ service HistoryService {
     )
 
   /**
-  * Returns the nextEventID of the history of workflow execution. Only events in the history with Ids below the returned Id are
-  * guaranteed to be valid, so the first step of reading an execution's history is to retrieve this event Id.
+  * Returns the information from mutable state of workflow execution.
   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
   **/
-  GetWorkflowExecutionNextEventIDResponse GetWorkflowExecutionNextEventID(1: GetWorkflowExecutionNextEventIDRequest getRequest)
+  GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

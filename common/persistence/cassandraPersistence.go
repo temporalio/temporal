@@ -129,7 +129,10 @@ const (
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
 		`sticky_task_list: ?, ` +
-		`sticky_schedule_to_start_timeout: ?` +
+		`sticky_schedule_to_start_timeout: ?,` +
+		`client_library_version: ?, ` +
+		`client_feature_version: ?, ` +
+		`client_impl: ?` +
 		`}`
 
 	templateTransferTaskType = `{` +
@@ -902,6 +905,9 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		"",
 		"", // sticky_task_list (no sticky tasklist for new workflow execution)
 		0,  // sticky_schedule_to_start_timeout
+		"", // client_library_version
+		"", // client_feature_version
+		"", // client_impl
 		request.NextEventID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
@@ -1020,6 +1026,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.CancelRequestID,
 		executionInfo.StickyTaskList,
 		executionInfo.StickyScheduleToStartTimeout,
+		executionInfo.ClientLibraryVersion,
+		executionInfo.ClientFeatureVersion,
+		executionInfo.ClientImpl,
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
@@ -2003,6 +2012,12 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.StickyTaskList = v.(string)
 		case "sticky_schedule_to_start_timeout":
 			info.StickyScheduleToStartTimeout = int32(v.(int))
+		case "client_library_version":
+			info.ClientLibraryVersion = v.(string)
+		case "client_feature_version":
+			info.ClientFeatureVersion = v.(string)
+		case "client_impl":
+			info.ClientImpl = v.(string)
 		}
 	}
 

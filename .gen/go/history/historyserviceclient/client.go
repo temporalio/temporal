@@ -42,11 +42,11 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
-	GetWorkflowExecutionNextEventID(
+	GetMutableState(
 		ctx context.Context,
-		GetRequest *history.GetWorkflowExecutionNextEventIDRequest,
+		GetRequest *history.GetMutableStateRequest,
 		opts ...yarpc.CallOption,
-	) (*history.GetWorkflowExecutionNextEventIDResponse, error)
+	) (*history.GetMutableStateResponse, error)
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -180,13 +180,13 @@ func (c client) DescribeWorkflowExecution(
 	return
 }
 
-func (c client) GetWorkflowExecutionNextEventID(
+func (c client) GetMutableState(
 	ctx context.Context,
-	_GetRequest *history.GetWorkflowExecutionNextEventIDRequest,
+	_GetRequest *history.GetMutableStateRequest,
 	opts ...yarpc.CallOption,
-) (success *history.GetWorkflowExecutionNextEventIDResponse, err error) {
+) (success *history.GetMutableStateResponse, err error) {
 
-	args := history.HistoryService_GetWorkflowExecutionNextEventID_Helper.Args(_GetRequest)
+	args := history.HistoryService_GetMutableState_Helper.Args(_GetRequest)
 
 	var body wire.Value
 	body, err = c.c.Call(ctx, args, opts...)
@@ -194,12 +194,12 @@ func (c client) GetWorkflowExecutionNextEventID(
 		return
 	}
 
-	var result history.HistoryService_GetWorkflowExecutionNextEventID_Result
+	var result history.HistoryService_GetMutableState_Result
 	if err = result.FromWire(body); err != nil {
 		return
 	}
 
-	success, err = history.HistoryService_GetWorkflowExecutionNextEventID_Helper.UnwrapResponse(&result)
+	success, err = history.HistoryService_GetMutableState_Helper.UnwrapResponse(&result)
 	return
 }
 

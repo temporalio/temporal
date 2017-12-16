@@ -68,7 +68,7 @@ type Config struct {
 	HistoryMgrNumConns   int
 
 	// Time to hold a poll request before returning an empty response
-	// right now only used by GetWorkflowExecutionNextEventID
+	// right now only used by GetMutableState
 	LongPollExpirationInterval time.Duration
 }
 

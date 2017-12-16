@@ -58,85 +58,92 @@ func NewClient(d common.RPCFactory, monitor membership.Monitor) (Client, error) 
 }
 
 func (c *clientImpl) AddActivityTask(
-	context context.Context,
+	ctx context.Context,
 	addRequest *m.AddActivityTaskRequest,
 	opts ...yarpc.CallOption) error {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*addRequest.TaskList.Name)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
+	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddActivityTask(ctx, addRequest)
+	return client.AddActivityTask(ctx, addRequest, opts...)
 }
 
 func (c *clientImpl) AddDecisionTask(
-	context context.Context,
+	ctx context.Context,
 	addRequest *m.AddDecisionTaskRequest,
 	opts ...yarpc.CallOption) error {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*addRequest.TaskList.Name)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := c.createContext(context)
+	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddDecisionTask(ctx, addRequest)
+	return client.AddDecisionTask(ctx, addRequest, opts...)
 }
 
 func (c *clientImpl) PollForActivityTask(
-	context context.Context,
+	ctx context.Context,
 	pollRequest *m.PollForActivityTaskRequest,
 	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*pollRequest.PollRequest.TaskList.Name)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createLongPollContext(context)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForActivityTask(ctx, pollRequest)
+	return client.PollForActivityTask(ctx, pollRequest, opts...)
 }
 
 func (c *clientImpl) PollForDecisionTask(
-	context context.Context,
+	ctx context.Context,
 	pollRequest *m.PollForDecisionTaskRequest,
 	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*pollRequest.PollRequest.TaskList.Name)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createLongPollContext(context)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
-	return client.PollForDecisionTask(ctx, pollRequest)
+	return client.PollForDecisionTask(ctx, pollRequest, opts...)
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*queryRequest.TaskList.Name)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.QueryWorkflow(ctx, queryRequest)
+	return client.QueryWorkflow(ctx, queryRequest, opts...)
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest, opts ...yarpc.CallOption) error {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*request.TaskList.Name)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondQueryTaskCompleted(ctx, request)
+	return client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
 func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest, opts ...yarpc.CallOption) error {
+	opts = common.AggregateYarpcOptions(ctx, opts...)
 	client, err := c.getHostForRequest(*request.TaskList.Name)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.CancelOutstandingPoll(ctx, request)
+	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
 func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interface, error) {

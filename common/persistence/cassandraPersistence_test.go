@@ -181,6 +181,11 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info0.DecisionTimeout)
 	s.Equal(int64(0), info0.DecisionAttempt)
 	s.Equal(int64(0), info0.DecisionTimestamp)
+	s.Empty(info0.StickyTaskList)
+	s.Equal(int32(0), info0.StickyScheduleToStartTimeout)
+	s.Empty(info0.ClientLibraryVersion)
+	s.Empty(info0.ClientFeatureVersion)
+	s.Empty(info0.ClientImpl)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -189,6 +194,11 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.DecisionAttempt = int64(123)
 	updatedInfo.DecisionTimestamp = int64(321)
+	updatedInfo.StickyTaskList = "random sticky tasklist"
+	updatedInfo.StickyScheduleToStartTimeout = 876
+	updatedInfo.ClientLibraryVersion = "random client library version"
+	updatedInfo.ClientFeatureVersion = "random client feature version"
+	updatedInfo.ClientImpl = "random client impl"
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
@@ -213,6 +223,11 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info1.DecisionTimeout)
 	s.Equal(int64(123), info1.DecisionAttempt)
 	s.Equal(int64(321), info1.DecisionTimestamp)
+	s.Equal(updatedInfo.StickyTaskList, info1.StickyTaskList)
+	s.Equal(updatedInfo.StickyScheduleToStartTimeout, info1.StickyScheduleToStartTimeout)
+	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
+	s.Equal(updatedInfo.ClientFeatureVersion, info1.ClientFeatureVersion)
+	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 

@@ -142,6 +142,9 @@ type (
 		CancelRequestID              string
 		StickyTaskList               string
 		StickyScheduleToStartTimeout int32
+		ClientLibraryVersion         string
+		ClientFeatureVersion         string
+		ClientImpl                   string
 	}
 
 	// TransferTaskInfo describes a transfer task

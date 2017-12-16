@@ -397,7 +397,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RespondDecisionTaskCompleted(wrappedRequest)
+	err2 := engine.RespondDecisionTaskCompleted(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -477,13 +477,13 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 	return response, nil
 }
 
-// GetWorkflowExecutionNextEventID - returns the id of the next event in the execution's history
-func (h *Handler) GetWorkflowExecutionNextEventID(ctx context.Context,
-	getRequest *hist.GetWorkflowExecutionNextEventIDRequest) (*hist.GetWorkflowExecutionNextEventIDResponse, error) {
+// GetMutableState - returns the id of the next event in the execution's history
+func (h *Handler) GetMutableState(ctx context.Context,
+	getRequest *hist.GetMutableStateRequest) (*hist.GetMutableStateResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryGetWorkflowExecutionNextEventIDScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryGetWorkflowExecutionNextEventIDScope, metrics.CadenceLatency)
+	h.metricsClient.IncCounter(metrics.HistoryGetMutableStateScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryGetMutableStateScope, metrics.CadenceLatency)
 	defer sw.Stop()
 
 	if getRequest.DomainUUID == nil {
@@ -493,13 +493,13 @@ func (h *Handler) GetWorkflowExecutionNextEventID(ctx context.Context,
 	workflowExecution := getRequest.Execution
 	engine, err1 := h.controller.GetEngine(*workflowExecution.WorkflowId)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionNextEventIDScope, err1)
+		h.updateErrorMetric(metrics.HistoryGetMutableStateScope, err1)
 		return nil, err1
 	}
 
-	resp, err2 := engine.GetWorkflowExecutionNextEventID(ctx, getRequest)
+	resp, err2 := engine.GetMutableState(ctx, getRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryGetWorkflowExecutionNextEventIDScope, h.convertError(err2))
+		h.updateErrorMetric(metrics.HistoryGetMutableStateScope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 	return resp, nil

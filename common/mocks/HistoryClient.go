@@ -31,21 +31,21 @@ type HistoryClient struct {
 	mock.Mock
 }
 
-// GetWorkflowExecutionNextEventID provides a mock function with given fields: ctx, getRequest
-func (_m *HistoryClient) GetWorkflowExecutionNextEventID(ctx context.Context, getRequest *history.GetWorkflowExecutionNextEventIDRequest, opts ...yarpc.CallOption) (*history.GetWorkflowExecutionNextEventIDResponse, error) {
+// GetMutableState provides a mock function with given fields: ctx, getRequest
+func (_m *HistoryClient) GetMutableState(ctx context.Context, getRequest *history.GetMutableStateRequest, opts ...yarpc.CallOption) (*history.GetMutableStateResponse, error) {
 	ret := _m.Called(ctx, getRequest)
 
-	var r0 *history.GetWorkflowExecutionNextEventIDResponse
-	if rf, ok := ret.Get(0).(func(context.Context, *history.GetWorkflowExecutionNextEventIDRequest) *history.GetWorkflowExecutionNextEventIDResponse); ok {
+	var r0 *history.GetMutableStateResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *history.GetMutableStateRequest) *history.GetMutableStateResponse); ok {
 		r0 = rf(ctx, getRequest)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*history.GetWorkflowExecutionNextEventIDResponse)
+			r0 = ret.Get(0).(*history.GetMutableStateResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *history.GetWorkflowExecutionNextEventIDRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *history.GetMutableStateRequest) error); ok {
 		r1 = rf(ctx, getRequest)
 	} else {
 		r1 = ret.Error(1)

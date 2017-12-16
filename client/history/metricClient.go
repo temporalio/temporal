@@ -22,6 +22,7 @@ package history
 
 import (
 	"context"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/metrics"
@@ -50,7 +51,7 @@ func (c *metricClient) StartWorkflowExecution(
 	c.metricsClient.IncCounter(metrics.HistoryClientStartWorkflowExecutionScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientStartWorkflowExecutionScope, metrics.CadenceLatency)
-	resp, err := c.client.StartWorkflowExecution(context, request)
+	resp, err := c.client.StartWorkflowExecution(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -60,18 +61,18 @@ func (c *metricClient) StartWorkflowExecution(
 	return resp, err
 }
 
-func (c *metricClient) GetWorkflowExecutionNextEventID(
+func (c *metricClient) GetMutableState(
 	context context.Context,
-	request *h.GetWorkflowExecutionNextEventIDRequest,
-	opts ...yarpc.CallOption) (*h.GetWorkflowExecutionNextEventIDResponse, error) {
-	c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceRequests)
+	request *h.GetMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.GetMutableStateResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientGetMutableStateScope, metrics.CadenceRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceLatency)
-	resp, err := c.client.GetWorkflowExecutionNextEventID(context, request)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetMutableStateScope, metrics.CadenceLatency)
+	resp, err := c.client.GetMutableState(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientGetWorkflowExecutionNextEventIDScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientGetMutableStateScope, metrics.CadenceFailures)
 	}
 
 	return resp, err
@@ -84,7 +85,7 @@ func (c *metricClient) DescribeWorkflowExecution(
 	c.metricsClient.IncCounter(metrics.HistoryClientDescribeWorkflowExecutionScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientDescribeWorkflowExecutionScope, metrics.CadenceLatency)
-	resp, err := c.client.DescribeWorkflowExecution(context, request)
+	resp, err := c.client.DescribeWorkflowExecution(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -101,7 +102,7 @@ func (c *metricClient) RecordDecisionTaskStarted(
 	c.metricsClient.IncCounter(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.CadenceLatency)
-	resp, err := c.client.RecordDecisionTaskStarted(context, request)
+	resp, err := c.client.RecordDecisionTaskStarted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -118,7 +119,7 @@ func (c *metricClient) RecordActivityTaskStarted(
 	c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskStartedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordActivityTaskStartedScope, metrics.CadenceLatency)
-	resp, err := c.client.RecordActivityTaskStarted(context, request)
+	resp, err := c.client.RecordActivityTaskStarted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -135,7 +136,7 @@ func (c *metricClient) RespondDecisionTaskCompleted(
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.CadenceLatency)
-	err := c.client.RespondDecisionTaskCompleted(context, request)
+	err := c.client.RespondDecisionTaskCompleted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -152,7 +153,7 @@ func (c *metricClient) RespondDecisionTaskFailed(
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.CadenceLatency)
-	err := c.client.RespondDecisionTaskFailed(context, request)
+	err := c.client.RespondDecisionTaskFailed(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -169,7 +170,7 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCompletedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondActivityTaskCompletedScope, metrics.CadenceLatency)
-	err := c.client.RespondActivityTaskCompleted(context, request)
+	err := c.client.RespondActivityTaskCompleted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -186,7 +187,7 @@ func (c *metricClient) RespondActivityTaskFailed(
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskFailedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondActivityTaskFailedScope, metrics.CadenceLatency)
-	err := c.client.RespondActivityTaskFailed(context, request)
+	err := c.client.RespondActivityTaskFailed(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -203,7 +204,7 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.CadenceLatency)
-	err := c.client.RespondActivityTaskCanceled(context, request)
+	err := c.client.RespondActivityTaskCanceled(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -220,7 +221,7 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskHeartbeatScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordActivityTaskHeartbeatScope, metrics.CadenceLatency)
-	resp, err := c.client.RecordActivityTaskHeartbeat(context, request)
+	resp, err := c.client.RecordActivityTaskHeartbeat(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -237,7 +238,7 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	c.metricsClient.IncCounter(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.CadenceLatency)
-	err := c.client.RequestCancelWorkflowExecution(context, request)
+	err := c.client.RequestCancelWorkflowExecution(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -254,7 +255,7 @@ func (c *metricClient) SignalWorkflowExecution(
 	c.metricsClient.IncCounter(metrics.HistoryClientSignalWorkflowExecutionScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientSignalWorkflowExecutionScope, metrics.CadenceLatency)
-	err := c.client.SignalWorkflowExecution(context, request)
+	err := c.client.SignalWorkflowExecution(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -271,7 +272,7 @@ func (c *metricClient) TerminateWorkflowExecution(
 	c.metricsClient.IncCounter(metrics.HistoryClientTerminateWorkflowExecutionScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientTerminateWorkflowExecutionScope, metrics.CadenceLatency)
-	err := c.client.TerminateWorkflowExecution(context, request)
+	err := c.client.TerminateWorkflowExecution(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -288,7 +289,7 @@ func (c *metricClient) ScheduleDecisionTask(
 	c.metricsClient.IncCounter(metrics.HistoryClientScheduleDecisionTaskScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientScheduleDecisionTaskScope, metrics.CadenceLatency)
-	err := c.client.ScheduleDecisionTask(context, request)
+	err := c.client.ScheduleDecisionTask(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
@@ -305,7 +306,7 @@ func (c *metricClient) RecordChildExecutionCompleted(
 	c.metricsClient.IncCounter(metrics.HistoryClientRecordChildExecutionCompletedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRecordChildExecutionCompletedScope, metrics.CadenceLatency)
-	err := c.client.RecordChildExecutionCompleted(context, request)
+	err := c.client.RecordChildExecutionCompleted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {

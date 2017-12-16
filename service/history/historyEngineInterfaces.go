@@ -49,12 +49,12 @@ type (
 		// TODO: Convert workflow.WorkflowExecution to pointer all over the place
 		StartWorkflowExecution(request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse,
 			error)
-		GetWorkflowExecutionNextEventID(ctx context.Context, request *h.GetWorkflowExecutionNextEventIDRequest) (*h.GetWorkflowExecutionNextEventIDResponse, error)
+		GetMutableState(ctx context.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
 		DescribeWorkflowExecution(
 			request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
 		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
 		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
-		RespondDecisionTaskCompleted(request *h.RespondDecisionTaskCompletedRequest) error
+		RespondDecisionTaskCompleted(ctx context.Context, request *h.RespondDecisionTaskCompletedRequest) error
 		RespondDecisionTaskFailed(request *h.RespondDecisionTaskFailedRequest) error
 		RespondActivityTaskCompleted(request *h.RespondActivityTaskCompletedRequest) error
 		RespondActivityTaskFailed(request *h.RespondActivityTaskFailedRequest) error

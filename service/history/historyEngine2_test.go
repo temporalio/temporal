@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -673,7 +674,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
-	err := s.historyEngine.RespondDecisionTaskCompleted(&h.RespondDecisionTaskCompletedRequest{
+	err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,

@@ -31,14 +31,14 @@ import (
 	"strings"
 )
 
-// HistoryService_GetWorkflowExecutionNextEventID_Args represents the arguments for the HistoryService.GetWorkflowExecutionNextEventID function.
+// HistoryService_GetMutableState_Args represents the arguments for the HistoryService.GetMutableState function.
 //
-// The arguments for GetWorkflowExecutionNextEventID are sent and received over the wire as this struct.
-type HistoryService_GetWorkflowExecutionNextEventID_Args struct {
-	GetRequest *GetWorkflowExecutionNextEventIDRequest `json:"getRequest,omitempty"`
+// The arguments for GetMutableState are sent and received over the wire as this struct.
+type HistoryService_GetMutableState_Args struct {
+	GetRequest *GetMutableStateRequest `json:"getRequest,omitempty"`
 }
 
-// ToWire translates a HistoryService_GetWorkflowExecutionNextEventID_Args struct into a Thrift-level intermediate
+// ToWire translates a HistoryService_GetMutableState_Args struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -53,7 +53,7 @@ type HistoryService_GetWorkflowExecutionNextEventID_Args struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) ToWire() (wire.Value, error) {
+func (v *HistoryService_GetMutableState_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
@@ -73,17 +73,17 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) ToWire() (wire.Val
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _GetWorkflowExecutionNextEventIDRequest_Read(w wire.Value) (*GetWorkflowExecutionNextEventIDRequest, error) {
-	var v GetWorkflowExecutionNextEventIDRequest
+func _GetMutableStateRequest_Read(w wire.Value) (*GetMutableStateRequest, error) {
+	var v GetMutableStateRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a HistoryService_GetWorkflowExecutionNextEventID_Args struct from its Thrift-level
+// FromWire deserializes a HistoryService_GetMutableState_Args struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a HistoryService_GetWorkflowExecutionNextEventID_Args struct
+// An error is returned if we were unable to build a HistoryService_GetMutableState_Args struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -91,19 +91,19 @@ func _GetWorkflowExecutionNextEventIDRequest_Read(w wire.Value) (*GetWorkflowExe
 //     return nil, err
 //   }
 //
-//   var v HistoryService_GetWorkflowExecutionNextEventID_Args
+//   var v HistoryService_GetMutableState_Args
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) FromWire(w wire.Value) error {
+func (v *HistoryService_GetMutableState_Args) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.GetRequest, err = _GetWorkflowExecutionNextEventIDRequest_Read(field.Value)
+				v.GetRequest, err = _GetMutableStateRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -115,9 +115,9 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) FromWire(w wire.Va
 	return nil
 }
 
-// String returns a readable string representation of a HistoryService_GetWorkflowExecutionNextEventID_Args
+// String returns a readable string representation of a HistoryService_GetMutableState_Args
 // struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) String() string {
+func (v *HistoryService_GetMutableState_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -129,14 +129,14 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("HistoryService_GetWorkflowExecutionNextEventID_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_GetMutableState_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this HistoryService_GetWorkflowExecutionNextEventID_Args match the
-// provided HistoryService_GetWorkflowExecutionNextEventID_Args.
+// Equals returns true if all the fields of this HistoryService_GetMutableState_Args match the
+// provided HistoryService_GetMutableState_Args.
 //
 // This function performs a deep comparison.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) Equals(rhs *HistoryService_GetWorkflowExecutionNextEventID_Args) bool {
+func (v *HistoryService_GetMutableState_Args) Equals(rhs *HistoryService_GetMutableState_Args) bool {
 	if !((v.GetRequest == nil && rhs.GetRequest == nil) || (v.GetRequest != nil && rhs.GetRequest != nil && v.GetRequest.Equals(rhs.GetRequest))) {
 		return false
 	}
@@ -147,73 +147,73 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) Equals(rhs *Histor
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the arguments.
 //
-// This will always be "GetWorkflowExecutionNextEventID" for this struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) MethodName() string {
-	return "GetWorkflowExecutionNextEventID"
+// This will always be "GetMutableState" for this struct.
+func (v *HistoryService_GetMutableState_Args) MethodName() string {
+	return "GetMutableState"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Call for this struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Args) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_GetMutableState_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-// HistoryService_GetWorkflowExecutionNextEventID_Helper provides functions that aid in handling the
-// parameters and return values of the HistoryService.GetWorkflowExecutionNextEventID
+// HistoryService_GetMutableState_Helper provides functions that aid in handling the
+// parameters and return values of the HistoryService.GetMutableState
 // function.
-var HistoryService_GetWorkflowExecutionNextEventID_Helper = struct {
-	// Args accepts the parameters of GetWorkflowExecutionNextEventID in-order and returns
+var HistoryService_GetMutableState_Helper = struct {
+	// Args accepts the parameters of GetMutableState in-order and returns
 	// the arguments struct for the function.
 	Args func(
-		getRequest *GetWorkflowExecutionNextEventIDRequest,
-	) *HistoryService_GetWorkflowExecutionNextEventID_Args
+		getRequest *GetMutableStateRequest,
+	) *HistoryService_GetMutableState_Args
 
 	// IsException returns true if the given error can be thrown
-	// by GetWorkflowExecutionNextEventID.
+	// by GetMutableState.
 	//
-	// An error can be thrown by GetWorkflowExecutionNextEventID only if the
+	// An error can be thrown by GetMutableState only if the
 	// corresponding exception type was mentioned in the 'throws'
 	// section for it in the Thrift file.
 	IsException func(error) bool
 
-	// WrapResponse returns the result struct for GetWorkflowExecutionNextEventID
+	// WrapResponse returns the result struct for GetMutableState
 	// given its return value and error.
 	//
 	// This allows mapping values and errors returned by
-	// GetWorkflowExecutionNextEventID into a serializable result struct.
+	// GetMutableState into a serializable result struct.
 	// WrapResponse returns a non-nil error if the provided
-	// error cannot be thrown by GetWorkflowExecutionNextEventID
+	// error cannot be thrown by GetMutableState
 	//
-	//   value, err := GetWorkflowExecutionNextEventID(args)
-	//   result, err := HistoryService_GetWorkflowExecutionNextEventID_Helper.WrapResponse(value, err)
+	//   value, err := GetMutableState(args)
+	//   result, err := HistoryService_GetMutableState_Helper.WrapResponse(value, err)
 	//   if err != nil {
-	//     return fmt.Errorf("unexpected error from GetWorkflowExecutionNextEventID: %v", err)
+	//     return fmt.Errorf("unexpected error from GetMutableState: %v", err)
 	//   }
 	//   serialize(result)
-	WrapResponse func(*GetWorkflowExecutionNextEventIDResponse, error) (*HistoryService_GetWorkflowExecutionNextEventID_Result, error)
+	WrapResponse func(*GetMutableStateResponse, error) (*HistoryService_GetMutableState_Result, error)
 
-	// UnwrapResponse takes the result struct for GetWorkflowExecutionNextEventID
+	// UnwrapResponse takes the result struct for GetMutableState
 	// and returns the value or error returned by it.
 	//
-	// The error is non-nil only if GetWorkflowExecutionNextEventID threw an
+	// The error is non-nil only if GetMutableState threw an
 	// exception.
 	//
 	//   result := deserialize(bytes)
-	//   value, err := HistoryService_GetWorkflowExecutionNextEventID_Helper.UnwrapResponse(result)
-	UnwrapResponse func(*HistoryService_GetWorkflowExecutionNextEventID_Result) (*GetWorkflowExecutionNextEventIDResponse, error)
+	//   value, err := HistoryService_GetMutableState_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_GetMutableState_Result) (*GetMutableStateResponse, error)
 }{}
 
 func init() {
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.Args = func(
-		getRequest *GetWorkflowExecutionNextEventIDRequest,
-	) *HistoryService_GetWorkflowExecutionNextEventID_Args {
-		return &HistoryService_GetWorkflowExecutionNextEventID_Args{
+	HistoryService_GetMutableState_Helper.Args = func(
+		getRequest *GetMutableStateRequest,
+	) *HistoryService_GetMutableState_Args {
+		return &HistoryService_GetMutableState_Args{
 			GetRequest: getRequest,
 		}
 	}
 
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.IsException = func(err error) bool {
+	HistoryService_GetMutableState_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
@@ -228,37 +228,37 @@ func init() {
 		}
 	}
 
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.WrapResponse = func(success *GetWorkflowExecutionNextEventIDResponse, err error) (*HistoryService_GetWorkflowExecutionNextEventID_Result, error) {
+	HistoryService_GetMutableState_Helper.WrapResponse = func(success *GetMutableStateResponse, err error) (*HistoryService_GetMutableState_Result, error) {
 		if err == nil {
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{Success: success}, nil
+			return &HistoryService_GetMutableState_Result{Success: success}, nil
 		}
 
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.BadRequestError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{BadRequestError: e}, nil
+			return &HistoryService_GetMutableState_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.InternalServiceError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{InternalServiceError: e}, nil
+			return &HistoryService_GetMutableState_Result{InternalServiceError: e}, nil
 		case *shared.EntityNotExistsError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.EntityNotExistError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.EntityNotExistError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{EntityNotExistError: e}, nil
+			return &HistoryService_GetMutableState_Result{EntityNotExistError: e}, nil
 		case *ShardOwnershipLostError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetWorkflowExecutionNextEventID_Result.ShardOwnershipLostError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_GetMutableState_Result.ShardOwnershipLostError")
 			}
-			return &HistoryService_GetWorkflowExecutionNextEventID_Result{ShardOwnershipLostError: e}, nil
+			return &HistoryService_GetMutableState_Result{ShardOwnershipLostError: e}, nil
 		}
 
 		return nil, err
 	}
-	HistoryService_GetWorkflowExecutionNextEventID_Helper.UnwrapResponse = func(result *HistoryService_GetWorkflowExecutionNextEventID_Result) (success *GetWorkflowExecutionNextEventIDResponse, err error) {
+	HistoryService_GetMutableState_Helper.UnwrapResponse = func(result *HistoryService_GetMutableState_Result) (success *GetMutableStateResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -287,21 +287,21 @@ func init() {
 
 }
 
-// HistoryService_GetWorkflowExecutionNextEventID_Result represents the result of a HistoryService.GetWorkflowExecutionNextEventID function call.
+// HistoryService_GetMutableState_Result represents the result of a HistoryService.GetMutableState function call.
 //
-// The result of a GetWorkflowExecutionNextEventID execution is sent and received over the wire as this struct.
+// The result of a GetMutableState execution is sent and received over the wire as this struct.
 //
 // Success is set only if the function did not throw an exception.
-type HistoryService_GetWorkflowExecutionNextEventID_Result struct {
-	// Value returned by GetWorkflowExecutionNextEventID after a successful execution.
-	Success                 *GetWorkflowExecutionNextEventIDResponse `json:"success,omitempty"`
-	BadRequestError         *shared.BadRequestError                  `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError             `json:"internalServiceError,omitempty"`
-	EntityNotExistError     *shared.EntityNotExistsError             `json:"entityNotExistError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError                 `json:"shardOwnershipLostError,omitempty"`
+type HistoryService_GetMutableState_Result struct {
+	// Value returned by GetMutableState after a successful execution.
+	Success                 *GetMutableStateResponse     `json:"success,omitempty"`
+	BadRequestError         *shared.BadRequestError      `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
 }
 
-// ToWire translates a HistoryService_GetWorkflowExecutionNextEventID_Result struct into a Thrift-level intermediate
+// ToWire translates a HistoryService_GetMutableState_Result struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -316,7 +316,7 @@ type HistoryService_GetWorkflowExecutionNextEventID_Result struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) ToWire() (wire.Value, error) {
+func (v *HistoryService_GetMutableState_Result) ToWire() (wire.Value, error) {
 	var (
 		fields [5]wire.Field
 		i      int = 0
@@ -366,23 +366,23 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) ToWire() (wire.V
 	}
 
 	if i != 1 {
-		return wire.Value{}, fmt.Errorf("HistoryService_GetWorkflowExecutionNextEventID_Result should have exactly one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("HistoryService_GetMutableState_Result should have exactly one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _GetWorkflowExecutionNextEventIDResponse_Read(w wire.Value) (*GetWorkflowExecutionNextEventIDResponse, error) {
-	var v GetWorkflowExecutionNextEventIDResponse
+func _GetMutableStateResponse_Read(w wire.Value) (*GetMutableStateResponse, error) {
+	var v GetMutableStateResponse
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a HistoryService_GetWorkflowExecutionNextEventID_Result struct from its Thrift-level
+// FromWire deserializes a HistoryService_GetMutableState_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a HistoryService_GetWorkflowExecutionNextEventID_Result struct
+// An error is returned if we were unable to build a HistoryService_GetMutableState_Result struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -390,19 +390,19 @@ func _GetWorkflowExecutionNextEventIDResponse_Read(w wire.Value) (*GetWorkflowEx
 //     return nil, err
 //   }
 //
-//   var v HistoryService_GetWorkflowExecutionNextEventID_Result
+//   var v HistoryService_GetMutableState_Result
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) FromWire(w wire.Value) error {
+func (v *HistoryService_GetMutableState_Result) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _GetWorkflowExecutionNextEventIDResponse_Read(field.Value)
+				v.Success, err = _GetMutableStateResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -460,15 +460,15 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) FromWire(w wire.
 		count++
 	}
 	if count != 1 {
-		return fmt.Errorf("HistoryService_GetWorkflowExecutionNextEventID_Result should have exactly one field: got %v fields", count)
+		return fmt.Errorf("HistoryService_GetMutableState_Result should have exactly one field: got %v fields", count)
 	}
 
 	return nil
 }
 
-// String returns a readable string representation of a HistoryService_GetWorkflowExecutionNextEventID_Result
+// String returns a readable string representation of a HistoryService_GetMutableState_Result
 // struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) String() string {
+func (v *HistoryService_GetMutableState_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -496,14 +496,14 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) String() string 
 		i++
 	}
 
-	return fmt.Sprintf("HistoryService_GetWorkflowExecutionNextEventID_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_GetMutableState_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this HistoryService_GetWorkflowExecutionNextEventID_Result match the
-// provided HistoryService_GetWorkflowExecutionNextEventID_Result.
+// Equals returns true if all the fields of this HistoryService_GetMutableState_Result match the
+// provided HistoryService_GetMutableState_Result.
 //
 // This function performs a deep comparison.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) Equals(rhs *HistoryService_GetWorkflowExecutionNextEventID_Result) bool {
+func (v *HistoryService_GetMutableState_Result) Equals(rhs *HistoryService_GetMutableState_Result) bool {
 	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
 		return false
 	}
@@ -526,14 +526,14 @@ func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) Equals(rhs *Hist
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the result.
 //
-// This will always be "GetWorkflowExecutionNextEventID" for this struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) MethodName() string {
-	return "GetWorkflowExecutionNextEventID"
+// This will always be "GetMutableState" for this struct.
+func (v *HistoryService_GetMutableState_Result) MethodName() string {
+	return "GetMutableState"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Reply for this struct.
-func (v *HistoryService_GetWorkflowExecutionNextEventID_Result) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_GetMutableState_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

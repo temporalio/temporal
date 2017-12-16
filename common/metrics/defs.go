@@ -175,8 +175,8 @@ const (
 	HistoryClientRespondActivityTaskFailedScope
 	// HistoryClientRespondActivityTaskCanceledScope tracks RPC calls to history service
 	HistoryClientRespondActivityTaskCanceledScope
-	// HistoryClientGetWorkflowExecutionNextEventIDScope tracks RPC calls to history service
-	HistoryClientGetWorkflowExecutionNextEventIDScope
+	// HistoryClientGetMutableStateScope tracks RPC calls to history service
+	HistoryClientGetMutableStateScope
 	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDescribeWorkflowExecutionScope
 	// HistoryClientRecordDecisionTaskStartedScope tracks RPC calls to history service
@@ -283,8 +283,8 @@ const (
 	HistoryRespondActivityTaskFailedScope
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope
-	// HistoryGetWorkflowExecutionNextEventIDScope tracks GetWorkflowExecutionHistory API calls received by service
-	HistoryGetWorkflowExecutionNextEventIDScope
+	// HistoryGetMutableStateScope tracks GetWorkflowExecutionHistory API calls received by service
+	HistoryGetMutableStateScope
 	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
 	HistoryDescribeWorkflowExecutionScope
 	// HistoryRecordDecisionTaskStartedScope tracks RecordDecisionTaskStarted API calls received by service
@@ -385,29 +385,29 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceDeleteDomainScope:                   {operation: "DeleteDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceDeleteDomainByNameScope:             {operation: "DeleteDomainByName", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 
-		HistoryClientStartWorkflowExecutionScope:          {operation: "HistoryClientStartWorkflowExecution"},
-		HistoryClientRecordActivityTaskHeartbeatScope:     {operation: "HistoryClientRecordActivityTaskHeartbeat"},
-		HistoryClientRespondDecisionTaskCompletedScope:    {operation: "HistoryClientRespondDecisionTaskCompleted"},
-		HistoryClientRespondDecisionTaskFailedScope:       {operation: "HistoryClientRespondDecisionTaskFailed"},
-		HistoryClientRespondActivityTaskCompletedScope:    {operation: "HistoryClientRespondActivityTaskCompleted"},
-		HistoryClientRespondActivityTaskFailedScope:       {operation: "HistoryClientRespondActivityTaskFailed"},
-		HistoryClientRespondActivityTaskCanceledScope:     {operation: "HistoryClientRespondActivityTaskCanceled"},
-		HistoryClientGetWorkflowExecutionNextEventIDScope: {operation: "HistoryClientGetWorkflowExecutionNextEventId"},
-		HistoryClientDescribeWorkflowExecutionScope:       {operation: "HistoryClientDescribeWorkflowExecution"},
-		HistoryClientRecordDecisionTaskStartedScope:       {operation: "HistoryClientRecordDecisionTaskStarted"},
-		HistoryClientRecordActivityTaskStartedScope:       {operation: "HistoryClientRecordActivityTaskStarted"},
-		HistoryClientRequestCancelWorkflowExecutionScope:  {operation: "HistoryClientRequestCancelWorkflowExecution"},
-		HistoryClientSignalWorkflowExecutionScope:         {operation: "HistoryClientSignalWorkflowExecution"},
-		HistoryClientTerminateWorkflowExecutionScope:      {operation: "HistoryClientTerminateWorkflowExecution"},
-		HistoryClientScheduleDecisionTaskScope:            {operation: "HistoryClientScheduleDecisionTask"},
-		HistoryClientRecordChildExecutionCompletedScope:   {operation: "HistoryClientRecordChildExecutionCompleted"},
-		MatchingClientPollForDecisionTaskScope:            {operation: "MatchingClientPollForDecisionTask"},
-		MatchingClientPollForActivityTaskScope:            {operation: "MatchingClientPollForActivityTask"},
-		MatchingClientAddActivityTaskScope:                {operation: "MatchingClientAddActivityTask"},
-		MatchingClientAddDecisionTaskScope:                {operation: "MatchingClientAddDecisionTask"},
-		MatchingClientQueryWorkflowScope:                  {operation: "MatchingClientQueryWorkflow"},
-		MatchingClientRespondQueryTaskCompletedScope:      {operation: "MatchingClientRespondQueryTaskCompleted"},
-		MatchingClientCancelOutstandingPollScope:          {operation: "MatchingClientCancelOutstandingPoll"},
+		HistoryClientStartWorkflowExecutionScope:         {operation: "HistoryClientStartWorkflowExecution"},
+		HistoryClientRecordActivityTaskHeartbeatScope:    {operation: "HistoryClientRecordActivityTaskHeartbeat"},
+		HistoryClientRespondDecisionTaskCompletedScope:   {operation: "HistoryClientRespondDecisionTaskCompleted"},
+		HistoryClientRespondDecisionTaskFailedScope:      {operation: "HistoryClientRespondDecisionTaskFailed"},
+		HistoryClientRespondActivityTaskCompletedScope:   {operation: "HistoryClientRespondActivityTaskCompleted"},
+		HistoryClientRespondActivityTaskFailedScope:      {operation: "HistoryClientRespondActivityTaskFailed"},
+		HistoryClientRespondActivityTaskCanceledScope:    {operation: "HistoryClientRespondActivityTaskCanceled"},
+		HistoryClientGetMutableStateScope:                {operation: "HistoryClientGetMutableState"},
+		HistoryClientDescribeWorkflowExecutionScope:      {operation: "HistoryClientDescribeWorkflowExecution"},
+		HistoryClientRecordDecisionTaskStartedScope:      {operation: "HistoryClientRecordDecisionTaskStarted"},
+		HistoryClientRecordActivityTaskStartedScope:      {operation: "HistoryClientRecordActivityTaskStarted"},
+		HistoryClientRequestCancelWorkflowExecutionScope: {operation: "HistoryClientRequestCancelWorkflowExecution"},
+		HistoryClientSignalWorkflowExecutionScope:        {operation: "HistoryClientSignalWorkflowExecution"},
+		HistoryClientTerminateWorkflowExecutionScope:     {operation: "HistoryClientTerminateWorkflowExecution"},
+		HistoryClientScheduleDecisionTaskScope:           {operation: "HistoryClientScheduleDecisionTask"},
+		HistoryClientRecordChildExecutionCompletedScope:  {operation: "HistoryClientRecordChildExecutionCompleted"},
+		MatchingClientPollForDecisionTaskScope:           {operation: "MatchingClientPollForDecisionTask"},
+		MatchingClientPollForActivityTaskScope:           {operation: "MatchingClientPollForActivityTask"},
+		MatchingClientAddActivityTaskScope:               {operation: "MatchingClientAddActivityTask"},
+		MatchingClientAddDecisionTaskScope:               {operation: "MatchingClientAddDecisionTask"},
+		MatchingClientQueryWorkflowScope:                 {operation: "MatchingClientQueryWorkflow"},
+		MatchingClientRespondQueryTaskCompletedScope:     {operation: "MatchingClientRespondQueryTaskCompleted"},
+		MatchingClientCancelOutstandingPollScope:         {operation: "MatchingClientCancelOutstandingPoll"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -439,36 +439,36 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// History Scope Names
 	History: {
-		HistoryStartWorkflowExecutionScope:          {operation: "StartWorkflowExecution"},
-		HistoryRecordActivityTaskHeartbeatScope:     {operation: "RecordActivityTaskHeartbeat"},
-		HistoryRespondDecisionTaskCompletedScope:    {operation: "RespondDecisionTaskCompleted"},
-		HistoryRespondDecisionTaskFailedScope:       {operation: "RespondDecisionTaskFailed"},
-		HistoryRespondActivityTaskCompletedScope:    {operation: "RespondActivityTaskCompleted"},
-		HistoryRespondActivityTaskFailedScope:       {operation: "RespondActivityTaskFailed"},
-		HistoryRespondActivityTaskCanceledScope:     {operation: "RespondActivityTaskCanceled"},
-		HistoryGetWorkflowExecutionNextEventIDScope: {operation: "GetWorkflowExecutionNextEventID"},
-		HistoryDescribeWorkflowExecutionScope:       {operation: "DescribeWorkflowExecution"},
-		HistoryRecordDecisionTaskStartedScope:       {operation: "RecordDecisionTaskStarted"},
-		HistoryRecordActivityTaskStartedScope:       {operation: "RecordActivityTaskStarted"},
-		HistorySignalWorkflowExecutionScope:         {operation: "SignalWorkflowExecution"},
-		HistoryTerminateWorkflowExecutionScope:      {operation: "TerminateWorkflowExecution"},
-		HistoryScheduleDecisionTaskScope:            {operation: "ScheduleDecisionTask"},
-		HistoryRecordChildExecutionCompletedScope:   {operation: "RecordChildExecutionCompleted"},
-		HistoryRequestCancelWorkflowExecutionScope:  {operation: "RequestCancelWorkflowExecution"},
-		HistoryShardControllerScope:                 {operation: "ShardController"},
-		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
-		TransferTaskActivityScope:                   {operation: "TransferTaskActivity"},
-		TransferTaskDecisionScope:                   {operation: "TransferTaskDecision"},
-		TransferTaskCloseExecutionScope:             {operation: "TransferTaskCloseExecution"},
-		TransferTaskCancelExecutionScope:            {operation: "TransferTaskCancelExecution"},
-		TransferTaskStartChildExecutionScope:        {operation: "TransferTaskStartChildExecution"},
-		TimerQueueProcessorScope:                    {operation: "TimerQueueProcessor"},
-		TimerTaskActivityTimeoutScope:               {operation: "TimerTaskActivityTimeout"},
-		TimerTaskDecisionTimeoutScope:               {operation: "TimerTaskDecisionTimeout"},
-		TimerTaskUserTimerScope:                     {operation: "TimerTaskUserTimer"},
-		TimerTaskWorkflowTimeoutScope:               {operation: "TimerTaskWorkflowTimeout"},
-		TimerTaskDeleteHistoryEvent:                 {operation: "TimerTaskDeleteHistoryEvent"},
-		HistoryEventNotificationScope:               {operation: "HistoryEventNotification"},
+		HistoryStartWorkflowExecutionScope:         {operation: "StartWorkflowExecution"},
+		HistoryRecordActivityTaskHeartbeatScope:    {operation: "RecordActivityTaskHeartbeat"},
+		HistoryRespondDecisionTaskCompletedScope:   {operation: "RespondDecisionTaskCompleted"},
+		HistoryRespondDecisionTaskFailedScope:      {operation: "RespondDecisionTaskFailed"},
+		HistoryRespondActivityTaskCompletedScope:   {operation: "RespondActivityTaskCompleted"},
+		HistoryRespondActivityTaskFailedScope:      {operation: "RespondActivityTaskFailed"},
+		HistoryRespondActivityTaskCanceledScope:    {operation: "RespondActivityTaskCanceled"},
+		HistoryGetMutableStateScope:                {operation: "GetMutableState"},
+		HistoryDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
+		HistoryRecordDecisionTaskStartedScope:      {operation: "RecordDecisionTaskStarted"},
+		HistoryRecordActivityTaskStartedScope:      {operation: "RecordActivityTaskStarted"},
+		HistorySignalWorkflowExecutionScope:        {operation: "SignalWorkflowExecution"},
+		HistoryTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
+		HistoryScheduleDecisionTaskScope:           {operation: "ScheduleDecisionTask"},
+		HistoryRecordChildExecutionCompletedScope:  {operation: "RecordChildExecutionCompleted"},
+		HistoryRequestCancelWorkflowExecutionScope: {operation: "RequestCancelWorkflowExecution"},
+		HistoryShardControllerScope:                {operation: "ShardController"},
+		TransferQueueProcessorScope:                {operation: "TransferQueueProcessor"},
+		TransferTaskActivityScope:                  {operation: "TransferTaskActivity"},
+		TransferTaskDecisionScope:                  {operation: "TransferTaskDecision"},
+		TransferTaskCloseExecutionScope:            {operation: "TransferTaskCloseExecution"},
+		TransferTaskCancelExecutionScope:           {operation: "TransferTaskCancelExecution"},
+		TransferTaskStartChildExecutionScope:       {operation: "TransferTaskStartChildExecution"},
+		TimerQueueProcessorScope:                   {operation: "TimerQueueProcessor"},
+		TimerTaskActivityTimeoutScope:              {operation: "TimerTaskActivityTimeout"},
+		TimerTaskDecisionTimeoutScope:              {operation: "TimerTaskDecisionTimeout"},
+		TimerTaskUserTimerScope:                    {operation: "TimerTaskUserTimer"},
+		TimerTaskWorkflowTimeoutScope:              {operation: "TimerTaskWorkflowTimeout"},
+		TimerTaskDeleteHistoryEvent:                {operation: "TimerTaskDeleteHistoryEvent"},
+		HistoryEventNotificationScope:              {operation: "HistoryEventNotification"},
 	},
 	// Matching Scope Names
 	Matching: {

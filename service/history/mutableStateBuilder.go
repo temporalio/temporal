@@ -665,8 +665,7 @@ func (e *mutableStateBuilder) DeleteDecision() {
 
 func (e *mutableStateBuilder) FailDecision() {
 	// Clear stickiness whenever decision fails
-	e.executionInfo.StickyTaskList = ""
-	e.executionInfo.StickyScheduleToStartTimeout = 0
+	e.clearStickyness()
 
 	failDecisionInfo := &decisionInfo{
 		ScheduleID:      emptyEventID,
@@ -676,6 +675,14 @@ func (e *mutableStateBuilder) FailDecision() {
 		Attempt:         e.executionInfo.DecisionAttempt + 1,
 	}
 	e.UpdateDecision(failDecisionInfo)
+}
+
+func (e *mutableStateBuilder) clearStickyness() {
+	e.executionInfo.StickyTaskList = ""
+	e.executionInfo.StickyScheduleToStartTimeout = 0
+	e.executionInfo.ClientLibraryVersion = ""
+	e.executionInfo.ClientFeatureVersion = ""
+	e.executionInfo.ClientImpl = ""
 }
 
 // GetNextEventID returns next event ID
@@ -925,8 +932,7 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduleToStartTimeoutEvent(schedul
 	}
 
 	// Clear stickiness whenever decision fails
-	e.executionInfo.StickyTaskList = ""
-	e.executionInfo.StickyScheduleToStartTimeout = 0
+	e.clearStickyness()
 
 	event := e.hBuilder.AddDecisionTaskTimedOutEvent(scheduleEventID, 0, workflow.TimeoutTypeScheduleToStart)
 

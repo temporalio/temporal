@@ -297,13 +297,13 @@ func (v *EventAlreadyStartedError) Error() string {
 	return v.String()
 }
 
-type GetWorkflowExecutionNextEventIDRequest struct {
+type GetMutableStateRequest struct {
 	DomainUUID          *string                   `json:"domainUUID,omitempty"`
 	Execution           *shared.WorkflowExecution `json:"execution,omitempty"`
 	ExpectedNextEventId *int64                    `json:"expectedNextEventId,omitempty"`
 }
 
-// ToWire translates a GetWorkflowExecutionNextEventIDRequest struct into a Thrift-level intermediate
+// ToWire translates a GetMutableStateRequest struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -318,7 +318,7 @@ type GetWorkflowExecutionNextEventIDRequest struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *GetWorkflowExecutionNextEventIDRequest) ToWire() (wire.Value, error) {
+func (v *GetMutableStateRequest) ToWire() (wire.Value, error) {
 	var (
 		fields [3]wire.Field
 		i      int = 0
@@ -360,11 +360,11 @@ func _WorkflowExecution_Read(w wire.Value) (*shared.WorkflowExecution, error) {
 	return &v, err
 }
 
-// FromWire deserializes a GetWorkflowExecutionNextEventIDRequest struct from its Thrift-level
+// FromWire deserializes a GetMutableStateRequest struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a GetWorkflowExecutionNextEventIDRequest struct
+// An error is returned if we were unable to build a GetMutableStateRequest struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -372,12 +372,12 @@ func _WorkflowExecution_Read(w wire.Value) (*shared.WorkflowExecution, error) {
 //     return nil, err
 //   }
 //
-//   var v GetWorkflowExecutionNextEventIDRequest
+//   var v GetMutableStateRequest
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *GetWorkflowExecutionNextEventIDRequest) FromWire(w wire.Value) error {
+func (v *GetMutableStateRequest) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
@@ -416,9 +416,9 @@ func (v *GetWorkflowExecutionNextEventIDRequest) FromWire(w wire.Value) error {
 	return nil
 }
 
-// String returns a readable string representation of a GetWorkflowExecutionNextEventIDRequest
+// String returns a readable string representation of a GetMutableStateRequest
 // struct.
-func (v *GetWorkflowExecutionNextEventIDRequest) String() string {
+func (v *GetMutableStateRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -438,7 +438,7 @@ func (v *GetWorkflowExecutionNextEventIDRequest) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("GetWorkflowExecutionNextEventIDRequest{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("GetMutableStateRequest{%v}", strings.Join(fields[:i], ", "))
 }
 
 func _I64_EqualsPtr(lhs, rhs *int64) bool {
@@ -451,11 +451,11 @@ func _I64_EqualsPtr(lhs, rhs *int64) bool {
 	return lhs == nil && rhs == nil
 }
 
-// Equals returns true if all the fields of this GetWorkflowExecutionNextEventIDRequest match the
-// provided GetWorkflowExecutionNextEventIDRequest.
+// Equals returns true if all the fields of this GetMutableStateRequest match the
+// provided GetMutableStateRequest.
 //
 // This function performs a deep comparison.
-func (v *GetWorkflowExecutionNextEventIDRequest) Equals(rhs *GetWorkflowExecutionNextEventIDRequest) bool {
+func (v *GetMutableStateRequest) Equals(rhs *GetMutableStateRequest) bool {
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
@@ -471,7 +471,7 @@ func (v *GetWorkflowExecutionNextEventIDRequest) Equals(rhs *GetWorkflowExecutio
 
 // GetDomainUUID returns the value of DomainUUID if it is set or its
 // zero value if it is unset.
-func (v *GetWorkflowExecutionNextEventIDRequest) GetDomainUUID() (o string) {
+func (v *GetMutableStateRequest) GetDomainUUID() (o string) {
 	if v.DomainUUID != nil {
 		return *v.DomainUUID
 	}
@@ -481,7 +481,7 @@ func (v *GetWorkflowExecutionNextEventIDRequest) GetDomainUUID() (o string) {
 
 // GetExpectedNextEventId returns the value of ExpectedNextEventId if it is set or its
 // zero value if it is unset.
-func (v *GetWorkflowExecutionNextEventIDRequest) GetExpectedNextEventId() (o int64) {
+func (v *GetMutableStateRequest) GetExpectedNextEventId() (o int64) {
 	if v.ExpectedNextEventId != nil {
 		return *v.ExpectedNextEventId
 	}
@@ -489,14 +489,20 @@ func (v *GetWorkflowExecutionNextEventIDRequest) GetExpectedNextEventId() (o int
 	return
 }
 
-type GetWorkflowExecutionNextEventIDResponse struct {
-	EventId           *int64           `json:"eventId,omitempty"`
-	RunId             *string          `json:"runId,omitempty"`
-	Tasklist          *shared.TaskList `json:"tasklist,omitempty"`
-	IsWorkflowRunning *bool            `json:"isWorkflowRunning,omitempty"`
+type GetMutableStateResponse struct {
+	Execution            *shared.WorkflowExecution `json:"execution,omitempty"`
+	WorkflowType         *shared.WorkflowType      `json:"workflowType,omitempty"`
+	NextEventId          *int64                    `json:"NextEventId,omitempty"`
+	LastFirstEventId     *int64                    `json:"LastFirstEventId,omitempty"`
+	TaskList             *shared.TaskList          `json:"taskList,omitempty"`
+	StickyTaskList       *shared.TaskList          `json:"stickyTaskList,omitempty"`
+	ClientLibraryVersion *string                   `json:"clientLibraryVersion,omitempty"`
+	ClientFeatureVersion *string                   `json:"clientFeatureVersion,omitempty"`
+	ClientImpl           *string                   `json:"clientImpl,omitempty"`
+	IsWorkflowRunning    *bool                     `json:"isWorkflowRunning,omitempty"`
 }
 
-// ToWire translates a GetWorkflowExecutionNextEventIDResponse struct into a Thrift-level intermediate
+// ToWire translates a GetMutableStateResponse struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -511,36 +517,84 @@ type GetWorkflowExecutionNextEventIDResponse struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *GetWorkflowExecutionNextEventIDResponse) ToWire() (wire.Value, error) {
+func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
-	if v.EventId != nil {
-		w, err = wire.NewValueI64(*(v.EventId)), error(nil)
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.RunId != nil {
-		w, err = wire.NewValueString(*(v.RunId)), error(nil)
+	if v.WorkflowType != nil {
+		w, err = v.WorkflowType.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
-	if v.Tasklist != nil {
-		w, err = v.Tasklist.ToWire()
+	if v.NextEventId != nil {
+		w, err = wire.NewValueI64(*(v.NextEventId)), error(nil)
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.LastFirstEventId != nil {
+		w, err = wire.NewValueI64(*(v.LastFirstEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.StickyTaskList != nil {
+		w, err = v.StickyTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ClientLibraryVersion != nil {
+		w, err = wire.NewValueString(*(v.ClientLibraryVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.ClientFeatureVersion != nil {
+		w, err = wire.NewValueString(*(v.ClientFeatureVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.ClientImpl != nil {
+		w, err = wire.NewValueString(*(v.ClientImpl)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
 		i++
 	}
 	if v.IsWorkflowRunning != nil {
@@ -548,11 +602,17 @@ func (v *GetWorkflowExecutionNextEventIDResponse) ToWire() (wire.Value, error) {
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 40, Value: w}
+		fields[i] = wire.Field{ID: 100, Value: w}
 		i++
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _WorkflowType_Read(w wire.Value) (*shared.WorkflowType, error) {
+	var v shared.WorkflowType
+	err := v.FromWire(w)
+	return &v, err
 }
 
 func _TaskList_Read(w wire.Value) (*shared.TaskList, error) {
@@ -561,11 +621,11 @@ func _TaskList_Read(w wire.Value) (*shared.TaskList, error) {
 	return &v, err
 }
 
-// FromWire deserializes a GetWorkflowExecutionNextEventIDResponse struct from its Thrift-level
+// FromWire deserializes a GetMutableStateResponse struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a GetWorkflowExecutionNextEventIDResponse struct
+// An error is returned if we were unable to build a GetMutableStateResponse struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -573,45 +633,99 @@ func _TaskList_Read(w wire.Value) (*shared.TaskList, error) {
 //     return nil, err
 //   }
 //
-//   var v GetWorkflowExecutionNextEventIDResponse
+//   var v GetMutableStateResponse
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *GetWorkflowExecutionNextEventIDResponse) FromWire(w wire.Value) error {
+func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 10:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.EventId = &x
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
 				if err != nil {
 					return err
 				}
 
 			}
 		case 20:
-			if field.Value.Type() == wire.TBinary {
-				var x string
-				x, err = field.Value.GetString(), error(nil)
-				v.RunId = &x
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowType, err = _WorkflowType_Read(field.Value)
 				if err != nil {
 					return err
 				}
 
 			}
 		case 30:
-			if field.Value.Type() == wire.TStruct {
-				v.Tasklist, err = _TaskList_Read(field.Value)
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NextEventId = &x
 				if err != nil {
 					return err
 				}
 
 			}
 		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.LastFirstEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TStruct {
+				v.StickyTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientLibraryVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientFeatureVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClientImpl = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 100:
 			if field.Value.Type() == wire.TBool {
 				var x bool
 				x, err = field.Value.GetBool(), error(nil)
@@ -627,25 +741,49 @@ func (v *GetWorkflowExecutionNextEventIDResponse) FromWire(w wire.Value) error {
 	return nil
 }
 
-// String returns a readable string representation of a GetWorkflowExecutionNextEventIDResponse
+// String returns a readable string representation of a GetMutableStateResponse
 // struct.
-func (v *GetWorkflowExecutionNextEventIDResponse) String() string {
+func (v *GetMutableStateResponse) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [10]string
 	i := 0
-	if v.EventId != nil {
-		fields[i] = fmt.Sprintf("EventId: %v", *(v.EventId))
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
 		i++
 	}
-	if v.RunId != nil {
-		fields[i] = fmt.Sprintf("RunId: %v", *(v.RunId))
+	if v.WorkflowType != nil {
+		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
 		i++
 	}
-	if v.Tasklist != nil {
-		fields[i] = fmt.Sprintf("Tasklist: %v", v.Tasklist)
+	if v.NextEventId != nil {
+		fields[i] = fmt.Sprintf("NextEventId: %v", *(v.NextEventId))
+		i++
+	}
+	if v.LastFirstEventId != nil {
+		fields[i] = fmt.Sprintf("LastFirstEventId: %v", *(v.LastFirstEventId))
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.StickyTaskList != nil {
+		fields[i] = fmt.Sprintf("StickyTaskList: %v", v.StickyTaskList)
+		i++
+	}
+	if v.ClientLibraryVersion != nil {
+		fields[i] = fmt.Sprintf("ClientLibraryVersion: %v", *(v.ClientLibraryVersion))
+		i++
+	}
+	if v.ClientFeatureVersion != nil {
+		fields[i] = fmt.Sprintf("ClientFeatureVersion: %v", *(v.ClientFeatureVersion))
+		i++
+	}
+	if v.ClientImpl != nil {
+		fields[i] = fmt.Sprintf("ClientImpl: %v", *(v.ClientImpl))
 		i++
 	}
 	if v.IsWorkflowRunning != nil {
@@ -653,7 +791,7 @@ func (v *GetWorkflowExecutionNextEventIDResponse) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("GetWorkflowExecutionNextEventIDResponse{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("GetMutableStateResponse{%v}", strings.Join(fields[:i], ", "))
 }
 
 func _Bool_EqualsPtr(lhs, rhs *bool) bool {
@@ -666,18 +804,36 @@ func _Bool_EqualsPtr(lhs, rhs *bool) bool {
 	return lhs == nil && rhs == nil
 }
 
-// Equals returns true if all the fields of this GetWorkflowExecutionNextEventIDResponse match the
-// provided GetWorkflowExecutionNextEventIDResponse.
+// Equals returns true if all the fields of this GetMutableStateResponse match the
+// provided GetMutableStateResponse.
 //
 // This function performs a deep comparison.
-func (v *GetWorkflowExecutionNextEventIDResponse) Equals(rhs *GetWorkflowExecutionNextEventIDResponse) bool {
-	if !_I64_EqualsPtr(v.EventId, rhs.EventId) {
+func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
 		return false
 	}
-	if !_String_EqualsPtr(v.RunId, rhs.RunId) {
+	if !((v.WorkflowType == nil && rhs.WorkflowType == nil) || (v.WorkflowType != nil && rhs.WorkflowType != nil && v.WorkflowType.Equals(rhs.WorkflowType))) {
 		return false
 	}
-	if !((v.Tasklist == nil && rhs.Tasklist == nil) || (v.Tasklist != nil && rhs.Tasklist != nil && v.Tasklist.Equals(rhs.Tasklist))) {
+	if !_I64_EqualsPtr(v.NextEventId, rhs.NextEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.LastFirstEventId, rhs.LastFirstEventId) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !((v.StickyTaskList == nil && rhs.StickyTaskList == nil) || (v.StickyTaskList != nil && rhs.StickyTaskList != nil && v.StickyTaskList.Equals(rhs.StickyTaskList))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientLibraryVersion, rhs.ClientLibraryVersion) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientFeatureVersion, rhs.ClientFeatureVersion) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ClientImpl, rhs.ClientImpl) {
 		return false
 	}
 	if !_Bool_EqualsPtr(v.IsWorkflowRunning, rhs.IsWorkflowRunning) {
@@ -687,21 +843,51 @@ func (v *GetWorkflowExecutionNextEventIDResponse) Equals(rhs *GetWorkflowExecuti
 	return true
 }
 
-// GetEventId returns the value of EventId if it is set or its
+// GetNextEventId returns the value of NextEventId if it is set or its
 // zero value if it is unset.
-func (v *GetWorkflowExecutionNextEventIDResponse) GetEventId() (o int64) {
-	if v.EventId != nil {
-		return *v.EventId
+func (v *GetMutableStateResponse) GetNextEventId() (o int64) {
+	if v.NextEventId != nil {
+		return *v.NextEventId
 	}
 
 	return
 }
 
-// GetRunId returns the value of RunId if it is set or its
+// GetLastFirstEventId returns the value of LastFirstEventId if it is set or its
 // zero value if it is unset.
-func (v *GetWorkflowExecutionNextEventIDResponse) GetRunId() (o string) {
-	if v.RunId != nil {
-		return *v.RunId
+func (v *GetMutableStateResponse) GetLastFirstEventId() (o int64) {
+	if v.LastFirstEventId != nil {
+		return *v.LastFirstEventId
+	}
+
+	return
+}
+
+// GetClientLibraryVersion returns the value of ClientLibraryVersion if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetClientLibraryVersion() (o string) {
+	if v.ClientLibraryVersion != nil {
+		return *v.ClientLibraryVersion
+	}
+
+	return
+}
+
+// GetClientFeatureVersion returns the value of ClientFeatureVersion if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetClientFeatureVersion() (o string) {
+	if v.ClientFeatureVersion != nil {
+		return *v.ClientFeatureVersion
+	}
+
+	return
+}
+
+// GetClientImpl returns the value of ClientImpl if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetClientImpl() (o string) {
+	if v.ClientImpl != nil {
+		return *v.ClientImpl
 	}
 
 	return
@@ -709,7 +895,7 @@ func (v *GetWorkflowExecutionNextEventIDResponse) GetRunId() (o string) {
 
 // GetIsWorkflowRunning returns the value of IsWorkflowRunning if it is set or its
 // zero value if it is unset.
-func (v *GetWorkflowExecutionNextEventIDResponse) GetIsWorkflowRunning() (o bool) {
+func (v *GetMutableStateResponse) GetIsWorkflowRunning() (o bool) {
 	if v.IsWorkflowRunning != nil {
 		return *v.IsWorkflowRunning
 	}
@@ -2058,12 +2244,6 @@ func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _WorkflowType_Read(w wire.Value) (*shared.WorkflowType, error) {
-	var v shared.WorkflowType
-	err := v.FromWire(w)
-	return &v, err
 }
 
 func _TransientDecisionInfo_Read(w wire.Value) (*shared.TransientDecisionInfo, error) {

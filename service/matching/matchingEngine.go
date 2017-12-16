@@ -258,7 +258,7 @@ pollLoop:
 		if tCtx.queryTaskInfo != nil {
 			// for query task, we don't need to update history to record decision task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this decision task.
-			nextIDResp, err := e.historyService.GetWorkflowExecutionNextEventID(ctx, &h.GetWorkflowExecutionNextEventIDRequest{
+			mutableStateResp, err := e.historyService.GetMutableState(ctx, &h.GetMutableStateRequest{
 				DomainUUID: req.DomainUUID,
 				Execution:  &tCtx.workflowExecution,
 			})
@@ -275,9 +275,15 @@ pollLoop:
 				return emptyPollForDecisionTaskResponse, nil
 			}
 
+			isStickyEnabled := false
+			if len(mutableStateResp.StickyTaskList.GetName()) != 0 {
+				isStickyEnabled = true
+			}
 			resp := &h.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId: nextIDResp.EventId,
-				NextEventId:            nextIDResp.EventId,
+				PreviousStartedEventId: mutableStateResp.NextEventId,
+				NextEventId:            mutableStateResp.NextEventId,
+				WorkflowType:           mutableStateResp.WorkflowType,
+				StickyExecutionEnabled: common.BoolPtr(isStickyEnabled),
 			}
 			tCtx.completeTask(nil)
 			return e.createPollForDecisionTaskResponse(tCtx, resp), nil
@@ -489,6 +495,7 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 	if historyResponse.GetPreviousStartedEventId() != common.EmptyEventID {
 		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
 	}
+	response.WorkflowType = historyResponse.WorkflowType
 	response.StartedEventId = historyResponse.StartedEventId
 	response.StickyExecutionEnabled = historyResponse.StickyExecutionEnabled
 	response.BacklogCountHint = common.Int64Ptr(context.backlogCountHint)

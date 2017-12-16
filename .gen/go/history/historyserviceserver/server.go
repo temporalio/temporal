@@ -39,10 +39,10 @@ type Interface interface {
 		DescribeRequest *history.DescribeWorkflowExecutionRequest,
 	) (*shared.DescribeWorkflowExecutionResponse, error)
 
-	GetWorkflowExecutionNextEventID(
+	GetMutableState(
 		ctx context.Context,
-		GetRequest *history.GetWorkflowExecutionNextEventIDRequest,
-	) (*history.GetWorkflowExecutionNextEventIDResponse, error)
+		GetRequest *history.GetMutableStateRequest,
+	) (*history.GetMutableStateResponse, error)
 
 	RecordActivityTaskHeartbeat(
 		ctx context.Context,
@@ -138,13 +138,13 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
-				Name: "GetWorkflowExecutionNextEventID",
+				Name: "GetMutableState",
 				HandlerSpec: thrift.HandlerSpec{
 
 					Type:  transport.Unary,
-					Unary: thrift.UnaryHandler(h.GetWorkflowExecutionNextEventID),
+					Unary: thrift.UnaryHandler(h.GetMutableState),
 				},
-				Signature:    "GetWorkflowExecutionNextEventID(GetRequest *history.GetWorkflowExecutionNextEventIDRequest) (*history.GetWorkflowExecutionNextEventIDResponse)",
+				Signature:    "GetMutableState(GetRequest *history.GetMutableStateRequest) (*history.GetMutableStateResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -330,16 +330,16 @@ func (h handler) DescribeWorkflowExecution(ctx context.Context, body wire.Value)
 	return response, err
 }
 
-func (h handler) GetWorkflowExecutionNextEventID(ctx context.Context, body wire.Value) (thrift.Response, error) {
-	var args history.HistoryService_GetWorkflowExecutionNextEventID_Args
+func (h handler) GetMutableState(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_GetMutableState_Args
 	if err := args.FromWire(body); err != nil {
 		return thrift.Response{}, err
 	}
 
-	success, err := h.impl.GetWorkflowExecutionNextEventID(ctx, args.GetRequest)
+	success, err := h.impl.GetMutableState(ctx, args.GetRequest)
 
 	hadError := err != nil
-	result, err := history.HistoryService_GetWorkflowExecutionNextEventID_Helper.WrapResponse(success, err)
+	result, err := history.HistoryService_GetMutableState_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {
