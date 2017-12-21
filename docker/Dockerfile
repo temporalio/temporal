@@ -65,7 +65,7 @@ RUN go get -u github.com/Masterminds/glide
 RUN go get -u github.com/golang/lint/golint
 
 RUN git clone https://github.com/uber/cadence.git $CADENCE_HOME
-RUN cd $CADENCE_HOME; git checkout $git_branch; make bins_nothrift
+RUN cd $CADENCE_HOME && git checkout $git_branch && make bins_nothrift
 
 EXPOSE 7933 7934 7935
 
