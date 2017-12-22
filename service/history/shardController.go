@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/cache"
+
 	"github.com/uber-common/bark"
 
 	"github.com/uber/cadence/common"
@@ -46,6 +48,7 @@ type (
 		membershipUpdateCh  chan *membership.ChangedEvent
 		shardMgr            persistence.ShardManager
 		historyMgr          persistence.HistoryManager
+		metadataMgr         persistence.MetadataManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		engineFactory       EngineFactory
 		shardClosedCh       chan int
@@ -68,6 +71,7 @@ type (
 		shardMgr      persistence.ShardManager
 		historyMgr    persistence.HistoryManager
 		executionMgr  persistence.ExecutionManager
+		domainCache   cache.DomainCache
 		engineFactory EngineFactory
 		host          *membership.HostInfo
 		engine        Engine
@@ -78,7 +82,7 @@ type (
 )
 
 func newShardController(host *membership.HostInfo, resolver membership.ServiceResolver,
-	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, metadataMgr persistence.MetadataManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, config *Config,
 	logger bark.Logger, reporter metrics.Client) *shardController {
 	return &shardController{
@@ -87,6 +91,7 @@ func newShardController(host *membership.HostInfo, resolver membership.ServiceRe
 		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
 		shardMgr:            shardMgr,
 		historyMgr:          historyMgr,
+		metadataMgr:         metadataMgr,
 		executionMgrFactory: executionMgrFactory,
 		engineFactory:       factory,
 		historyShards:       make(map[int]*historyShardsItem),
@@ -101,19 +106,22 @@ func newShardController(host *membership.HostInfo, resolver membership.ServiceRe
 }
 
 func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
-	config *Config, logger bark.Logger, reporter metrics.Client) (*historyShardsItem, error) {
+	metadataMgr persistence.MetadataManager, executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
+	host *membership.HostInfo, config *Config, logger bark.Logger, reporter metrics.Client) (*historyShardsItem, error) {
 
 	executionMgr, err := executionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
 		return nil, err
 	}
 
+	domainCache := cache.NewDomainCache(metadataMgr, logger)
+
 	return &historyShardsItem{
 		shardID:       shardID,
 		shardMgr:      shardMgr,
 		historyMgr:    historyMgr,
 		executionMgr:  executionMgr,
+		domainCache:   domainCache,
 		engineFactory: factory,
 		host:          host,
 		config:        config,
@@ -209,8 +217,8 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	}
 
 	if info.Identity() == c.host.Identity() {
-		shardItem, err := newHistoryShardsItem(shardID, c.shardMgr, c.historyMgr, c.executionMgrFactory, c.engineFactory, c.host,
-			c.config, c.logger, c.metricsClient)
+		shardItem, err := newHistoryShardsItem(shardID, c.shardMgr, c.historyMgr, c.metadataMgr,
+			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.metricsClient)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +376,7 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 
 	logging.LogShardEngineCreatingEvent(i.logger, i.host.Identity(), i.shardID)
 
-	context, err := acquireShard(i.shardID, i.shardMgr, i.historyMgr, i.executionMgr, i.host.Identity(), shardClosedCh,
+	context, err := acquireShard(i.shardID, i.shardMgr, i.historyMgr, i.executionMgr, i.domainCache, i.host.Identity(), shardClosedCh,
 		i.config, i.logger, i.metricsClient)
 	if err != nil {
 		return nil, err

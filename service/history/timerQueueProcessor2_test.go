@@ -96,6 +96,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
+		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
@@ -223,7 +224,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(wfResponse, nil).Once()
 
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-		&persistence.GetDomainResponse{Config: &persistence.DomainConfig{Retention: 1}}, nil).Once()
+		&persistence.GetDomainResponse{Config: &persistence.DomainConfig{Retention: 1}}, nil)
 	s.mockExecutionMgr.On("CompleteTimerTask", mock.Anything).Return(nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Run(func(arguments mock.Arguments) {

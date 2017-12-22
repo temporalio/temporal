@@ -156,11 +156,18 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	}
 
 	continueAsNew := updates.continueAsNew
-	deleteExecution := false
+	finishExecution := false
+	var finishExecutionTTL int32
 	if c.msBuilder.executionInfo.State == persistence.WorkflowStateCompleted {
 		// Workflow execution completed as part of this transaction.
-		// Also transactionally delete workflow execution representing current run for the execution
-		deleteExecution = true
+		// Also transactionally delete workflow execution representing
+		// current run for the execution using cassandra TTL
+		finishExecution = true
+		_, domainConfig, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
+		if err != nil {
+			return err
+		}
+		finishExecutionTTL = domainConfig.Retention
 	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,
@@ -177,7 +184,8 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		NewBufferedEvents:         updates.newBufferedEvents,
 		ClearBufferedEvents:       updates.clearBufferedEvents,
 		ContinueAsNew:             continueAsNew,
-		CloseExecution:            deleteExecution,
+		FinishExecution:           finishExecution,
+		FinishedExecutionTTL:      finishExecutionTTL,
 	}); err1 != nil {
 		switch err1.(type) {
 		case *persistence.ConditionFailedError:
@@ -267,15 +275,6 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithRetry(
 	request *persistence.UpdateWorkflowExecutionRequest) error {
 	op := func() error {
 		return c.shard.UpdateWorkflowExecution(request)
-	}
-
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (c *workflowExecutionContext) deleteWorkflowExecutionWithRetry(
-	request *persistence.DeleteWorkflowExecutionRequest) error {
-	op := func() error {
-		return c.executionManager.DeleteWorkflowExecution(request)
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)

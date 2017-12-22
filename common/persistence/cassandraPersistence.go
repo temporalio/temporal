@@ -239,19 +239,20 @@ const (
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions ` +
-		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?}` +
+	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions USING TTL 0 ` +
+		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id = ? `
+		`and task_id = ? ` +
+		`IF current_run_id = ? `
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?}) IF NOT EXISTS`
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}) IF NOT EXISTS USING TTL 0 `
 
 	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id) ` +
@@ -286,7 +287,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
-	templateGetCurrentExecutionQuery = `SELECT current_run_id ` +
+	templateGetCurrentExecutionQuery = `SELECT current_run_id, execution ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -417,14 +418,9 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
-	templateDeleteWorkflowExecutionQuery = `DELETE FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and domain_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
+	templateDeleteWorkflowExecutionQueryWithTTL = `INSERT INTO executions ` +
+		`(shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}) USING TTL ? `
 
 	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -797,12 +793,15 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 				if execution, ok := previous["execution"].(map[string]interface{}); ok {
 					// CreateWorkflowExecution failed because it already exists
+					executionInfo := createWorkflowExecutionInfo(execution)
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						execution["workflow_id"], execution["run_id"], request.RangeID, strings.Join(columns, ","))
-					return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-						Message:        common.StringPtr(msg),
-						StartRequestId: common.StringPtr(fmt.Sprintf("%v", execution["create_request_id"])),
-						RunId:          common.StringPtr(fmt.Sprintf("%v", execution["run_id"])),
+						request.Execution.GetWorkflowId(), executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
+					return nil, &WorkflowExecutionAlreadyStartedError{
+						Msg:            msg,
+						StartRequestID: executionInfo.CreateRequestID,
+						RunID:          executionInfo.RunID,
+						State:          executionInfo.State,
+						CloseStatus:    executionInfo.CloseStatus,
 					}
 				}
 			}
@@ -832,18 +831,37 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 
 func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *CreateWorkflowExecutionRequest,
 	batch *gocql.Batch, cqlNowTimestamp int64) {
+
+	parentDomainID := emptyDomainID
+	parentWorkflowID := ""
+	parentRunID := emptyRunID
+	initiatedID := emptyInitiatedID
+	state := WorkflowStateRunning
+	closeStatus := WorkflowCloseStatusNone
+	if request.ParentExecution != nil {
+		parentDomainID = request.ParentDomainID
+		parentWorkflowID = *request.ParentExecution.WorkflowId
+		parentRunID = *request.ParentExecution.RunId
+		initiatedID = request.InitiatedID
+		state = WorkflowStateCreated
+	}
+
 	if request.ContinueAsNew {
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 			*request.Execution.RunId,
 			*request.Execution.RunId,
 			request.RequestID,
+			state,
+			closeStatus,
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
 			*request.Execution.WorkflowId,
 			permanentRunID,
 			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
+			rowTypeExecutionTaskID,
+			request.PreviousRunID,
+		)
 	} else {
 		batch.Query(templateCreateWorkflowExecutionQuery,
 			d.shardID,
@@ -855,18 +873,10 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			rowTypeExecutionTaskID,
 			*request.Execution.RunId,
 			*request.Execution.RunId,
-			request.RequestID)
-	}
-
-	parentDomainID := emptyDomainID
-	parentWorkflowID := ""
-	parentRunID := emptyRunID
-	initiatedID := emptyInitiatedID
-	if request.ParentExecution != nil {
-		parentDomainID = request.ParentDomainID
-		parentWorkflowID = *request.ParentExecution.WorkflowId
-		parentRunID = *request.ParentExecution.RunId
-		initiatedID = request.InitiatedID
+			request.RequestID,
+			state,
+			closeStatus,
+		)
 	}
 
 	batch.Query(templateCreateWorkflowExecutionQuery2,
@@ -1065,16 +1075,23 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		d.CreateWorkflowExecutionWithinBatch(startReq, batch, cqlNowTimestamp)
 		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, *startReq.Execution.WorkflowId,
 			*startReq.Execution.RunId, cqlNowTimestamp)
-	} else if request.CloseExecution {
-		// Delete WorkflowExecution row representing current execution
-		batch.Query(templateDeleteWorkflowExecutionQuery,
+	} else if request.FinishExecution {
+		// Delete WorkflowExecution row representing current execution, by using a TTL
+		batch.Query(templateDeleteWorkflowExecutionQueryWithTTL,
 			d.shardID,
 			rowTypeExecution,
 			executionInfo.DomainID,
 			executionInfo.WorkflowID,
 			permanentRunID,
 			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
+			rowTypeExecutionTaskID,
+			executionInfo.RunID,
+			executionInfo.RunID,
+			executionInfo.CreateRequestID,
+			executionInfo.State,
+			executionInfo.CloseStatus,
+			request.FinishedExecutionTTL,
+		)
 	}
 
 	// Verifies that the RangeID has not changed
@@ -1203,8 +1220,8 @@ func (d *cassandraPersistence) GetCurrentExecution(request *GetCurrentExecutionR
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 
-	var currentRunID string
-	if err := query.Scan(&currentRunID); err != nil {
+	result := make(map[string]interface{})
+	if err := query.MapScan(result); err != nil {
 		if err == gocql.ErrNotFound {
 			return nil, &workflow.EntityNotExistsError{
 				Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v",
@@ -1221,7 +1238,14 @@ func (d *cassandraPersistence) GetCurrentExecution(request *GetCurrentExecutionR
 		}
 	}
 
-	return &GetCurrentExecutionResponse{RunID: currentRunID}, nil
+	currentRunID := result["current_run_id"].(gocql.UUID).String()
+	executionInfo := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
+	return &GetCurrentExecutionResponse{
+		RunID:          currentRunID,
+		StartRequestID: executionInfo.CreateRequestID,
+		State:          executionInfo.State,
+		CloseStatus:    executionInfo.CloseStatus,
+	}, nil
 }
 
 func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {

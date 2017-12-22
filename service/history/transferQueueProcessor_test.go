@@ -213,7 +213,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	addCompleteWorkflowEvent(builder, *completeDecisionEvent.EventId, []byte("result"))
 
 	updatedInfo1 := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionAndDelete(updatedInfo1, int64(3))
+	err1 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
 	s.Nil(err1, "No error expected.")
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
@@ -249,7 +249,7 @@ workerPump:
 	}
 
 	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
-	s.Nil(err3, "No error expected.")
+	s.NotNil(err3, "Error expected.")
 	s.logger.Infof("Execution created successfully: %v", err3)
 }
 
@@ -276,7 +276,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotE
 	addCompleteWorkflowEvent(builder, *completeDecisionEvent.EventId, []byte("result"))
 
 	updatedInfo1 := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionAndDelete(updatedInfo1, int64(3))
+	err1 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
 	s.Nil(err1, "No error expected.")
 
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),

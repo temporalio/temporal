@@ -51,7 +51,6 @@ const (
 type (
 	historyEngineImpl struct {
 		shard                ShardContext
-		metadataMgr          persistence.MetadataManager
 		historyMgr           persistence.HistoryManager
 		executionManager     persistence.ExecutionManager
 		txProcessor          transferQueueProcessor
@@ -84,10 +83,19 @@ var (
 	ErrConflict = errors.New("Conditional update failed")
 	// ErrMaxAttemptsExceeded is exported temporarily for integration test
 	ErrMaxAttemptsExceeded = errors.New("Maximum attempts exceeded to update history")
+
+	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
+	// for start workflow execution API
+	FailedWorkflowCloseState = map[int]bool{
+		persistence.WorkflowCloseStatusFailed:     true,
+		persistence.WorkflowCloseStatusCanceled:   true,
+		persistence.WorkflowCloseStatusTerminated: true,
+		persistence.WorkflowCloseStatusTimedOut:   true,
+	}
 )
 
 // NewEngineWithShardContext creates an instance of history engine
-func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.MetadataManager,
+func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache,
 	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client,
 	historyEventNotifier historyEventNotifier) Engine {
 	shardWrapper := &shardContextWrapper{
@@ -99,10 +107,8 @@ func NewEngineWithShardContext(shard ShardContext, metadataMgr persistence.Metad
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard, logger)
-	domainCache := cache.NewDomainCache(metadataMgr, logger)
 	historyEngImpl := &historyEngineImpl{
 		shard:              shard,
-		metadataMgr:        metadataMgr,
 		historyMgr:         historyManager,
 		executionManager:   executionManager,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
@@ -151,7 +157,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	request := startRequest.StartRequest
-	executionID := *request.WorkflowId
 
 	if request.ExecutionStartToCloseTimeoutSeconds == nil || *request.ExecutionStartToCloseTimeoutSeconds <= 0 {
 		return nil, &workflow.BadRequestError{Message: "Missing or invalid ExecutionStartToCloseTimeoutSeconds."}
@@ -160,12 +165,9 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, &workflow.BadRequestError{Message: "Missing or invalid TaskStartToCloseTimeoutSeconds."}
 	}
 
-	// We generate a new workflow execution run_id on each StartWorkflowExecution call.  This generated run_id is
-	// returned back to the caller as the response to StartWorkflowExecution.
-	runID := uuid.New()
-	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr(executionID),
-		RunId:      common.StringPtr(runID),
+	execution := workflow.WorkflowExecution{
+		WorkflowId: request.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
 	}
 
 	var parentExecution *workflow.WorkflowExecution
@@ -181,7 +183,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// Generate first decision task event.
 	taskList := *request.TaskList.Name
 	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
-	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, workflowExecution, request)
+	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, execution, request)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -213,81 +215,138 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
 	if serializedError != nil {
 		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
-			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v", executionID, runID))
+			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
+			execution.GetWorkflowId(), execution.GetRunId()))
 		return nil, serializedError
 	}
 
-	err1 := e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+	err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 		DomainID:  domainID,
-		Execution: workflowExecution,
+		Execution: execution,
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
 		// no potential duplicates to override.
 		TransactionID: 0,
 		FirstEventID:  *startedEvent.EventId,
 		Events:        serializedHistory,
 	})
-	if err1 != nil {
-		return nil, err1
-	}
-
-	_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
-		RequestID:                   common.StringDefault(request.RequestId),
-		DomainID:                    domainID,
-		Execution:                   workflowExecution,
-		ParentDomainID:              parentDomainID,
-		ParentExecution:             parentExecution,
-		InitiatedID:                 initiatedID,
-		TaskList:                    *request.TaskList.Name,
-		WorkflowTypeName:            *request.WorkflowType.Name,
-		WorkflowTimeout:             *request.ExecutionStartToCloseTimeoutSeconds,
-		DecisionTimeoutValue:        *request.TaskStartToCloseTimeoutSeconds,
-		ExecutionContext:            nil,
-		NextEventID:                 msBuilder.GetNextEventID(),
-		LastProcessedEvent:          emptyEventID,
-		TransferTasks:               transferTasks,
-		DecisionScheduleID:          decisionScheduleID,
-		DecisionStartedID:           decisionStartID,
-		DecisionStartToCloseTimeout: decisionTimeout,
-		ContinueAsNew:               false,
-		TimerTasks:                  timerTasks,
-	})
-
 	if err != nil {
-		switch t := err.(type) {
-		case *workflow.WorkflowExecutionAlreadyStartedError:
-			// We created the history events but failed to create workflow execution, so cleanup the history which could cause
-			// us to leak history events which are never cleaned up.  Cleaning up the events is absolutely safe here as they
-			// are always created for a unique run_id which is not visible beyond this call yet.
-			// TODO: Handle error on deletion of execution history
-			e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-				DomainID:  domainID,
-				Execution: workflowExecution,
-			})
-
-			if common.StringDefault(t.StartRequestId) == common.StringDefault(request.RequestId) {
-				return &workflow.StartWorkflowExecutionResponse{
-					RunId: t.RunId,
-				}, nil
-			}
-		case *persistence.ShardOwnershipLostError:
-			// We created the history events but failed to create workflow execution, so cleanup the history which could cause
-			// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
-			// are always created for a unique run_id which is not visible beyond this call yet.
-			// TODO: Handle error on deletion of execution history
-			e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-				DomainID:  domainID,
-				Execution: workflowExecution,
-			})
-		}
-
 		return nil, err
 	}
 
-	e.timerProcessor.NotifyNewTimer(timerTasks)
+	deleteEvents := func() {
+		// We created the history events but failed to create workflow execution, so cleanup the history which could cause
+		// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
+		// are always created for a unique run_id which is not visible beyond this call yet.
+		// TODO: Handle error on deletion of execution history
+		e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
+			DomainID:  domainID,
+			Execution: execution,
+		})
+	}
 
-	return &workflow.StartWorkflowExecutionResponse{
-		RunId: workflowExecution.RunId,
-	}, nil
+	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
+		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+			RequestID:                   common.StringDefault(request.RequestId),
+			DomainID:                    domainID,
+			Execution:                   execution,
+			ParentDomainID:              parentDomainID,
+			ParentExecution:             parentExecution,
+			InitiatedID:                 initiatedID,
+			TaskList:                    *request.TaskList.Name,
+			WorkflowTypeName:            *request.WorkflowType.Name,
+			WorkflowTimeout:             *request.ExecutionStartToCloseTimeoutSeconds,
+			DecisionTimeoutValue:        *request.TaskStartToCloseTimeoutSeconds,
+			ExecutionContext:            nil,
+			NextEventID:                 msBuilder.GetNextEventID(),
+			LastProcessedEvent:          emptyEventID,
+			TransferTasks:               transferTasks,
+			DecisionScheduleID:          decisionScheduleID,
+			DecisionStartedID:           decisionStartID,
+			DecisionStartToCloseTimeout: decisionTimeout,
+			TimerTasks:                  timerTasks,
+			ContinueAsNew:               !isBrandNew,
+			PreviousRunID:               prevRunID,
+		})
+
+		if err != nil {
+			switch t := err.(type) {
+			case *persistence.WorkflowExecutionAlreadyStartedError:
+				if t.StartRequestID == common.StringDefault(request.RequestId) {
+					deleteEvents()
+					return t.RunID, nil
+				}
+			case *persistence.ShardOwnershipLostError:
+				deleteEvents()
+			}
+			return "", err
+		}
+		return execution.GetRunId(), nil
+	}
+
+	workflowExistsErrHandler := func(err *persistence.WorkflowExecutionAlreadyStartedError) error {
+		// set the prev run ID for database conditional update
+		prevStartRequestID := err.StartRequestID
+		prevRunID := err.RunID
+		prevState := err.State
+		prevCloseState := err.CloseStatus
+
+		errFn := func(errMsg string, createRequestID string, workflowID string, runID string) error {
+			msg := fmt.Sprintf(errMsg, workflowID, runID)
+			return &workflow.WorkflowExecutionAlreadyStartedError{
+				Message:        common.StringPtr(msg),
+				StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
+				RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
+			}
+		}
+
+		// here we know there is some information about the prev workflow, i.e. either running right now
+		// or has history check if the this workflow is finished
+		if prevState != persistence.WorkflowStateCompleted {
+			deleteEvents()
+			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
+			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+		}
+		switch startRequest.StartRequest.GetWorkflowIdReusePolicy() {
+		case workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
+			if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {
+				deleteEvents()
+				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
+				return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+			}
+		case workflow.WorkflowIdReusePolicyAllowDuplicate:
+			// as long as workflow not running, so this case has no check
+		case workflow.WorkflowIdReusePolicyRejectDuplicate:
+			deleteEvents()
+			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
+			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+		default:
+			deleteEvents()
+			return &workflow.InternalServiceError{Message: "Failed to process start workflow reuse policy."}
+		}
+
+		return nil
+	}
+
+	// try to create the workflow execution
+	isBrandNew := true
+	resultRunID := ""
+	resultRunID, err = createWorkflow(isBrandNew, "")
+	// if err still non nil, see if retry
+	if errExist, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
+		if err = workflowExistsErrHandler(errExist); err == nil {
+			isBrandNew = false
+			resultRunID, err = createWorkflow(isBrandNew, errExist.RunID)
+		}
+	}
+
+	if err == nil {
+		e.timerProcessor.NotifyNewTimer(timerTasks)
+
+		return &workflow.StartWorkflowExecutionResponse{
+			RunId: common.StringPtr(resultRunID),
+		}, nil
+	}
+	return nil, err
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution

@@ -54,6 +54,24 @@ exception QueryFailedError {
   1: required string message
 }
 
+enum WorkflowIdReusePolicy {
+  /*
+   * allow start a workflow execution using the same workflow ID,
+   * when workflow not running, and the last execution close state is in
+   * [terminated, cancelled, timeouted, failed].
+   */
+  AllowDuplicateFailedOnly,
+  /*
+   * allow start a workflow execution using the same workflow ID,
+   * when workflow not running.
+   */
+  AllowDuplicate,
+  /*
+   * do not allow start a workflow execution using the same workflow ID at all
+   */
+  RejectDuplicate,
+}
+
 enum DomainStatus {
   REGISTERED,
   DEPRECATED,
@@ -693,6 +711,7 @@ struct StartWorkflowExecutionRequest {
   70: optional i32 taskStartToCloseTimeoutSeconds
   80: optional string identity
   90: optional string requestId
+  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
 }
 
 struct StartWorkflowExecutionResponse {

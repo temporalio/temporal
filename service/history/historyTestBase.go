@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/cache"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uber-common/bark"
@@ -48,6 +50,7 @@ type (
 		transferSequenceNumber int64
 		historyMgr             persistence.HistoryManager
 		executionMgr           persistence.ExecutionManager
+		domainCache            cache.DomainCache
 		config                 *Config
 		logger                 bark.Logger
 		metricsClient          metrics.Client
@@ -63,12 +66,13 @@ type (
 var _ ShardContext = (*TestShardContext)(nil)
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, config *Config, logger bark.Logger) *TestShardContext {
+	executionMgr persistence.ExecutionManager, domainCache cache.DomainCache, config *Config, logger bark.Logger) *TestShardContext {
 	return &TestShardContext{
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
 		historyMgr:             historyMgr,
 		executionMgr:           executionMgr,
+		domainCache:            domainCache,
 		config:                 config,
 		logger:                 logger,
 		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
@@ -83,6 +87,11 @@ func (s *TestShardContext) GetExecutionManager() persistence.ExecutionManager {
 // GetHistoryManager test implementation
 func (s *TestShardContext) GetHistoryManager() persistence.HistoryManager {
 	return s.historyMgr
+}
+
+// GetDomainCache test implementation
+func (s *TestShardContext) GetDomainCache() cache.DomainCache {
+	return s.domainCache
 }
 
 // GetNextTransferTaskID test implementation
@@ -193,7 +202,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 	s.TestBase.SetupWorkflowStoreWithOptions(options)
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(1)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, config, log)
+	domainCache := cache.NewDomainCache(s.MetadataManager, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 
@@ -202,6 +212,7 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.SetupWorkflowStore()
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(1)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, config, log)
+	domainCache := cache.NewDomainCache(s.MetadataManager, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

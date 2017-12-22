@@ -203,7 +203,7 @@ func (s *TestBase) UpdateShard(updatedInfo *ShardInfo, previousRangeID int64) er
 // CreateWorkflowExecution is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution, taskList,
 	wType string, wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
-	decisionScheduleID int64, timerTasks []Task) (string, error) {
+	decisionScheduleID int64, timerTasks []Task) (*CreateWorkflowExecutionResponse, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
 		DomainID:             domainID,
@@ -230,17 +230,13 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 		DecisionStartToCloseTimeout: 1,
 	})
 
-	if err != nil {
-		return "", err
-	}
-
-	return response.TaskID, nil
+	return response, err
 }
 
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExecution workflow.WorkflowExecution,
 	taskList string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
-	decisionScheduleIDs []int64, activityScheduleIDs []int64) (string, error) {
+	decisionScheduleIDs []int64, activityScheduleIDs []int64) (*CreateWorkflowExecutionResponse, error) {
 
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
@@ -278,18 +274,14 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExe
 		DecisionStartToCloseTimeout: 1,
 	})
 
-	if err != nil {
-		return "", err
-	}
-
-	return response.TaskID, nil
+	return response, err
 }
 
 // CreateChildWorkflowExecution is a utility method to create child workflow executions
 func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecution workflow.WorkflowExecution,
 	parentDomainID string, parentExecution *workflow.WorkflowExecution, initiatedID int64, taskList, wType string,
 	wTimeout int32, decisionTimeout int32, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
-	decisionScheduleID int64, timerTasks []Task) (string, error) {
+	decisionScheduleID int64, timerTasks []Task) (*CreateWorkflowExecutionResponse, error) {
 	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
 		DomainID:             domainID,
@@ -319,11 +311,7 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 		DecisionStartToCloseTimeout: 1,
 	})
 
-	if err != nil {
-		return "", err
-	}
-
-	return response.TaskID, nil
+	return response, err
 }
 
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
@@ -340,8 +328,8 @@ func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution w
 	return response.State, nil
 }
 
-// GetCurrentWorkflow returns the workflow state for the given params
-func (s *TestBase) GetCurrentWorkflow(domainID, workflowID string) (string, error) {
+// GetCurrentWorkflowRunID returns the workflow run ID for the given params
+func (s *TestBase) GetCurrentWorkflowRunID(domainID, workflowID string) (string, error) {
 	response, err := s.WorkflowMgr.GetCurrentExecution(&GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,
@@ -393,6 +381,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *WorkflowExecutionInfo, co
 			DecisionStartedID:           common.EmptyEventID,
 			DecisionStartToCloseTimeout: 1,
 			ContinueAsNew:               true,
+			PreviousRunID:               updatedInfo.RunID,
 		},
 	})
 }
@@ -407,8 +396,8 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil)
 }
 
-// UpdateWorkflowExecutionAndDelete is a utility method to update workflow execution
-func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecutionInfo, condition int64) error {
+// UpdateWorkflowExecutionAndFinish is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *WorkflowExecutionInfo, condition int64) error {
 	transferTasks := []Task{}
 	transferTasks = append(transferTasks, &CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
@@ -422,7 +411,7 @@ func (s *TestBase) UpdateWorkflowExecutionAndDelete(updatedInfo *WorkflowExecuti
 		DeleteActivityInfo:  nil,
 		UpserTimerInfos:     nil,
 		DeleteTimerInfos:    nil,
-		CloseExecution:      true,
+		FinishExecution:     true,
 	})
 }
 

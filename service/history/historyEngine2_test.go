@@ -27,6 +27,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/pborman/uuid"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -103,6 +105,7 @@ func (s *engine2Suite) SetupTest() {
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
+		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.logger),
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
@@ -689,6 +692,244 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
 	s.False(executionBuilder.HasPendingDecisionTask())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
+	domainID := "domainId"
+	workflowID := "workflowID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+
+	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		StartRequest: &workflow.StartWorkflowExecutionRequest{
+			Domain:       common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+		},
+	})
+	s.Nil(err)
+	s.NotNil(resp.RunId)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
+	domainID := "domainId"
+	workflowID := "workflowID"
+	runID := "runID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+	requestID := "requestID"
+
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+		Msg:            "random message",
+		StartRequestID: requestID,
+		RunID:          runID,
+		State:          persistence.WorkflowStateRunning,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
+	}).Once()
+	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+
+	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		StartRequest: &workflow.StartWorkflowExecutionRequest{
+			Domain:       common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			RequestId:                           common.StringPtr(requestID),
+		},
+	})
+	s.Nil(err)
+	s.Equal(runID, resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
+	domainID := "domainId"
+	workflowID := "workflowID"
+	runID := "runID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+		Msg:            "random message",
+		StartRequestID: "oldRequestID",
+		RunID:          runID,
+		State:          persistence.WorkflowStateRunning,
+		CloseStatus:    persistence.WorkflowCloseStatusNone,
+	}).Once()
+	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+
+	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		StartRequest: &workflow.StartWorkflowExecutionRequest{
+			Domain:       common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			RequestId:                           common.StringPtr("newRequestID"),
+		},
+	})
+	s.NotNil(err)
+	s.Nil(resp)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
+	domainID := "domainId"
+	workflowID := "workflowID"
+	runID := "runID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+
+	options := []workflow.WorkflowIdReusePolicy{
+		workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
+		workflow.WorkflowIdReusePolicyAllowDuplicate,
+		workflow.WorkflowIdReusePolicyRejectDuplicate,
+	}
+
+	expecedErrs := []bool{true, false, true}
+
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
+	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Times(len(expecedErrs))
+	s.mockExecutionMgr.On(
+		"CreateWorkflowExecution",
+		mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),
+	).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+		Msg:            "random message",
+		StartRequestID: "oldRequestID",
+		RunID:          runID,
+		State:          persistence.WorkflowStateCompleted,
+		CloseStatus:    persistence.WorkflowCloseStatusCompleted,
+	}).Times(len(expecedErrs))
+
+	for index, option := range options {
+		if !expecedErrs[index] {
+			s.mockExecutionMgr.On(
+				"CreateWorkflowExecution",
+				mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
+			).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+		} else {
+			s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+		}
+
+		resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				Domain:       common.StringPtr(domainID),
+				WorkflowId:   common.StringPtr(workflowID),
+				WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+				Identity:                            common.StringPtr(identity),
+				RequestId:                           common.StringPtr("newRequestID"),
+				WorkflowIdReusePolicy:               &option,
+			},
+		})
+
+		if expecedErrs[index] {
+			s.NotNil(err)
+			s.Nil(resp)
+		} else {
+			s.Nil(err)
+			s.NotNil(resp)
+		}
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
+	domainID := "domainId"
+	workflowID := "workflowID"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+
+	options := []workflow.WorkflowIdReusePolicy{
+		workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
+		workflow.WorkflowIdReusePolicyAllowDuplicate,
+		workflow.WorkflowIdReusePolicyRejectDuplicate,
+	}
+
+	expecedErrs := []bool{false, false, true}
+
+	closeStates := []int{
+		persistence.WorkflowCloseStatusFailed,
+		persistence.WorkflowCloseStatusCanceled,
+		persistence.WorkflowCloseStatusTerminated,
+		persistence.WorkflowCloseStatusTimedOut,
+	}
+	runIDs := []string{"1", "2", "3", "4"}
+
+	for i, closeState := range closeStates {
+
+		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
+		s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Times(len(expecedErrs))
+		s.mockExecutionMgr.On(
+			"CreateWorkflowExecution",
+			mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),
+		).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+			Msg:            "random message",
+			StartRequestID: "oldRequestID",
+			RunID:          runIDs[i],
+			State:          persistence.WorkflowStateCompleted,
+			CloseStatus:    closeState,
+		}).Times(len(expecedErrs))
+
+		for j, option := range options {
+
+			if !expecedErrs[j] {
+				s.mockExecutionMgr.On(
+					"CreateWorkflowExecution",
+					mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
+				).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+			} else {
+				s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+			}
+
+			resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+				DomainUUID: common.StringPtr(domainID),
+				StartRequest: &workflow.StartWorkflowExecutionRequest{
+					Domain:       common.StringPtr(domainID),
+					WorkflowId:   common.StringPtr(workflowID),
+					WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+					TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+					Identity:                            common.StringPtr(identity),
+					RequestId:                           common.StringPtr("newRequestID"),
+					WorkflowIdReusePolicy:               &option,
+				},
+			})
+
+			if expecedErrs[j] {
+				s.NotNil(err)
+				s.Nil(resp)
+			} else {
+				s.Nil(err)
+				s.NotNil(resp)
+			}
+		}
+	}
 }
 
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {

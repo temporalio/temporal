@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/cache"
+
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
@@ -40,6 +42,7 @@ type (
 	ShardContext interface {
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
+		GetDomainCache() cache.DomainCache
 		GetNextTransferTaskID() (int64, error)
 		GetTransferSequenceNumber() int64
 		GetTransferMaxReadLevel() int64
@@ -64,6 +67,7 @@ type (
 		shardManager     persistence.ShardManager
 		historyMgr       persistence.HistoryManager
 		executionManager persistence.ExecutionManager
+		domainCache      cache.DomainCache
 		closeCh          chan<- int
 		isClosed         bool
 		config           *Config
@@ -86,6 +90,10 @@ func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 
 func (s *shardContextImpl) GetHistoryManager() persistence.HistoryManager {
 	return s.historyMgr
+}
+
+func (s *shardContextImpl) GetDomainCache() cache.DomainCache {
+	return s.domainCache
 }
 
 func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
@@ -445,7 +453,7 @@ func (s *shardContextImpl) GetTimeSource() common.TimeSource {
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, owner string, closeCh chan<- int, config *Config,
+	executionMgr persistence.ExecutionManager, domainCache cache.DomainCache, owner string, closeCh chan<- int, config *Config,
 	logger bark.Logger, metricsClient metrics.Client) (ShardContext, error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
@@ -463,6 +471,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 		shardManager:     shardManager,
 		historyMgr:       historyMgr,
 		executionManager: executionMgr,
+		domainCache:      domainCache,
 		shardInfo:        updatedShardInfo,
 		closeCh:          closeCh,
 		metricsClient:    metricsClient.Tagged(tags),
