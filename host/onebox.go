@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"errors"
+
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
@@ -34,6 +35,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/service/frontend"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
@@ -134,6 +136,10 @@ func (c *cadenceImpl) FrontendAddress() string {
 	return "127.0.0.1:7104"
 }
 
+func (c *cadenceImpl) FrontendPProfPort() int {
+	return 7105
+}
+
 func (c *cadenceImpl) HistoryServiceAddress() []string {
 	hosts := []string{}
 	startPort := 7200
@@ -146,8 +152,24 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 	return hosts
 }
 
+func (c *cadenceImpl) HistoryPProfPort() []int {
+	ports := []int{}
+	startPort := 7300
+	for i := 0; i < c.numberOfHistoryHosts; i++ {
+		port := startPort + i
+		ports = append(ports, port)
+	}
+
+	c.logger.Infof("History pprof ports: %v", ports)
+	return ports
+}
+
 func (c *cadenceImpl) MatchingServiceAddress() string {
 	return "127.0.0.1:7106"
+}
+
+func (c *cadenceImpl) MatchingPProfPort() int {
+	return 7107
 }
 
 func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
@@ -163,6 +185,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params := new(service.BootstrapParams)
 	params.Name = common.FrontendServiceName
 	params.Logger = logger
+	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
@@ -185,10 +208,12 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
 
-	for _, hostport := range c.HistoryServiceAddress() {
+	pprofPorts := c.HistoryPProfPort()
+	for i, hostport := range c.HistoryServiceAddress() {
 		params := new(service.BootstrapParams)
 		params.Name = common.HistoryServiceName
 		params.Logger = logger
+		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
@@ -213,6 +238,7 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 	params := new(service.BootstrapParams)
 	params.Name = common.MatchingServiceName
 	params.Logger = logger
+	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
@@ -279,6 +305,15 @@ type rpcFactoryImpl struct {
 	serviceName string
 	hostPort    string
 	logger      bark.Logger
+}
+
+func newPProfInitializerImpl(logger bark.Logger, port int) common.PProfInitializer {
+	return &config.PProfInitializerImpl{
+		PProf: &config.PProf{
+			Port: port,
+		},
+		Logger: logger,
+	}
 }
 
 func newRPCFactoryImpl(sName string, hostPort string, logger bark.Logger) common.RPCFactory {

@@ -44,12 +44,13 @@ type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
-		Name            string
-		Logger          bark.Logger
-		MetricScope     tally.Scope
-		RingpopFactory  RingpopFactory
-		RPCFactory      common.RPCFactory
-		CassandraConfig config.Cassandra
+		Name             string
+		Logger           bark.Logger
+		MetricScope      tally.Scope
+		RingpopFactory   RingpopFactory
+		RPCFactory       common.RPCFactory
+		PProfInitializer common.PProfInitializer
+		CassandraConfig  config.Cassandra
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
@@ -68,6 +69,7 @@ type (
 		rpFactory              RingpopFactory
 		membershipMonitor      membership.Monitor
 		rpcFactory             common.RPCFactory
+		pprofInitializer       common.PProfInitializer
 		clientFactory          client.Factory
 		numberOfHistoryShards  int
 		logger                 bark.Logger
@@ -85,6 +87,7 @@ func New(params *BootstrapParams) Service {
 		logger:                params.Logger.WithField("Service", params.Name),
 		rpcFactory:            params.RPCFactory,
 		rpFactory:             params.RingpopFactory,
+		pprofInitializer:      params.PProfInitializer,
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
 	}
@@ -115,6 +118,10 @@ func (h *serviceImpl) Start() {
 
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	h.runtimeMetricsReporter.Start()
+
+	if err := h.pprofInitializer.Start(); err != nil {
+		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Failed to start pprof")
+	}
 
 	if err := h.dispatcher.Start(); err != nil {
 		h.logger.WithFields(bark.Fields{logging.TagErr: err}).Fatal("Failed to start yarpc dispatcher")

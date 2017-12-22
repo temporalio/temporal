@@ -20,6 +20,8 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "cadence"
+    pprof:
+      port: 7936
 
   matching:
     rpc:
@@ -29,6 +31,8 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "cadence"
+    pprof:
+      port: 7938
 
   history:
     rpc:
@@ -38,3 +42,5 @@ services:
       statsd:
         hostPort: "127.0.0.1:8125"
         prefix: "cadence"
+    pprof:
+      port: 7937

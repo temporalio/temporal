@@ -22,9 +22,10 @@ package config
 
 import (
 	"encoding/json"
+	"time"
+
 	"github.com/uber-go/tally/m3"
 	"github.com/uber/ringpop-go/discovery"
-	"time"
 )
 
 type (
@@ -46,6 +47,14 @@ type (
 		RPC RPC `yaml:"rpc"`
 		// Metrics is the metrics subsystem configuration
 		Metrics Metrics `yaml:"metrics"`
+		// PProf is the PProf configuration
+		PProf PProf `yaml:"pprof"`
+	}
+
+	// PProf contains the rpc config items
+	PProf struct {
+		// Port is the port on which the PProf will bind to
+		Port int `yaml:"port"`
 	}
 
 	// RPC contains the rpc config items
