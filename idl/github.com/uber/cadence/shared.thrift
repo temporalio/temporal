@@ -185,6 +185,12 @@ enum QueryTaskCompletedType {
   FAILED,
 }
 
+enum PendingActivityState {
+  SCHEDULED,
+  STARTED,
+  CANCEL_REQUESTED,
+}
+
 struct WorkflowType {
   10: optional string name
 }
@@ -926,7 +932,16 @@ struct DescribeWorkflowExecutionRequest {
   20: optional WorkflowExecution execution
 }
 
+struct PendingActivityInfo {
+  10: optional string activityID
+  20: optional ActivityType activityType
+  30: optional PendingActivityState state
+  40: optional binary heartbeatDetails
+  50: optional i64 (js.type = "Long") lastHeartbeatTimestamp
+}
+
 struct DescribeWorkflowExecutionResponse {
   10: optional WorkflowExecutionConfiguration executionConfiguration
   20: optional WorkflowExecutionInfo workflowExecutionInfo
+  30: optional list<PendingActivityInfo> pendingActivities
 }

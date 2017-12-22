@@ -1926,7 +1926,6 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	// decider logic
 	workflowComplete := false
 	signalSent := false
-	var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if !signalSent {
@@ -1946,12 +1945,6 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
 				},
 			}}, nil
-		} else if previousStartedEventID > 0 && signalEvent == nil {
-			for _, event := range history.Events[previousStartedEventID:] {
-				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
-					signalEvent = event
-				}
-			}
 		}
 
 		workflowComplete = true
@@ -1963,13 +1956,18 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		}}, nil
 	}
 
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
 	poller := &taskPoller{
 		engine:          s.engine,
 		domain:          s.domainName,
 		taskList:        taskList,
 		identity:        identity,
 		decisionHandler: dtHandler,
-		activityHandler: nil,
+		activityHandler: atHandler,
 		logger:          s.logger,
 		suite:           s,
 	}
@@ -1983,35 +1981,28 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Nil(err)
 	s.True(nil == dweResponse.WorkflowExecutionInfo.CloseStatus)
 	s.Equal(int64(5), *dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, ActivityScheduled
+	s.Equal(1, len(dweResponse.PendingActivities))
+	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
+	s.Equal(int64(0), dweResponse.PendingActivities[0].GetLastHeartbeatTimestamp())
 
-	// this will create new decision task
-	err = s.engine.SignalWorkflowExecution(createContext(),
-		&workflow.SignalWorkflowExecutionRequest{
-			Domain: common.StringPtr(s.domainName),
-			WorkflowExecution: &workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(id),
-			},
-			SignalName: common.StringPtr("buffered-signal"),
-			Input:      []byte("buffered-signal-input"),
-			Identity:   common.StringPtr(identity),
-		})
+	// process activity task
+	err = poller.pollAndProcessActivityTask(false)
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
 	s.True(nil == dweResponse.WorkflowExecutionInfo.CloseStatus)
-	s.Equal(int64(7), *dweResponse.WorkflowExecutionInfo.HistoryLength) // Signaled, DecisionTaskScheduled
+	s.Equal(int64(8), *dweResponse.WorkflowExecutionInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, DecisionTaskScheduled
+	s.Equal(0, len(dweResponse.PendingActivities))
 
 	// Process signal in decider
 	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
-	s.NotNil(signalEvent)
 	s.True(workflowComplete)
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
 	s.Equal(workflow.WorkflowExecutionCloseStatusCompleted, *dweResponse.WorkflowExecutionInfo.CloseStatus)
-	s.Equal(int64(10), *dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
+	s.Equal(int64(11), *dweResponse.WorkflowExecutionInfo.HistoryLength) // DecisionStarted, DecisionCompleted, WorkflowCompleted
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {

@@ -486,6 +486,30 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(msBuilder.getLastUpdatedTimestamp())
 	}
 
+	if len(msBuilder.pendingActivityInfoIDs) > 0 {
+		for _, pi := range msBuilder.pendingActivityInfoIDs {
+			ai := &workflow.PendingActivityInfo{
+				ActivityID: common.StringPtr(pi.ActivityID),
+			}
+			state := workflow.PendingActivityStateScheduled
+			if pi.CancelRequested {
+				state = workflow.PendingActivityStateCancelRequested
+			} else if pi.StartedID != emptyEventID {
+				state = workflow.PendingActivityStateStarted
+			}
+			ai.State = &state
+			lastHeartbeatUnixNano := pi.LastHeartBeatUpdatedTime.UnixNano()
+			if lastHeartbeatUnixNano > 0 {
+				ai.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
+				ai.HeartbeatDetails = pi.Details
+			}
+			if scheduledEvent, ok := msBuilder.getHistoryEvent(pi.ScheduledEvent); ok {
+				ai.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
+			}
+			result.PendingActivities = append(result.PendingActivities, ai)
+		}
+	}
+
 	return result, nil
 }
 
