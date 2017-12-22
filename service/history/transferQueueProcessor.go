@@ -372,6 +372,7 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	if err != nil {
 		return err
 	}
+
 	var mb *mutableStateBuilder
 	mb, err = context.loadWorkflowExecution()
 	if err != nil {
@@ -427,10 +428,10 @@ func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.Tra
 		RunId: common.StringPtr(task.RunID)}
 
 	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
-	defer release()
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	var mb *mutableStateBuilder
 	mb, err = context.loadWorkflowExecution()
@@ -509,10 +510,10 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	var context *workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
 	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
-	defer release()
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	// First load the execution to validate if there is pending request cancellation for this transfer task
 	var msBuilder *mutableStateBuilder
@@ -598,10 +599,10 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 	var context *workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
 	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
-	defer release()
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	// First step is to load workflow execution so we can retrieve the initiated event
 	var msBuilder *mutableStateBuilder

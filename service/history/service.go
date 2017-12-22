@@ -76,8 +76,8 @@ type Config struct {
 func NewConfig(numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                              numberOfShards,
-		HistoryCacheInitialSize:                     256,
-		HistoryCacheMaxSize:                         1 * 1024,
+		HistoryCacheInitialSize:                     128,
+		HistoryCacheMaxSize:                         256,
 		HistoryCacheTTL:                             time.Hour,
 		RangeSizeBits:                               20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                        time.Minute,
