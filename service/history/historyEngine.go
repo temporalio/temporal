@@ -58,7 +58,6 @@ type (
 		historyEventNotifier historyEventNotifier
 		tokenSerializer      common.TaskTokenSerializer
 		hSerializerFactory   persistence.HistorySerializerFactory
-		metricsReporter      metrics.Client
 		historyCache         *historyCache
 		domainCache          cache.DomainCache
 		metricsClient        metrics.Client

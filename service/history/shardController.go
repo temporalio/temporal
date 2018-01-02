@@ -107,7 +107,7 @@ func newShardController(host *membership.HostInfo, resolver membership.ServiceRe
 
 func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
 	metadataMgr persistence.MetadataManager, executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
-	host *membership.HostInfo, config *Config, logger bark.Logger, reporter metrics.Client) (*historyShardsItem, error) {
+	host *membership.HostInfo, config *Config, logger bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 
 	executionMgr, err := executionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
@@ -128,7 +128,7 @@ func newHistoryShardsItem(shardID int, shardMgr persistence.ShardManager, histor
 		logger: logger.WithFields(bark.Fields{
 			logging.TagHistoryShardID: shardID,
 		}),
-		metricsClient: reporter,
+		metricsClient: metricsClient,
 	}, nil
 }
 
