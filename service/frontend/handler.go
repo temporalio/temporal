@@ -921,42 +921,34 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 
 	// this function return the following 3 things,
 	// 1. the workflow run ID
-	// 2. the next event ID
-	// 3. whether the workflow is closed
-	getNextEventID := func(domainUUID string, execution *gen.WorkflowExecution, expectedNextEventID *int64) (string, int64, bool, error) {
+	// 2. the last first event ID (the event ID of the last batch of events in the history)
+	// 3. the next event ID
+	// 4. whether the workflow is closed
+	queryHistory := func(domainUUID string, execution *gen.WorkflowExecution, expectedNextEventID int64) (string, int64, int64, bool, error) {
 		response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
 			DomainUUID:          common.StringPtr(domainUUID),
 			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
+			ExpectedNextEventId: common.Int64Ptr(expectedNextEventID),
 		})
 
-		if err == nil {
-			return response.Execution.GetRunId(), response.GetNextEventId(), response.GetIsWorkflowRunning(), nil
-		}
-
-		if _, ok := err.(*gen.EntityNotExistsError); !ok || execution.RunId == nil {
-			return "", 0, false, err
-		}
-		// here we have error == EntityNotExistsError && run ID != nil
-		// (validateExecution guaranee that when run ID != nil, run ID is a valid UUID)
-
-		// It is possible that we still have the events in the table even though the mutable state is gone
-		// Get the nextEventID from visibility store if we still have it.
-		visibilityResp, err := wh.visibitiltyMgr.GetClosedWorkflowExecution(&persistence.GetClosedWorkflowExecutionRequest{
-			DomainUUID: domainUUID,
-			Execution:  *execution,
-		})
 		if err != nil {
-			return "", 0, false, err
+			return "", 0, 0, false, err
 		}
-		return *visibilityResp.Execution.Execution.RunId, *visibilityResp.Execution.HistoryLength, false, nil
+		return response.Execution.GetRunId(), response.GetLastFirstEventId(), response.GetNextEventId(), response.GetIsWorkflowRunning(), nil
 	}
 
 	isLongPoll := getRequest.GetWaitForNewEvent()
+	isCloseEventOnly := getRequest.GetHistoryEventFilterType() == gen.HistoryEventFilterTypeCloseEvent
 	execution := getRequest.Execution
 	token := &getHistoryContinuationToken{}
 
+	var runID string
+	var lastFirstEventID int64
+	var nextEventID int64
+	var isWorkflowRunning bool
+
 	// process the token for paging
+	queryNextEventID := common.EndEventID
 	if getRequest.NextPageToken != nil {
 		token, err = deserializeHistoryToken(getRequest.NextPageToken)
 		if err != nil {
@@ -970,17 +962,23 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 
 		// we need to update the current next event ID and whether workflow is running
 		if len(token.PersistenceToken) == 0 && isLongPoll && token.IsWorkflowRunning {
-			token.FirstEventID = token.NextEventID
-			_, nextEventID, isRunning, err := getNextEventID(domainInfo.ID, execution, &token.NextEventID)
+			if !isCloseEventOnly {
+				queryNextEventID = token.NextEventID
+			}
+			_, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainInfo.ID, execution, queryNextEventID)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
 
+			token.FirstEventID = token.NextEventID
 			token.NextEventID = nextEventID
-			token.IsWorkflowRunning = isRunning
+			token.IsWorkflowRunning = isWorkflowRunning
 		}
 	} else {
-		runID, nextEventID, isRunning, err := getNextEventID(domainInfo.ID, execution, nil)
+		if !isCloseEventOnly {
+			queryNextEventID = common.FirstEventID
+		}
+		runID, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainInfo.ID, execution, queryNextEventID)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -988,33 +986,52 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		execution.RunId = &runID
 
 		token.RunID = runID
-		token.FirstEventID = 0
+		token.FirstEventID = common.FirstEventID
 		token.NextEventID = nextEventID
-		token.IsWorkflowRunning = isRunning
+		token.IsWorkflowRunning = isWorkflowRunning
 		token.PersistenceToken = nil
 	}
 
 	history := &gen.History{}
-	if token.FirstEventID >= token.NextEventID {
-		// currently there is no new event
-		events := []*gen.HistoryEvent{}
-		history.Events = events
-		if !token.IsWorkflowRunning {
+	history.Events = []*gen.HistoryEvent{}
+	if isCloseEventOnly {
+		if !isWorkflowRunning {
+			history, _, err = wh.getHistory(domainInfo.ID, *execution, lastFirstEventID, nextEventID,
+				*getRequest.MaximumPageSize, nil, token.TransientDecision)
+			if err != nil {
+				return nil, wh.error(err, scope)
+			}
+			// since getHistory func will not return empty history, so the below is safe
+			history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
+			token = nil
+		} else if isLongPoll {
+			// set the persistance token to be nil so next time we will query history for updates
+			token.PersistenceToken = nil
+		} else {
 			token = nil
 		}
 	} else {
-		history, token.PersistenceToken, err =
-			wh.getHistory(domainInfo.ID, *execution, token.FirstEventID, token.NextEventID,
-				*getRequest.MaximumPageSize, token.PersistenceToken, token.TransientDecision)
-		if err != nil {
-			return nil, wh.error(err, scope)
-		}
+		// return all events
+		if token.FirstEventID >= token.NextEventID {
+			// currently there is no new event
+			history.Events = []*gen.HistoryEvent{}
+			if !isWorkflowRunning {
+				token = nil
+			}
+		} else {
+			history, token.PersistenceToken, err =
+				wh.getHistory(domainInfo.ID, *execution, token.FirstEventID, token.NextEventID,
+					*getRequest.MaximumPageSize, token.PersistenceToken, token.TransientDecision)
+			if err != nil {
+				return nil, wh.error(err, scope)
+			}
 
-		// here, for long pull on history events, we need to intercept the paging token from cassandra
-		// and do something clever
-		if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
-			// meaning, there is no more history to be returned
-			token = nil
+			// here, for long pull on history events, we need to intercept the paging token from cassandra
+			// and do something clever
+			if len(token.PersistenceToken) == 0 && (!token.IsWorkflowRunning || !isLongPoll) {
+				// meaning, there is no more history to be returned
+				token = nil
+			}
 		}
 	}
 

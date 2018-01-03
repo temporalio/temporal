@@ -136,6 +136,7 @@ type (
 		ExecutionContext             []byte
 		State                        int
 		CloseStatus                  int
+		LastFirstEventID             int64
 		NextEventID                  int64
 		LastProcessedEvent           int64
 		StartTimestamp               time.Time

@@ -28,6 +28,7 @@ CREATE TYPE workflow_execution (
   execution_context                blob,
   state                            int,  -- enum WorkflowState {Created, Running, Completed}
   close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
+  last_first_event_id              bigint,
   next_event_id                    bigint,
   last_processed_event             bigint,
   start_time                       timestamp,

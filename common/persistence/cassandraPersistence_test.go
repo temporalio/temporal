@@ -173,6 +173,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int32(13), info0.DecisionTimeoutValue)
 	s.Equal([]byte(nil), info0.ExecutionContext)
 	s.Equal(WorkflowStateCreated, info0.State)
+	s.Equal(int64(1), info0.LastFirstEventID)
 	s.Equal(int64(3), info0.NextEventID)
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(true, validateTimeRange(info0.LastUpdatedTimestamp, time.Hour))
@@ -190,6 +191,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.LastFirstEventID = int64(3)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	updatedInfo.DecisionAttempt = int64(123)
@@ -215,6 +217,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int32(13), info1.DecisionTimeoutValue)
 	s.Equal([]byte(nil), info1.ExecutionContext)
 	s.Equal(WorkflowStateCreated, info1.State)
+	s.Equal(int64(3), info1.LastFirstEventID)
 	s.Equal(int64(5), info1.NextEventID)
 	s.Equal(int64(2), info1.LastProcessedEvent)
 	s.Equal(true, validateTimeRange(info1.LastUpdatedTimestamp, time.Hour))

@@ -118,6 +118,7 @@ const (
 		`execution_context: ?, ` +
 		`state: ?, ` +
 		`close_status: ?, ` +
+		`last_first_event_id: ?, ` +
 		`next_event_id: ?, ` +
 		`last_processed_event: ?, ` +
 		`start_time: ?, ` +
@@ -903,6 +904,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		request.ExecutionContext,
 		WorkflowStateCreated,
 		WorkflowCloseStatusNone,
+		common.FirstEventID,
 		request.NextEventID,
 		request.LastProcessedEvent,
 		cqlNowTimestamp,
@@ -1024,6 +1026,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.ExecutionContext,
 		executionInfo.State,
 		executionInfo.CloseStatus,
+		executionInfo.LastFirstEventID,
 		executionInfo.NextEventID,
 		executionInfo.LastProcessedEvent,
 		executionInfo.StartTimestamp,
@@ -2013,6 +2016,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 			info.State = v.(int)
 		case "close_status":
 			info.CloseStatus = v.(int)
+		case "last_first_event_id":
+			info.LastFirstEventID = v.(int64)
 		case "next_event_id":
 			info.NextEventID = v.(int64)
 		case "last_processed_event":

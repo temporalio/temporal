@@ -25,6 +25,8 @@ const (
 	FirstEventID int64 = 1
 	// EmptyEventID is the id of the empty event
 	EmptyEventID int64 = -23
+	// EndEventID is the id of the end event, here we use the int64 max
+	EndEventID int64 = 1<<63 - 1
 )
 
 const (

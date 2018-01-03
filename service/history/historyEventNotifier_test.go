@@ -77,9 +77,10 @@ func (s *historyEventNotifierSuite) TestSingleSubscriberWatchingEvents() {
 		WorkflowId: common.StringPtr("workflow ID"),
 		RunId:      common.StringPtr("run ID"),
 	}
+	var lastFirstEventID int64 = 3
 	var nextEventID int64 = 18
 	isRunning := true
-	historyEvent := newHistoryEventNotification(domainID, execution, nextEventID, isRunning)
+	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, isRunning)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.historyEventNotifier.WatchHistoryEvent(newWorkflowIdentifier(domainID, execution))
@@ -110,9 +111,10 @@ func (s *historyEventNotifierSuite) TestMultipleSubscriberWatchingEvents() {
 		RunId:      common.StringPtr("run ID"),
 	}
 
+	var lastFirstEventID int64 = 3
 	var nextEventID int64 = 18
 	isRunning := true
-	historyEvent := newHistoryEventNotification(domainID, execution, nextEventID, isRunning)
+	historyEvent := newHistoryEventNotification(domainID, execution, lastFirstEventID, nextEventID, isRunning)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100

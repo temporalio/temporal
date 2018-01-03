@@ -3457,7 +3457,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, lastEvent.GetEventType())
 }
 
-func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
+func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "interation-get-workflow-history-events-long-poll-test"
 	identity := "worker1"
 	activityName := "activity_type1"
@@ -3542,7 +3542,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 	}
 
 	// this function poll events from history side
-	testLongPoll := func(domain string, workflowID string, token []byte) ([]*workflow.HistoryEvent, []byte) {
+	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*workflow.HistoryEvent, []byte) {
 		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 			Domain: common.StringPtr(domain),
 			Execution: &workflow.WorkflowExecution{
@@ -3551,10 +3551,9 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 			// since the page size have essential no relation with number of events..
 			// so just use a really larger number, to test whether long poll works
 			MaximumPageSize: common.Int32Ptr(100),
-			WaitForNewEvent: common.BoolPtr(true), // long poll
+			WaitForNewEvent: common.BoolPtr(isLongPoll),
 			NextPageToken:   token,
 		})
-
 		return responseInner.History.Events, responseInner.NextPageToken
 	}
 
@@ -3564,7 +3563,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now()
-	events, token = testLongPoll(s.domainName, workflowID, token)
+	events, token = getHistory(s.domainName, workflowID, token, true)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().Before(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -3577,7 +3576,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision1)
 	})
 	start = time.Now()
-	events, token = testLongPoll(s.domainName, workflowID, token)
+	events, token = getHistory(s.domainName, workflowID, token, true)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().After(start.Add(time.Second * 5)))
 	s.NotEmpty(events)
@@ -3593,7 +3592,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision2)
 	})
 	for token != nil {
-		events, token = testLongPoll(s.domainName, workflowID, token)
+		events, token = getHistory(s.domainName, workflowID, token, true)
 		allEvents = append(allEvents, events...)
 	}
 
@@ -3610,6 +3609,177 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistoryLongPoll() {
 	// 10. DecisionTaskCompleted
 	// 11. WorkflowExecutionCompleted
 	s.Equal(11, len(allEvents))
+
+	// test non long poll
+	allEvents = nil
+	token = nil
+	for {
+		events, token = getHistory(s.domainName, workflowID, token, false)
+		allEvents = append(allEvents, events...)
+		if token == nil {
+			break
+		}
+	}
+	s.Equal(11, len(allEvents))
+}
+
+func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
+	workflowID := "interation-get-workflow-history-events-long-poll-test"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr("interation-get-workflow-history-events-long-poll-test-type")
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr("interation-get-workflow-history-events-long-poll-test-tasklist")
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(workflowID),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	workflowComplete := false
+	activityScheduled := false
+	activityData := int32(1)
+	// var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     taskList,
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// this function poll events from history side
+	getHistory := func(domain string, workflowID string, token []byte, isLongPoll bool) ([]*workflow.HistoryEvent, []byte) {
+		closeEventOnly := workflow.HistoryEventFilterTypeCloseEvent
+		responseInner, _ := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(domain),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+			},
+			// since the page size have essential no relation with number of events..
+			// so just use a really larger number, to test whether long poll works
+			MaximumPageSize:        common.Int32Ptr(100),
+			WaitForNewEvent:        common.BoolPtr(isLongPoll),
+			NextPageToken:          token,
+			HistoryEventFilterType: &closeEventOnly,
+		})
+
+		return responseInner.History.Events, responseInner.NextPageToken
+	}
+
+	var events []*workflow.HistoryEvent
+	var token []byte
+
+	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
+	start := time.Now()
+	events, token = getHistory(s.domainName, workflowID, token, true)
+	s.True(time.Now().After(start.Add(time.Second * 10)))
+	// since we are only interested in close event
+	s.Empty(events)
+	s.NotNil(token)
+
+	// here do a long pull and check # of events and time elapsed
+	// make first decision to schedule activity, this should affect the long poll above
+	time.AfterFunc(time.Second*8, func() {
+		_, errDecision1 := poller.pollAndProcessDecisionTask(false, false)
+		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision1)
+	})
+	start = time.Now()
+	events, token = getHistory(s.domainName, workflowID, token, true)
+	s.True(time.Now().After(start.Add(time.Second * 10)))
+	// since we are only interested in close event
+	s.Empty(events)
+	s.NotNil(token)
+
+	// finish the activity and poll all events
+	time.AfterFunc(time.Second*5, func() {
+		errActivity := poller.pollAndProcessActivityTask(false)
+		s.logger.Infof("pollAndProcessDecisionTask: %v", errActivity)
+	})
+	time.AfterFunc(time.Second*8, func() {
+		_, errDecision2 := poller.pollAndProcessDecisionTask(false, false)
+		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision2)
+	})
+	for token != nil {
+		events, token = getHistory(s.domainName, workflowID, token, true)
+
+		// since we are only interested in close event
+		if token == nil {
+			s.Equal(1, len(events))
+			s.Equal(workflow.EventTypeWorkflowExecutionCompleted, *events[0].EventType)
+		} else {
+			s.Empty(events)
+		}
+	}
+
+	// test non long poll for only closed events
+	token = nil
+	for {
+		events, token = getHistory(s.domainName, workflowID, token, false)
+		if token == nil {
+			break
+		}
+	}
+	s.Equal(1, len(events))
 }
 
 func (s *integrationSuite) setupShards() {

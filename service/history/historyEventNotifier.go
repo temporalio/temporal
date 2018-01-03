@@ -70,13 +70,14 @@ func newWorkflowIdentifier(domainID string, workflowExecution *gen.WorkflowExecu
 }
 
 func newHistoryEventNotification(domainID string, workflowExecution *gen.WorkflowExecution,
-	nextEventID int64, isWorkflowRunning bool) *historyEventNotification {
+	lastFirstEventID int64, nextEventID int64, isWorkflowRunning bool) *historyEventNotification {
 	return &historyEventNotification{
 		workflowIdentifier: workflowIdentifier{
 			domainID:   domainID,
 			workflowID: *workflowExecution.WorkflowId,
 			runID:      *workflowExecution.RunId,
 		},
+		lastFirstEventID:  lastFirstEventID,
 		nextEventID:       nextEventID,
 		isWorkflowRunning: isWorkflowRunning,
 	}

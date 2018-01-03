@@ -157,6 +157,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 				fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
 			return err0
 		}
+		c.msBuilder.executionInfo.LastFirstEventID = *firstEvent.EventId
 	}
 
 	continueAsNew := updates.continueAsNew
@@ -210,6 +211,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	c.shard.NotifyNewHistoryEvent(newHistoryEventNotification(
 		c.domainID,
 		&c.workflowExecution,
+		c.msBuilder.GetLastFirstEventID(),
 		c.msBuilder.GetNextEventID(),
 		c.msBuilder.isWorkflowExecutionRunning(),
 	))
@@ -248,6 +250,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	if err1 != nil {
 		return err1
 	}
+	c.msBuilder.executionInfo.LastFirstEventID = *firstEvent.EventId
 
 	err2 := c.updateWorkflowExecutionWithContext(context, transferTasks, timerTasks, transactionID)
 

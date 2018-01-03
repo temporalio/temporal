@@ -39,6 +39,7 @@ type (
 
 	historyEventNotification struct {
 		workflowIdentifier
+		lastFirstEventID  int64
 		nextEventID       int64
 		isWorkflowRunning bool
 		timestamp         time.Time

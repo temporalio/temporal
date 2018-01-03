@@ -685,6 +685,12 @@ func (e *mutableStateBuilder) clearStickyness() {
 	e.executionInfo.ClientImpl = ""
 }
 
+// GetLastFirstEventID returns last first event ID
+// first event ID is the ID of a batch of events in a single history events record
+func (e *mutableStateBuilder) GetLastFirstEventID() int64 {
+	return e.executionInfo.LastFirstEventID
+}
+
 // GetNextEventID returns next event ID
 func (e *mutableStateBuilder) GetNextEventID() int64 {
 	return e.executionInfo.NextEventID

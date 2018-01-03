@@ -8996,11 +8996,12 @@ func (v *FailWorkflowExecutionDecisionAttributes) GetReason() (o string) {
 }
 
 type GetWorkflowExecutionHistoryRequest struct {
-	Domain          *string            `json:"domain,omitempty"`
-	Execution       *WorkflowExecution `json:"execution,omitempty"`
-	MaximumPageSize *int32             `json:"maximumPageSize,omitempty"`
-	NextPageToken   []byte             `json:"nextPageToken,omitempty"`
-	WaitForNewEvent *bool              `json:"waitForNewEvent,omitempty"`
+	Domain                 *string                 `json:"domain,omitempty"`
+	Execution              *WorkflowExecution      `json:"execution,omitempty"`
+	MaximumPageSize        *int32                  `json:"maximumPageSize,omitempty"`
+	NextPageToken          []byte                  `json:"nextPageToken,omitempty"`
+	WaitForNewEvent        *bool                   `json:"waitForNewEvent,omitempty"`
+	HistoryEventFilterType *HistoryEventFilterType `json:"HistoryEventFilterType,omitempty"`
 }
 
 // ToWire translates a GetWorkflowExecutionHistoryRequest struct into a Thrift-level intermediate
@@ -9020,7 +9021,7 @@ type GetWorkflowExecutionHistoryRequest struct {
 //   }
 func (v *GetWorkflowExecutionHistoryRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -9066,8 +9067,22 @@ func (v *GetWorkflowExecutionHistoryRequest) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
+	if v.HistoryEventFilterType != nil {
+		w, err = v.HistoryEventFilterType.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _HistoryEventFilterType_Read(w wire.Value) (HistoryEventFilterType, error) {
+	var v HistoryEventFilterType
+	err := v.FromWire(w)
+	return v, err
 }
 
 // FromWire deserializes a GetWorkflowExecutionHistoryRequest struct from its Thrift-level
@@ -9138,6 +9153,16 @@ func (v *GetWorkflowExecutionHistoryRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TI32 {
+				var x HistoryEventFilterType
+				x, err = _HistoryEventFilterType_Read(field.Value)
+				v.HistoryEventFilterType = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -9151,7 +9176,7 @@ func (v *GetWorkflowExecutionHistoryRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -9173,8 +9198,22 @@ func (v *GetWorkflowExecutionHistoryRequest) String() string {
 		fields[i] = fmt.Sprintf("WaitForNewEvent: %v", *(v.WaitForNewEvent))
 		i++
 	}
+	if v.HistoryEventFilterType != nil {
+		fields[i] = fmt.Sprintf("HistoryEventFilterType: %v", *(v.HistoryEventFilterType))
+		i++
+	}
 
 	return fmt.Sprintf("GetWorkflowExecutionHistoryRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _HistoryEventFilterType_EqualsPtr(lhs, rhs *HistoryEventFilterType) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this GetWorkflowExecutionHistoryRequest match the
@@ -9195,6 +9234,9 @@ func (v *GetWorkflowExecutionHistoryRequest) Equals(rhs *GetWorkflowExecutionHis
 		return false
 	}
 	if !_Bool_EqualsPtr(v.WaitForNewEvent, rhs.WaitForNewEvent) {
+		return false
+	}
+	if !_HistoryEventFilterType_EqualsPtr(v.HistoryEventFilterType, rhs.HistoryEventFilterType) {
 		return false
 	}
 
@@ -9226,6 +9268,16 @@ func (v *GetWorkflowExecutionHistoryRequest) GetMaximumPageSize() (o int32) {
 func (v *GetWorkflowExecutionHistoryRequest) GetWaitForNewEvent() (o bool) {
 	if v.WaitForNewEvent != nil {
 		return *v.WaitForNewEvent
+	}
+
+	return
+}
+
+// GetHistoryEventFilterType returns the value of HistoryEventFilterType if it is set or its
+// zero value if it is unset.
+func (v *GetWorkflowExecutionHistoryRequest) GetHistoryEventFilterType() (o HistoryEventFilterType) {
+	if v.HistoryEventFilterType != nil {
+		return *v.HistoryEventFilterType
 	}
 
 	return
@@ -10879,6 +10931,136 @@ func (v *HistoryEvent) GetEventType() (o EventType) {
 	}
 
 	return
+}
+
+type HistoryEventFilterType int32
+
+const (
+	HistoryEventFilterTypeAllEvent   HistoryEventFilterType = 0
+	HistoryEventFilterTypeCloseEvent HistoryEventFilterType = 1
+)
+
+// HistoryEventFilterType_Values returns all recognized values of HistoryEventFilterType.
+func HistoryEventFilterType_Values() []HistoryEventFilterType {
+	return []HistoryEventFilterType{
+		HistoryEventFilterTypeAllEvent,
+		HistoryEventFilterTypeCloseEvent,
+	}
+}
+
+// UnmarshalText tries to decode HistoryEventFilterType from a byte slice
+// containing its name.
+//
+//   var v HistoryEventFilterType
+//   err := v.UnmarshalText([]byte("ALL_EVENT"))
+func (v *HistoryEventFilterType) UnmarshalText(value []byte) error {
+	switch string(value) {
+	case "ALL_EVENT":
+		*v = HistoryEventFilterTypeAllEvent
+		return nil
+	case "CLOSE_EVENT":
+		*v = HistoryEventFilterTypeCloseEvent
+		return nil
+	default:
+		return fmt.Errorf("unknown enum value %q for %q", value, "HistoryEventFilterType")
+	}
+}
+
+// ToWire translates HistoryEventFilterType into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// Enums are represented as 32-bit integers over the wire.
+func (v HistoryEventFilterType) ToWire() (wire.Value, error) {
+	return wire.NewValueI32(int32(v)), nil
+}
+
+// FromWire deserializes HistoryEventFilterType from its Thrift-level
+// representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TI32)
+//   if err != nil {
+//     return HistoryEventFilterType(0), err
+//   }
+//
+//   var v HistoryEventFilterType
+//   if err := v.FromWire(x); err != nil {
+//     return HistoryEventFilterType(0), err
+//   }
+//   return v, nil
+func (v *HistoryEventFilterType) FromWire(w wire.Value) error {
+	*v = (HistoryEventFilterType)(w.GetI32())
+	return nil
+}
+
+// String returns a readable string representation of HistoryEventFilterType.
+func (v HistoryEventFilterType) String() string {
+	w := int32(v)
+	switch w {
+	case 0:
+		return "ALL_EVENT"
+	case 1:
+		return "CLOSE_EVENT"
+	}
+	return fmt.Sprintf("HistoryEventFilterType(%d)", w)
+}
+
+// Equals returns true if this HistoryEventFilterType value matches the provided
+// value.
+func (v HistoryEventFilterType) Equals(rhs HistoryEventFilterType) bool {
+	return v == rhs
+}
+
+// MarshalJSON serializes HistoryEventFilterType into JSON.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements json.Marshaler.
+func (v HistoryEventFilterType) MarshalJSON() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return ([]byte)("\"ALL_EVENT\""), nil
+	case 1:
+		return ([]byte)("\"CLOSE_EVENT\""), nil
+	}
+	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// UnmarshalJSON attempts to decode HistoryEventFilterType from its JSON
+// representation.
+//
+// This implementation supports both, numeric and string inputs. If a
+// string is provided, it must be a known enum name.
+//
+// This implements json.Unmarshaler.
+func (v *HistoryEventFilterType) UnmarshalJSON(text []byte) error {
+	d := json.NewDecoder(bytes.NewReader(text))
+	d.UseNumber()
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+
+	switch w := t.(type) {
+	case json.Number:
+		x, err := w.Int64()
+		if err != nil {
+			return err
+		}
+		if x > math.MaxInt32 {
+			return fmt.Errorf("enum overflow from JSON %q for %q", text, "HistoryEventFilterType")
+		}
+		if x < math.MinInt32 {
+			return fmt.Errorf("enum underflow from JSON %q for %q", text, "HistoryEventFilterType")
+		}
+		*v = (HistoryEventFilterType)(x)
+		return nil
+	case string:
+		return v.UnmarshalText([]byte(w))
+	default:
+		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "HistoryEventFilterType")
+	}
 }
 
 type InternalServiceError struct {

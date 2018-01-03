@@ -225,12 +225,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
 		// no potential duplicates to override.
 		TransactionID: 0,
-		FirstEventID:  *startedEvent.EventId,
+		FirstEventID:  startedEvent.GetEventId(),
 		Events:        serializedHistory,
 	})
 	if err != nil {
 		return nil, err
 	}
+	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
 
 	deleteEvents := func() {
 		// We created the history events but failed to create workflow execution, so cleanup the history which could cause
@@ -366,6 +367,8 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// set the run id in case query the current running workflwo
+	execution.RunId = response.Execution.RunId
 
 	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
 	expectedNextEventID := common.FirstEventID
@@ -397,6 +400,7 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 		for {
 			select {
 			case event := <-channel:
+				response.LastFirstEventId = common.Int64Ptr(event.lastFirstEventID)
 				response.NextEventId = common.Int64Ptr(event.nextEventID)
 				response.IsWorkflowRunning = common.BoolPtr(event.isWorkflowRunning)
 				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
@@ -431,6 +435,7 @@ func (e *historyEngineImpl) getMutableState(
 	result := &h.GetMutableStateResponse{
 		Execution:            &execution,
 		WorkflowType:         &workflow.WorkflowType{Name: common.StringPtr(msBuilder.executionInfo.WorkflowTypeName)},
+		LastFirstEventId:     common.Int64Ptr(msBuilder.GetLastFirstEventID()),
 		NextEventId:          common.Int64Ptr(msBuilder.GetNextEventID()),
 		TaskList:             &workflow.TaskList{Name: common.StringPtr(context.msBuilder.executionInfo.TaskList)},
 		StickyTaskList:       &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.StickyTaskList)},
