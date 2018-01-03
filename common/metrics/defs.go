@@ -161,6 +161,26 @@ const (
 	PersistenceDeleteDomainScope
 	// PersistenceDeleteDomainByNameScope tracks DeleteDomainByName calls made by service to persistence layer
 	PersistenceDeleteDomainByNameScope
+	// PersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
+	PersistenceRecordWorkflowExecutionStartedScope
+	// PersistenceRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to persistence layer
+	PersistenceRecordWorkflowExecutionClosedScope
+	// PersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to persistence layer
+	PersistenceListOpenWorkflowExecutionsScope
+	// PersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to persistence layer
+	PersistenceListClosedWorkflowExecutionsScope
+	// PersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to persistence layer
+	PersistenceListOpenWorkflowExecutionsByTypeScope
+	// PersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to persistence layer
+	PersistenceListClosedWorkflowExecutionsByTypeScope
+	// PersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to persistence layer
+	PersistenceListOpenWorkflowExecutionsByWorkflowIDScope
+	// PersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to persistence layer
+	PersistenceListClosedWorkflowExecutionsByWorkflowIDScope
+	// PersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
+	PersistenceListClosedWorkflowExecutionsByStatusScope
+	// PersistenceGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
+	PersistenceGetClosedWorkflowExecutionScope
 	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientStartWorkflowExecutionScope
 	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
@@ -359,31 +379,41 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		PersistenceCreateShardScope:                    {operation: "CreateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceGetShardScope:                       {operation: "GetShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceUpdateShardScope:                    {operation: "UpdateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceCreateWorkflowExecutionScope:        {operation: "CreateWorkflowExecution"},
-		PersistenceGetWorkflowExecutionScope:           {operation: "GetWorkflowExecution"},
-		PersistenceUpdateWorkflowExecutionScope:        {operation: "UpdateWorkflowExecution"},
-		PersistenceDeleteWorkflowExecutionScope:        {operation: "DeleteWorkflowExecution"},
-		PersistenceGetCurrentExecutionScope:            {operation: "GetCurrentExecution"},
-		PersistenceGetTransferTasksScope:               {operation: "GetTransferTasks"},
-		PersistenceCompleteTransferTaskScope:           {operation: "CompleteTransferTask"},
-		PersistenceGetTimerIndexTasksScope:             {operation: "GetTimerIndexTasks"},
-		PersistenceCompleteTimerTaskScope:              {operation: "CompleteTimerTask"},
-		PersistenceCreateTaskScope:                     {operation: "CreateTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceGetTasksScope:                       {operation: "GetTasks", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceCompleteTaskScope:                   {operation: "CompleteTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceLeaseTaskListScope:                  {operation: "LeaseTaskList", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceUpdateTaskListScope:                 {operation: "UpdateTaskList", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceAppendHistoryEventsScope:            {operation: "AppendHistoryEvents", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceGetWorkflowExecutionHistoryScope:    {operation: "GetWorkflowExecutionHistory", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceDeleteWorkflowExecutionHistoryScope: {operation: "DeleteWorkflowExecutionHistory", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceCreateDomainScope:                   {operation: "CreateDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceGetDomainScope:                      {operation: "GetDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceUpdateDomainScope:                   {operation: "UpdateDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceDeleteDomainScope:                   {operation: "DeleteDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
-		PersistenceDeleteDomainByNameScope:             {operation: "DeleteDomainByName", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceCreateShardScope:                              {operation: "CreateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceGetShardScope:                                 {operation: "GetShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceUpdateShardScope:                              {operation: "UpdateShard", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceCreateWorkflowExecutionScope:                  {operation: "CreateWorkflowExecution"},
+		PersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution"},
+		PersistenceUpdateWorkflowExecutionScope:                  {operation: "UpdateWorkflowExecution"},
+		PersistenceDeleteWorkflowExecutionScope:                  {operation: "DeleteWorkflowExecution"},
+		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
+		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
+		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
+		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
+		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
+		PersistenceCreateTaskScope:                               {operation: "CreateTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceGetTasksScope:                                 {operation: "GetTasks", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceCompleteTaskScope:                             {operation: "CompleteTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceLeaseTaskListScope:                            {operation: "LeaseTaskList", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceUpdateTaskListScope:                           {operation: "UpdateTaskList", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceAppendHistoryEventsScope:                      {operation: "AppendHistoryEvents", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceGetWorkflowExecutionHistoryScope:              {operation: "GetWorkflowExecutionHistory", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceDeleteWorkflowExecutionHistoryScope:           {operation: "DeleteWorkflowExecutionHistory", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceCreateDomainScope:                             {operation: "CreateDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceGetDomainScope:                                {operation: "GetDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceUpdateDomainScope:                             {operation: "UpdateDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceDeleteDomainScope:                             {operation: "DeleteDomain", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceDeleteDomainByNameScope:                       {operation: "DeleteDomainByName", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
+		PersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted"},
+		PersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed"},
+		PersistenceListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions"},
+		PersistenceListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions"},
+		PersistenceListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType"},
+		PersistenceListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType"},
+		PersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
+		PersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
+		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
+		PersistenceGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 
 		HistoryClientStartWorkflowExecutionScope:         {operation: "HistoryClientStartWorkflowExecution"},
 		HistoryClientRecordActivityTaskHeartbeatScope:    {operation: "HistoryClientRecordActivityTaskHeartbeat"},

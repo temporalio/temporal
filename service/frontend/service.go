@@ -96,6 +96,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create visiblity manager: %v", err)
 	}
+	visibility = persistence.NewVisibilityPersistenceClient(visibility, base.GetMetricsClient())
 
 	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
