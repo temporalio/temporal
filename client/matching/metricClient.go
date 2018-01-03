@@ -55,7 +55,7 @@ func (c *metricClient) AddActivityTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.MatchingFailures)
 	}
 
 	return err
@@ -72,7 +72,7 @@ func (c *metricClient) AddDecisionTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientAddDecisionTaskScope, metrics.MatchingFailures)
 	}
 
 	return err
@@ -89,7 +89,7 @@ func (c *metricClient) PollForActivityTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollForActivityTaskScope, metrics.MatchingFailures)
 	}
 
 	return resp, err
@@ -106,7 +106,7 @@ func (c *metricClient) PollForDecisionTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientPollForDecisionTaskScope, metrics.MatchingFailures)
 	}
 
 	return resp, err
@@ -123,7 +123,7 @@ func (c *metricClient) QueryWorkflow(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.MatchingFailures)
 	}
 
 	return resp, err
@@ -140,7 +140,7 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.MatchingFailures)
 	}
 
 	return err
@@ -157,7 +157,7 @@ func (c *metricClient) CancelOutstandingPoll(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.MatchingFailures)
 	}
 
 	return err
