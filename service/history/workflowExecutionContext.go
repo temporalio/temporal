@@ -34,6 +34,10 @@ import (
 	"github.com/uber-common/bark"
 )
 
+const (
+	secondsInDay = int32(24 * time.Hour / time.Second)
+)
+
 type (
 	workflowExecutionContext struct {
 		domainID          string
@@ -167,7 +171,8 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		if err != nil {
 			return err
 		}
-		finishExecutionTTL = domainConfig.Retention
+		// NOTE: domain retention is in days, so we need to do a conversion
+		finishExecutionTTL = domainConfig.Retention * secondsInDay
 	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,

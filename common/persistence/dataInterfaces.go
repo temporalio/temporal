@@ -606,6 +606,7 @@ type (
 
 	// DomainConfig describes the domain configuration
 	DomainConfig struct {
+		// NOTE: this retention is in days, not in seconds
 		Retention  int32
 		EmitMetric bool
 	}

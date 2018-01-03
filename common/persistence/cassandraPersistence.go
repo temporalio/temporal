@@ -67,6 +67,9 @@ const (
 	rowTypeShardTaskID      = int64(-11)
 	emptyInitiatedID        = int64(-7)
 	defaultDeleteTTLSeconds = int64(time.Hour*24*7) / int64(time.Second) // keep deleted records for 7 days
+
+	// minimum current execution retention TTL when current execution is deleted, in seconds
+	minCurrentExecutionRetentionTTL = int32(24 * time.Hour / time.Second)
 )
 
 const (
@@ -1076,6 +1079,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, *startReq.Execution.WorkflowId,
 			*startReq.Execution.RunId, cqlNowTimestamp)
 	} else if request.FinishExecution {
+		retentionInSeconds := request.FinishedExecutionTTL
+		if retentionInSeconds <= 0 {
+			retentionInSeconds = minCurrentExecutionRetentionTTL
+		}
 		// Delete WorkflowExecution row representing current execution, by using a TTL
 		batch.Query(templateDeleteWorkflowExecutionQueryWithTTL,
 			d.shardID,
@@ -1090,7 +1097,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 			executionInfo.CreateRequestID,
 			executionInfo.State,
 			executionInfo.CloseStatus,
-			request.FinishedExecutionTTL,
+			retentionInSeconds,
 		)
 	}
 
