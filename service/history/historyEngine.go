@@ -789,6 +789,7 @@ Update_History_Loop:
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
 		var continueAsNewBuilder *mutableStateBuilder
+		var continueAsNewTimerTasks []persistence.Task
 		hasDecisionScheduleActivityTask := false
 
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskList == nil {
@@ -1038,6 +1039,14 @@ Update_History_Loop:
 				if err != nil {
 					return nil
 				}
+
+				// add timer task to new workflow
+				duration := time.Duration(*attributes.ExecutionStartToCloseTimeoutSeconds) * time.Second
+				continueAsNewTimerTasks = []persistence.Task{&persistence.WorkflowTimeoutTask{
+					VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
+				}}
+				msBuilder.continueAsNew.TimerTasks = continueAsNewTimerTasks
+
 				isComplete = true
 				continueAsNewBuilder = newStateBuilder
 
@@ -1143,8 +1152,11 @@ Update_History_Loop:
 			return updateErr
 		}
 
+		// add continueAsNewTimerTask
+		timerTasks = append(timerTasks, continueAsNewTimerTasks...)
 		// Inform timer about the new ones.
 		e.timerProcessor.NotifyNewTimer(timerTasks)
+
 		return err
 	}
 

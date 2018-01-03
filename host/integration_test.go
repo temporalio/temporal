@@ -2087,6 +2087,112 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.True(workflowComplete)
 }
 
+func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
+	id := "interation-continue-as-new-workflow-timeout-test"
+	wt := "interation-continue-as-new-workflow-timeout-test-type"
+	tl := "interation-continue-as-new-workflow-timeout-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	workflowComplete := false
+	continueAsNewCount := int32(1)
+	continueAsNewCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if continueAsNewCounter < continueAsNewCount {
+			continueAsNewCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
+				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					WorkflowType: workflowType,
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1), // set timeout to 1
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// process the decision and continue as new
+	_, err := poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+
+	time.Sleep(1 * time.Second) // wait 1 second for timeout
+
+GetHistoryLoop:
+	for i := 0; i < 20; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.History
+		common.PrettyPrintHistory(history, s.logger)
+
+		lastEvent := history.Events[len(history.Events)-1]
+		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTimedOut {
+			s.logger.Warnf("Execution not timedout yet.")
+			time.Sleep(200 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		timeoutEventAttributes := lastEvent.WorkflowExecutionTimedOutEventAttributes
+		s.Equal(workflow.TimeoutTypeStartToClose, *timeoutEventAttributes.TimeoutType)
+		workflowComplete = true
+		break GetHistoryLoop
+	}
+	s.True(workflowComplete)
+}
+
 func (s *integrationSuite) TestVisibility() {
 	startTime := time.Now().UnixNano()
 
@@ -3833,6 +3939,6 @@ func (s *integrationSuite) printWorkflowHistory(domain string, execution *workfl
 }
 
 func createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
 	return ctx
 }

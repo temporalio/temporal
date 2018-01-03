@@ -208,6 +208,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 }
 
 // NotifyNewTimer - Notify the processor about the new timer arrival.
+// This should be called each time new timer created, otherwise timer maybe fired unexpected.
 func (t *timerQueueProcessorImpl) NotifyNewTimer(timerTasks []persistence.Task) {
 	if len(timerTasks) == 0 {
 		return

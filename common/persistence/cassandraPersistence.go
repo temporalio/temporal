@@ -1079,8 +1079,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	if request.ContinueAsNew != nil {
 		startReq := request.ContinueAsNew
 		d.CreateWorkflowExecutionWithinBatch(startReq, batch, cqlNowTimestamp)
-		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, *startReq.Execution.WorkflowId,
-			*startReq.Execution.RunId, cqlNowTimestamp)
+		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, startReq.Execution.GetWorkflowId(),
+			startReq.Execution.GetRunId(), cqlNowTimestamp)
+		d.createTimerTasks(batch, startReq.TimerTasks, nil, startReq.DomainID, startReq.Execution.GetWorkflowId(),
+			startReq.Execution.GetRunId(), cqlNowTimestamp)
 	} else if request.FinishExecution {
 		retentionInSeconds := request.FinishedExecutionTTL
 		if retentionInSeconds <= 0 {
