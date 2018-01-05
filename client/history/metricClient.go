@@ -55,7 +55,7 @@ func (c *metricClient) StartWorkflowExecution(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientStartWorkflowExecutionScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientStartWorkflowExecutionScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -72,7 +72,7 @@ func (c *metricClient) GetMutableState(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientGetMutableStateScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientGetMutableStateScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -89,7 +89,7 @@ func (c *metricClient) DescribeWorkflowExecution(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientDescribeWorkflowExecutionScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientDescribeWorkflowExecutionScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -106,7 +106,7 @@ func (c *metricClient) RecordDecisionTaskStarted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRecordDecisionTaskStartedScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -123,7 +123,7 @@ func (c *metricClient) RecordActivityTaskStarted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskStartedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskStartedScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -140,7 +140,7 @@ func (c *metricClient) RespondDecisionTaskCompleted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -157,7 +157,7 @@ func (c *metricClient) RespondDecisionTaskFailed(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskFailedScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -174,7 +174,7 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCompletedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCompletedScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -191,7 +191,7 @@ func (c *metricClient) RespondActivityTaskFailed(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskFailedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskFailedScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -208,7 +208,7 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRespondActivityTaskCanceledScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -225,7 +225,7 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskHeartbeatScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRecordActivityTaskHeartbeatScope, metrics.HistoryClientFailures)
 	}
 
 	return resp, err
@@ -242,7 +242,7 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRequestCancelWorkflowExecutionScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -259,7 +259,7 @@ func (c *metricClient) SignalWorkflowExecution(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientSignalWorkflowExecutionScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientSignalWorkflowExecutionScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -276,7 +276,7 @@ func (c *metricClient) TerminateWorkflowExecution(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientTerminateWorkflowExecutionScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientTerminateWorkflowExecutionScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -293,7 +293,7 @@ func (c *metricClient) ScheduleDecisionTask(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientScheduleDecisionTaskScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientScheduleDecisionTaskScope, metrics.HistoryClientFailures)
 	}
 
 	return err
@@ -310,7 +310,7 @@ func (c *metricClient) RecordChildExecutionCompleted(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRecordChildExecutionCompletedScope, metrics.HistoryFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRecordChildExecutionCompletedScope, metrics.HistoryClientFailures)
 	}
 
 	return err
