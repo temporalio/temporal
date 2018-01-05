@@ -591,12 +591,13 @@ const (
 	MatchingFailures = iota + NumCommonMetrics
 	PollSuccessCounter
 	PollTimeoutCounter
-	PollErrorsCounter
 	PollSuccessWithSyncCounter
 	LeaseRequestCounter
 	LeaseFailureCounter
 	ConditionFailedErrorCounter
 	RespondQueryTaskFailedCounter
+	SyncThrottleCounter
+	BufferThrottleCounter
 )
 
 // MetricDefs record the metrics for all services
@@ -673,12 +674,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MatchingFailures:              {metricName: "matching.errors", metricType: Counter},
 		PollSuccessCounter:            {metricName: "poll.success"},
 		PollTimeoutCounter:            {metricName: "poll.timeouts"},
-		PollErrorsCounter:             {metricName: "poll.errors"},
 		PollSuccessWithSyncCounter:    {metricName: "poll.success.sync"},
 		LeaseRequestCounter:           {metricName: "lease.requests"},
 		LeaseFailureCounter:           {metricName: "lease.failures"},
 		ConditionFailedErrorCounter:   {metricName: "condition-failed-errors"},
 		RespondQueryTaskFailedCounter: {metricName: "respond-query-failed"},
+		SyncThrottleCounter:           {metricName: "sync.throttle.count"},
+		BufferThrottleCounter:         {metricName: "buffer.throttle.count"},
 	},
 }
 

@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/client/history"
 
 	"github.com/uber-go/tally"
 	gohistory "github.com/uber/cadence/.gen/go/history"
@@ -107,12 +108,21 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.matchingEngine.Start()
 }
 
-func (s *matchingEngineSuite) newMatchingEngine(config *Config, taskMgr persistence.TaskManager) *matchingEngineImpl {
+func (s *matchingEngineSuite) newMatchingEngine(
+	config *Config, taskMgr persistence.TaskManager,
+) *matchingEngineImpl {
+	return newMatchingEngine(config, taskMgr, s.historyClient, s.logger)
+}
+
+func newMatchingEngine(
+	config *Config, taskMgr persistence.TaskManager, historyClient history.Client,
+	logger bark.Logger,
+) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
-		historyService:  s.historyClient,
+		historyService:  historyClient,
 		taskLists:       make(map[taskListID]taskListManager),
-		logger:          s.logger,
+		logger:          logger,
 		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		config:          config,
@@ -439,7 +449,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 }
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	s.matchingEngine.config.LongPollExpirationInterval = 1 * time.Minute
+	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
+	s.matchingEngine.config.LongPollExpirationInterval = 50 * time.Millisecond
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -453,8 +464,20 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	domainID := "domainId"
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
+	// So we can get snapshots
+	scope := tally.NewTestScope("test", nil)
+	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
+
+	dispatchTTL := time.Nanosecond
+	dPtr := _defaultTaskDispatchRPS
+	mgr := newTaskListManagerWithRateLimiter(
+		s.matchingEngine, tlID, s.matchingEngine.config,
+		newRateLimiter(&dPtr, dispatchTTL),
+	)
+	s.matchingEngine.updateTaskList(tlID, mgr)
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
+	s.NoError(mgr.Start())
 
 	taskList := &workflow.TaskList{}
 	taskList.Name = &tl
@@ -496,17 +519,23 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 		var result *workflow.PollForActivityTaskResponse
 		var pollErr error
+		maxDispatch := _defaultTaskDispatchRPS
+		if i == taskCount/2 {
+			maxDispatch = 0
+		}
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			result, pollErr = s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
 				DomainUUID: common.StringPtr(domainID),
 				PollRequest: &workflow.PollForActivityTaskRequest{
-					TaskList: taskList,
-					Identity: &identity},
+					TaskList:         taskList,
+					Identity:         &identity,
+					TaskListMetadata: &workflow.TaskListMetadata{MaxTasksPerSecond: &maxDispatch},
+				},
 			})
-			wg.Done()
 		}()
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 		addRequest := matching.AddActivityTaskRequest{
 			SourceDomainUUID:              common.StringPtr(domainID),
 			DomainUUID:                    common.StringPtr(domainID),
@@ -516,10 +545,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
 		err := s.matchingEngine.AddActivityTask(&addRequest)
-		s.NoError(err)
-
 		wg.Wait()
-
+		s.NoError(err)
 		s.NoError(pollErr)
 		s.NotNil(result)
 		if len(result.TaskToken) == 0 {
@@ -541,9 +568,12 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		//s.EqualValues(scheduleID, result.TaskToken)
 
 		s.EqualValues(string(taskToken), string(result.TaskToken))
-
 	}
-	s.EqualValues(0, s.taskManager.getCreateTaskCount(tlID)) // Not tasks stored in persistence
+
+	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
+	syncCtr := scope.Snapshot().Counters()["test.sync.throttle.count+operation=TaskListMgr"]
+	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
+	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
@@ -554,21 +584,57 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
+	dispatchLimitFn := func(int, int64) float64 {
+		return _defaultTaskDispatchRPS
+	}
+	const workerCount = 20
+	const taskCount = 100
+	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
+	s.Zero(throttleCt)
+}
+
+func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
+	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
+	s.matchingEngine.config.LongPollExpirationInterval = 20 * time.Millisecond
+	dispatchLimitFn := func(wc int, tc int64) float64 {
+		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
+			return 0
+		}
+		return _defaultTaskDispatchRPS
+	}
+	const workerCount = 20
+	const taskCount = 100
+	s.matchingEngine.metricsClient = metrics.NewClient(tally.NewTestScope("test", nil), metrics.Matching)
+	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
+	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
+	// hard to predict exactly how many times, since the atomic.Value load might not have updated.
+	s.True(throttleCt >= 1 && throttleCt < int64(workerCount*int(taskCount)))
+}
+
+func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
+	workerCount int, taskCount int64, dispatchLimitFn func(int, int64) float64) int64 {
+	scope := tally.NewTestScope("test", nil)
+	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 	runID := "run1"
 	workflowID := "workflow1"
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
-	const workerCount = 200
-	const taskCount = 100
 	const initialRangeID = 0
 	const rangeSize = 3
 	var scheduleID int64 = 123
-
 	domainID := "domainId"
 	tl := "makeToast"
 	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
+	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
+	dPtr := _defaultTaskDispatchRPS
+	mgr := newTaskListManagerWithRateLimiter(
+		s.matchingEngine, tlID, s.matchingEngine.config,
+		newRateLimiter(&dPtr, dispatchTTL),
+	)
+	s.matchingEngine.updateTaskList(tlID, mgr)
+	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
+	s.NoError(mgr.Start())
 
 	taskList := &workflow.TaskList{}
 	taskList.Name = &tl
@@ -578,6 +644,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 	for p := 0; p < workerCount; p++ {
 		go func() {
+			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matching.AddActivityTaskRequest{
 					SourceDomainUUID:              common.StringPtr(domainID),
@@ -594,7 +661,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 					i--
 				}
 			}
-			wg.Done()
 		}()
 	}
 
@@ -629,17 +695,19 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 				})}
 		}, nil)
 	for p := 0; p < workerCount; p++ {
-		go func() {
+		go func(wNum int) {
+			defer wg.Done()
 			for i := int64(0); i < taskCount; {
+				maxDispatch := dispatchLimitFn(wNum, i)
 				result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{
 					DomainUUID: common.StringPtr(domainID),
 					PollRequest: &workflow.PollForActivityTaskRequest{
-						TaskList: taskList,
-						Identity: &identity},
+						TaskList:         taskList,
+						Identity:         &identity,
+						TaskListMetadata: &workflow.TaskListMetadata{MaxTasksPerSecond: &maxDispatch},
+					},
 				})
-				if err != nil {
-					panic(err)
-				}
+				s.NoError(err)
 				s.NotNil(result)
 				if len(result.TaskToken) == 0 {
 					s.logger.Debugf("empty poll returned")
@@ -656,21 +724,17 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 					ScheduleID: scheduleID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
-				if err != nil {
-					panic(err)
-				}
+				s.NoError(err)
 
 				//taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
 				//s.EqualValues(taskToken, result.TaskToken, fmt.Sprintf("%v!=%v", string(taskToken)))
 				s.EqualValues(token, resultToken, fmt.Sprintf("%v!=%v", token, resultToken))
 				i++
 			}
-			wg.Done()
-		}()
+		}(p)
 	}
 	wg.Wait()
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
-	totalTasks := taskCount * workerCount
+	totalTasks := int(taskCount) * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	s.True(persisted < totalTasks)
 	expectedRange := int64(initialRangeID + persisted/rangeSize)
@@ -679,6 +743,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.True(expectedRange <= s.taskManager.getTaskListManager(tlID).rangeID)
+	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+
+	syncCtr := scope.Snapshot().Counters()["test.sync.throttle.count+operation=TaskListMgr"]
+	bufCtr := scope.Snapshot().Counters()["test.buffer.throttle.count+operation=TaskListMgr"]
+	return syncCtr.Value() + bufCtr.Value()
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
@@ -686,7 +755,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	workflowID := "workflow1"
 	workflowExecution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
 
-	const workerCount = 200
+	const workerCount = 20
 	const taskCount = 100
 	const initialRangeID = 0
 	const rangeSize = 5
@@ -1154,12 +1223,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	ctx, err := s.matchingEngine.getTask(context.Background(), tlID)
+	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, nil)
 	s.NoError(err)
 
 	ctx.completeTask(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID)
+	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, nil)
 	s.NoError(err)
 
 	s.NotEqual(ctx.info.TaskID, ctx2.info.TaskID)
@@ -1257,6 +1326,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 				})}
 		}, nil)
 
+	time.Sleep(time.Second)
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
 		result, err := s.matchingEngine.PollForActivityTask(s.callContext, &matching.PollForActivityTaskRequest{

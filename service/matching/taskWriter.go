@@ -115,7 +115,7 @@ func (w *taskWriter) appendTask(execution *s.WorkflowExecution,
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, createServiceBusyError()
+		return nil, createServiceBusyError("Too many outstanding appends to the TaskList")
 	}
 }
 

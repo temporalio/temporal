@@ -21,12 +21,13 @@
 package matching
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
@@ -35,42 +36,129 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"golang.org/x/net/context"
+
+	"github.com/uber-common/bark"
+	"golang.org/x/time/rate"
 )
 
 const (
 	done time.Duration = -1
 )
 
+// NOTE: Is this good enough for stress tests?
+const (
+	_defaultTaskDispatchRPS    = 100000.0
+	_defaultTaskDispatchRPSTTL = 60 * time.Second
+)
+
+var errAddTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
+
 type taskListManager interface {
 	Start() error
 	Stop()
 	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error
-	GetTaskContext(ctx context.Context) (*taskContext, error)
+	GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
 	SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 	CancelPoller(pollerID string)
 	String() string
 }
 
-func newTaskListManager(e *matchingEngineImpl, taskList *taskListID, config *Config) taskListManager {
+type rateLimiter struct {
+	sync.RWMutex
+	maxDispatchPerSecond *float64
+	globalLimiter        atomic.Value
+	// TTL is used to determine whether to update the limit. Until TTL, pick
+	// lower(existing TTL, input TTL). After TTL, pick input TTL if different from existing TTL
+	ttlTimer *time.Timer
+	ttl      time.Duration
+}
+
+func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration) rateLimiter {
+	rl := rateLimiter{
+		maxDispatchPerSecond: maxDispatchPerSecond,
+		ttl:                  ttl,
+		ttlTimer:             time.NewTimer(ttl),
+	}
+	// Note: Potentially expose burst config in future
+	limiter := rate.NewLimiter(
+		rate.Limit(*maxDispatchPerSecond), int(*maxDispatchPerSecond),
+	)
+	rl.globalLimiter.Store(limiter)
+	return rl
+}
+
+func (rl *rateLimiter) UpdateMaxDispatch(maxDispatchPerSecond *float64) {
+	if rl.shouldUpdate(maxDispatchPerSecond) {
+		rl.Lock()
+		rl.maxDispatchPerSecond = maxDispatchPerSecond
+		rl.globalLimiter.Store(
+			rate.NewLimiter(rate.Limit(*maxDispatchPerSecond), int(*maxDispatchPerSecond)),
+		)
+		rl.Unlock()
+	}
+}
+
+func (rl *rateLimiter) shouldUpdate(maxDispatchPerSecond *float64) bool {
+	if maxDispatchPerSecond == nil {
+		return false
+	}
+	select {
+	case <-rl.ttlTimer.C:
+		rl.ttlTimer.Reset(rl.ttl)
+		rl.RLock()
+		defer rl.RUnlock()
+		return *maxDispatchPerSecond != *rl.maxDispatchPerSecond
+	default:
+		rl.RLock()
+		defer rl.RUnlock()
+		return *maxDispatchPerSecond < *rl.maxDispatchPerSecond
+	}
+}
+
+func (rl *rateLimiter) Wait(ctx context.Context) error {
+	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	return limiter.Wait(ctx)
+}
+
+func (rl *rateLimiter) Reserve() *rate.Reservation {
+	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	return limiter.Reserve()
+}
+
+func newTaskListManager(
+	e *matchingEngineImpl, taskList *taskListID, config *Config,
+) taskListManager {
+	dPtr := _defaultTaskDispatchRPS
+	rl := newRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL)
+	return newTaskListManagerWithRateLimiter(e, taskList, config, rl)
+}
+
+// This is for use in tests
+func newTaskListManagerWithRateLimiter(
+	e *matchingEngineImpl, taskList *taskListID, config *Config, rl rateLimiter,
+) taskListManager {
 	// To perform one db operation if there are no pollers
 	taskBufferSize := config.GetTasksBatchSize - 1
-
+	ctx, cancel := context.WithCancel(context.Background())
 	tlMgr := &taskListManagerImpl{
-		engine:     e,
-		taskBuffer: make(chan *persistence.TaskInfo, taskBufferSize),
-		notifyCh:   make(chan struct{}, 1),
-		shutdownCh: make(chan struct{}),
-		taskListID: taskList,
+		engine:                  e,
+		taskBuffer:              make(chan *persistence.TaskInfo, taskBufferSize),
+		notifyCh:                make(chan struct{}, 1),
+		shutdownCh:              make(chan struct{}),
+		deliverBufferShutdownCh: make(chan struct{}),
+		cancelCtx:               ctx,
+		cancelFunc:              cancel,
+		taskListID:              taskList,
 		logger: e.logger.WithFields(bark.Fields{
 			logging.TagTaskListType: taskList.taskType,
 			logging.TagTaskListName: taskList.taskListName,
 		}),
 		metricsClient:       e.metricsClient,
 		taskAckManager:      newAckManager(e.logger),
-		syncMatch:           make(chan *getTaskResult),
+		tasksForPoll:        make(chan *getTaskResult),
 		config:              config,
 		outstandingPollsMap: make(map[string]context.CancelFunc),
+		rateLimiter:         rl,
 	}
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.startWG.Add(1)
@@ -105,14 +193,25 @@ type taskListManagerImpl struct {
 	persistenceLock sync.Mutex
 	taskWriter      *taskWriter
 	taskBuffer      chan *persistence.TaskInfo // tasks loaded from persistence
-	// Sync channel used to perform sync matching.
+	// tasksForPoll is used to deliver tasks to pollers.
 	// It must to be unbuffered. addTask publishes to it asynchronously and expects publish to succeed
-	// only if there is waiting poll that consumes from it.
-	syncMatch  chan *getTaskResult
-	notifyCh   chan struct{}  // Used as signal to notify pump of new tasks
-	shutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
-	startWG    sync.WaitGroup // ensures that background processes do not start until setup is ready
-	stopped    int32
+	// only if there is waiting poll that consumes from it. Tasks in taskBuffer will blocking-add to
+	// this channel
+	tasksForPoll chan *getTaskResult
+	notifyCh     chan struct{} // Used as signal to notify pump of new tasks
+	// Note: We need two shutdown channels so we can stop task pump independently of the deliverBuffer
+	// loop in getTasksPump in unit tests
+	shutdownCh              chan struct{}  // Delivers stop to the pump that populates taskBuffer
+	deliverBufferShutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
+	startWG                 sync.WaitGroup // ensures that background processes do not start until setup is ready
+	stopped                 int32
+	// The cancel objects are to cancel the ratelimiter Wait in deliverBufferTasksLoop. The ideal
+	// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
+	// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
+	// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
+	// so the cancel can be called directly on shutdown.
+	cancelCtx  context.Context
+	cancelFunc context.CancelFunc
 
 	sync.Mutex
 	taskAckManager          ackManager // tracks ackLevel for delivered messages
@@ -127,6 +226,8 @@ type taskListManagerImpl struct {
 	// prevent tasks being dispatched to zombie pollers.
 	outstandingPollsLock sync.Mutex
 	outstandingPollsMap  map[string]context.CancelFunc
+	// Rate limiter for task dispatch
+	rateLimiter rateLimiter
 }
 
 // getTaskResult contains task info and optional channel to notify createTask caller
@@ -135,6 +236,7 @@ type getTaskResult struct {
 	task      *persistence.TaskInfo
 	C         chan *syncMatchResponse
 	queryTask *queryTaskInfo
+	syncMatch bool
 }
 
 // syncMatchResponse result of sync match delivered to a createTask caller
@@ -167,6 +269,8 @@ func (c *taskListManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
 		return
 	}
+	close(c.deliverBufferShutdownCh)
+	c.cancelFunc()
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
@@ -177,7 +281,7 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 	c.startWG.Wait()
 	_, err := c.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		r, err := c.trySyncMatch(taskInfo)
-		if err != nil || r != nil {
+		if (err != nil && err != errAddTasklistThrottled) || r != nil {
 			return r, err
 		}
 		r, err = c.taskWriter.appendTask(execution, taskInfo, rangeID)
@@ -202,7 +306,7 @@ func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask 
 
 	request := &getTaskResult{task: taskInfo, C: make(chan *syncMatchResponse, 1), queryTask: queryTask}
 	select {
-	case c.syncMatch <- request:
+	case c.tasksForPoll <- request:
 		<-request.C
 		return nil
 	case <-ctx.Done():
@@ -211,7 +315,11 @@ func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask 
 }
 
 // Loads a task from DB or from sync match and wraps it in a task context
-func (c *taskListManagerImpl) GetTaskContext(ctx context.Context) (*taskContext, error) {
+func (c *taskListManagerImpl) GetTaskContext(
+	ctx context.Context,
+	maxDispatchPerSecond *float64,
+) (*taskContext, error) {
+	c.rateLimiter.UpdateMaxDispatch(maxDispatchPerSecond)
 	result, err := c.getTask(ctx)
 	if err != nil {
 		return nil, err
@@ -324,17 +432,12 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 	}
 
 	select {
-	case task, ok := <-c.taskBuffer:
-		if !ok { // Task list getTasks pump is shutdown
-			c.metricsClient.IncCounter(scope, metrics.PollErrorsCounter)
-			return nil, errPumpClosed
+	case result := <-c.tasksForPoll:
+		if result.syncMatch {
+			c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
 		}
 		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
-		return &getTaskResult{task: task}, nil
-	case resultFromSyncMatch := <-c.syncMatch:
-		c.metricsClient.IncCounter(scope, metrics.PollSuccessCounter)
-		c.metricsClient.IncCounter(scope, metrics.PollSuccessWithSyncCounter)
-		return resultFromSyncMatch, nil
+		return result, nil
 	case <-timer.C:
 		c.metricsClient.IncCounter(scope, metrics.PollTimeoutCounter)
 		return nil, ErrNoTasks
@@ -474,13 +577,45 @@ func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persist
 	}
 	// Request from the point of view of Add(Activity|Decision)Task operation.
 	// But it is getTask result from the point of view of a poll operation.
-	request := &getTaskResult{task: task, C: make(chan *syncMatchResponse, 1)}
+	request := &getTaskResult{task: task, C: make(chan *syncMatchResponse, 1), syncMatch: true}
+
+	rsv := c.rateLimiter.Reserve()
+	if !rsv.OK() {
+		c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.SyncThrottleCounter)
+		return nil, errAddTasklistThrottled
+	}
 	select {
-	case c.syncMatch <- request: // poller goroutine picked up the task
+	case c.tasksForPoll <- request: // poller goroutine picked up the task
 		r := <-request.C
 		return r.response, r.err
 	default: // no poller waiting for tasks
+		rsv.Cancel()
 		return nil, nil
+	}
+}
+
+func (c *taskListManagerImpl) deliverBufferTasksForPoll() {
+deliverBufferTasksLoop:
+	for {
+		err := c.rateLimiter.Wait(c.cancelCtx)
+		if err != nil {
+			if err == context.Canceled {
+				c.logger.Info("Tasklist manager context is cancelled, shutting down")
+				break deliverBufferTasksLoop
+			}
+			c.logger.Warnf("Unable to send tasks for poll, rate limit failed: %s", err.Error())
+			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.BufferThrottleCounter)
+			continue
+		}
+		select {
+		case task, ok := <-c.taskBuffer:
+			if !ok { // Task list getTasks pump is shutdown
+				break deliverBufferTasksLoop
+			}
+			c.tasksForPoll <- &getTaskResult{task: task}
+		case <-c.deliverBufferShutdownCh:
+			break deliverBufferTasksLoop
+		}
 	}
 }
 
@@ -488,8 +623,8 @@ func (c *taskListManagerImpl) getTasksPump() {
 	defer close(c.taskBuffer)
 	c.startWG.Wait()
 
+	go c.deliverBufferTasksForPoll()
 	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval)
-
 getTasksPumpLoop:
 	for {
 		select {
@@ -688,8 +823,6 @@ func (c *taskContext) completeTask(err error) {
 	}
 }
 
-func createServiceBusyError() *s.ServiceBusyError {
-	err := &s.ServiceBusyError{}
-	err.Message = "Too many outstanding appends to the TaskList"
-	return err
+func createServiceBusyError(msg string) *s.ServiceBusyError {
+	return &s.ServiceBusyError{Message: msg}
 }
