@@ -23,6 +23,7 @@ package config
 import (
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	// DO NOT REMOVE THE LINE BELOW
 	_ "net/http/pprof"
 
@@ -36,6 +37,15 @@ type (
 		Logger bark.Logger
 	}
 )
+
+const (
+	pprofNotInitialized int32 = 0
+	pprofInitialized    int32 = 1
+)
+
+// the pprof should only be initialized once per process
+// otherwise, the caller / worker will experience weird issue
+var pprofStatus = pprofNotInitialized
 
 // NewInitializer create a new instance of PProf Initializer
 func (cfg *PProf) NewInitializer(logger bark.Logger) *PProfInitializerImpl {
@@ -53,10 +63,11 @@ func (initializer *PProfInitializerImpl) Start() error {
 		return nil
 	}
 
-	go func() {
-		initializer.Logger.Info("PProf listen on %d", port)
-		http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
-	}()
-
+	if atomic.CompareAndSwapInt32(&pprofStatus, pprofNotInitialized, pprofInitialized) {
+		go func() {
+			initializer.Logger.Infof("PProf listen on %d", port)
+			http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
+		}()
+	}
 	return nil
 }
