@@ -1739,6 +1739,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(completionRequest *h.R
 			case workflow.EventTypeWorkflowExecutionTerminated:
 				attributes := completionEvent.WorkflowExecutionTerminatedEventAttributes
 				msBuilder.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
+			case workflow.EventTypeWorkflowExecutionTimedOut:
+				attributes := completionEvent.WorkflowExecutionTimedOutEventAttributes
+				msBuilder.AddChildWorkflowExecutionTimedOutEvent(initiatedID, completedExecution, attributes)
 			}
 
 			return nil

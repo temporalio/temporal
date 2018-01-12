@@ -85,6 +85,7 @@ const (
 	TagValueActionChildExecutionFailed            = "add-childexecution-failed-event"
 	TagValueActionChildExecutionCanceled          = "add-childexecution-canceled-event"
 	TagValueActionChildExecutionTerminated        = "add-childexecution-terminated-event"
+	TagValueActionChildExecutionTimedOut          = "add-childexecution-timedout-event"
 	TagValueActionRequestCancelWorkflow           = "add-request-cancel-workflow-event"
 	TagValueActionWorkflowCancelRequested         = "add-workflow-execution-cancel-requested-event"
 	TagValueActionWorkflowCancelFailed            = "add-workflow-execution-cancel-failed-event"

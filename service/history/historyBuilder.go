@@ -382,6 +382,15 @@ func (b *historyBuilder) AddChildWorkflowExecutionTerminatedEvent(domain string,
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddChildWorkflowExecutionTimedOutEvent(domain string, execution *workflow.WorkflowExecution,
+	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
+	timedOutAttributes *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent {
+	event := b.newChildWorkflowExecutionTimedOutEvent(domain, execution, workflowType, initiatedID, startedID,
+		timedOutAttributes)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	b.history = append(b.history, event)
 	return event
@@ -793,6 +802,22 @@ func (b *historyBuilder) newChildWorkflowExecutionTerminatedEvent(domain string,
 	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
 	attributes.StartedEventId = common.Int64Ptr(startedID)
 	historyEvent.ChildWorkflowExecutionTerminatedEventAttributes = attributes
+
+	return historyEvent
+}
+
+func (b *historyBuilder) newChildWorkflowExecutionTimedOutEvent(domain string, execution *workflow.WorkflowExecution,
+	workflowType *workflow.WorkflowType, initiatedID, startedID int64,
+	timedOutAttributes *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeChildWorkflowExecutionTimedOut)
+	attributes := &workflow.ChildWorkflowExecutionTimedOutEventAttributes{}
+	attributes.Domain = common.StringPtr(domain)
+	attributes.TimeoutType = timedOutAttributes.TimeoutType
+	attributes.WorkflowExecution = execution
+	attributes.WorkflowType = workflowType
+	attributes.InitiatedEventId = common.Int64Ptr(initiatedID)
+	attributes.StartedEventId = common.Int64Ptr(startedID)
+	historyEvent.ChildWorkflowExecutionTimedOutEventAttributes = attributes
 
 	return historyEvent
 }

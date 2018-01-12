@@ -1620,3 +1620,26 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(initiated
 
 	return nil
 }
+
+func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(initiatedID int64,
+	childExecution *workflow.WorkflowExecution,
+	attributes *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent {
+	ci, ok := e.GetChildExecutionInfo(initiatedID)
+	if !ok || ci.StartedID == emptyEventID {
+		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionChildExecutionTimedOut, e.GetNextEventID(),
+			fmt.Sprintf("{InitiatedID: %v, Exist: %v}", initiatedID, ok))
+		return nil
+	}
+
+	startedEvent, _ := e.getHistoryEvent(ci.StartedEvent)
+
+	domain := *startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+
+	if err := e.DeletePendingChildExecution(initiatedID); err == nil {
+		return e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(domain, childExecution, workflowType, ci.InitiatedID,
+			ci.StartedID, attributes)
+	}
+
+	return nil
+}
