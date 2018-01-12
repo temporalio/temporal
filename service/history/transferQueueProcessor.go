@@ -634,7 +634,8 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(*attributes.ExecutionStartToCloseTimeoutSeconds),
 					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(*attributes.TaskStartToCloseTimeoutSeconds),
 					// Use the same request ID to dedupe StartWorkflowExecution calls
-					RequestId: common.StringPtr(ci.CreateRequestID),
+					RequestId:             common.StringPtr(ci.CreateRequestID),
+					WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 				},
 				ParentExecutionInfo: &history.ParentExecutionInfo{
 					DomainUUID: common.StringPtr(domainID),

@@ -30,7 +30,7 @@ var ThriftModule = &thriftreflect.ThriftModule{
 	Name:     "shared",
 	Package:  "github.com/uber/cadence/.gen/go/shared",
 	FilePath: "shared.thrift",
-	SHA1:     "c066d327e24384e16775fb9fccd5eb435f382a02",
+	SHA1:     "c8ed90fd99be82b9358829f0ec4d84d259e68021",
 	Raw:      rawIDL,
 }
 

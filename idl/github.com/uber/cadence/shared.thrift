@@ -306,6 +306,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   70: optional i32 taskStartToCloseTimeoutSeconds
   80: optional ChildPolicy childPolicy
   90: optional binary control
+  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
 }
 
 struct Decision {
@@ -538,6 +539,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   80:  optional ChildPolicy childPolicy
   90:  optional binary control
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  110: optional WorkflowIdReusePolicy workflowIdReusePolicy
 }
 
 struct StartChildWorkflowExecutionFailedEventAttributes {

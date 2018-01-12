@@ -19525,15 +19525,16 @@ func (v *SignalWorkflowExecutionRequest) GetIdentity() (o string) {
 }
 
 type StartChildWorkflowExecutionDecisionAttributes struct {
-	Domain                              *string       `json:"domain,omitempty"`
-	WorkflowId                          *string       `json:"workflowId,omitempty"`
-	WorkflowType                        *WorkflowType `json:"workflowType,omitempty"`
-	TaskList                            *TaskList     `json:"taskList,omitempty"`
-	Input                               []byte        `json:"input,omitempty"`
-	ExecutionStartToCloseTimeoutSeconds *int32        `json:"executionStartToCloseTimeoutSeconds,omitempty"`
-	TaskStartToCloseTimeoutSeconds      *int32        `json:"taskStartToCloseTimeoutSeconds,omitempty"`
-	ChildPolicy                         *ChildPolicy  `json:"childPolicy,omitempty"`
-	Control                             []byte        `json:"control,omitempty"`
+	Domain                              *string                `json:"domain,omitempty"`
+	WorkflowId                          *string                `json:"workflowId,omitempty"`
+	WorkflowType                        *WorkflowType          `json:"workflowType,omitempty"`
+	TaskList                            *TaskList              `json:"taskList,omitempty"`
+	Input                               []byte                 `json:"input,omitempty"`
+	ExecutionStartToCloseTimeoutSeconds *int32                 `json:"executionStartToCloseTimeoutSeconds,omitempty"`
+	TaskStartToCloseTimeoutSeconds      *int32                 `json:"taskStartToCloseTimeoutSeconds,omitempty"`
+	ChildPolicy                         *ChildPolicy           `json:"childPolicy,omitempty"`
+	Control                             []byte                 `json:"control,omitempty"`
+	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionDecisionAttributes struct into a Thrift-level intermediate
@@ -19553,7 +19554,7 @@ type StartChildWorkflowExecutionDecisionAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -19631,12 +19632,26 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, er
 		fields[i] = wire.Field{ID: 90, Value: w}
 		i++
 	}
+	if v.WorkflowIdReusePolicy != nil {
+		w, err = v.WorkflowIdReusePolicy.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
 func _ChildPolicy_Read(w wire.Value) (ChildPolicy, error) {
 	var v ChildPolicy
+	err := v.FromWire(w)
+	return v, err
+}
+
+func _WorkflowIdReusePolicy_Read(w wire.Value) (WorkflowIdReusePolicy, error) {
+	var v WorkflowIdReusePolicy
 	err := v.FromWire(w)
 	return v, err
 }
@@ -19745,6 +19760,16 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) FromWire(w wire.Value) e
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TI32 {
+				var x WorkflowIdReusePolicy
+				x, err = _WorkflowIdReusePolicy_Read(field.Value)
+				v.WorkflowIdReusePolicy = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -19758,7 +19783,7 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [10]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -19796,11 +19821,25 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 		fields[i] = fmt.Sprintf("Control: %v", v.Control)
 		i++
 	}
+	if v.WorkflowIdReusePolicy != nil {
+		fields[i] = fmt.Sprintf("WorkflowIdReusePolicy: %v", *(v.WorkflowIdReusePolicy))
+		i++
+	}
 
 	return fmt.Sprintf("StartChildWorkflowExecutionDecisionAttributes{%v}", strings.Join(fields[:i], ", "))
 }
 
 func _ChildPolicy_EqualsPtr(lhs, rhs *ChildPolicy) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func _WorkflowIdReusePolicy_EqualsPtr(lhs, rhs *WorkflowIdReusePolicy) bool {
 	if lhs != nil && rhs != nil {
 
 		x := *lhs
@@ -19840,6 +19879,9 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) Equals(rhs *StartChildWo
 		return false
 	}
 	if !((v.Control == nil && rhs.Control == nil) || (v.Control != nil && rhs.Control != nil && bytes.Equal(v.Control, rhs.Control))) {
+		return false
+	}
+	if !_WorkflowIdReusePolicy_EqualsPtr(v.WorkflowIdReusePolicy, rhs.WorkflowIdReusePolicy) {
 		return false
 	}
 
@@ -19891,6 +19933,16 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) GetTaskStartToCloseTimeo
 func (v *StartChildWorkflowExecutionDecisionAttributes) GetChildPolicy() (o ChildPolicy) {
 	if v.ChildPolicy != nil {
 		return *v.ChildPolicy
+	}
+
+	return
+}
+
+// GetWorkflowIdReusePolicy returns the value of WorkflowIdReusePolicy if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetWorkflowIdReusePolicy() (o WorkflowIdReusePolicy) {
+	if v.WorkflowIdReusePolicy != nil {
+		return *v.WorkflowIdReusePolicy
 	}
 
 	return
@@ -20221,16 +20273,17 @@ func (v *StartChildWorkflowExecutionFailedEventAttributes) GetDecisionTaskComple
 }
 
 type StartChildWorkflowExecutionInitiatedEventAttributes struct {
-	Domain                              *string       `json:"domain,omitempty"`
-	WorkflowId                          *string       `json:"workflowId,omitempty"`
-	WorkflowType                        *WorkflowType `json:"workflowType,omitempty"`
-	TaskList                            *TaskList     `json:"taskList,omitempty"`
-	Input                               []byte        `json:"input,omitempty"`
-	ExecutionStartToCloseTimeoutSeconds *int32        `json:"executionStartToCloseTimeoutSeconds,omitempty"`
-	TaskStartToCloseTimeoutSeconds      *int32        `json:"taskStartToCloseTimeoutSeconds,omitempty"`
-	ChildPolicy                         *ChildPolicy  `json:"childPolicy,omitempty"`
-	Control                             []byte        `json:"control,omitempty"`
-	DecisionTaskCompletedEventId        *int64        `json:"decisionTaskCompletedEventId,omitempty"`
+	Domain                              *string                `json:"domain,omitempty"`
+	WorkflowId                          *string                `json:"workflowId,omitempty"`
+	WorkflowType                        *WorkflowType          `json:"workflowType,omitempty"`
+	TaskList                            *TaskList              `json:"taskList,omitempty"`
+	Input                               []byte                 `json:"input,omitempty"`
+	ExecutionStartToCloseTimeoutSeconds *int32                 `json:"executionStartToCloseTimeoutSeconds,omitempty"`
+	TaskStartToCloseTimeoutSeconds      *int32                 `json:"taskStartToCloseTimeoutSeconds,omitempty"`
+	ChildPolicy                         *ChildPolicy           `json:"childPolicy,omitempty"`
+	Control                             []byte                 `json:"control,omitempty"`
+	DecisionTaskCompletedEventId        *int64                 `json:"decisionTaskCompletedEventId,omitempty"`
+	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionInitiatedEventAttributes struct into a Thrift-level intermediate
@@ -20250,7 +20303,7 @@ type StartChildWorkflowExecutionInitiatedEventAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -20334,6 +20387,14 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Val
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.WorkflowIdReusePolicy != nil {
+		w, err = v.WorkflowIdReusePolicy.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -20454,6 +20515,16 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) FromWire(w wire.Va
 				}
 
 			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x WorkflowIdReusePolicy
+				x, err = _WorkflowIdReusePolicy_Read(field.Value)
+				v.WorkflowIdReusePolicy = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -20467,7 +20538,7 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [11]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -20509,6 +20580,10 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 		fields[i] = fmt.Sprintf("DecisionTaskCompletedEventId: %v", *(v.DecisionTaskCompletedEventId))
 		i++
 	}
+	if v.WorkflowIdReusePolicy != nil {
+		fields[i] = fmt.Sprintf("WorkflowIdReusePolicy: %v", *(v.WorkflowIdReusePolicy))
+		i++
+	}
 
 	return fmt.Sprintf("StartChildWorkflowExecutionInitiatedEventAttributes{%v}", strings.Join(fields[:i], ", "))
 }
@@ -20546,6 +20621,9 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) Equals(rhs *StartC
 		return false
 	}
 	if !_I64_EqualsPtr(v.DecisionTaskCompletedEventId, rhs.DecisionTaskCompletedEventId) {
+		return false
+	}
+	if !_WorkflowIdReusePolicy_EqualsPtr(v.WorkflowIdReusePolicy, rhs.WorkflowIdReusePolicy) {
 		return false
 	}
 
@@ -20607,6 +20685,16 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetChildPolicy() (
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetDecisionTaskCompletedEventId() (o int64) {
 	if v.DecisionTaskCompletedEventId != nil {
 		return *v.DecisionTaskCompletedEventId
+	}
+
+	return
+}
+
+// GetWorkflowIdReusePolicy returns the value of WorkflowIdReusePolicy if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetWorkflowIdReusePolicy() (o WorkflowIdReusePolicy) {
+	if v.WorkflowIdReusePolicy != nil {
+		return *v.WorkflowIdReusePolicy
 	}
 
 	return
@@ -21036,12 +21124,6 @@ func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _WorkflowIdReusePolicy_Read(w wire.Value) (WorkflowIdReusePolicy, error) {
-	var v WorkflowIdReusePolicy
-	err := v.FromWire(w)
-	return v, err
-}
-
 // FromWire deserializes a StartWorkflowExecutionRequest struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
@@ -21215,16 +21297,6 @@ func (v *StartWorkflowExecutionRequest) String() string {
 	}
 
 	return fmt.Sprintf("StartWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _WorkflowIdReusePolicy_EqualsPtr(lhs, rhs *WorkflowIdReusePolicy) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return x.Equals(y)
-	}
-	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this StartWorkflowExecutionRequest match the
