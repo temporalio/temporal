@@ -38,5 +38,6 @@ type (
 		QueryWorkflow(ctx context.Context, request *m.QueryWorkflowRequest) (*workflow.QueryWorkflowResponse, error)
 		RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest) error
 		CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest) error
+		DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*workflow.DescribeTaskListResponse, error)
 	}
 )

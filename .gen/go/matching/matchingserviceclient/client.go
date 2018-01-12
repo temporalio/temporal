@@ -54,6 +54,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	DescribeTaskList(
+		ctx context.Context,
+		Request *matching.DescribeTaskListRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeTaskListResponse, error)
+
 	PollForActivityTask(
 		ctx context.Context,
 		PollRequest *matching.PollForActivityTaskRequest,
@@ -169,6 +175,29 @@ func (c client) CancelOutstandingPoll(
 	}
 
 	err = matching.MatchingService_CancelOutstandingPoll_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) DescribeTaskList(
+	ctx context.Context,
+	_Request *matching.DescribeTaskListRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeTaskListResponse, err error) {
+
+	args := matching.MatchingService_DescribeTaskList_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result matching.MatchingService_DescribeTaskList_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = matching.MatchingService_DescribeTaskList_Helper.UnwrapResponse(&result)
 	return
 }
 

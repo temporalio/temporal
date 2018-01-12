@@ -65,6 +65,7 @@ type taskListID struct {
 }
 
 type pollerIDCtxKey string
+type identityCtxKey string
 
 var (
 	// EmptyPollForDecisionTaskResponse is the response when there are no decision tasks to hand out
@@ -79,6 +80,7 @@ var (
 	errPumpClosed = errors.New("Task list pump closed its channel")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
+	identityKey identityCtxKey = "identity"
 )
 
 func (t *taskListID) String() string {
@@ -257,6 +259,7 @@ pollLoop:
 		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
+		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 		tCtx, err := e.getTask(pollerCtx, taskList, nil)
 		if err != nil {
@@ -359,6 +362,7 @@ pollLoop:
 		// Add frontend generated pollerID to context so tasklistMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
+		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		tCtx, err := e.getTask(pollerCtx, taskList, maxDispatch)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
@@ -462,6 +466,30 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(ctx context.Context, request 
 
 	tlMgr.CancelPoller(pollerID)
 	return nil
+}
+
+func (e *matchingEngineImpl) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*workflow.DescribeTaskListResponse, error) {
+	domainID := request.GetDomainUUID()
+	taskListType := persistence.TaskListTypeDecision
+	if request.DescRequest.GetTaskListType() == workflow.TaskListTypeActivity {
+		taskListType = persistence.TaskListTypeActivity
+	}
+	taskListName := request.DescRequest.TaskList.GetName()
+
+	taskList := newTaskListID(domainID, taskListName, taskListType)
+	tlMgr, err := e.getTaskListManager(taskList)
+	if err != nil {
+		return nil, err
+	}
+
+	pollers := []*workflow.PollerInfo{}
+	for _, poller := range tlMgr.GetAllPollerInfo() {
+		pollers = append(pollers, &workflow.PollerInfo{
+			Identity:       common.StringPtr(poller.identity),
+			LastAccessTime: common.Int64Ptr(poller.lastAccessTime.UnixNano()),
+		})
+	}
+	return &workflow.DescribeTaskListResponse{Pollers: pollers}, nil
 }
 
 // Loads a task from persistence and wraps it in a task context

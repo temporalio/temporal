@@ -162,3 +162,20 @@ func (c *metricClient) CancelOutstandingPoll(
 
 	return err
 }
+
+func (c *metricClient) DescribeTaskList(
+	ctx context.Context,
+	request *m.DescribeTaskListRequest,
+	opts ...yarpc.CallOption) (*workflow.DescribeTaskListResponse, error) {
+	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceLatency)
+	resp, err := c.client.DescribeTaskList(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceFailures)
+	}
+
+	return resp, err
+}

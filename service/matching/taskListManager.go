@@ -60,6 +60,7 @@ type taskListManager interface {
 	GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
 	SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 	CancelPoller(pollerID string)
+	GetAllPollerInfo() []*pollerInfo
 	String() string
 }
 
@@ -157,6 +158,7 @@ func newTaskListManagerWithRateLimiter(
 		taskAckManager:      newAckManager(e.logger),
 		tasksForPoll:        make(chan *getTaskResult),
 		config:              config,
+		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 		rateLimiter:         rl,
 	}
@@ -187,6 +189,10 @@ type taskListManagerImpl struct {
 	metricsClient metrics.Client
 	engine        *matchingEngineImpl
 	config        *Config
+
+	// pollerHistory stores poller which poll from this tasklist in last few minutes
+	pollerHistory *pollerHistory
+
 	// serializes all writes to persistence
 	// This is needed because of a known Cassandra issue where concurrent LWT to the same partition
 	// cause timeout errors.
@@ -431,6 +437,13 @@ func (c *taskListManagerImpl) getTask(ctx context.Context) (*getTaskResult, erro
 		}()
 	}
 
+	identity, ok := ctx.Value(identityKey).(string)
+	if ok && identity != "" {
+		c.pollerHistory.updatePollerInfo(pollerIdentity{
+			identity: identity,
+		})
+	}
+
 	select {
 	case result := <-c.tasksForPoll:
 		if result.syncMatch {
@@ -565,6 +578,16 @@ func (c *taskListManagerImpl) String() string {
 	r += fmt.Sprintf("MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
 
 	return r
+}
+
+// updatePollerInfo update the poller information for this tasklist
+func (c *taskListManagerImpl) updatePollerInfo(id pollerIdentity) {
+	c.pollerHistory.updatePollerInfo(id)
+}
+
+// getAllPollerInfo return poller which poll from this tasklist in last few minutes
+func (c *taskListManagerImpl) GetAllPollerInfo() []*pollerInfo {
+	return c.pollerHistory.getAllPollerInfo()
 }
 
 // Tries to match task to a poller that is already waiting on getTask.

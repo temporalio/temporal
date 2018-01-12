@@ -85,6 +85,11 @@ struct CancelOutstandingPollRequest {
   40: optional string pollerID
 }
 
+struct DescribeTaskListRequest {
+  10: optional string domainUUID
+  20: optional shared.DescribeTaskListRequest descRequest
+}
+
 /**
 * MatchingService API is exposed to provide support for polling from long running applications.
 * Such applications are expected to have a worker which regularly polls for DecisionTask and ActivityTask.  For each
@@ -139,22 +144,22 @@ service MatchingService {
   * QueryWorkflow is called by frontend to query a workflow.
   **/
   shared.QueryWorkflowResponse QueryWorkflow(1: QueryWorkflowRequest queryRequest)
-	throws (
-	  1: shared.BadRequestError badRequestError,
-	  2: shared.InternalServiceError internalServiceError,
-	  3: shared.EntityNotExistsError entityNotExistError,
-	  4: shared.QueryFailedError queryFailedError,
-	)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.QueryFailedError queryFailedError,
+    )
 
   /**
   * RespondQueryTaskCompleted is called by frontend to respond query completed.
   **/
   void RespondQueryTaskCompleted(1: RespondQueryTaskCompletedRequest request)
-	throws (
-	  1: shared.BadRequestError badRequestError,
-	  2: shared.InternalServiceError internalServiceError,
-	  3: shared.EntityNotExistsError entityNotExistError,
-	)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
 
   /**
     * CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
@@ -171,4 +176,14 @@ service MatchingService {
       2: shared.InternalServiceError internalServiceError,
     )
 
+  /**
+  * DescribeTaskList returns information about the target tasklist, right now this API returns the
+  * pollers which polled this tasklist in last few minutes.
+  **/
+  shared.DescribeTaskListResponse DescribeTaskList(1: DescribeTaskListRequest request)
+    throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+      )
 }

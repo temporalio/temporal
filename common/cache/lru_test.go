@@ -28,6 +28,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type keyType struct {
+	dummyString string
+	dummyInt    int
+}
+
 func TestLRU(t *testing.T) {
 	cache := NewLRU(5)
 
@@ -62,6 +67,27 @@ func TestLRU(t *testing.T) {
 	assert.Nil(t, cache.Get("A"))
 }
 
+func TestGenerics(t *testing.T) {
+	key := keyType{
+		dummyString: "some random key",
+		dummyInt:    59,
+	}
+	value := "some random value"
+
+	cache := NewLRU(5)
+	cache.Put(key, value)
+
+	assert.Equal(t, value, cache.Get(key))
+	assert.Equal(t, value, cache.Get(keyType{
+		dummyString: "some random key",
+		dummyInt:    59,
+	}))
+	assert.Nil(t, cache.Get(keyType{
+		dummyString: "some other random key",
+		dummyInt:    56,
+	}))
+}
+
 func TestLRUWithTTL(t *testing.T) {
 	cache := New(5, &Options{
 		TTL: time.Millisecond * 100,
@@ -90,8 +116,9 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
-		wg.Add(1)
+		wg.Add(2)
 
+		// concurrent get and put
 		go func() {
 			defer wg.Done()
 
@@ -99,6 +126,24 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 
 			for j := 0; j < 1000; j++ {
 				cache.Get("A")
+				cache.Put("A", "fooo")
+			}
+		}()
+
+		// confurrent iteration
+		go func() {
+			defer wg.Done()
+
+			<-start
+
+			for j := 0; j < 50; j++ {
+				result := []Entry{}
+				it := cache.Iterator()
+				for it.HasNext() {
+					entry := it.Next()
+					result = append(result, entry)
+				}
+				it.Close()
 			}
 		}()
 	}
@@ -153,4 +198,37 @@ func TestRemovedFuncWithTTL(t *testing.T) {
 	case <-timeout.C:
 		t.Error("RemovedFunc did not send true on channel ch")
 	}
+}
+
+func TestIterator(t *testing.T) {
+	expected := map[string]string{
+		"A": "Alpha",
+		"B": "Beta",
+		"G": "Gamma",
+		"D": "Delta",
+	}
+
+	cache := NewLRU(5)
+
+	for k, v := range expected {
+		cache.Put(k, v)
+	}
+
+	actual := map[string]string{}
+
+	it := cache.Iterator()
+	for it.HasNext() {
+		entry := it.Next()
+		actual[entry.Key().(string)] = entry.Value().(string)
+	}
+	it.Close()
+	assert.Equal(t, expected, actual)
+
+	it = cache.Iterator()
+	for i := 0; i < len(expected); i++ {
+		entry := it.Next()
+		actual[entry.Key().(string)] = entry.Value().(string)
+	}
+	it.Close()
+	assert.Equal(t, expected, actual)
 }

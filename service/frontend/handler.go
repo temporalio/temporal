@@ -81,6 +81,7 @@ var (
 	errInvalidTaskToken           = &gen.BadRequestError{Message: "Invalid TaskToken."}
 	errInvalidRequestType         = &gen.BadRequestError{Message: "Invalid request type."}
 	errTaskListNotSet             = &gen.BadRequestError{Message: "TaskList is not set on request."}
+	errTaskListTypeNotSet         = &gen.BadRequestError{Message: "TaskListType is not set on request."}
 	errExecutionNotSet            = &gen.BadRequestError{Message: "Execution is not set on request."}
 	errWorkflowIDNotSet           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
 	errRunIDNotSet                = &gen.BadRequestError{Message: "RunId is not set on request."}
@@ -1440,6 +1441,46 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	return response, nil
 }
 
+// DescribeTaskList returns information about the target tasklist, right now this API returns the
+// pollers which polled this tasklist in last few minutes.
+func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.DescribeTaskListRequest) (*gen.DescribeTaskListResponse, error) {
+
+	scope := metrics.FrontendDescribeTaskListScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if request.Domain == nil {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	domainInfo, _, err := wh.domainCache.GetDomain(request.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if err := wh.validateTaskList(request.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTaskListType(request.TaskListType, scope); err != nil {
+		return nil, err
+	}
+
+	response, err := wh.matching.DescribeTaskList(ctx, &m.DescribeTaskListRequest{
+		DomainUUID:  common.StringPtr(domainInfo.ID),
+		DescRequest: request,
+	})
+
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return response, nil
+}
+
 func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExecution,
 	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte,
 	transientDecision *gen.TransientDecisionInfo) (*gen.History, []byte, error) {
@@ -1543,6 +1584,13 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 		wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return &gen.InternalServiceError{Message: err.Error()}
 	}
+}
+
+func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope int) error {
+	if t == nil {
+		return wh.error(errTaskListTypeNotSet, scope)
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) validateTaskList(t *gen.TaskList, scope int) error {

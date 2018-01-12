@@ -3888,6 +3888,134 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	s.Equal(1, len(events))
 }
 
+func (s *integrationSuite) TestDescribeTaskList() {
+	workflowID := "interation-get-poller-history"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr("interation-get-poller-history-type")
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr("interation-get-poller-history-tasklist")
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(workflowID),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	workflowComplete := false
+	activityScheduled := false
+	activityData := int32(1)
+	// var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     taskList,
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(25),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(25),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// this function poll events from history side
+	testDescribeTaskList := func(domain string, tasklist *workflow.TaskList, tasklistType workflow.TaskListType) []*workflow.PollerInfo {
+		responseInner, errInner := s.engine.DescribeTaskList(createContext(), &workflow.DescribeTaskListRequest{
+			Domain:       common.StringPtr(domain),
+			TaskList:     taskList,
+			TaskListType: &tasklistType,
+		})
+
+		s.Nil(errInner)
+		return responseInner.Pollers
+	}
+
+	before := time.Now()
+
+	// when no one polling on the tasklist (activity or decition), there shall be no poller information
+	pollerInfos := testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeActivity)
+	s.Empty(pollerInfos)
+	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeDecision)
+	s.Empty(pollerInfos)
+
+	_, errDecision := poller.pollAndProcessDecisionTask(false, false)
+	s.Nil(errDecision)
+	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeActivity)
+	s.Empty(pollerInfos)
+	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeDecision)
+	s.Equal(1, len(pollerInfos))
+	s.Equal(identity, pollerInfos[0].GetIdentity())
+	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
+	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
+
+	errActivity := poller.pollAndProcessActivityTask(false)
+	s.Nil(errActivity)
+	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeActivity)
+	s.Equal(1, len(pollerInfos))
+	s.Equal(identity, pollerInfos[0].GetIdentity())
+	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
+	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
+	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeDecision)
+	s.Equal(1, len(pollerInfos))
+	s.Equal(identity, pollerInfos[0].GetIdentity())
+	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
+	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
+}
+
 func (s *integrationSuite) setupShards() {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {

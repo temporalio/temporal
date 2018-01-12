@@ -29,20 +29,23 @@ import (
 type Cache interface {
 	// Get retrieves an element based on a key, returning nil if the element
 	// does not exist
-	Get(key string) interface{}
+	Get(key interface{}) interface{}
 
 	// Put adds an element to the cache, returning the previous element
-	Put(key string, value interface{}) interface{}
+	Put(key interface{}, value interface{}) interface{}
 
 	// PutIfNotExist puts a value associated with a given key if it does not exist
-	PutIfNotExist(key string, value interface{}) (interface{}, error)
+	PutIfNotExist(key interface{}, value interface{}) (interface{}, error)
 
 	// Delete deletes an element in the cache
-	Delete(key string)
+	Delete(key interface{})
 
 	// Release decrements the ref count of a pinned element. If the ref count
 	// drops to 0, the element can be evicted from the cache.
-	Release(key string)
+	Release(key interface{})
+
+	// Iterator returns the iterator of the cache
+	Iterator() Iterator
 
 	// Size returns the number of entries currently stored in the Cache
 	Size() int
@@ -70,3 +73,24 @@ type Options struct {
 // appropriate signature and i is the interface{} scheduled for
 // deletion, Cache calls go f(i)
 type RemovedFunc func(interface{})
+
+// Iterator represents the interface for cache iterators
+type Iterator interface {
+	// Close closes the iterator
+	// and releases any allocated resources
+	Close()
+	// HasNext return true if there is more items to be returned
+	HasNext() bool
+	// Next return the next item
+	Next() Entry
+}
+
+// Entry represents a key-value entry within the map
+type Entry interface {
+	// Key represents the key
+	Key() interface{}
+	// Value represents the value
+	Value() interface{}
+	// CreateTime represents the time when the entry is created
+	CreateTime() time.Time
+}

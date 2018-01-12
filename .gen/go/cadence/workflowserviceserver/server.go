@@ -44,6 +44,11 @@ type Interface interface {
 		DescribeRequest *shared.DescribeDomainRequest,
 	) (*shared.DescribeDomainResponse, error)
 
+	DescribeTaskList(
+		ctx context.Context,
+		Request *shared.DescribeTaskListRequest,
+	) (*shared.DescribeTaskListResponse, error)
+
 	DescribeWorkflowExecution(
 		ctx context.Context,
 		DescribeRequest *shared.DescribeWorkflowExecutionRequest,
@@ -190,6 +195,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Unary: thrift.UnaryHandler(h.DescribeDomain),
 				},
 				Signature:    "DescribeDomain(DescribeRequest *shared.DescribeDomainRequest) (*shared.DescribeDomainResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
+				Name: "DescribeTaskList",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.DescribeTaskList),
+				},
+				Signature:    "DescribeTaskList(Request *shared.DescribeTaskListRequest) (*shared.DescribeTaskListResponse)",
 				ThriftModule: cadence.ThriftModule,
 			},
 
@@ -448,7 +464,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 25)
+	procedures := make([]transport.Procedure, 0, 26)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -484,6 +500,25 @@ func (h handler) DescribeDomain(ctx context.Context, body wire.Value) (thrift.Re
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_DescribeDomain_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) DescribeTaskList(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_DescribeTaskList_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.DescribeTaskList(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_DescribeTaskList_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

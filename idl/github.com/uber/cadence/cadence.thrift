@@ -351,4 +351,15 @@ service WorkflowService {
       3: shared.EntityNotExistsError entityNotExistError,
     )
 
+  /**
+  * DescribeTaskList returns information about the target tasklist, right now this API returns the
+  * pollers which polled this tasklist in last few minutes.
+  **/
+  shared.DescribeTaskListResponse DescribeTaskList(1: shared.DescribeTaskListRequest request)
+    throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+      )
+
 }

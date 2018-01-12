@@ -169,6 +169,17 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	return h.handleErr(err, scope)
 }
 
+// DescribeTaskList returns information about the target tasklist, right now this API returns the
+// pollers which polled this tasklist in last few minutes.
+func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest) (*gen.DescribeTaskListResponse, error) {
+	scope := metrics.MatchingDescribeTaskListScope
+	sw := h.startRequestProfile("DescribeTaskList", scope)
+	defer sw.Stop()
+
+	response, err := h.engine.DescribeTaskList(ctx, request)
+	return response, h.handleErr(err, scope)
+}
+
 func (h *Handler) handleErr(err error, scope int) error {
 
 	if err == nil {
