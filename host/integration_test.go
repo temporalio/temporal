@@ -2209,7 +2209,7 @@ func (s *integrationSuite) TestVisibility() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = common.StringPtr(tl)
 
-	request := &workflow.StartWorkflowExecutionRequest{
+	startRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:    common.StringPtr(uuid.New()),
 		Domain:       common.StringPtr(s.domainName),
 		WorkflowId:   common.StringPtr(id1),
@@ -2221,23 +2221,8 @@ func (s *integrationSuite) TestVisibility() {
 		Identity:                            common.StringPtr(identity),
 	}
 
-	_, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	startResponse, err0 := s.engine.StartWorkflowExecution(createContext(), startRequest)
 	s.Nil(err0)
-
-	request = &workflow.StartWorkflowExecutionRequest{
-		RequestId:    common.StringPtr(uuid.New()),
-		Domain:       common.StringPtr(s.domainName),
-		WorkflowId:   common.StringPtr(id2),
-		WorkflowType: workflowType,
-		TaskList:     taskList,
-		Input:        nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
-		Identity:                            common.StringPtr(identity),
-	}
-
-	_, err1 := s.engine.StartWorkflowExecution(createContext(), request)
-	s.Nil(err1)
 
 	// Now complete one of the executions
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -2261,7 +2246,44 @@ func (s *integrationSuite) TestVisibility() {
 		suite:           s,
 	}
 
-	_, err2 := poller.pollAndProcessDecisionTask(false, false)
+	_, err1 := poller.pollAndProcessDecisionTask(false, false)
+	s.Nil(err1)
+
+	// wait until the start workflow is done
+	var nexttoken []byte
+	historyEventFilterType := workflow.HistoryEventFilterTypeCloseEvent
+	for {
+		historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: startRequest.Domain,
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: startRequest.WorkflowId,
+				RunId:      startResponse.RunId,
+			},
+			WaitForNewEvent:        common.BoolPtr(true),
+			HistoryEventFilterType: &historyEventFilterType,
+			NextPageToken:          nexttoken,
+		})
+		s.Nil(historyErr)
+		if len(historyResponse.NextPageToken) == 0 {
+			break
+		}
+
+		nexttoken = historyResponse.NextPageToken
+	}
+
+	startRequest = &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id2),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	_, err2 := s.engine.StartWorkflowExecution(createContext(), startRequest)
 	s.Nil(err2)
 
 	startFilter := &workflow.StartTimeFilter{}
@@ -2271,22 +2293,13 @@ func (s *integrationSuite) TestVisibility() {
 	closedCount := 0
 	openCount := 0
 
-ListClosedLoop:
-	for i := 0; i < 10; i++ {
-		resp, err3 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
-			Domain:          common.StringPtr(s.domainName),
-			MaximumPageSize: common.Int32Ptr(100),
-			StartTimeFilter: startFilter,
-		})
-		s.Nil(err3)
-		closedCount = len(resp.Executions)
-		if closedCount == 0 {
-			s.logger.Info("Closed WorkflowExecution is not yet visibile")
-			time.Sleep(100 * time.Millisecond)
-			continue ListClosedLoop
-		}
-		break ListClosedLoop
-	}
+	resp, err3 := s.engine.ListClosedWorkflowExecutions(createContext(), &workflow.ListClosedWorkflowExecutionsRequest{
+		Domain:          common.StringPtr(s.domainName),
+		MaximumPageSize: common.Int32Ptr(100),
+		StartTimeFilter: startFilter,
+	})
+	s.Nil(err3)
+	closedCount = len(resp.Executions)
 	s.Equal(1, closedCount)
 
 ListOpenLoop:
