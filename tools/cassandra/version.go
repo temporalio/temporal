@@ -21,9 +21,12 @@
 package cassandra
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"path"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -124,8 +127,38 @@ func getExpectedVersion(dir string) (string, error) {
 	return result, nil
 }
 
-// CheckCompatibleVersion check the version compatibility
-func CheckCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
+// VerifyCompatibleVersion ensures that the installed version of cadence and visibility keyspaces
+// is greater than or equal to the expected version.
+// In most cases, the versions should match. However if after a schema upgrade there is a code
+// rollback, the code version (expected version) would fall lower than the actual version in
+// cassandra.
+func VerifyCompatibleVersion(cfg config.Cassandra) error {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return errors.New("unable to get the current function path")
+	}
+	return verifyCompatibleVersionWithRoot(cfg, filename)
+}
+
+func verifyCompatibleVersionWithRoot(cfg config.Cassandra, rootFile string) error {
+	// Traverse until project root i.e. "cadence" dir to navigate to the schema/ directory
+	projRoot := rootFile
+	for path.Base(projRoot) != "cadence" {
+		projRoot = path.Dir(projRoot) // According to spec, returns "." when it cannot go any further
+		if projRoot == "." {
+			return fmt.Errorf("Unable to get project root from path: %s", rootFile)
+		}
+	}
+	schemaPath := path.Join(projRoot, "schema/cadence/versioned")
+	if err := checkCompatibleVersion(cfg, cfg.Keyspace, schemaPath); err != nil {
+		return err
+	}
+	schemaPath = path.Join(projRoot, "schema/visibility/versioned")
+	return checkCompatibleVersion(cfg, cfg.VisibilityKeyspace, schemaPath)
+}
+
+// checkCompatibleVersion check the version compatibility
+func checkCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
 	cqlClient, err := newCQLClient(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, keyspace)
 	if err != nil {
 		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
@@ -133,7 +166,7 @@ func CheckCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath strin
 	defer cqlClient.Close()
 	version, err := cqlClient.ReadSchemaVersion()
 	if err != nil {
-		return fmt.Errorf("unable to read cassandra schema version: %v", err.Error())
+		return fmt.Errorf("unable to read cassandra schema version keyspace: %s error: %v", keyspace, err.Error())
 	}
 	expectedVersion, err := getExpectedVersion(dirPath)
 	if err != nil {

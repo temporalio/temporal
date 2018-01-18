@@ -25,6 +25,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path"
+	"runtime"
 	"testing"
 	"time"
 
@@ -159,6 +161,35 @@ func (s *VersionTestSuite) expectedVersionTest(expected string, dirs []string, e
 	}
 }
 
+func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
+	keyspace := "cadence_test"
+	visKeyspace := "cadence_visibility_test"
+	_, filename, _, ok := runtime.Caller(0)
+	s.True(ok)
+	root := path.Dir(path.Dir(path.Dir(filename)))
+	cqlFile := path.Join(root, "schema/cadence/schema.cql")
+	visCqlFile := path.Join(root, "schema/visibility/schema.cql")
+
+	defer s.createKeyspace(keyspace)()
+	defer s.createKeyspace(visKeyspace)()
+	RunTool([]string{
+		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", "10.0", "-o",
+	})
+	RunTool([]string{
+		"./tool", "-k", visKeyspace, "-q", "setup-schema", "-f", visCqlFile, "-version", "10.0", "-o",
+	})
+
+	cfg := config.Cassandra{
+		Hosts:              "127.0.0.1",
+		Port:               defaultCassandraPort,
+		User:               "",
+		Password:           "",
+		Keyspace:           keyspace,
+		VisibilityKeyspace: visKeyspace,
+	}
+	s.NoError(verifyCompatibleVersionWithRoot(cfg, filename))
+}
+
 func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 	flags := []struct {
 		expectedVersion string
@@ -173,24 +204,30 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 		{"abc", "1.0", "unable to read expected schema version", true},
 	}
 	for _, flag := range flags {
-		s.checkCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
+		s.runCheckCompatibleVersion(flag.expectedVersion, flag.actualVersion, flag.errStr, flag.expectedFail)
 	}
 }
 
-func (s *VersionTestSuite) checkCompatibleVersion(
-	expected string, actual string, errStr string, expectedFail bool,
-) {
+func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
 	s.NoError(err)
-	defer client.Close()
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	keyspace := fmt.Sprintf("version_test_%v", r.Int63())
 	err = client.CreateKeyspace(keyspace, 1)
 	if err != nil {
 		log.Fatalf("error creating keyspace, err=%v", err)
 	}
-	defer client.DropKeyspace(keyspace)
+	return func() {
+		s.NoError(client.DropKeyspace(keyspace))
+		client.Close()
+	}
+}
+
+func (s *VersionTestSuite) runCheckCompatibleVersion(
+	expected string, actual string, errStr string, expectedFail bool,
+) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	keyspace := fmt.Sprintf("version_test_%v", r.Int63())
+	defer s.createKeyspace(keyspace)()
 
 	dir := "check_version"
 	tmpDir, err := ioutil.TempDir("", dir)
@@ -219,7 +256,7 @@ func (s *VersionTestSuite) checkCompatibleVersion(
 		User:     "",
 		Password: "",
 	}
-	err = CheckCompatibleVersion(cfg, keyspace, subdir)
+	err = checkCompatibleVersion(cfg, keyspace, subdir)
 	if len(errStr) > 0 {
 		s.Error(err)
 		s.Contains(err.Error(), errStr)
