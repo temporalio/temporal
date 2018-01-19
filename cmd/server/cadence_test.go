@@ -21,9 +21,10 @@
 package main
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
 )
 
 type CadenceSuite struct {
@@ -50,5 +51,5 @@ func (s *CadenceSuite) TestIsValidService() {
 }
 
 func (s *CadenceSuite) TestPath() {
-	s.Equal("foo/bar", path("foo", "bar"))
+	s.Equal("foo/bar", constructPath("foo", "bar"))
 }
