@@ -789,7 +789,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 			RequestId:                           common.StringPtr("newRequestID"),
 		},
 	})
-	s.NotNil(err)
+	if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
+		s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+	}
 	s.Nil(resp)
 }
 
@@ -848,7 +850,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		})
 
 		if expecedErrs[index] {
-			s.NotNil(err)
+			if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
+				s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+			}
 			s.Nil(resp)
 		} else {
 			s.Nil(err)
@@ -922,7 +926,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			})
 
 			if expecedErrs[j] {
-				s.NotNil(err)
+				if _, ok := err.(*workflow.WorkflowExecutionAlreadyStartedError); !ok {
+					s.Fail("return err is not *shared.WorkflowExecutionAlreadyStartedError")
+				}
 				s.Nil(resp)
 			} else {
 				s.Nil(err)

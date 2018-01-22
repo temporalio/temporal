@@ -300,7 +300,7 @@ func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *Complete
 
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *workflow.WorkflowExecutionAlreadyStartedError:
+	case *WorkflowExecutionAlreadyStartedError:
 		p.metricClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
