@@ -994,7 +994,7 @@ Update_History_Loop:
 				foreignInfo, _, err := e.domainCache.GetDomain(*attributes.Domain)
 				if err != nil {
 					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("Unable to schedule activity across domain: %v.",
+						Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.",
 							*attributes.Domain)}
 				}
 
@@ -1010,6 +1010,38 @@ Update_History_Loop:
 					TargetWorkflowID: *attributes.WorkflowId,
 					TargetRunID:      common.StringDefault(attributes.RunId),
 					ScheduleID:       *wfCancelReqEvent.EventId,
+				})
+
+			case workflow.DecisionTypeSignalExternalWorkflowExecution:
+				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
+					metrics.DecisionTypeSignalExternalWorkflowCounter)
+
+				attributes := d.SignalExternalWorkflowExecutionDecisionAttributes
+				if err = validateSignalExternalWorkflowExecutionAttributes(attributes); err != nil {
+					failDecision = true
+					failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
+					break Process_Decision_Loop
+				}
+
+				foreignInfo, _, err := e.domainCache.GetDomain(attributes.GetDomain())
+				if err != nil {
+					return &workflow.InternalServiceError{
+						Message: fmt.Sprintf("Unable to signal workflow across domain: %v.",
+							attributes.GetDomain())}
+				}
+
+				signalRequestID := uuid.New() // for deduplicate
+				wfSignalReqEvent := msBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(completedID,
+					signalRequestID, attributes)
+				if wfSignalReqEvent == nil {
+					return &workflow.InternalServiceError{Message: "Unable to add external signal workflow request."}
+				}
+
+				transferTasks = append(transferTasks, &persistence.SignalExecutionTask{
+					TargetDomainID:   foreignInfo.ID,
+					TargetWorkflowID: attributes.Execution.GetWorkflowId(),
+					TargetRunID:      attributes.Execution.GetRunId(),
+					InitiatedID:      wfSignalReqEvent.GetEventId(),
 				})
 
 			case workflow.DecisionTypeContinueAsNewWorkflowExecution:
@@ -1643,9 +1675,40 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
 			}
 
+			// deduplicate by request id for signal decision
+			if requestID := request.GetRequestId(); requestID != "" {
+				if msBuilder.isSignalRequested(requestID) {
+					return nil
+				}
+				msBuilder.addSignalRequested(requestID)
+			}
+
 			if msBuilder.AddWorkflowExecutionSignaled(request) == nil {
 				return &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
 			}
+
+			return nil
+		})
+}
+
+// RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
+func (e *historyEngineImpl) RemoveSignalMutableState(request *h.RemoveSignalMutableStateRequest) error {
+	domainID, err := getDomainUUID(request.DomainUUID)
+	if err != nil {
+		return err
+	}
+	execution := workflow.WorkflowExecution{
+		WorkflowId: request.WorkflowExecution.WorkflowId,
+		RunId:      request.WorkflowExecution.RunId,
+	}
+
+	return e.updateWorkflowExecution(domainID, execution, false, false,
+		func(msBuilder *mutableStateBuilder) error {
+			if !msBuilder.isWorkflowExecutionRunning() {
+				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+			}
+
+			msBuilder.deleteSignalRequested(request.GetRequestId())
 
 			return nil
 		})
@@ -1766,6 +1829,7 @@ Update_History_Loop:
 		}
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
+		// conduct caller action
 		if err := action(msBuilder); err != nil {
 			return err
 		}
@@ -2041,13 +2105,35 @@ func validateCancelExternalWorkflowExecutionAttributes(attributes *workflow.Requ
 	if attributes.WorkflowId == nil {
 		return &workflow.BadRequestError{Message: "WorkflowId is not set on decision."}
 	}
-
 	if attributes.RunId == nil {
 		return &workflow.BadRequestError{Message: "RunId is not set on decision."}
 	}
-
 	if uuid.Parse(*attributes.RunId) == nil {
 		return &workflow.BadRequestError{Message: "Invalid RunId set on decision."}
+	}
+
+	return nil
+}
+
+func validateSignalExternalWorkflowExecutionAttributes(attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes) error {
+	if attributes == nil {
+		return &workflow.BadRequestError{Message: "SignalExternalWorkflowExecutionDecisionAttributes is not set on decision."}
+	}
+	if attributes.Execution == nil {
+		return &workflow.BadRequestError{Message: "Execution is nil on decision."}
+	}
+	if attributes.Execution.WorkflowId == nil {
+		return &workflow.BadRequestError{Message: "WorkflowId is not set on decision."}
+	}
+	runID := attributes.Execution.GetRunId()
+	if runID != "" && uuid.Parse(runID) == nil {
+		return &workflow.BadRequestError{Message: "Invalid RunId set on decision."}
+	}
+	if attributes.SignalName == nil {
+		return &workflow.BadRequestError{Message: "SignalName is not set on decision."}
+	}
+	if attributes.Input == nil {
+		return &workflow.BadRequestError{Message: "Input is not set on decision."}
 	}
 
 	return nil

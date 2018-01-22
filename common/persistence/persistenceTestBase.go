@@ -393,7 +393,8 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
 		s.ShardInfo.RangeID, condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfo,
-		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil)
+		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil,
+		nil, nil, nil, "")
 }
 
 // UpdateWorkflowExecutionAndFinish is a utility method to update workflow execution
@@ -420,7 +421,8 @@ func (s *TestBase) UpsertChildExecutionsState(updatedInfo *WorkflowExecutionInfo
 	upsertChildInfos []*ChildExecutionInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
-		nil, nil, upsertChildInfos, nil, nil, nil)
+		nil, nil, upsertChildInfos, nil, nil, nil,
+		nil, nil, nil, "")
 }
 
 // UpsertRequestCancelState is a utility method to update mutable state of workflow execution
@@ -428,7 +430,26 @@ func (s *TestBase) UpsertRequestCancelState(updatedInfo *WorkflowExecutionInfo, 
 	upsertCancelInfos []*RequestCancelInfo) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
-		nil, nil, nil, nil, upsertCancelInfos, nil)
+		nil, nil, nil, nil, upsertCancelInfos, nil,
+		nil, nil, nil, "")
+}
+
+// UpsertSignalInfoState is a utility method to update mutable state of workflow execution
+func (s *TestBase) UpsertSignalInfoState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	upsertSignalInfos []*SignalInfo) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		upsertSignalInfos, nil, nil, "")
+}
+
+// UpsertSignalsRequestedState is a utility method to update mutable state of workflow execution
+func (s *TestBase) UpsertSignalsRequestedState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	upsertSignalsRequested []string) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, upsertSignalsRequested, "")
 }
 
 // DeleteChildExecutionsState is a utility method to delete child execution from mutable state
@@ -436,7 +457,8 @@ func (s *TestBase) DeleteChildExecutionsState(updatedInfo *WorkflowExecutionInfo
 	deleteChildInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
-		nil, nil, nil, &deleteChildInfo, nil, nil)
+		nil, nil, nil, &deleteChildInfo, nil, nil,
+		nil, nil, nil, "")
 }
 
 // DeleteCancelState is a utility method to delete request cancel state from mutable state
@@ -444,7 +466,26 @@ func (s *TestBase) DeleteCancelState(updatedInfo *WorkflowExecutionInfo, conditi
 	deleteCancelInfo int64) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
 		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, &deleteCancelInfo)
+		nil, nil, nil, nil, nil, &deleteCancelInfo,
+		nil, nil, nil, "")
+}
+
+// DeleteSignalState is a utility method to delete request cancel state from mutable state
+func (s *TestBase) DeleteSignalState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	deleteSignalInfo int64) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, &deleteSignalInfo, nil, "")
+}
+
+// DeleteSignalsRequestedState is a utility method to delete mutable state of workflow execution
+func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *WorkflowExecutionInfo, condition int64,
+	deleteSignalsRequestedID string) error {
+	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, nil, nil,
+		s.ShardInfo.RangeID, condition, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, deleteSignalsRequestedID)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
@@ -452,7 +493,9 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
 	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo,
 	deleteTimerInfos []string, upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64,
-	upsertCancelInfos []*RequestCancelInfo, deleteCancelInfo *int64) error {
+	upsertCancelInfos []*RequestCancelInfo, deleteCancelInfo *int64,
+	upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64,
+	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
 	transferTasks := []Task{}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{
@@ -485,6 +528,10 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 		DeleteChildExecutionInfo:  deleteChildInfo,
 		UpsertRequestCancelInfos:  upsertCancelInfos,
 		DeleteRequestCancelInfo:   deleteCancelInfo,
+		UpsertSignalInfos:         upsertSignalInfos,
+		DeleteSignalInfo:          deleteSignalInfo,
+		UpsertSignalRequestedIDs:  upsertSignalRequestedIDs,
+		DeleteSignalRequestedID:   deleteSignalRequestedID,
 	})
 }
 
@@ -522,6 +569,19 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 		Condition:                condition,
 		UpsertRequestCancelInfos: upsertRequestCancelInfo,
 		RangeID:                  s.ShardInfo.RangeID,
+	})
+}
+
+// UpdateWorkflowExecutionForSignal is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionForSignal(
+	updatedInfo *WorkflowExecutionInfo, condition int64, transferTasks []Task,
+	upsertSignalInfos []*SignalInfo) error {
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:     updatedInfo,
+		TransferTasks:     transferTasks,
+		Condition:         condition,
+		UpsertSignalInfos: upsertSignalInfos,
+		RangeID:           s.ShardInfo.RangeID,
 	})
 }
 

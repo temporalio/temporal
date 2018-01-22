@@ -598,6 +598,32 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 	return nil
 }
 
+// RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
+// used to clean execution info when signal decision finished.
+func (h *Handler) RemoveSignalMutableState(ctx context.Context,
+	wrappedRequest *hist.RemoveSignalMutableStateRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryRemoveSignalMutableStateScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryRemoveSignalMutableStateScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if wrappedRequest.DomainUUID == nil {
+		return errDomainNotSet
+	}
+
+	workflowExecution := wrappedRequest.WorkflowExecution
+	engine, err1 := h.controller.GetEngine(*workflowExecution.WorkflowId)
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryRemoveSignalMutableStateScope, err1)
+		return err1
+	}
+
+	engine.RemoveSignalMutableState(wrappedRequest)
+
+	return nil
+}
+
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
 func (h *Handler) TerminateWorkflowExecution(ctx context.Context,

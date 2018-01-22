@@ -66,6 +66,7 @@ const (
 	TransferTaskTypeCloseExecution
 	TransferTaskTypeCancelExecution
 	TransferTaskTypeStartChildExecution
+	TransferTaskTypeSignalExecution
 )
 
 // Types of timers
@@ -261,6 +262,15 @@ type (
 		ScheduleID       int64
 	}
 
+	// SignalExecutionTask identifies a transfer task for signal execution
+	SignalExecutionTask struct {
+		TaskID           int64
+		TargetDomainID   string
+		TargetWorkflowID string
+		TargetRunID      string
+		InitiatedID      int64
+	}
+
 	// StartChildExecutionTask identifies a transfer task for starting child execution
 	StartChildExecutionTask struct {
 		TaskID           int64
@@ -290,6 +300,8 @@ type (
 		TimerInfos          map[string]*TimerInfo
 		ChildExecutionInfos map[int64]*ChildExecutionInfo
 		RequestCancelInfos  map[int64]*RequestCancelInfo
+		SignalInfos         map[int64]*SignalInfo
+		SignalRequestedIDs  map[string]struct{}
 		ExecutionInfo       *WorkflowExecutionInfo
 		BufferedEvents      []*SerializedHistoryEventBatch
 	}
@@ -336,6 +348,15 @@ type (
 	RequestCancelInfo struct {
 		InitiatedID     int64
 		CancelRequestID string
+	}
+
+	// SignalInfo has details for pending external workflow signal
+	SignalInfo struct {
+		InitiatedID     int64
+		SignalRequestID string
+		SignalName      string
+		Input           []byte
+		Control         []byte
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -436,6 +457,10 @@ type (
 		DeleteChildExecutionInfo  *int64
 		UpsertRequestCancelInfos  []*RequestCancelInfo
 		DeleteRequestCancelInfo   *int64
+		UpsertSignalInfos         []*SignalInfo
+		DeleteSignalInfo          *int64
+		UpsertSignalRequestedIDs  []string
+		DeleteSignalRequestedID   string
 		NewBufferedEvents         *SerializedHistoryEventBatch
 		ClearBufferedEvents       bool
 	}
@@ -913,6 +938,21 @@ func (u *CancelExecutionTask) GetTaskID() int64 {
 
 // SetTaskID sets the sequence ID of the cancel transfer task.
 func (u *CancelExecutionTask) SetTaskID(id int64) {
+	u.TaskID = id
+}
+
+// GetType returns the type of the signal transfer task
+func (u *SignalExecutionTask) GetType() int {
+	return TransferTaskTypeSignalExecution
+}
+
+// GetTaskID returns the sequence ID of the signal transfer task.
+func (u *SignalExecutionTask) GetTaskID() int64 {
+	return u.TaskID
+}
+
+// SetTaskID sets the sequence ID of the signal transfer task.
+func (u *SignalExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 

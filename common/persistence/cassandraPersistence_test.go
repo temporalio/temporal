@@ -273,7 +273,7 @@ func (s *cassandraPersistenceSuite) TestUpdateWorkflow() {
 	failedUpdatedInfo2.LastProcessedEvent = int64(3)
 	failedUpdatedInfo.DecisionAttempt = int64(666)
 	failedUpdatedInfo.DecisionTimestamp = int64(66)
-	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.NotNil(err5, "expected non nil error.")
 	s.IsType(&ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -922,6 +922,105 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_RequestCancel() {
 	s.Nil(err2, "No error expected.")
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.RequestCancelInfos))
+}
+
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_SignalInfo() {
+	domainID := uuid.New()
+	runID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-mutable-signal-info-test"),
+		RunId:      common.StringPtr(runID),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	signalRequestID := uuid.New()
+	signalName := "my signal"
+	input := []byte("test signal input")
+	control := []byte(uuid.New())
+	signalInfos := []*SignalInfo{
+		{
+			InitiatedID:     1,
+			SignalRequestID: signalRequestID,
+			SignalName:      signalName,
+			Input:           input,
+			Control:         control,
+		}}
+	err2 := s.UpsertSignalInfoState(updatedInfo, int64(3), signalInfos)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(1, len(state.SignalInfos))
+	ri, ok := state.SignalInfos[1]
+	s.True(ok)
+	s.NotNil(ri)
+	s.Equal(int64(1), ri.InitiatedID)
+	s.Equal(signalRequestID, ri.SignalRequestID)
+	s.Equal(signalName, ri.SignalName)
+	s.Equal(input, ri.Input)
+	s.Equal(control, ri.Control)
+
+	err2 = s.DeleteSignalState(updatedInfo, int64(5), int64(1))
+	s.Nil(err2, "No error expected.")
+
+	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(0, len(state.SignalInfos))
+}
+
+func (s *cassandraPersistenceSuite) TestWorkflowMutableState_SignalRequested() {
+	domainID := uuid.New()
+	runID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-mutable-signal-requested-test"),
+		RunId:      common.StringPtr(runID),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	signalRequestedID := uuid.New()
+	signalsRequested := []string{signalRequestedID}
+	err2 := s.UpsertSignalsRequestedState(updatedInfo, int64(3), signalsRequested)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(1, len(state.SignalRequestedIDs))
+	ri, ok := state.SignalRequestedIDs[signalRequestedID]
+	s.True(ok)
+	s.NotNil(ri)
+
+	err2 = s.DeleteSignalsRequestedState(updatedInfo, int64(5), signalRequestedID)
+	s.Nil(err2, "No error expected.")
+
+	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(state, "expected valid state.")
+	s.Equal(0, len(state.SignalRequestedIDs))
 }
 
 func (s *cassandraPersistenceSuite) TestWorkflowMutableStateInfo() {

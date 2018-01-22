@@ -64,6 +64,11 @@ type Interface interface {
 		AddRequest *history.RecordDecisionTaskStartedRequest,
 	) (*history.RecordDecisionTaskStartedResponse, error)
 
+	RemoveSignalMutableState(
+		ctx context.Context,
+		RemoveRequest *history.RemoveSignalMutableStateRequest,
+	) error
+
 	RequestCancelWorkflowExecution(
 		ctx context.Context,
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
@@ -193,6 +198,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RemoveSignalMutableState",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RemoveSignalMutableState),
+				},
+				Signature:    "RemoveSignalMutableState(RemoveRequest *history.RemoveSignalMutableStateRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RequestCancelWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -304,7 +320,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 16)
+	procedures := make([]transport.Procedure, 0, 17)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -416,6 +432,25 @@ func (h handler) RecordDecisionTaskStarted(ctx context.Context, body wire.Value)
 
 	hadError := err != nil
 	result, err := history.HistoryService_RecordDecisionTaskStarted_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RemoveSignalMutableState(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_RemoveSignalMutableState_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.RemoveSignalMutableState(ctx, args.RemoveRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_RemoveSignalMutableState_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

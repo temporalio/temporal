@@ -429,6 +429,135 @@ workerPump:
 	}
 }
 
+func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask() {
+	domainID := uuid.New()
+	runID := uuid.New()
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("signal-transfer-test"),
+		RunId:      common.StringPtr(runID)}
+	taskList := "signal-transfer-queue"
+	identity := "signal-execution-test"
+	targetDomain := uuid.New()
+	targetWorkflowID := "target-workflow_id"
+	targetRunID := uuid.New()
+	signalRequestID := uuid.New()
+	signalName := "testSignalName"
+	input := []byte("test input")
+	control := []byte(uuid.New())
+	wtimeout := int32(20)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", wtimeout, 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info)
+	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
+	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, int64(2), *startedEvent.EventId, nil, identity)
+	initiatedEvent := addRequestSignalInitiatedEvent(builder, *completeDecisionEvent.EventId, signalRequestID,
+		targetDomain, targetWorkflowID, targetRunID, signalName, input, control)
+
+	transferTasks := []persistence.Task{&persistence.SignalExecutionTask{
+		TaskID:           s.GetNextSequenceNumber(),
+		TargetDomainID:   targetDomain,
+		TargetWorkflowID: targetWorkflowID,
+		TargetRunID:      targetRunID,
+		InitiatedID:      initiatedEvent.GetEventId(),
+	}}
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionForSignal(updatedInfo, int64(3), transferTasks,
+		builder.updateSignalInfos)
+	s.Nil(err1, "No error expected.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
+			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
+				if task.ScheduleID == firstEventID+1 {
+					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
+				}
+			} else if task.TaskType == persistence.TransferTaskTypeSignalExecution {
+				s.logger.Infof("TransferTaskTypeSignalExecution. TargetDomain: %v, TargetWorkflowID: %v, TargetRunID: %v",
+					task.TargetDomainID, task.TargetWorkflowID, task.TargetRunID)
+				s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.Anything).Return(nil).Once()
+				s.mockHistoryClient.On("RemoveSignalMutableState", mock.Anything, mock.Anything).Return(nil).Once()
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+}
+
+func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask_Failed() {
+	domainID := uuid.New()
+	runID := uuid.New()
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("signal-transfer-test"),
+		RunId:      common.StringPtr(runID)}
+	taskList := "signal-transfer-queue"
+	identity := "signal-execution-test"
+	targetDomain := uuid.New()
+	targetWorkflowID := "target-workflow_id"
+	targetRunID := uuid.New()
+	signalRequestID := uuid.New()
+	signalName := "testSignalName"
+	input := []byte("test input")
+	control := []byte(uuid.New())
+	wtimeout := int32(20)
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", wtimeout, 10, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	info, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	builder.Load(info)
+	startedEvent := addDecisionTaskStartedEvent(builder, int64(2), taskList, identity)
+	completeDecisionEvent := addDecisionTaskCompletedEvent(builder, int64(2), *startedEvent.EventId, nil, identity)
+	initiatedEvent := addRequestSignalInitiatedEvent(builder, *completeDecisionEvent.EventId, signalRequestID,
+		targetDomain, targetWorkflowID, targetRunID, signalName, input, control)
+
+	transferTasks := []persistence.Task{&persistence.SignalExecutionTask{
+		TaskID:           s.GetNextSequenceNumber(),
+		TargetDomainID:   targetDomain,
+		TargetWorkflowID: targetWorkflowID,
+		TargetRunID:      targetRunID,
+		InitiatedID:      initiatedEvent.GetEventId(),
+	}}
+	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
+	err1 := s.UpdateWorkflowExecutionForSignal(updatedInfo, int64(3), transferTasks,
+		builder.updateSignalInfos)
+	s.Nil(err1, "No error expected.")
+
+	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
+	s.processor.processTransferTasks(tasksCh)
+workerPump:
+	for {
+		select {
+		case task := <-tasksCh:
+			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
+			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
+				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
+				if task.ScheduleID == firstEventID+1 {
+					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
+				}
+			} else if task.TaskType == persistence.TransferTaskTypeSignalExecution {
+				s.logger.Infof("TransferTaskTypeSignalExecution. TargetDomain: %v, TargetWorkflowID: %v, TargetRunID: %v",
+					task.TargetDomainID, task.TargetWorkflowID, task.TargetRunID)
+				s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.Anything).Return(&workflow.EntityNotExistsError{}).Once()
+			}
+			s.processor.processTransferTask(task)
+		default:
+			break workerPump
+		}
+	}
+}
+
 func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
 	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("complete-task-execution-deleted-test"),

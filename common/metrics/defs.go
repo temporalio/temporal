@@ -207,6 +207,8 @@ const (
 	HistoryClientRequestCancelWorkflowExecutionScope
 	// HistoryClientSignalWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientSignalWorkflowExecutionScope
+	// HistoryClientRemoveSignalMutableStateScope tracks RPC calls to history service
+	HistoryClientRemoveSignalMutableStateScope
 	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientTerminateWorkflowExecutionScope
 	// HistoryClientScheduleDecisionTaskScope tracks RPC calls to history service
@@ -317,6 +319,8 @@ const (
 	HistoryRecordActivityTaskStartedScope
 	// HistorySignalWorkflowExecutionScope tracks SignalWorkflowExecution API calls received by service
 	HistorySignalWorkflowExecutionScope
+	// HistoryRemoveSignalMutableStateScope tracks RemoveSignalMutableState API calls received by service
+	HistoryRemoveSignalMutableStateScope
 	// HistoryTerminateWorkflowExecutionScope tracks TerminateWorkflowExecution API calls received by service
 	HistoryTerminateWorkflowExecutionScope
 	// HistoryScheduleDecisionTaskScope tracks ScheduleDecisionTask API calls received by service
@@ -337,6 +341,8 @@ const (
 	TransferTaskCloseExecutionScope
 	// TransferTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
 	TransferTaskCancelExecutionScope
+	// TransferTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
+	TransferTaskSignalExecutionScope
 	// TransferTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
 	TransferTaskStartChildExecutionScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
@@ -434,6 +440,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRecordActivityTaskStartedScope:      {operation: "HistoryClientRecordActivityTaskStarted"},
 		HistoryClientRequestCancelWorkflowExecutionScope: {operation: "HistoryClientRequestCancelWorkflowExecution"},
 		HistoryClientSignalWorkflowExecutionScope:        {operation: "HistoryClientSignalWorkflowExecution"},
+		HistoryClientRemoveSignalMutableStateScope:       {operation: "HistoryClientRemoveSignalMutableStateScope"},
 		HistoryClientTerminateWorkflowExecutionScope:     {operation: "HistoryClientTerminateWorkflowExecution"},
 		HistoryClientScheduleDecisionTaskScope:           {operation: "HistoryClientScheduleDecisionTask"},
 		HistoryClientRecordChildExecutionCompletedScope:  {operation: "HistoryClientRecordChildExecutionCompleted"},
@@ -489,6 +496,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRecordDecisionTaskStartedScope:      {operation: "RecordDecisionTaskStarted"},
 		HistoryRecordActivityTaskStartedScope:      {operation: "RecordActivityTaskStarted"},
 		HistorySignalWorkflowExecutionScope:        {operation: "SignalWorkflowExecution"},
+		HistoryRemoveSignalMutableStateScope:       {operation: "RemoveSignalMutableState"},
 		HistoryTerminateWorkflowExecutionScope:     {operation: "TerminateWorkflowExecution"},
 		HistoryScheduleDecisionTaskScope:           {operation: "ScheduleDecisionTask"},
 		HistoryRecordChildExecutionCompletedScope:  {operation: "RecordChildExecutionCompleted"},
@@ -499,6 +507,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TransferTaskDecisionScope:                  {operation: "TransferTaskDecision"},
 		TransferTaskCloseExecutionScope:            {operation: "TransferTaskCloseExecution"},
 		TransferTaskCancelExecutionScope:           {operation: "TransferTaskCancelExecution"},
+		TransferTaskSignalExecutionScope:           {operation: "TransferTaskSignalExecution"},
 		TransferTaskStartChildExecutionScope:       {operation: "TransferTaskStartChildExecution"},
 		TimerQueueProcessorScope:                   {operation: "TimerQueueProcessor"},
 		TimerTaskActivityTimeoutScope:              {operation: "TimerTaskActivityTimeout"},
@@ -567,6 +576,7 @@ const (
 	DecisionTypeCancelExternalWorkflowCounter
 	DecisionTypeChildWorkflowCounter
 	DecisionTypeContinueAsNewCounter
+	DecisionTypeSignalExternalWorkflowCounter
 	MultipleCompletionDecisionsCounter
 	FailedDecisionsCounter
 	StaleMutableStateCounter

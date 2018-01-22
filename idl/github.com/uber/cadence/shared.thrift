@@ -97,6 +97,7 @@ enum DecisionType {
   RecordMarker,
   ContinueAsNewWorkflowExecution,
   StartChildWorkflowExecution,
+  SignalExternalWorkflowExecution,
 }
 
 enum EventType {
@@ -138,6 +139,9 @@ enum EventType {
   ChildWorkflowExecutionCanceled,
   ChildWorkflowExecutionTimedOut,
   ChildWorkflowExecutionTerminated,
+  SignalExternalWorkflowExecutionInitiated,
+  SignalExternalWorkflowExecutionFailed,
+  ExternalWorkflowExecutionSignaled,
 }
 
 enum DecisionTaskFailedCause {
@@ -154,10 +158,15 @@ enum DecisionTaskFailedCause {
   BAD_CONTINUE_AS_NEW_ATTRIBUTES,
   START_TIMER_DUPLICATE_ID,
   RESET_STICKY_TASKLIST,
-  WORKFLOW_WORKER_UNHANDLED_FAILURE
+  WORKFLOW_WORKER_UNHANDLED_FAILURE,
+  BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
+  UNKNOWN_EXTERNAL_WORKFLOW_EXECUTION,
+}
+
+enum SignalExternalWorkflowExecutionFailedCause {
   UNKNOWN_EXTERNAL_WORKFLOW_EXECUTION,
 }
 
@@ -283,6 +292,14 @@ struct RequestCancelExternalWorkflowExecutionDecisionAttributes {
   40: optional binary control
 }
 
+struct SignalExternalWorkflowExecutionDecisionAttributes {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+  30: optional string signalName
+  40: optional binary input
+  50: optional binary control
+}
+
 struct RecordMarkerDecisionAttributes {
   10: optional string markerName
   20: optional binary details
@@ -322,6 +339,7 @@ struct Decision {
   80:  optional RecordMarkerDecisionAttributes recordMarkerDecisionAttributes
   90:  optional ContinueAsNewWorkflowExecutionDecisionAttributes continueAsNewWorkflowExecutionDecisionAttributes
   100: optional StartChildWorkflowExecutionDecisionAttributes startChildWorkflowExecutionDecisionAttributes
+  110: optional SignalExternalWorkflowExecutionDecisionAttributes signalExternalWorkflowExecutionDecisionAttributes
 }
 
 struct WorkflowExecutionStartedEventAttributes {
@@ -528,6 +546,31 @@ struct ExternalWorkflowExecutionCancelRequestedEventAttributes {
   30: optional WorkflowExecution workflowExecution
 }
 
+struct SignalExternalWorkflowExecutionInitiatedEventAttributes {
+  10: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  20: optional string domain
+  30: optional WorkflowExecution workflowExecution
+  40: optional string signalName
+  50: optional binary input
+  60: optional binary control
+}
+
+struct SignalExternalWorkflowExecutionFailedEventAttributes {
+  10: optional SignalExternalWorkflowExecutionFailedCause cause
+  20: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  30: optional string domain
+  40: optional WorkflowExecution workflowExecution
+  50: optional i64 (js.type = "Long") initiatedEventId
+  60: optional binary control
+}
+
+struct ExternalWorkflowExecutionSignaledEventAttributes {
+  10: optional i64 (js.type = "Long") initiatedEventId
+  20: optional string domain
+  30: optional WorkflowExecution workflowExecution
+  40: optional binary control
+}
+
 struct StartChildWorkflowExecutionInitiatedEventAttributes {
   10:  optional string domain
   20:  optional string workflowId
@@ -646,6 +689,9 @@ struct HistoryEvent {
   390: optional ChildWorkflowExecutionCanceledEventAttributes childWorkflowExecutionCanceledEventAttributes
   400: optional ChildWorkflowExecutionTimedOutEventAttributes childWorkflowExecutionTimedOutEventAttributes
   410: optional ChildWorkflowExecutionTerminatedEventAttributes childWorkflowExecutionTerminatedEventAttributes
+  420: optional SignalExternalWorkflowExecutionInitiatedEventAttributes signalExternalWorkflowExecutionInitiatedEventAttributes
+  430: optional SignalExternalWorkflowExecutionFailedEventAttributes signalExternalWorkflowExecutionFailedEventAttributes
+  440: optional ExternalWorkflowExecutionSignaledEventAttributes externalWorkflowExecutionSignaledEventAttributes
 }
 
 struct History {
@@ -874,6 +920,8 @@ struct SignalWorkflowExecutionRequest {
   30: optional string signalName
   40: optional binary input
   50: optional string identity
+  60: optional string requestId
+  70: optional binary control
 }
 
 struct TerminateWorkflowExecutionRequest {

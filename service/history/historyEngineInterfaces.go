@@ -63,6 +63,7 @@ type (
 		RecordActivityTaskHeartbeat(request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
 		RequestCancelWorkflowExecution(request *h.RequestCancelWorkflowExecutionRequest) error
 		SignalWorkflowExecution(request *h.SignalWorkflowExecutionRequest) error
+		RemoveSignalMutableState(request *h.RemoveSignalMutableStateRequest) error
 		TerminateWorkflowExecution(request *h.TerminateWorkflowExecutionRequest) error
 		ScheduleDecisionTask(request *h.ScheduleDecisionTaskRequest) error
 		RecordChildExecutionCompleted(request *h.RecordChildExecutionCompletedRequest) error

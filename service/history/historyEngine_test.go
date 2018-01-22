@@ -1020,6 +1020,177 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
+func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSuccess() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+		SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+			Domain: common.StringPtr(domainID),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: we.WorkflowId,
+				RunId:      we.RunId,
+			},
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte("test input"),
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	domainInfo := &persistence.DomainInfo{
+		ID:   domainID,
+		Name: domainID,
+	}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Config: &persistence.DomainConfig{Retention: 1},
+			Info:   domainInfo,
+		}, nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: executionContext,
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err, s.printHistory(msBuilder))
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(executionContext, executionBuilder.executionInfo.ExecutionContext)
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("invalid run id"),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+		SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+			Domain: common.StringPtr(domainID),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: we.WorkflowId,
+				RunId:      we.RunId,
+			},
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte("test input"),
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Twice()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: executionContext,
+			Identity:         &identity,
+		},
+	})
+
+	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
+}
+
+func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFailed_UnKnownDomain() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	executionContext := []byte("context")
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+		SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+			Domain: common.StringPtr(domainID),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: we.WorkflowId,
+				RunId:      we.RunId,
+			},
+			SignalName: common.StringPtr("signal"),
+			Input:      []byte("test input"),
+		},
+	}}
+
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		nil, errors.New("get foreign domain error")).Once()
+
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: executionContext,
+			Identity:         &identity,
+		},
+	})
+
+	s.EqualError(err, "InternalServiceError{Message: Unable to signal workflow across domain: domainId.}")
+}
+
 func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 	domainID := "domainId"
 	invalidToken, _ := json.Marshal("bad token")
@@ -2904,6 +3075,173 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
+func (s *engineSuite) TestSignalWorkflowExecution() {
+	signalRequest := &history.SignalWorkflowExecutionRequest{}
+	err := s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	signalRequest = &history.SignalWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalRequest: &workflow.SignalWorkflowExecutionRequest{
+			Domain:            common.StringPtr(domainID),
+			WorkflowExecution: &we,
+			Identity:          common.StringPtr(identity),
+			SignalName:        common.StringPtr(signalName),
+			Input:             input,
+		},
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.Nil(err)
+}
+
+// Test signal decision by adding request ID
+func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
+	signalRequest := &history.SignalWorkflowExecutionRequest{}
+	err := s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId2"),
+		RunId:      common.StringPtr("rId2"),
+	}
+	identity := "testIdentity2"
+	signalName := "my signal name 2"
+	input := []byte("test input 2")
+	requestID := uuid.New()
+	signalRequest = &history.SignalWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalRequest: &workflow.SignalWorkflowExecutionRequest{
+			Domain:            common.StringPtr(domainID),
+			WorkflowExecution: &we,
+			Identity:          common.StringPtr(identity),
+			SignalName:        common.StringPtr(signalName),
+			Input:             input,
+			RequestId:         common.StringPtr(requestID),
+		},
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	// assume duplicate request id
+	ms.SignalRequestedIDs = make(map[string]struct{})
+	ms.SignalRequestedIDs[requestID] = struct{}{}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.Nil(err)
+}
+
+func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
+	signalRequest := &history.SignalWorkflowExecutionRequest{}
+	err := s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	we := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	signalRequest = &history.SignalWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalRequest: &workflow.SignalWorkflowExecutionRequest{
+			Domain:            common.StringPtr(domainID),
+			WorkflowExecution: we,
+			Identity:          common.StringPtr(identity),
+			SignalName:        common.StringPtr(signalName),
+			Input:             input,
+		},
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+	err = s.mockHistoryEngine.SignalWorkflowExecution(signalRequest)
+	s.EqualError(err, "EntityNotExistsError{Message: Workflow execution already completed.}")
+}
+
+func (s *engineSuite) TestRemoveSignalMutableState() {
+	removeRequest := &history.RemoveSignalMutableStateRequest{}
+	err := s.mockHistoryEngine.RemoveSignalMutableState(removeRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domain := "domainID"
+	requestID := uuid.New()
+	removeRequest = &history.RemoveSignalMutableStateRequest{
+		DomainUUID: common.StringPtr(domain),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr("wId"),
+			RunId:      common.StringPtr("rId"),
+		},
+		RequestId: common.StringPtr(requestID),
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	err = s.mockHistoryEngine.RemoveSignalMutableState(removeRequest)
+	s.Nil(err)
+}
+
+func (s *engineSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
+	var attributes *workflow.SignalExternalWorkflowExecutionDecisionAttributes
+	err := validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.EqualError(err, "BadRequestError{Message: SignalExternalWorkflowExecutionDecisionAttributes is not set on decision.}")
+
+	attributes = &workflow.SignalExternalWorkflowExecutionDecisionAttributes{}
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.EqualError(err, "BadRequestError{Message: Execution is nil on decision.}")
+
+	attributes.Execution = &workflow.WorkflowExecution{}
+	attributes.Execution.WorkflowId = common.StringPtr("workflow-id")
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.EqualError(err, "BadRequestError{Message: SignalName is not set on decision.}")
+
+	attributes.Execution.RunId = common.StringPtr("run-id")
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.EqualError(err, "BadRequestError{Message: Invalid RunId set on decision.}")
+	attributes.Execution.RunId = common.StringPtr(uuid.New())
+
+	attributes.SignalName = common.StringPtr("my signal name")
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.EqualError(err, "BadRequestError{Message: Input is not set on decision.}")
+
+	attributes.Input = []byte("test input")
+	err = validateSignalExternalWorkflowExecutionAttributes(attributes)
+	s.Nil(err)
+}
+
 func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
 	context, release, err := s.mockHistoryEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
@@ -3070,6 +3408,23 @@ func addRequestCancelInitiatedEvent(builder *mutableStateBuilder, decisionComple
 	return event
 }
 
+func addRequestSignalInitiatedEvent(builder *mutableStateBuilder, decisionCompletedEventID int64,
+	signalRequestID, domain, workflowID, runID, signalName string, input, control []byte) *workflow.HistoryEvent {
+	event := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
+		&workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+			Domain: common.StringPtr(domain),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			SignalName: common.StringPtr(signalName),
+			Input:      input,
+			Control:    control,
+		})
+
+	return event
+}
+
 func addStartChildWorkflowExecutionInitiatedEvent(builder *mutableStateBuilder, decisionCompletedID int64,
 	createRequestID, domain, workflowID, workflowType, tasklist string, input []byte,
 	executionStartToCloseTimeout, taskStartToCloseTimeout int32) (*workflow.HistoryEvent,
@@ -3107,6 +3462,7 @@ func createMutableState(builder *mutableStateBuilder) *persistence.WorkflowMutab
 	for id, info := range builder.pendingTimerInfoIDs {
 		timerInfos[id] = copyTimerInfo(info)
 	}
+	signalInfos := make(map[int64]*persistence.SignalInfo)
 	builder.FlushBufferedEvents()
 	var bufferedEvents []*persistence.SerializedHistoryEventBatch
 	if len(builder.bufferedEvents) > 0 {
@@ -3121,6 +3477,7 @@ func createMutableState(builder *mutableStateBuilder) *persistence.WorkflowMutab
 		ActivitInfos:   activityInfos,
 		TimerInfos:     timerInfos,
 		BufferedEvents: bufferedEvents,
+		SignalInfos:    signalInfos,
 	}
 }
 

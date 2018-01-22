@@ -72,6 +72,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*history.RecordDecisionTaskStartedResponse, error)
 
+	RemoveSignalMutableState(
+		ctx context.Context,
+		RemoveRequest *history.RemoveSignalMutableStateRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RequestCancelWorkflowExecution(
 		ctx context.Context,
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
@@ -292,6 +298,29 @@ func (c client) RecordDecisionTaskStarted(
 	}
 
 	success, err = history.HistoryService_RecordDecisionTaskStarted_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) RemoveSignalMutableState(
+	ctx context.Context,
+	_RemoveRequest *history.RemoveSignalMutableStateRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_RemoveSignalMutableState_Helper.Args(_RemoveRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_RemoveSignalMutableState_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_RemoveSignalMutableState_Helper.UnwrapResponse(&result)
 	return
 }
 

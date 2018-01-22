@@ -1424,6 +1424,150 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.IsType(&workflow.EntityNotExistsError{}, err)
 }
 
+func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
+	id := "interation-signal-workflow-test"
+	wt := "interation-signal-workflow-test-type"
+	tl := "interation-signal-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	workflowComplete := false
+	activityScheduled := false
+	activityData := int32(1)
+	var signalEvent *workflow.HistoryEvent
+	numOfSignaledEvent := 0
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !activityScheduled {
+			activityScheduled = true
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(1))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		} else if previousStartedEventID > 0 {
+			numOfSignaledEvent = 0
+			for _, event := range history.Events[previousStartedEventID:] {
+				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
+					signalEvent = event
+					numOfSignaledEvent++
+				}
+			}
+			return nil, []*workflow.Decision{}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	// activity handler
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Make first decision to schedule activity
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// Send first signal
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	requestID := uuid.New()
+	signalReqest := &workflow.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(*we.RunId),
+		},
+		SignalName: common.StringPtr(signalName),
+		Input:      signalInput,
+		Identity:   common.StringPtr(identity),
+		RequestId:  common.StringPtr(requestID),
+	}
+	err = s.engine.SignalWorkflowExecution(createContext(), signalReqest)
+	s.Nil(err)
+
+	// Process signal in decider
+	_, err = poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+	s.True(signalEvent != nil)
+	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
+	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
+	s.Equal(identity, *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
+	s.Equal(1, numOfSignaledEvent)
+
+	// Send another signal with same request id
+	err = s.engine.SignalWorkflowExecution(createContext(), signalReqest)
+	s.Nil(err)
+
+	// Process signal in decider
+	_, err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+	s.True(signalEvent != nil)
+	s.Equal(0, numOfSignaledEvent)
+}
+
 func (s *integrationSuite) TestBufferedEvents() {
 	id := "interation-buffered-events-test"
 	wt := "interation-buffered-events-test-type"
@@ -2351,7 +2495,6 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
-	workflowComplete := false
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -2376,7 +2519,6 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 			}}, nil
 		}
 
-		workflowComplete = true
 		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelWorkflowExecution),
 			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
@@ -2554,7 +2696,6 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		suite:           s,
 	}
 
-	foreginWorkflowComplete := false
 	foreignActivityCount := int32(1)
 	foreignActivityCounter := int32(0)
 	foreignDtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -2579,7 +2720,6 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 			}}, nil
 		}
 
-		foreginWorkflowComplete = true
 		return []byte(strconv.Itoa(int(foreignActivityCounter))), []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelWorkflowExecution),
 			CancelWorkflowExecutionDecisionAttributes: &workflow.CancelWorkflowExecutionDecisionAttributes{
@@ -2634,7 +2774,7 @@ CheckHistoryLoopForCancelSent:
 
 		lastEvent := history.Events[len(history.Events)-2]
 		if *lastEvent.EventType != workflow.EventTypeExternalWorkflowExecutionCancelRequested {
-			s.logger.Info("Cancellaton still not sent.")
+			s.logger.Info("Cancellation still not sent.")
 			time.Sleep(100 * time.Millisecond)
 			continue CheckHistoryLoopForCancelSent
 		}
@@ -2777,7 +2917,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		suite:           s,
 	}
 
-	// Start both current and foreign workflows to make some progress.
+	// Start workflows to make some progress.
 	_, err := poller.pollAndProcessDecisionTask(false, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
@@ -3967,10 +4107,8 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		}}, nil
 	}
 
-	// activity handler
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-
 		return []byte("Activity Result."), false, nil
 	}
 
@@ -4027,6 +4165,568 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
+}
+
+func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
+	id := "integration-signal-external-workflow-test"
+	wt := "integration-signal-external-workflow-test-type"
+	tl := "integration-signal-external-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	foreignRequest := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.foreignDomainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+			SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+				Domain: common.StringPtr(s.foreignDomainName),
+				Execution: &workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(id),
+					RunId:      common.StringPtr(we2.GetRunId()),
+				},
+				SignalName: common.StringPtr(signalName),
+				Input:      signalInput,
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	workflowComplete := false
+	foreignActivityCount := int32(1)
+	foreignActivityCounter := int32(0)
+	var signalEvent *workflow.HistoryEvent
+	foreignDtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if foreignActivityCounter < foreignActivityCount {
+			foreignActivityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
+
+			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(foreignActivityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		} else if previousStartedEventID > 0 {
+			for _, event := range history.Events[previousStartedEventID:] {
+				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
+					signalEvent = event
+					return nil, []*workflow.Decision{}, nil
+				}
+			}
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	foreignPoller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.foreignDomainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: foreignDtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Start both current and foreign workflows to make some progress.
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = foreignPoller.pollAndProcessActivityTask(false)
+	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	s.Nil(err)
+
+	// Signal the foreign workflow with this decision request.
+	_, err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// in source workflow
+	signalSent := false
+	intiatedEventID := 10
+CheckHistoryLoopForSignalSent:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.History
+		common.PrettyPrintHistory(history, s.logger)
+
+		signalRequestedEvent := history.Events[len(history.Events)-2]
+		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
+			s.logger.Info("Signal still not sent.")
+			time.Sleep(100 * time.Millisecond)
+			continue CheckHistoryLoopForSignalSent
+		}
+
+		ewfeAttributes := signalRequestedEvent.ExternalWorkflowExecutionSignaledEventAttributes
+		s.Equal(int64(intiatedEventID), ewfeAttributes.GetInitiatedEventId())
+		s.Equal(id, ewfeAttributes.WorkflowExecution.GetWorkflowId())
+		s.Equal(we2.RunId, ewfeAttributes.WorkflowExecution.RunId)
+
+		signalSent = true
+		break
+	}
+
+	s.True(signalSent)
+
+	// process signal in decider for foreign workflow
+	_, err = foreignPoller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+	s.True(signalEvent != nil)
+	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
+	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
+	s.Equal("history-service", *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
+}
+
+func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
+	id := "integration-signal-external-workflow-test"
+	wt := "integration-signal-external-workflow-test-type"
+	tl := "integration-signal-external-workflow-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	foreignRequest := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.foreignDomainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+			SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+				Domain: common.StringPtr(s.foreignDomainName),
+				Execution: &workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(id),
+					// No RunID in decision
+				},
+				SignalName: common.StringPtr(signalName),
+				Input:      signalInput,
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	workflowComplete := false
+	foreignActivityCount := int32(1)
+	foreignActivityCounter := int32(0)
+	var signalEvent *workflow.HistoryEvent
+	foreignDtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if foreignActivityCounter < foreignActivityCount {
+			foreignActivityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, foreignActivityCounter))
+
+			return []byte(strconv.Itoa(int(foreignActivityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(foreignActivityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		} else if previousStartedEventID > 0 {
+			for _, event := range history.Events[previousStartedEventID:] {
+				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
+					signalEvent = event
+					return nil, []*workflow.Decision{}, nil
+				}
+			}
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	foreignPoller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.foreignDomainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: foreignDtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Start both current and foreign workflows to make some progress.
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = foreignPoller.pollAndProcessActivityTask(false)
+	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	s.Nil(err)
+
+	// Signal the foreign workflow with this decision request.
+	_, err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// in source workflow
+	signalSent := false
+	intiatedEventID := 10
+CheckHistoryLoopForSignalSent:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.History
+		common.PrettyPrintHistory(history, s.logger)
+
+		signalRequestedEvent := history.Events[len(history.Events)-2]
+		if *signalRequestedEvent.EventType != workflow.EventTypeExternalWorkflowExecutionSignaled {
+			s.logger.Info("Signal still not sent.")
+			time.Sleep(100 * time.Millisecond)
+			continue CheckHistoryLoopForSignalSent
+		}
+
+		ewfeAttributes := signalRequestedEvent.ExternalWorkflowExecutionSignaledEventAttributes
+		s.Equal(int64(intiatedEventID), ewfeAttributes.GetInitiatedEventId())
+		s.Equal(id, ewfeAttributes.WorkflowExecution.GetWorkflowId())
+		s.Equal("", ewfeAttributes.WorkflowExecution.GetRunId())
+
+		signalSent = true
+		break
+	}
+
+	s.True(signalSent)
+
+	// process signal in decider for foreign workflow
+	_, err = foreignPoller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+	s.True(signalEvent != nil)
+	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
+	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
+	s.Equal("history-service", *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
+}
+
+func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
+	id := "integration-signal-unknown-workflow-decision-test"
+	wt := "integration-signal-unknown-workflow-decision-test-type"
+	tl := "integration-signal-unknown-workflow-decision-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
+			SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
+				Domain: common.StringPtr(s.foreignDomainName),
+				Execution: &workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr("workflow_not_exist"),
+					RunId:      common.StringPtr(we.GetRunId()),
+				},
+				SignalName: common.StringPtr(signalName),
+				Input:      signalInput,
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: atHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Start workflows to make some progress.
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// Signal the foreign workflow with this decision request.
+	_, err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	signalSentFailed := false
+	intiatedEventID := 10
+CheckHistoryLoopForCancelSent:
+	for i := 1; i < 10; i++ {
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain: common.StringPtr(s.domainName),
+			Execution: &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(*we.RunId),
+			},
+		})
+		s.Nil(err)
+		history := historyResponse.History
+		common.PrettyPrintHistory(history, s.logger)
+
+		signalFailedEvent := history.Events[len(history.Events)-2]
+		if *signalFailedEvent.EventType != workflow.EventTypeSignalExternalWorkflowExecutionFailed {
+			s.logger.Info("Cancellaton not cancelled yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue CheckHistoryLoopForCancelSent
+		}
+
+		signalExternalWorkflowExecutionFailedEventAttributes := signalFailedEvent.SignalExternalWorkflowExecutionFailedEventAttributes
+		s.Equal(int64(intiatedEventID), *signalExternalWorkflowExecutionFailedEventAttributes.InitiatedEventId)
+		s.Equal("workflow_not_exist", *signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.WorkflowId)
+		s.Equal(we.RunId, signalExternalWorkflowExecutionFailedEventAttributes.WorkflowExecution.RunId)
+
+		signalSentFailed = true
+		break
+	}
+
+	s.True(signalSentFailed)
 }
 
 func (s *integrationSuite) setupShards() {

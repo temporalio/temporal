@@ -89,6 +89,8 @@ const (
 	TagValueActionRequestCancelWorkflow           = "add-request-cancel-workflow-event"
 	TagValueActionWorkflowCancelRequested         = "add-workflow-execution-cancel-requested-event"
 	TagValueActionWorkflowCancelFailed            = "add-workflow-execution-cancel-failed-event"
+	TagValueActionWorkflowSignalRequested         = "add-workflow-execution-signal-requested-event"
+	TagValueActionWorkflowSignalFailed            = "add-workflow-execution-signal-failed-event"
 	TagValueActionUnknownEvent                    = "add-unknown-event"
 
 	// TagStoreOperation values

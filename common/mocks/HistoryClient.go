@@ -230,6 +230,20 @@ func (_m *HistoryClient) SignalWorkflowExecution(ctx context.Context, signalRequ
 	return r0
 }
 
+// RemoveSignalMutableState provides a mock function with given fields: ctx, removeRequest
+func (_m *HistoryClient) RemoveSignalMutableState(ctx context.Context, removeRequest *history.RemoveSignalMutableStateRequest, opts ...yarpc.CallOption) error {
+	ret := _m.Called(ctx, removeRequest)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *history.RemoveSignalMutableStateRequest) error); ok {
+		r0 = rf(ctx, removeRequest)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // StartWorkflowExecution provides a mock function with given fields: ctx, startRequest
 func (_m *HistoryClient) StartWorkflowExecution(ctx context.Context, startRequest *history.StartWorkflowExecutionRequest, opts ...yarpc.CallOption) (*shared.StartWorkflowExecutionResponse, error) {
 	ret := _m.Called(ctx, startRequest)
