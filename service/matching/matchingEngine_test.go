@@ -491,7 +491,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dPtr := _defaultTaskDispatchRPS
 	mgr := newTaskListManagerWithRateLimiter(
 		s.matchingEngine, tlID, s.matchingEngine.config,
-		newRateLimiter(&dPtr, dispatchTTL),
+		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID
@@ -648,7 +648,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dPtr := _defaultTaskDispatchRPS
 	mgr := newTaskListManagerWithRateLimiter(
 		s.matchingEngine, tlID, s.matchingEngine.config,
-		newRateLimiter(&dPtr, dispatchTTL),
+		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
 	s.taskManager.getTaskListManager(tlID).rangeID = initialRangeID

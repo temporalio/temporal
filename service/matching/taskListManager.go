@@ -74,16 +74,19 @@ type rateLimiter struct {
 	ttl      time.Duration
 }
 
-func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration) rateLimiter {
+func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration, minBurst int) rateLimiter {
 	rl := rateLimiter{
 		maxDispatchPerSecond: maxDispatchPerSecond,
 		ttl:                  ttl,
 		ttlTimer:             time.NewTimer(ttl),
 	}
 	// Note: Potentially expose burst config in future
-	limiter := rate.NewLimiter(
-		rate.Limit(*maxDispatchPerSecond), int(*maxDispatchPerSecond),
-	)
+	// Set burst to be a minimum of 5 when maxDispatch is set to low numbers
+	burst := int(*maxDispatchPerSecond)
+	if burst <= minBurst {
+		burst = minBurst
+	}
+	limiter := rate.NewLimiter(rate.Limit(*maxDispatchPerSecond), burst)
 	rl.globalLimiter.Store(limiter)
 	return rl
 }
@@ -130,7 +133,7 @@ func newTaskListManager(
 	e *matchingEngineImpl, taskList *taskListID, config *Config,
 ) taskListManager {
 	dPtr := _defaultTaskDispatchRPS
-	rl := newRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL)
+	rl := newRateLimiter(&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize)
 	return newTaskListManagerWithRateLimiter(e, taskList, config, rl)
 }
 
@@ -626,7 +629,10 @@ deliverBufferTasksLoop:
 				c.logger.Info("Tasklist manager context is cancelled, shutting down")
 				break deliverBufferTasksLoop
 			}
-			c.logger.Warnf("Unable to send tasks for poll, rate limit failed: %s", err.Error())
+			c.logger.Debugf(
+				"Unable to send tasks for poll, rate limit failed, domain: %s, tasklist: %s, error: %s",
+				c.taskListID.domainID, c.taskListID.String(), err.Error(),
+			)
 			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.BufferThrottleCounter)
 			continue
 		}

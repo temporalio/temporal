@@ -35,9 +35,10 @@ type Config struct {
 	LongPollExpirationInterval time.Duration
 
 	// taskListManager configuration
-	RangeSize         int64
-	GetTasksBatchSize int
-	UpdateAckInterval time.Duration
+	RangeSize                  int64
+	GetTasksBatchSize          int
+	UpdateAckInterval          time.Duration
+	MinTaskThrottlingBurstSize int
 
 	// taskWriter configuration
 	OutstandingTaskAppendsThreshold int
@@ -54,6 +55,7 @@ func NewConfig() *Config {
 		UpdateAckInterval:               10 * time.Second,
 		OutstandingTaskAppendsThreshold: 250,
 		MaxTaskBatchSize:                100,
+		MinTaskThrottlingBurstSize:      5,
 	}
 }
 

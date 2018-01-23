@@ -23,6 +23,10 @@ package matching
 import (
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/time/rate"
 
 	"github.com/uber/cadence/common/mocks"
 
@@ -30,6 +34,8 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/persistence"
 )
+
+const _minBurst = 5
 
 func TestDeliverBufferTasks(t *testing.T) {
 	tests := []func(tlm *taskListManagerImpl){
@@ -49,6 +55,13 @@ func TestDeliverBufferTasks(t *testing.T) {
 		// deliverBufferTasksForPoll should stop after invokation of the test function
 		wg.Wait()
 	}
+}
+
+func TestNewRateLimiter(t *testing.T) {
+	maxDispatch := float64(0.01)
+	rl := newRateLimiter(&maxDispatch, time.Second, _minBurst)
+	limiter := rl.globalLimiter.Load().(*rate.Limiter)
+	assert.Equal(t, _minBurst, limiter.Burst())
 }
 
 func createTestTaskListManager() *taskListManagerImpl {
