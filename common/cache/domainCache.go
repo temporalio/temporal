@@ -46,6 +46,7 @@ type (
 	DomainCache interface {
 		GetDomain(name string) (*persistence.DomainInfo, *persistence.DomainConfig, error)
 		GetDomainByID(id string) (*persistence.DomainInfo, *persistence.DomainConfig, error)
+		GetDomainID(name string) (string, error)
 	}
 
 	domainCache struct {
@@ -93,6 +94,15 @@ func (c *domainCache) GetDomain(name string) (*persistence.DomainInfo, *persiste
 // store and writes it to the cache with an expiry before returning back
 func (c *domainCache) GetDomainByID(id string) (*persistence.DomainInfo, *persistence.DomainConfig, error) {
 	return c.getDomain(id, id, "", c.cacheByID)
+}
+
+// GetDomainID retrieves domainID by using GetDomain
+func (c *domainCache) GetDomainID(name string) (string, error) {
+	info, _, err := c.GetDomain(name)
+	if err != nil {
+		return "", err
+	}
+	return info.ID, nil
 }
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata

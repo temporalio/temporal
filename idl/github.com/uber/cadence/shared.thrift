@@ -866,7 +866,7 @@ struct RespondActivityTaskCanceledRequest {
 }
 
 struct RespondActivityTaskCompletedByIDRequest {
-  10: optional string domainID
+  10: optional string domain
   20: optional string workflowID
   30: optional string runID
   40: optional string activityID
@@ -875,7 +875,7 @@ struct RespondActivityTaskCompletedByIDRequest {
 }
 
 struct RespondActivityTaskFailedByIDRequest {
-  10: optional string domainID
+  10: optional string domain
   20: optional string workflowID
   30: optional string runID
   40: optional string activityID
@@ -885,7 +885,7 @@ struct RespondActivityTaskFailedByIDRequest {
 }
 
 struct RespondActivityTaskCanceledByIDRequest {
-  10: optional string domainID
+  10: optional string domain
   20: optional string workflowID
   30: optional string runID
   40: optional string activityID
