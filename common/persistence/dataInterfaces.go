@@ -59,6 +59,12 @@ const (
 	TaskListTypeActivity
 )
 
+// Kinds of task lists
+const (
+	TaskListKindNormal = iota
+	TaskListKindSticky
+)
+
 // Transfer task types
 const (
 	TransferTaskTypeDecisionTask = iota
@@ -192,6 +198,7 @@ type (
 		TaskType int
 		RangeID  int64
 		AckLevel int64
+		Kind     int
 	}
 
 	// TaskInfo describes either activity or decision task
@@ -497,9 +504,10 @@ type (
 
 	// LeaseTaskListRequest is used to request lease of a task list
 	LeaseTaskListRequest struct {
-		DomainID string
-		TaskList string
-		TaskType int
+		DomainID     string
+		TaskList     string
+		TaskType     int
+		TaskListKind int
 	}
 
 	// LeaseTaskListResponse is response to LeaseTaskListRequest

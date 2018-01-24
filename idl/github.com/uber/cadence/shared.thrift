@@ -205,6 +205,11 @@ enum HistoryEventFilterType {
   CLOSE_EVENT,
 }
 
+enum TaskListKind {
+  NORMAL,
+  STICKY,
+}
+
 struct WorkflowType {
   10: optional string name
 }
@@ -215,6 +220,7 @@ struct ActivityType {
 
 struct TaskList {
   10: optional string name
+  20: optional TaskListKind kind
 }
 
 struct TaskListMetadata {

@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "0.4",
+  "MinCompatibleVersion": "0.4",
+  "Description": "add signal_decision to mutable state, add kind to taskList",
+  "SchemaUpdateCqlFiles": [
+    "add_signal_decision.cql",
+    "add_tasklist_kind.cql"
+  ]
+}

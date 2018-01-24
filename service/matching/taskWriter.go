@@ -164,6 +164,7 @@ writerLoop:
 					// might be out of sync. This is OK as caller can just retry.
 					RangeID:  rangeID,
 					AckLevel: w.tlMgr.getAckLevel(),
+					Kind:     w.tlMgr.getTaskListKind(),
 				}
 
 				w.tlMgr.persistenceLock.Lock()

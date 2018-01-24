@@ -141,6 +141,7 @@ CREATE TYPE task_list (
   name             text,
   type             int, -- enum TaskRowType {ActivityTask, DecisionTask}
   ack_level        bigint, -- task_id of the last acknowledged message
+  kind             int, -- enum TaskListKind {Normal, Sticky}
 );
 
 CREATE TYPE domain (

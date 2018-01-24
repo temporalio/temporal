@@ -32,6 +32,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -52,7 +54,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 			tlm.deliverBufferTasksForPoll()
 		}()
 		test(tlm)
-		// deliverBufferTasksForPoll should stop after invokation of the test function
+		// deliverBufferTasksForPoll should stop after invocation of the test function
 		wg.Wait()
 	}
 }
@@ -74,5 +76,6 @@ func createTestTaskListManager() *taskListManagerImpl {
 	tl := "tl"
 	dID := "domain"
 	tlID := &taskListID{domainID: dID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
-	return newTaskListManager(me, tlID, cfg).(*taskListManagerImpl)
+	tlKind := common.TaskListKindPtr(workflow.TaskListKindNormal)
+	return newTaskListManager(me, tlID, tlKind, cfg).(*taskListManagerImpl)
 }

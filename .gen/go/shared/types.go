@@ -22983,7 +22983,8 @@ func (v *StickyExecutionAttributes) GetScheduleToStartTimeoutSeconds() (o int32)
 }
 
 type TaskList struct {
-	Name *string `json:"name,omitempty"`
+	Name *string       `json:"name,omitempty"`
+	Kind *TaskListKind `json:"kind,omitempty"`
 }
 
 // ToWire translates a TaskList struct into a Thrift-level intermediate
@@ -23003,7 +23004,7 @@ type TaskList struct {
 //   }
 func (v *TaskList) ToWire() (wire.Value, error) {
 	var (
-		fields [1]wire.Field
+		fields [2]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -23017,8 +23018,22 @@ func (v *TaskList) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
+	if v.Kind != nil {
+		w, err = v.Kind.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _TaskListKind_Read(w wire.Value) (TaskListKind, error) {
+	var v TaskListKind
+	err := v.FromWire(w)
+	return v, err
 }
 
 // FromWire deserializes a TaskList struct from its Thrift-level
@@ -23053,6 +23068,16 @@ func (v *TaskList) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x TaskListKind
+				x, err = _TaskListKind_Read(field.Value)
+				v.Kind = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -23066,14 +23091,28 @@ func (v *TaskList) String() string {
 		return "<nil>"
 	}
 
-	var fields [1]string
+	var fields [2]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
 		i++
 	}
+	if v.Kind != nil {
+		fields[i] = fmt.Sprintf("Kind: %v", *(v.Kind))
+		i++
+	}
 
 	return fmt.Sprintf("TaskList{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _TaskListKind_EqualsPtr(lhs, rhs *TaskListKind) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this TaskList match the
@@ -23082,6 +23121,9 @@ func (v *TaskList) String() string {
 // This function performs a deep comparison.
 func (v *TaskList) Equals(rhs *TaskList) bool {
 	if !_String_EqualsPtr(v.Name, rhs.Name) {
+		return false
+	}
+	if !_TaskListKind_EqualsPtr(v.Kind, rhs.Kind) {
 		return false
 	}
 
@@ -23096,6 +23138,146 @@ func (v *TaskList) GetName() (o string) {
 	}
 
 	return
+}
+
+// GetKind returns the value of Kind if it is set or its
+// zero value if it is unset.
+func (v *TaskList) GetKind() (o TaskListKind) {
+	if v.Kind != nil {
+		return *v.Kind
+	}
+
+	return
+}
+
+type TaskListKind int32
+
+const (
+	TaskListKindNormal TaskListKind = 0
+	TaskListKindSticky TaskListKind = 1
+)
+
+// TaskListKind_Values returns all recognized values of TaskListKind.
+func TaskListKind_Values() []TaskListKind {
+	return []TaskListKind{
+		TaskListKindNormal,
+		TaskListKindSticky,
+	}
+}
+
+// UnmarshalText tries to decode TaskListKind from a byte slice
+// containing its name.
+//
+//   var v TaskListKind
+//   err := v.UnmarshalText([]byte("NORMAL"))
+func (v *TaskListKind) UnmarshalText(value []byte) error {
+	switch string(value) {
+	case "NORMAL":
+		*v = TaskListKindNormal
+		return nil
+	case "STICKY":
+		*v = TaskListKindSticky
+		return nil
+	default:
+		return fmt.Errorf("unknown enum value %q for %q", value, "TaskListKind")
+	}
+}
+
+// ToWire translates TaskListKind into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// Enums are represented as 32-bit integers over the wire.
+func (v TaskListKind) ToWire() (wire.Value, error) {
+	return wire.NewValueI32(int32(v)), nil
+}
+
+// FromWire deserializes TaskListKind from its Thrift-level
+// representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TI32)
+//   if err != nil {
+//     return TaskListKind(0), err
+//   }
+//
+//   var v TaskListKind
+//   if err := v.FromWire(x); err != nil {
+//     return TaskListKind(0), err
+//   }
+//   return v, nil
+func (v *TaskListKind) FromWire(w wire.Value) error {
+	*v = (TaskListKind)(w.GetI32())
+	return nil
+}
+
+// String returns a readable string representation of TaskListKind.
+func (v TaskListKind) String() string {
+	w := int32(v)
+	switch w {
+	case 0:
+		return "NORMAL"
+	case 1:
+		return "STICKY"
+	}
+	return fmt.Sprintf("TaskListKind(%d)", w)
+}
+
+// Equals returns true if this TaskListKind value matches the provided
+// value.
+func (v TaskListKind) Equals(rhs TaskListKind) bool {
+	return v == rhs
+}
+
+// MarshalJSON serializes TaskListKind into JSON.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements json.Marshaler.
+func (v TaskListKind) MarshalJSON() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return ([]byte)("\"NORMAL\""), nil
+	case 1:
+		return ([]byte)("\"STICKY\""), nil
+	}
+	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// UnmarshalJSON attempts to decode TaskListKind from its JSON
+// representation.
+//
+// This implementation supports both, numeric and string inputs. If a
+// string is provided, it must be a known enum name.
+//
+// This implements json.Unmarshaler.
+func (v *TaskListKind) UnmarshalJSON(text []byte) error {
+	d := json.NewDecoder(bytes.NewReader(text))
+	d.UseNumber()
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+
+	switch w := t.(type) {
+	case json.Number:
+		x, err := w.Int64()
+		if err != nil {
+			return err
+		}
+		if x > math.MaxInt32 {
+			return fmt.Errorf("enum overflow from JSON %q for %q", text, "TaskListKind")
+		}
+		if x < math.MinInt32 {
+			return fmt.Errorf("enum underflow from JSON %q for %q", text, "TaskListKind")
+		}
+		*v = (TaskListKind)(x)
+		return nil
+	case string:
+		return v.UnmarshalText([]byte(w))
+	default:
+		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "TaskListKind")
+	}
 }
 
 type TaskListMetadata struct {

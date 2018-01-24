@@ -94,6 +94,11 @@ func TimeoutTypePtr(t s.TimeoutType) *s.TimeoutType {
 	return &t
 }
 
+// TaskListKindPtr makes a copy and returns the pointer to a TaskListKind.
+func TaskListKindPtr(t s.TaskListKind) *s.TaskListKind {
+	return &t
+}
+
 // DecisionTaskFailedCausePtr makes a copy and returns the pointer to a DecisionTaskFailedCause.
 func DecisionTaskFailedCausePtr(t s.DecisionTaskFailedCause) *s.DecisionTaskFailedCause {
 	return &t

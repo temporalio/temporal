@@ -70,6 +70,8 @@ const (
 
 	// minimum current execution retention TTL when current execution is deleted, in seconds
 	minCurrentExecutionRetentionTTL = int32(24 * time.Hour / time.Second)
+
+	stickyTaskListTTL = int32(86400) // if sticky task_list stopped being updated, remove it in one day
 )
 
 const (
@@ -216,7 +218,8 @@ const (
 		`domain_id: ?, ` +
 		`name: ?, ` +
 		`type: ?, ` +
-		`ack_level: ? ` +
+		`ack_level: ?, ` +
+		`kind: ? ` +
 		`}`
 
 	templateTaskType = `{` +
@@ -579,6 +582,16 @@ const (
 		`and type = ? ` +
 		`and task_id = ? ` +
 		`IF range_id = ?`
+
+	templateUpdateTaskListQueryWithTTL = `INSERT INTO tasks (` +
+		`domain_id, ` +
+		`task_list_name, ` +
+		`task_list_type, ` +
+		`type, ` +
+		`task_id, ` +
+		`range_id, ` +
+		`task_list ` +
+		`) VALUES (?, ?, ?, ?, ?, ?, ` + templateTaskListType + `) USING TTL ?`
 )
 
 var (
@@ -1453,7 +1466,9 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 				request.DomainID,
 				request.TaskList,
 				request.TaskType,
-				0)
+				0,
+				request.TaskListKind,
+			)
 		} else if isThrottlingError(err) {
 			return nil, &workflow.ServiceBusyError{
 				Message: fmt.Sprintf("LeaseTaskList operation failed. TaskList: %v, TaskType: %v, Error: %v",
@@ -1467,12 +1482,14 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 		}
 	} else {
 		ackLevel = tlDB["ack_level"].(int64)
+		taskListKind := tlDB["kind"].(int)
 		query = d.session.Query(templateUpdateTaskListQuery,
 			rangeID+1,
 			request.DomainID,
 			&request.TaskList,
 			request.TaskType,
 			ackLevel,
+			taskListKind,
 			request.DomainID,
 			&request.TaskList,
 			request.TaskType,
@@ -1499,7 +1516,7 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 			Msg: fmt.Sprintf("LeaseTaskList failed to apply. db rangeID %v", previousRangeID),
 		}
 	}
-	tli := &TaskListInfo{DomainID: request.DomainID, Name: request.TaskList, TaskType: request.TaskType, RangeID: rangeID + 1, AckLevel: ackLevel}
+	tli := &TaskListInfo{DomainID: request.DomainID, Name: request.TaskList, TaskType: request.TaskType, RangeID: rangeID + 1, AckLevel: ackLevel, Kind: request.TaskListKind}
 	return &LeaseTaskListResponse{TaskListInfo: tli}, nil
 }
 
@@ -1507,12 +1524,42 @@ func (d *cassandraPersistence) LeaseTaskList(request *LeaseTaskListRequest) (*Le
 func (d *cassandraPersistence) UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error) {
 	tli := request.TaskListInfo
 
+	if tli.Kind == TaskListKindSticky { // if task_list is sticky, then update with TTL
+		query := d.session.Query(templateUpdateTaskListQueryWithTTL,
+			tli.DomainID,
+			&tli.Name,
+			tli.TaskType,
+			rowTypeTaskList,
+			taskListTaskID,
+			tli.RangeID,
+			tli.DomainID,
+			&tli.Name,
+			tli.TaskType,
+			tli.AckLevel,
+			tli.Kind,
+			stickyTaskListTTL,
+		)
+		err := query.Exec()
+		if err != nil {
+			if isThrottlingError(err) {
+				return nil, &workflow.ServiceBusyError{
+					Message: fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err),
+				}
+			}
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("UpdateTaskList operation failed. Error: %v", err),
+			}
+		}
+		return &UpdateTaskListResponse{}, nil
+	}
+
 	query := d.session.Query(templateUpdateTaskListQuery,
 		tli.RangeID,
 		tli.DomainID,
 		&tli.Name,
 		tli.TaskType,
 		tli.AckLevel,
+		tli.Kind,
 		tli.DomainID,
 		&tli.Name,
 		tli.TaskType,
@@ -1555,6 +1602,7 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 	domainID := request.TaskListInfo.DomainID
 	taskList := request.TaskListInfo.Name
 	taskListType := request.TaskListInfo.TaskType
+	taskListKind := request.TaskListInfo.Kind
 	ackLevel := request.TaskListInfo.AckLevel
 
 	for _, task := range request.Tasks {
@@ -1567,8 +1615,8 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 				rowTypeTask,
 				task.TaskID,
 				domainID,
-				*task.Execution.WorkflowId,
-				*task.Execution.RunId,
+				task.Execution.GetWorkflowId(),
+				task.Execution.GetRunId(),
 				scheduleID)
 		} else {
 			batch.Query(templateCreateTaskWithTTLQuery,
@@ -1578,8 +1626,8 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 				rowTypeTask,
 				task.TaskID,
 				domainID,
-				*task.Execution.WorkflowId,
-				*task.Execution.RunId,
+				task.Execution.GetWorkflowId(),
+				task.Execution.GetRunId(),
 				scheduleID,
 				task.Data.ScheduleToStartTimeout)
 		}
@@ -1592,6 +1640,7 @@ func (d *cassandraPersistence) CreateTasks(request *CreateTasksRequest) (*Create
 		taskList,
 		taskListType,
 		ackLevel,
+		taskListKind,
 		domainID,
 		taskList,
 		taskListType,
