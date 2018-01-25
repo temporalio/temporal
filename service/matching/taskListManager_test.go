@@ -37,7 +37,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const _minBurst = 5
+const _minBurst = 10000
 
 func TestDeliverBufferTasks(t *testing.T) {
 	tests := []func(tlm *taskListManagerImpl){

@@ -642,10 +642,6 @@ deliverBufferTasksLoop:
 				c.logger.Info("Tasklist manager context is cancelled, shutting down")
 				break deliverBufferTasksLoop
 			}
-			c.logger.Debugf(
-				"Unable to send tasks for poll, rate limit failed, domain: %s, tasklist: %s, error: %s",
-				c.taskListID.domainID, c.taskListID.String(), err.Error(),
-			)
 			c.metricsClient.IncCounter(metrics.MatchingTaskListMgrScope, metrics.BufferThrottleCounter)
 			continue
 		}
