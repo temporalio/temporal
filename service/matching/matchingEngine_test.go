@@ -627,9 +627,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	const taskCount = 100
 	s.matchingEngine.metricsClient = metrics.NewClient(tally.NewTestScope("test", nil), metrics.Matching)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
+	s.logger.Infof("Number of tasks throttled: %d", throttleCt)
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
 	// hard to predict exactly how many times, since the atomic.Value load might not have updated.
-	s.True(throttleCt >= 1 && throttleCt < int64(workerCount*int(taskCount)))
+	s.True(throttleCt >= 1)
 }
 
 func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
@@ -660,7 +661,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	taskList := &workflow.TaskList{}
 	taskList.Name = &tl
-
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
@@ -716,6 +716,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					Identity: &identity,
 				})}
 		}, nil)
+
 	for p := 0; p < workerCount; p++ {
 		go func(wNum int) {
 			defer wg.Done()

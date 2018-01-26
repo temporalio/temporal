@@ -57,7 +57,7 @@ func NewConfig() *Config {
 		IdleTasklistCheckInterval:       5 * time.Minute,
 		OutstandingTaskAppendsThreshold: 250,
 		MaxTaskBatchSize:                100,
-		MinTaskThrottlingBurstSize:      10000,
+		MinTaskThrottlingBurstSize:      1,
 	}
 }
 
