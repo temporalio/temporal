@@ -46,7 +46,7 @@ type (
 )
 
 type pollerHistory struct {
-	// // poller ID -> last access time
+	// poller ID -> last access time
 	// pollers map[pollerID]time.Time
 	history cache.Cache
 }

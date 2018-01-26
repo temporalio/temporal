@@ -663,6 +663,7 @@ func (c *taskListManagerImpl) getTasksPump() {
 
 	go c.deliverBufferTasksForPoll()
 	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval)
+	checkPollerTimer := time.NewTimer(c.config.IdleTasklistCheckInterval)
 getTasksPumpLoop:
 	for {
 		select {
@@ -716,10 +717,19 @@ getTasksPumpLoop:
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
 				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval)
 			}
+		case <-checkPollerTimer.C:
+			{
+				pollers := c.GetAllPollerInfo()
+				if len(pollers) == 0 {
+					c.Stop()
+				}
+				checkPollerTimer = time.NewTimer(c.config.IdleTasklistCheckInterval)
+			}
 		}
 	}
 
 	updateAckTimer.Stop()
+	checkPollerTimer.Stop()
 }
 
 // Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().
