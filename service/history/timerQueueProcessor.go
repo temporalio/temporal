@@ -608,8 +608,8 @@ Update_History_Loop:
 		}
 
 		var timerTasks []persistence.Task
-		scheduleNewDecision := false
 		updateHistory := false
+		createNewTimer := false
 
 	ExpireActivityTimers:
 		for _, td := range tBuilder.GetActivityTimers(msBuilder) {
@@ -650,7 +650,7 @@ Update_History_Loop:
 						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 						t.logger.Debugf("Activity Heartbeat expired: %+v", *ai)
 
-						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
+						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
 							return errFailedToAddTimeoutEvent
 						}
 						updateHistory = true
@@ -675,13 +675,14 @@ Update_History_Loop:
 				// if current one is HB task and we need to create next HB task for the same.
 				// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
 				// where we create next timer task based on that new updated timestamp.
-				if !td.TaskCreated || (isHeartBeatTask && td.ActivityID == scheduleID) {
+				if !td.TaskCreated || (isHeartBeatTask && td.EventID == scheduleID) {
 					nextTask := tBuilder.createNewTask(td)
 					timerTasks = []persistence.Task{nextTask}
 					at := nextTask.(*persistence.ActivityTimeoutTask)
 
-					ai.TimerTaskStatus = ai.TimerTaskStatus & getActivityTimerStatus(workflow.TimeoutType(at.TimeoutType))
+					ai.TimerTaskStatus = ai.TimerTaskStatus | getActivityTimerStatus(workflow.TimeoutType(at.TimeoutType))
 					msBuilder.UpdateActivity(ai)
+					createNewTimer = true
 
 					t.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
 						time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID)
@@ -692,10 +693,10 @@ Update_History_Loop:
 			}
 		}
 
-		if updateHistory {
+		if updateHistory || createNewTimer {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
-			scheduleNewDecision = !msBuilder.HasPendingDecisionTask()
+			scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecisionTask()
 			err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
 			if err != nil {
 				if err == ErrConflict {

@@ -152,11 +152,6 @@ func (tb *timerBuilder) AddScheduleToStartDecisionTimoutTask(scheduleID, schedul
 	return timeOutTask
 }
 
-func (tb *timerBuilder) AddScheduleToStartActivityTimeout(
-	ai *persistence.ActivityInfo) *persistence.ActivityTimeoutTask {
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeScheduleToStart, ai.ScheduleToStartTimeout, nil)
-}
-
 func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(
 	ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask, error) {
 	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeScheduleToClose, ai.ScheduleToCloseTimeout, nil), nil
@@ -165,17 +160,6 @@ func (tb *timerBuilder) AddScheduleToCloseActivityTimeout(
 func (tb *timerBuilder) AddStartToCloseActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
 	error) {
 	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeStartToClose, ai.StartToCloseTimeout, nil), nil
-}
-
-func (tb *timerBuilder) AddHeartBeatActivityTimeout(ai *persistence.ActivityInfo) (*persistence.ActivityTimeoutTask,
-	error) {
-	// We want to create the timer starting from the last heart beat time stamp but
-	// avoid creating timers before the current timer frame.
-	targetTime := common.AddSecondsToBaseTime(ai.LastHeartBeatUpdatedTime.UnixNano(), int64(ai.HeartbeatTimeout))
-	if targetTime > tb.timeSource.Now().UnixNano() {
-		return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeHeartbeat, ai.HeartbeatTimeout, &ai.LastHeartBeatUpdatedTime), nil
-	}
-	return tb.AddActivityTimeoutTask(ai.ScheduleID, w.TimeoutTypeHeartbeat, ai.HeartbeatTimeout, nil), nil
 }
 
 // AddActivityTimeoutTask - Adds an activity timeout task.
@@ -257,7 +241,7 @@ func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder *mutableStateBuil
 		td := tb.activityTimers[0]
 		ai := tb.pendingActivityTimers[td.ActivityID]
 		at := timerTask.(*persistence.ActivityTimeoutTask)
-		ai.TimerTaskStatus = ai.TimerTaskStatus & getActivityTimerStatus(w.TimeoutType(at.TimeoutType))
+		ai.TimerTaskStatus = ai.TimerTaskStatus | getActivityTimerStatus(w.TimeoutType(at.TimeoutType))
 		msBuilder.UpdateActivity(ai)
 
 		tb.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
@@ -287,6 +271,16 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 	tb.activityTimers = make(timers, 0, len(msBuilder.pendingActivityInfoIDs))
 	for _, v := range msBuilder.pendingActivityInfoIDs {
 		if v.ScheduleID != emptyEventID {
+			scheduleToCloseExpiry := v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
+			td := &timerDetails{
+				SequenceID:  SequenceID{VisibilityTimestamp: scheduleToCloseExpiry},
+				ActivityID:  v.ScheduleID,
+				EventID:     v.ScheduleID,
+				TimeoutSec:  v.ScheduleToCloseTimeout,
+				TimeoutType: w.TimeoutTypeScheduleToClose,
+				TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) != 0}
+			tb.activityTimers = append(tb.activityTimers, td)
+
 			if v.StartedID != emptyEventID {
 				startToCloseExpiry := v.StartedTime.Add(time.Duration(v.StartToCloseTimeout) * time.Second)
 				td := &timerDetails{
@@ -321,15 +315,6 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					TimeoutSec:  v.ScheduleToStartTimeout,
 					TimeoutType: w.TimeoutTypeScheduleToStart,
 					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToStart) != 0}
-				tb.activityTimers = append(tb.activityTimers, td)
-				scheduleToCloseExpiry := v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
-				td = &timerDetails{
-					SequenceID:  SequenceID{VisibilityTimestamp: scheduleToCloseExpiry},
-					ActivityID:  v.ScheduleID,
-					EventID:     v.ScheduleID,
-					TimeoutSec:  v.ScheduleToCloseTimeout,
-					TimeoutType: w.TimeoutTypeScheduleToClose,
-					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
 			}
 		}
