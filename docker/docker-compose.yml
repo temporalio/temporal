@@ -23,3 +23,11 @@ services:
     depends_on:
       - cassandra
       - statsd
+  cadence-web:
+    image: ubercadence/web:0.6.1
+    environment:
+      - "CADENCE_TCHANNEL_PEERS=cadence:7933"
+    ports:
+      - "8088:8088"
+    depends_on:
+      - cadence
