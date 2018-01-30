@@ -130,13 +130,12 @@ func getExpectedVersion(dir string) (string, error) {
 // In most cases, the versions should match. However if after a schema upgrade there is a code
 // rollback, the code version (expected version) would fall lower than the actual version in
 // cassandra.
-func VerifyCompatibleVersion(cfg config.Cassandra, rootFile string) error {
-	projRoot := "github.com/uber/cadence/schema"
-	schemaPath := path.Join(rootFile, projRoot+"/cadence/versioned")
+func VerifyCompatibleVersion(cfg config.Cassandra, rootPath string) error {
+	schemaPath := path.Join(rootPath, "schema/cadence/versioned")
 	if err := checkCompatibleVersion(cfg, cfg.Keyspace, schemaPath); err != nil {
 		return err
 	}
-	schemaPath = path.Join(rootFile, projRoot+"/visibility/versioned")
+	schemaPath = path.Join(rootPath, "schema/visibility/versioned")
 	return checkCompatibleVersion(cfg, cfg.VisibilityKeyspace, schemaPath)
 }
 

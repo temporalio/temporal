@@ -187,7 +187,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		Keyspace:           keyspace,
 		VisibilityKeyspace: visKeyspace,
 	}
-	s.NoError(VerifyCompatibleVersion(cfg, path.Dir(path.Dir(path.Dir(root)))))
+	s.NoError(VerifyCompatibleVersion(cfg, root))
 }
 
 func (s *VersionTestSuite) TestCheckCompatibleVersion() {

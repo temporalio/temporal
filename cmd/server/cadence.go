@@ -23,7 +23,6 @@ package main
 import (
 	"log"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/uber/cadence/common/service/config"
@@ -54,12 +53,11 @@ func startHandler(c *cli.Context) {
 	log.Printf("config=\n%v\n", cfg.String())
 
 	cassCfg := cfg.Cassandra
-	dir, err := os.Getwd() // dir = /Users/madhuravi/Uber/gocode/src/github.com/uber/cadence
+	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatal("Unable to get current directory")
 	}
-	root := path.Dir(path.Dir(path.Dir(dir))) // root = /Users/madhuravi/Uber/gocode/src
-	if err := cassandra.VerifyCompatibleVersion(cassCfg, root); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(cassCfg, dir); err != nil {
 		log.Fatalf("Incompatible versions", err)
 	}
 	for _, svc := range getServices(c) {
