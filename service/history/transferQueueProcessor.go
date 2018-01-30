@@ -613,7 +613,7 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
-	if err != nil {
+	if err != nil || !msBuilder.isWorkflowExecutionRunning() {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
@@ -628,6 +628,28 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 		// Otherwise, target SignalRequestID still can leak if shard restart after requestSignalCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
+	}
+
+	// handle workflow signal itself
+	if domainID == targetDomainID && task.WorkflowID == task.TargetWorkflowID {
+		signalRequest := &history.SignalWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			SignalRequest: &workflow.SignalWorkflowExecutionRequest{
+				Domain: common.StringPtr(domainID),
+				WorkflowExecution: &workflow.WorkflowExecution{
+					WorkflowId: common.StringPtr(task.WorkflowID),
+					RunId:      common.StringPtr(task.RunID),
+				},
+				Identity: common.StringPtr(identityHistoryService),
+				Control:  ri.Control,
+			},
+		}
+		err = t.requestSignalFailed(task, context, signalRequest)
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil
+		}
+		return err
 	}
 
 	targetRunID := task.TargetRunID
@@ -717,7 +739,7 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 	// First step is to load workflow execution so we can retrieve the initiated event
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
-	if err != nil {
+	if err != nil || !msBuilder.isWorkflowExecutionRunning() {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
