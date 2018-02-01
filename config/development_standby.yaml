@@ -1,0 +1,54 @@
+cassandra:
+  hosts: "127.0.0.1"
+  keyspace: "cadence_standby"
+  visibilityKeyspace: "cadence_visibility_standby"
+  consistency: "One"
+  numHistoryShards: 4
+
+ringpop:
+  name: cadence_standby
+  bootstrapMode: hosts
+  bootstrapHosts: ["127.0.0.1:8933", "127.0.0.1:8934", "127.0.0.1:8935"]
+  maxJoinDuration: 30s
+
+services:
+  frontend:
+    rpc:
+      port: 8933
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 8936
+
+  matching:
+    rpc:
+      port: 8935
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 8938
+
+  history:
+    rpc:
+      port: 8934
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 8937
+
+clustersInfo:
+  initialFailoverVersion: 1
+  failoverVersionIncrement: 10
+  currentClusterName: "standby"
+  clusterNames:
+    - "active"
+    - "standby"
