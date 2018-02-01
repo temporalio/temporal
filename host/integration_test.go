@@ -130,7 +130,7 @@ func (s *integrationSuite) SetupTest() {
 
 	s.setupShards()
 
-	s.host = NewCadence(s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	s.host = NewCadence(s.ClusterMetadata, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger)
 
 	s.host.Start()
@@ -141,16 +141,22 @@ func (s *integrationSuite) SetupTest() {
 		Name:        s.domainName,
 		Status:      persistence.DomainStatusRegistered,
 		Description: "Test domain for integration test",
-		Retention:   1,
-		EmitMetric:  false,
+		Config: &persistence.DomainConfig{
+			Retention:  1,
+			EmitMetric: false,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
 	})
 	s.foreignDomainName = "integration-foreign-test-domain"
 	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
 		Name:        s.foreignDomainName,
 		Status:      persistence.DomainStatusRegistered,
 		Description: "Test foreign domain for integration test",
-		Retention:   1,
-		EmitMetric:  false,
+		Config: &persistence.DomainConfig{
+			Retention:  1,
+			EmitMetric: false,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
 	})
 }
 
@@ -158,6 +164,267 @@ func (s *integrationSuite) TearDownTest() {
 	s.host.Stop()
 	s.host = nil
 	s.TearDownWorkflowStore()
+}
+
+func (s *integrationSuite) TestIntegrationRegisterGetDomain_AllDefault() {
+	domainName := "some random domain name"
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(replicationConfig.ClusterName),
+		})
+	}
+
+	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+
+	resp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, resp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *resp.DomainInfo.Status)
+	s.Empty(resp.DomainInfo.GetDescription())
+	s.Empty(resp.DomainInfo.GetOwnerEmail())
+	s.Equal(int32(0), resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(false, resp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), resp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, resp.ReplicationConfiguration.Clusters)
+}
+
+func (s *integrationSuite) TestIntegrationRegisterGetDomain_NoDefault() {
+	domainName := "some random domain name"
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+	}
+
+	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Description:                            common.StringPtr(description),
+		OwnerEmail:                             common.StringPtr(email),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+		EmitMetric:                             common.BoolPtr(emitMetric),
+		Clusters:                               clusters,
+	})
+	s.Nil(err)
+
+	resp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, resp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *resp.DomainInfo.Status)
+	s.Equal(description, resp.DomainInfo.GetDescription())
+	s.Equal(email, resp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, resp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), resp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, resp.ReplicationConfiguration.Clusters)
+}
+
+func (s *integrationSuite) TestIntegrationUpdateGetDomain_AllSet() {
+	domainName := "some random domain name"
+	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+	}
+
+	updateResp, err := s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		UpdatedInfo: &workflow.UpdateDomainInfo{
+			Description: common.StringPtr(description),
+			OwnerEmail:  common.StringPtr(email),
+		},
+		Configuration: &workflow.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+		},
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			Clusters: clusters,
+		},
+	})
+	s.Nil(err)
+	s.Equal(domainName, updateResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *updateResp.DomainInfo.Status)
+	s.Equal(description, updateResp.DomainInfo.GetDescription())
+	s.Equal(email, updateResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, updateResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, updateResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, updateResp.ReplicationConfiguration.Clusters)
+
+	describeResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, describeResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *describeResp.DomainInfo.Status)
+	s.Equal(description, describeResp.DomainInfo.GetDescription())
+	s.Equal(email, describeResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, describeResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, describeResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), describeResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, describeResp.ReplicationConfiguration.Clusters)
+}
+
+func (s *integrationSuite) TestIntegrationUpdateGetDomain_NoSet() {
+	domainName := "some random domain name"
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+	}
+
+	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Description:                            common.StringPtr(description),
+		OwnerEmail:                             common.StringPtr(email),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+		EmitMetric:                             common.BoolPtr(emitMetric),
+		Clusters:                               clusters,
+	})
+	s.Nil(err)
+
+	updateResp, err := s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, updateResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *updateResp.DomainInfo.Status)
+	s.Equal(description, updateResp.DomainInfo.GetDescription())
+	s.Equal(email, updateResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, updateResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, updateResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, updateResp.ReplicationConfiguration.Clusters)
+
+	describeResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, describeResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *describeResp.DomainInfo.Status)
+	s.Equal(description, describeResp.DomainInfo.GetDescription())
+	s.Equal(email, describeResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, describeResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, describeResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), describeResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, describeResp.ReplicationConfiguration.Clusters)
+}
+
+func (s *integrationSuite) TestIntegrationUpdateGetDomain_Failover() {
+	domainName := "some random domain name"
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+
+	activeClusterName := ""
+	failoverVersion := int64(59)
+	persistenceClusters := []*persistence.ClusterReplicationConfig{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+
+		persistenceClusters = append(persistenceClusters, &persistence.ClusterReplicationConfig{
+			ClusterName: clusterName,
+		})
+		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
+			activeClusterName = clusterName
+		}
+	}
+
+	// create a domain which is not currently active
+	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+		Name:        domainName,
+		Status:      persistence.DomainStatusRegistered,
+		Description: description,
+		OwnerEmail:  email,
+		Config: &persistence.DomainConfig{
+			Retention:  retention,
+			EmitMetric: emitMetric,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: activeClusterName,
+			FailoverVersion:   failoverVersion,
+			Clusters:          persistenceClusters,
+		},
+	})
+
+	// when doing the failover, the only thing can be updated is the active cluster
+	updateResp, err := s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		UpdatedInfo: &workflow.UpdateDomainInfo{
+			Description: common.StringPtr(description),
+			OwnerEmail:  common.StringPtr(email),
+		},
+		Configuration: &workflow.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+		},
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+			Clusters:          clusters,
+		},
+	})
+	s.Nil(updateResp)
+	s.NotNil(err)
+
+	updateResp, err = s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		},
+	})
+	s.Nil(err)
+	s.Equal(domainName, updateResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *updateResp.DomainInfo.Status)
+	s.Equal(description, updateResp.DomainInfo.GetDescription())
+	s.Equal(email, updateResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, updateResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, updateResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, updateResp.ReplicationConfiguration.Clusters)
+
+	describeResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, describeResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *describeResp.DomainInfo.Status)
+	s.Equal(description, describeResp.DomainInfo.GetDescription())
+	s.Equal(email, describeResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, describeResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, describeResp.Configuration.GetEmitMetric())
+	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), describeResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, describeResp.ReplicationConfiguration.Clusters)
 }
 
 func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {

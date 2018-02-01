@@ -37,6 +37,8 @@ type (
 		Cassandra Cassandra `yaml:"cassandra"`
 		// Log is the logging config
 		Log Logger `yaml:"log"`
+		// ClustersInfo is the config containing all valid clusters and active acluster
+		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
 		// Services is a map of service name to service config items
 		Services map[string]Service `yaml:"services"`
 	}
@@ -115,6 +117,18 @@ type (
 		Level string `yaml:"level"`
 		// OutputFile is the path to the log output file
 		OutputFile string `yaml:"outputFile"`
+	}
+
+	// ClustersInfo contains the all cluster names and active cluster
+	ClustersInfo struct {
+		// InitialFailoverVersion is the initial failover version
+		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
+		// FailoverVersionIncrement is the increment of each cluster failover version
+		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
+		// CurrentClusterName is the name of the current cluster
+		CurrentClusterName string `yaml:"currentClusterName"`
+		// ClusterNames contains all cluster names
+		ClusterNames []string `yaml:"clusterNames"`
 	}
 
 	// Metrics contains the config items for metrics subsystem

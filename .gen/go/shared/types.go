@@ -4453,6 +4453,122 @@ func (v *ChildWorkflowExecutionTimedOutEventAttributes) GetStartedEventId() (o i
 	return
 }
 
+type ClusterReplicationConfiguration struct {
+	ClusterName *string `json:"clusterName,omitempty"`
+}
+
+// ToWire translates a ClusterReplicationConfiguration struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ClusterReplicationConfiguration) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.ClusterName != nil {
+		w, err = wire.NewValueString(*(v.ClusterName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ClusterReplicationConfiguration struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ClusterReplicationConfiguration struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ClusterReplicationConfiguration
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ClusterReplicationConfiguration) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ClusterName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ClusterReplicationConfiguration
+// struct.
+func (v *ClusterReplicationConfiguration) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.ClusterName != nil {
+		fields[i] = fmt.Sprintf("ClusterName: %v", *(v.ClusterName))
+		i++
+	}
+
+	return fmt.Sprintf("ClusterReplicationConfiguration{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ClusterReplicationConfiguration match the
+// provided ClusterReplicationConfiguration.
+//
+// This function performs a deep comparison.
+func (v *ClusterReplicationConfiguration) Equals(rhs *ClusterReplicationConfiguration) bool {
+	if !_String_EqualsPtr(v.ClusterName, rhs.ClusterName) {
+		return false
+	}
+
+	return true
+}
+
+// GetClusterName returns the value of ClusterName if it is set or its
+// zero value if it is unset.
+func (v *ClusterReplicationConfiguration) GetClusterName() (o string) {
+	if v.ClusterName != nil {
+		return *v.ClusterName
+	}
+
+	return
+}
+
 type CompleteWorkflowExecutionDecisionAttributes struct {
 	Result []byte `json:"result,omitempty"`
 }
@@ -7001,8 +7117,10 @@ func (v *DescribeDomainRequest) GetName() (o string) {
 }
 
 type DescribeDomainResponse struct {
-	DomainInfo    *DomainInfo          `json:"domainInfo,omitempty"`
-	Configuration *DomainConfiguration `json:"configuration,omitempty"`
+	DomainInfo               *DomainInfo                     `json:"domainInfo,omitempty"`
+	Configuration            *DomainConfiguration            `json:"configuration,omitempty"`
+	ReplicationConfiguration *DomainReplicationConfiguration `json:"replicationConfiguration,omitempty"`
+	FailoverVersion          *int64                          `json:"failoverVersion,omitempty"`
 }
 
 // ToWire translates a DescribeDomainResponse struct into a Thrift-level intermediate
@@ -7022,7 +7140,7 @@ type DescribeDomainResponse struct {
 //   }
 func (v *DescribeDomainResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7044,6 +7162,22 @@ func (v *DescribeDomainResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
+	if v.ReplicationConfiguration != nil {
+		w, err = v.ReplicationConfiguration.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.FailoverVersion != nil {
+		w, err = wire.NewValueI64(*(v.FailoverVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -7056,6 +7190,12 @@ func _DomainInfo_Read(w wire.Value) (*DomainInfo, error) {
 
 func _DomainConfiguration_Read(w wire.Value) (*DomainConfiguration, error) {
 	var v DomainConfiguration
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _DomainReplicationConfiguration_Read(w wire.Value) (*DomainReplicationConfiguration, error) {
+	var v DomainReplicationConfiguration
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -7098,6 +7238,24 @@ func (v *DescribeDomainResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.ReplicationConfiguration, err = _DomainReplicationConfiguration_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.FailoverVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -7111,7 +7269,7 @@ func (v *DescribeDomainResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [4]string
 	i := 0
 	if v.DomainInfo != nil {
 		fields[i] = fmt.Sprintf("DomainInfo: %v", v.DomainInfo)
@@ -7119,6 +7277,14 @@ func (v *DescribeDomainResponse) String() string {
 	}
 	if v.Configuration != nil {
 		fields[i] = fmt.Sprintf("Configuration: %v", v.Configuration)
+		i++
+	}
+	if v.ReplicationConfiguration != nil {
+		fields[i] = fmt.Sprintf("ReplicationConfiguration: %v", v.ReplicationConfiguration)
+		i++
+	}
+	if v.FailoverVersion != nil {
+		fields[i] = fmt.Sprintf("FailoverVersion: %v", *(v.FailoverVersion))
 		i++
 	}
 
@@ -7136,8 +7302,24 @@ func (v *DescribeDomainResponse) Equals(rhs *DescribeDomainResponse) bool {
 	if !((v.Configuration == nil && rhs.Configuration == nil) || (v.Configuration != nil && rhs.Configuration != nil && v.Configuration.Equals(rhs.Configuration))) {
 		return false
 	}
+	if !((v.ReplicationConfiguration == nil && rhs.ReplicationConfiguration == nil) || (v.ReplicationConfiguration != nil && rhs.ReplicationConfiguration != nil && v.ReplicationConfiguration.Equals(rhs.ReplicationConfiguration))) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.FailoverVersion, rhs.FailoverVersion) {
+		return false
+	}
 
 	return true
+}
+
+// GetFailoverVersion returns the value of FailoverVersion if it is set or its
+// zero value if it is unset.
+func (v *DescribeDomainResponse) GetFailoverVersion() (o int64) {
+	if v.FailoverVersion != nil {
+		return *v.FailoverVersion
+	}
+
+	return
 }
 
 type DescribeTaskListRequest struct {
@@ -8383,6 +8565,214 @@ func (v *DomainInfo) GetDescription() (o string) {
 func (v *DomainInfo) GetOwnerEmail() (o string) {
 	if v.OwnerEmail != nil {
 		return *v.OwnerEmail
+	}
+
+	return
+}
+
+type DomainReplicationConfiguration struct {
+	ActiveClusterName *string                            `json:"activeClusterName,omitempty"`
+	Clusters          []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
+}
+
+type _List_ClusterReplicationConfiguration_ValueList []*ClusterReplicationConfiguration
+
+func (v _List_ClusterReplicationConfiguration_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_ClusterReplicationConfiguration_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_ClusterReplicationConfiguration_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_ClusterReplicationConfiguration_ValueList) Close() {}
+
+// ToWire translates a DomainReplicationConfiguration struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DomainReplicationConfiguration) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.ActiveClusterName != nil {
+		w, err = wire.NewValueString(*(v.ActiveClusterName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Clusters != nil {
+		w, err = wire.NewValueList(_List_ClusterReplicationConfiguration_ValueList(v.Clusters)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ClusterReplicationConfiguration_Read(w wire.Value) (*ClusterReplicationConfiguration, error) {
+	var v ClusterReplicationConfiguration
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_ClusterReplicationConfiguration_Read(l wire.ValueList) ([]*ClusterReplicationConfiguration, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*ClusterReplicationConfiguration, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _ClusterReplicationConfiguration_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a DomainReplicationConfiguration struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DomainReplicationConfiguration struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DomainReplicationConfiguration
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DomainReplicationConfiguration) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActiveClusterName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.Clusters, err = _List_ClusterReplicationConfiguration_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DomainReplicationConfiguration
+// struct.
+func (v *DomainReplicationConfiguration) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.ActiveClusterName != nil {
+		fields[i] = fmt.Sprintf("ActiveClusterName: %v", *(v.ActiveClusterName))
+		i++
+	}
+	if v.Clusters != nil {
+		fields[i] = fmt.Sprintf("Clusters: %v", v.Clusters)
+		i++
+	}
+
+	return fmt.Sprintf("DomainReplicationConfiguration{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_ClusterReplicationConfiguration_Equals(lhs, rhs []*ClusterReplicationConfiguration) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this DomainReplicationConfiguration match the
+// provided DomainReplicationConfiguration.
+//
+// This function performs a deep comparison.
+func (v *DomainReplicationConfiguration) Equals(rhs *DomainReplicationConfiguration) bool {
+	if !_String_EqualsPtr(v.ActiveClusterName, rhs.ActiveClusterName) {
+		return false
+	}
+	if !((v.Clusters == nil && rhs.Clusters == nil) || (v.Clusters != nil && rhs.Clusters != nil && _List_ClusterReplicationConfiguration_Equals(v.Clusters, rhs.Clusters))) {
+		return false
+	}
+
+	return true
+}
+
+// GetActiveClusterName returns the value of ActiveClusterName if it is set or its
+// zero value if it is unset.
+func (v *DomainReplicationConfiguration) GetActiveClusterName() (o string) {
+	if v.ActiveClusterName != nil {
+		return *v.ActiveClusterName
 	}
 
 	return
@@ -15582,11 +15972,12 @@ func (v *RecordMarkerDecisionAttributes) GetMarkerName() (o string) {
 }
 
 type RegisterDomainRequest struct {
-	Name                                   *string `json:"name,omitempty"`
-	Description                            *string `json:"description,omitempty"`
-	OwnerEmail                             *string `json:"ownerEmail,omitempty"`
-	WorkflowExecutionRetentionPeriodInDays *int32  `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
-	EmitMetric                             *bool   `json:"emitMetric,omitempty"`
+	Name                                   *string                            `json:"name,omitempty"`
+	Description                            *string                            `json:"description,omitempty"`
+	OwnerEmail                             *string                            `json:"ownerEmail,omitempty"`
+	WorkflowExecutionRetentionPeriodInDays *int32                             `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
+	EmitMetric                             *bool                              `json:"emitMetric,omitempty"`
+	Clusters                               []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
 }
 
 // ToWire translates a RegisterDomainRequest struct into a Thrift-level intermediate
@@ -15606,7 +15997,7 @@ type RegisterDomainRequest struct {
 //   }
 func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -15650,6 +16041,14 @@ func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Clusters != nil {
+		w, err = wire.NewValueList(_List_ClusterReplicationConfiguration_ValueList(v.Clusters)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 
@@ -15728,6 +16127,14 @@ func (v *RegisterDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TList {
+				v.Clusters, err = _List_ClusterReplicationConfiguration_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -15741,7 +16148,7 @@ func (v *RegisterDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -15761,6 +16168,10 @@ func (v *RegisterDomainRequest) String() string {
 	}
 	if v.EmitMetric != nil {
 		fields[i] = fmt.Sprintf("EmitMetric: %v", *(v.EmitMetric))
+		i++
+	}
+	if v.Clusters != nil {
+		fields[i] = fmt.Sprintf("Clusters: %v", v.Clusters)
 		i++
 	}
 
@@ -15785,6 +16196,9 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 		return false
 	}
 	if !_Bool_EqualsPtr(v.EmitMetric, rhs.EmitMetric) {
+		return false
+	}
+	if !((v.Clusters == nil && rhs.Clusters == nil) || (v.Clusters != nil && rhs.Clusters != nil && _List_ClusterReplicationConfiguration_Equals(v.Clusters, rhs.Clusters))) {
 		return false
 	}
 
@@ -24765,9 +25179,10 @@ func (v *UpdateDomainInfo) GetOwnerEmail() (o string) {
 }
 
 type UpdateDomainRequest struct {
-	Name          *string              `json:"name,omitempty"`
-	UpdatedInfo   *UpdateDomainInfo    `json:"updatedInfo,omitempty"`
-	Configuration *DomainConfiguration `json:"configuration,omitempty"`
+	Name                     *string                         `json:"name,omitempty"`
+	UpdatedInfo              *UpdateDomainInfo               `json:"updatedInfo,omitempty"`
+	Configuration            *DomainConfiguration            `json:"configuration,omitempty"`
+	ReplicationConfiguration *DomainReplicationConfiguration `json:"replicationConfiguration,omitempty"`
 }
 
 // ToWire translates a UpdateDomainRequest struct into a Thrift-level intermediate
@@ -24787,7 +25202,7 @@ type UpdateDomainRequest struct {
 //   }
 func (v *UpdateDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -24815,6 +25230,14 @@ func (v *UpdateDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ReplicationConfiguration != nil {
+		w, err = v.ReplicationConfiguration.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -24875,6 +25298,14 @@ func (v *UpdateDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.ReplicationConfiguration, err = _DomainReplicationConfiguration_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -24888,7 +25319,7 @@ func (v *UpdateDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -24900,6 +25331,10 @@ func (v *UpdateDomainRequest) String() string {
 	}
 	if v.Configuration != nil {
 		fields[i] = fmt.Sprintf("Configuration: %v", v.Configuration)
+		i++
+	}
+	if v.ReplicationConfiguration != nil {
+		fields[i] = fmt.Sprintf("ReplicationConfiguration: %v", v.ReplicationConfiguration)
 		i++
 	}
 
@@ -24920,6 +25355,9 @@ func (v *UpdateDomainRequest) Equals(rhs *UpdateDomainRequest) bool {
 	if !((v.Configuration == nil && rhs.Configuration == nil) || (v.Configuration != nil && rhs.Configuration != nil && v.Configuration.Equals(rhs.Configuration))) {
 		return false
 	}
+	if !((v.ReplicationConfiguration == nil && rhs.ReplicationConfiguration == nil) || (v.ReplicationConfiguration != nil && rhs.ReplicationConfiguration != nil && v.ReplicationConfiguration.Equals(rhs.ReplicationConfiguration))) {
+		return false
+	}
 
 	return true
 }
@@ -24935,8 +25373,10 @@ func (v *UpdateDomainRequest) GetName() (o string) {
 }
 
 type UpdateDomainResponse struct {
-	DomainInfo    *DomainInfo          `json:"domainInfo,omitempty"`
-	Configuration *DomainConfiguration `json:"configuration,omitempty"`
+	DomainInfo               *DomainInfo                     `json:"domainInfo,omitempty"`
+	Configuration            *DomainConfiguration            `json:"configuration,omitempty"`
+	ReplicationConfiguration *DomainReplicationConfiguration `json:"replicationConfiguration,omitempty"`
+	FailoverVersion          *int64                          `json:"failoverVersion,omitempty"`
 }
 
 // ToWire translates a UpdateDomainResponse struct into a Thrift-level intermediate
@@ -24956,7 +25396,7 @@ type UpdateDomainResponse struct {
 //   }
 func (v *UpdateDomainResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -24976,6 +25416,22 @@ func (v *UpdateDomainResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.ReplicationConfiguration != nil {
+		w, err = v.ReplicationConfiguration.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.FailoverVersion != nil {
+		w, err = wire.NewValueI64(*(v.FailoverVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -25020,6 +25476,24 @@ func (v *UpdateDomainResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.ReplicationConfiguration, err = _DomainReplicationConfiguration_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.FailoverVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -25033,7 +25507,7 @@ func (v *UpdateDomainResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [4]string
 	i := 0
 	if v.DomainInfo != nil {
 		fields[i] = fmt.Sprintf("DomainInfo: %v", v.DomainInfo)
@@ -25041,6 +25515,14 @@ func (v *UpdateDomainResponse) String() string {
 	}
 	if v.Configuration != nil {
 		fields[i] = fmt.Sprintf("Configuration: %v", v.Configuration)
+		i++
+	}
+	if v.ReplicationConfiguration != nil {
+		fields[i] = fmt.Sprintf("ReplicationConfiguration: %v", v.ReplicationConfiguration)
+		i++
+	}
+	if v.FailoverVersion != nil {
+		fields[i] = fmt.Sprintf("FailoverVersion: %v", *(v.FailoverVersion))
 		i++
 	}
 
@@ -25058,8 +25540,24 @@ func (v *UpdateDomainResponse) Equals(rhs *UpdateDomainResponse) bool {
 	if !((v.Configuration == nil && rhs.Configuration == nil) || (v.Configuration != nil && rhs.Configuration != nil && v.Configuration.Equals(rhs.Configuration))) {
 		return false
 	}
+	if !((v.ReplicationConfiguration == nil && rhs.ReplicationConfiguration == nil) || (v.ReplicationConfiguration != nil && rhs.ReplicationConfiguration != nil && v.ReplicationConfiguration.Equals(rhs.ReplicationConfiguration))) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.FailoverVersion, rhs.FailoverVersion) {
+		return false
+	}
 
 	return true
+}
+
+// GetFailoverVersion returns the value of FailoverVersion if it is set or its
+// zero value if it is unset.
+func (v *UpdateDomainResponse) GetFailoverVersion() (o int64) {
+	if v.FailoverVersion != nil {
+		return *v.FailoverVersion
+	}
+
+	return
 }
 
 type WorkflowExecution struct {

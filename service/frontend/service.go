@@ -78,6 +78,7 @@ func (s *Service) Start() {
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
+		p.ClusterMetadata.GetCurrentClusterName(),
 		p.Logger)
 
 	if err != nil {

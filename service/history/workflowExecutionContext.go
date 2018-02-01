@@ -168,12 +168,12 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		// Also transactionally delete workflow execution representing
 		// current run for the execution using cassandra TTL
 		finishExecution = true
-		_, domainConfig, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
+		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
 		if err != nil {
 			return err
 		}
 		// NOTE: domain retention is in days, so we need to do a conversion
-		finishExecutionTTL = domainConfig.Retention * secondsInDay
+		finishExecutionTTL = domainEntry.Config.Retention * secondsInDay
 	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,

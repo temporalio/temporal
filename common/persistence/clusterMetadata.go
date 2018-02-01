@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Uber Technologies, Inc.
+// Copyright (c) 2018 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,42 +18,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package service
+package persistence
 
-import (
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/client"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/membership"
-	"github.com/uber/cadence/common/metrics"
-	"go.uber.org/yarpc"
-)
-
-type (
-	// Service is the interface which must be implemented by all the services
-	Service interface {
-		// GetHostName returns the name of host running the service
-		GetHostName() string
-
-		// Start the service
-		Start()
-
-		// Stop stops the service
-		Stop()
-
-		GetLogger() bark.Logger
-
-		GetMetricsClient() metrics.Client
-
-		GetClientFactory() client.Factory
-
-		GetDispatcher() *yarpc.Dispatcher
-
-		GetMembershipMonitor() membership.Monitor
-
-		GetHostInfo() *membership.HostInfo
-
-		// GetClusterMetadata returns the service cluster metadata
-		GetClusterMetadata() cluster.Metadata
+// GetOrUseDefaultActiveCluster return the current cluster name or use the input if valid
+func GetOrUseDefaultActiveCluster(currentClusterName string, activeClusterName string) string {
+	if len(activeClusterName) == 0 {
+		return currentClusterName
 	}
-)
+	return activeClusterName
+}
+
+// GetOrUseDefaultClusters return the current cluster or use the input if valid
+func GetOrUseDefaultClusters(currentClusterName string, clusters []*ClusterReplicationConfig) []*ClusterReplicationConfig {
+	if len(clusters) == 0 {
+		return []*ClusterReplicationConfig{
+			&ClusterReplicationConfig{
+				ClusterName: currentClusterName,
+			},
+		}
+	}
+	return clusters
+}

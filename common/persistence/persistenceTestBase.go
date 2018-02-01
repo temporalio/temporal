@@ -34,16 +34,25 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 )
 
 const (
-	testWorkflowClusterHosts = "127.0.0.1"
-	testPort                 = 0
-	testUser                 = ""
-	testPassword             = ""
-	testDatacenter           = ""
-	testSchemaDir            = "../.."
+	testWorkflowClusterHosts     = "127.0.0.1"
+	testPort                     = 0
+	testUser                     = ""
+	testPassword                 = ""
+	testDatacenter               = ""
+	testSchemaDir                = "../.."
+	testInitialFailoverVersion   = int64(0)
+	testFailoverVersionIncrement = int64(10)
+	testCurrentClusterName       = "current-cluster"
+	testAlternativeClusterName   = "alternative-cluster"
+)
+
+var (
+	testAllClusterNames = []string{testCurrentClusterName, testAlternativeClusterName}
 )
 
 type (
@@ -54,14 +63,16 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		ClusterHost     string
-		ClusterPort     int
-		ClusterUser     string
-		ClusterPassword string
-		KeySpace        string
-		Datacenter      string
-		DropKeySpace    bool
-		SchemaDir       string
+		ClusterHost        string
+		ClusterPort        int
+		ClusterUser        string
+		ClusterPassword    string
+		KeySpace           string
+		Datacenter         string
+		DropKeySpace       bool
+		SchemaDir          string
+		CurrentClusterName string
+		AllClusterNames    []string
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -75,6 +86,7 @@ type (
 		VisibilityMgr       VisibilityManager
 		ShardInfo           *ShardInfo
 		TaskIDGenerator     TransferTaskIDGenerator
+		ClusterMetadata     cluster.Metadata
 		readLevel           int64
 		CassandraTestCluster
 	}
@@ -104,6 +116,12 @@ func (g *testTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	log := bark.NewLoggerFromLogrus(log.New())
+	s.ClusterMetadata = cluster.NewMetadata(
+		testInitialFailoverVersion,
+		testFailoverVersionIncrement,
+		testCurrentClusterName,
+		testAllClusterNames,
+	)
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
 	shardID := 0
@@ -137,7 +155,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	}
 
 	s.MetadataManager, err = NewCassandraMetadataPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
-		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, log)
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, s.ClusterMetadata.GetCurrentClusterName(), log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -778,12 +796,14 @@ func (s *TestBase) CompleteTask(domainID, taskList string, taskType int, taskID 
 // SetupWorkflowStore to setup workflow test base
 func (s *TestBase) SetupWorkflowStore() {
 	s.SetupWorkflowStoreWithOptions(TestBaseOptions{
-		SchemaDir:       testSchemaDir,
-		ClusterHost:     testWorkflowClusterHosts,
-		ClusterPort:     testPort,
-		ClusterUser:     testUser,
-		ClusterPassword: testPassword,
-		DropKeySpace:    true,
+		SchemaDir:          testSchemaDir,
+		ClusterHost:        testWorkflowClusterHosts,
+		ClusterPort:        testPort,
+		ClusterUser:        testUser,
+		ClusterPassword:    testPassword,
+		DropKeySpace:       true,
+		CurrentClusterName: testCurrentClusterName,
+		AllClusterNames:    testAllClusterNames,
 	})
 }
 

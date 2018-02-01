@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
@@ -67,6 +68,7 @@ type (
 		numberOfHistoryShards int
 		numberOfHistoryHosts  int
 		logger                bark.Logger
+		clusterMetadata       cluster.Metadata
 		metadataMgr           persistence.MetadataManager
 		shardMgr              persistence.ShardManager
 		historyMgr            persistence.HistoryManager
@@ -85,7 +87,7 @@ type (
 )
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(metadataMgr persistence.MetadataManager, shardMgr persistence.ShardManager,
+func NewCadence(clusterMetadata cluster.Metadata, metadataMgr persistence.MetadataManager, shardMgr persistence.ShardManager,
 	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory,
 	taskMgr persistence.TaskManager, visibilityMgr persistence.VisibilityManager,
 	numberOfHistoryShards, numberOfHistoryHosts int, logger bark.Logger) Cadence {
@@ -93,6 +95,7 @@ func NewCadence(metadataMgr persistence.MetadataManager, shardMgr persistence.Sh
 		numberOfHistoryShards: numberOfHistoryShards,
 		numberOfHistoryHosts:  numberOfHistoryHosts,
 		logger:                logger,
+		clusterMetadata:       clusterMetadata,
 		metadataMgr:           metadataMgr,
 		visibilityMgr:         visibilityMgr,
 		shardMgr:              shardMgr,
@@ -189,6 +192,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+	params.ClusterMetadata = c.clusterMetadata
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	params.CassandraConfig.Hosts = "127.0.0.1"
 
@@ -217,6 +221,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+		params.ClusterMetadata = c.clusterMetadata
 		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 		service := service.New(params)
 		historyConfig := history.NewConfig(c.numberOfHistoryShards)
@@ -242,6 +247,7 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+	params.ClusterMetadata = c.clusterMetadata
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	service := service.New(params)
 	c.matchingHandler = matching.NewHandler(service, matching.NewConfig(), taskMgr)

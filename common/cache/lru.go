@@ -243,19 +243,24 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	elt := c.byKey[key]
 	if elt != nil {
 		entry := elt.Value.(*entryImpl)
-		existing := entry.value
-		if allowUpdate {
-			entry.value = value
-			if c.ttl != 0 {
-				entry.createTime = time.Now()
+		if c.isEntryExpired(entry, time.Now()) {
+			// Entry has expired
+			c.deleteInternal(elt)
+		} else {
+			existing := entry.value
+			if allowUpdate {
+				entry.value = value
+				if c.ttl != 0 {
+					entry.createTime = time.Now()
+				}
 			}
-		}
 
-		c.byAccess.MoveToFront(elt)
-		if c.pin {
-			entry.refCount++
+			c.byAccess.MoveToFront(elt)
+			if c.pin {
+				entry.refCount++
+			}
+			return existing, nil
 		}
-		return existing, nil
 	}
 
 	entry := &entryImpl{

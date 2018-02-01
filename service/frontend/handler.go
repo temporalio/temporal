@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/pborman/uuid"
@@ -158,8 +159,35 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
-	if registerRequest.Name == nil || *registerRequest.Name == "" {
+	if len(registerRequest.GetName()) == 0 {
 		return wh.error(errDomainNotSet, scope)
+	}
+
+	// input validation on cluster names
+	clusterMetadata := wh.GetClusterMetadata()
+	activeClusterName := clusterMetadata.GetCurrentClusterName()
+	clusters := []*persistence.ClusterReplicationConfig{}
+	for _, cluster := range registerRequest.Clusters {
+		clusterName := cluster.GetClusterName()
+		if err := wh.validateClusterName(clusterName); err != nil {
+			return wh.error(err, scope)
+		}
+		clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
+	}
+	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
+
+	// validate active cluster is also specified in all clusters
+	activeClusterInClusters := false
+	for _, cluster := range clusters {
+		if cluster.ClusterName == activeClusterName {
+			activeClusterInClusters = true
+			break
+		}
+	}
+	if !activeClusterInClusters {
+		errMsg := "Active cluster is not contained in all clusters"
+		err := &gen.BadRequestError{Message: errMsg}
+		return wh.error(err, scope)
 	}
 
 	response, err := wh.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
@@ -167,8 +195,14 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		Status:      persistence.DomainStatusRegistered,
 		OwnerEmail:  common.StringDefault(registerRequest.OwnerEmail),
 		Description: common.StringDefault(registerRequest.Description),
-		Retention:   common.Int32Default(registerRequest.WorkflowExecutionRetentionPeriodInDays),
-		EmitMetric:  common.BoolDefault(registerRequest.EmitMetric),
+		Config: &persistence.DomainConfig{
+			Retention:  common.Int32Default(registerRequest.WorkflowExecutionRetentionPeriodInDays),
+			EmitMetric: common.BoolDefault(registerRequest.EmitMetric),
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: activeClusterName,
+			Clusters:          clusters,
+		},
 	})
 
 	if err != nil {
@@ -200,8 +234,11 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	response := &gen.DescribeDomainResponse{}
-	response.DomainInfo, response.Configuration = createDomainResponse(resp.Info, resp.Config)
+	response := &gen.DescribeDomainResponse{
+		FailoverVersion: common.Int64Ptr(resp.ReplicationConfig.FailoverVersion),
+	}
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
+		resp.Info, resp.Config, resp.ReplicationConfig)
 
 	return response, nil
 }
@@ -228,37 +265,105 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 
 	info := getResponse.Info
 	config := getResponse.Config
+	replicationConfig := getResponse.ReplicationConfig
+	clusterMetadate := wh.GetClusterMetadata()
+	currentCluster := clusterMetadate.GetCurrentClusterName()
+	isCurrentClusterActive := currentCluster == replicationConfig.ActiveClusterName
 
+	// whether active cluster is changed
+	activeClusterChanged := false
+	// whether anything other than active cluster is changed
+	configurationChanged := false
 	if updateRequest.UpdatedInfo != nil {
 		updatedInfo := updateRequest.UpdatedInfo
 		if updatedInfo.Description != nil {
-			info.Description = *updatedInfo.Description
+			configurationChanged = true
+			info.Description = updatedInfo.GetDescription()
 		}
 		if updatedInfo.OwnerEmail != nil {
-			info.OwnerEmail = *updatedInfo.OwnerEmail
+			configurationChanged = true
+			info.OwnerEmail = updatedInfo.GetOwnerEmail()
 		}
 	}
-
 	if updateRequest.Configuration != nil {
 		updatedConfig := updateRequest.Configuration
 		if updatedConfig.EmitMetric != nil {
-			config.EmitMetric = *updatedConfig.EmitMetric
+			configurationChanged = true
+			config.EmitMetric = updatedConfig.GetEmitMetric()
 		}
 		if updatedConfig.WorkflowExecutionRetentionPeriodInDays != nil {
-			config.Retention = *updatedConfig.WorkflowExecutionRetentionPeriodInDays
+			configurationChanged = true
+			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
+		}
+	}
+	if updateRequest.ReplicationConfiguration != nil {
+		updateReplicationConfig := updateRequest.ReplicationConfiguration
+		if len(updateReplicationConfig.Clusters) != 0 {
+			configurationChanged = true
+			clusters := []*persistence.ClusterReplicationConfig{}
+			for _, cluster := range updateReplicationConfig.Clusters {
+				clusterName := cluster.GetClusterName()
+				if err := wh.validateClusterName(clusterName); err != nil {
+					return nil, wh.error(err, scope)
+				}
+				clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
+			}
+			replicationConfig.Clusters = clusters
+		}
+
+		if updateReplicationConfig.ActiveClusterName != nil {
+			activeClusterChanged = true
+			if updateReplicationConfig.GetActiveClusterName() != currentCluster {
+				errMsg := fmt.Sprintf("Can only set active cluster to current cluster: %s", currentCluster)
+				err := &gen.BadRequestError{Message: errMsg}
+				return nil, wh.error(err, scope)
+			}
+			replicationConfig.ActiveClusterName = currentCluster
+			replicationConfig.FailoverVersion = clusterMetadate.GetNextFailoverVersion(replicationConfig.FailoverVersion)
 		}
 	}
 
-	err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
-		Info:   info,
-		Config: config,
-	})
-	if err != nil {
+	if configurationChanged && activeClusterChanged {
+		errMsg := "Cannot set active cluster to current cluster when other paramaters are set"
+		err := &gen.BadRequestError{Message: errMsg}
 		return nil, wh.error(err, scope)
+	} else if configurationChanged || activeClusterChanged {
+		if configurationChanged && !isCurrentClusterActive {
+			errMsg := "Cannot update domain when current cluster is not active"
+			err := &gen.BadRequestError{Message: errMsg}
+			return nil, wh.error(err, scope)
+		}
+
+		// validate active cluster is also specified in all clusters
+		activeClusterInClusters := false
+		for _, cluster := range replicationConfig.Clusters {
+			if cluster.ClusterName == currentCluster {
+				activeClusterInClusters = true
+				break
+			}
+		}
+		if !activeClusterInClusters {
+			errMsg := "Active cluster is not contained in all clusters"
+			err := &gen.BadRequestError{Message: errMsg}
+			return nil, wh.error(err, scope)
+		}
+
+		err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+			Info:              info,
+			Config:            config,
+			ReplicationConfig: replicationConfig,
+			Version:           getResponse.Version,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
 	}
 
-	response := &gen.UpdateDomainResponse{}
-	response.DomainInfo, response.Configuration = createDomainResponse(info, config)
+	response := &gen.UpdateDomainResponse{
+		FailoverVersion: common.Int64Ptr(replicationConfig.FailoverVersion),
+	}
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
+		info, config, replicationConfig)
 	return response, nil
 }
 
@@ -283,14 +388,21 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(err0, scope)
 	}
 
-	info := getResponse.Info
-	info.Status = persistence.DomainStatusDeprecated
-	config := getResponse.Config
+	currentCluster := wh.GetClusterMetadata().GetCurrentClusterName()
+	if currentCluster != getResponse.ReplicationConfig.ActiveClusterName {
+		errMsg := "DeprecateDomain cannot depreate domain when active cluster is not current cluster"
+		err := &gen.BadRequestError{Message: errMsg}
+		return wh.error(err, scope)
+	}
 
+	getResponse.Info.Status = persistence.DomainStatusDeprecated
 	err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
-		Info:   info,
-		Config: config,
+		Info:              getResponse.Info,
+		Config:            getResponse.Config,
+		ReplicationConfig: getResponse.ReplicationConfig,
+		Version:           getResponse.Version,
 	})
+
 	if err != nil {
 		return wh.error(errDomainNotSet, scope)
 	}
@@ -1638,20 +1750,35 @@ func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
 	return nil
 }
 
-func createDomainResponse(info *persistence.DomainInfo, config *persistence.DomainConfig) (*gen.DomainInfo,
-	*gen.DomainConfiguration) {
+func createDomainResponse(info *persistence.DomainInfo, config *persistence.DomainConfig,
+	replicationConfig *persistence.DomainReplicationConfig) (*gen.DomainInfo,
+	*gen.DomainConfiguration, *gen.DomainReplicationConfiguration) {
 
-	i := &gen.DomainInfo{}
-	i.Name = common.StringPtr(info.Name)
-	i.Status = getDomainStatus(info)
-	i.Description = common.StringPtr(info.Description)
-	i.OwnerEmail = common.StringPtr(info.OwnerEmail)
+	infoResult := &gen.DomainInfo{
+		Name:        common.StringPtr(info.Name),
+		Status:      getDomainStatus(info),
+		Description: common.StringPtr(info.Description),
+		OwnerEmail:  common.StringPtr(info.OwnerEmail),
+	}
 
-	c := &gen.DomainConfiguration{}
-	c.EmitMetric = common.BoolPtr(config.EmitMetric)
-	c.WorkflowExecutionRetentionPeriodInDays = common.Int32Ptr(config.Retention)
+	configResult := &gen.DomainConfiguration{
+		EmitMetric:                             common.BoolPtr(config.EmitMetric),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
+	}
 
-	return i, c
+	clusters := []*gen.ClusterReplicationConfiguration{}
+	for _, cluster := range replicationConfig.Clusters {
+		clusters = append(clusters, &gen.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(cluster.ClusterName),
+		})
+	}
+
+	replicationConfigResult := &gen.DomainReplicationConfiguration{
+		ActiveClusterName: common.StringPtr(replicationConfig.ActiveClusterName),
+		Clusters:          clusters,
+	}
+
+	return infoResult, configResult, replicationConfigResult
 }
 
 func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context, domainID string,
@@ -1756,4 +1883,13 @@ func createServiceBusyError() *gen.ServiceBusyError {
 	err := &gen.ServiceBusyError{}
 	err.Message = "Too many outstanding requests to the cadence service"
 	return err
+}
+
+func (wh *WorkflowHandler) validateClusterName(clusterName string) error {
+	clusterMetadata := wh.GetClusterMetadata()
+	if _, ok := clusterMetadata.GetAllClusterNames()[clusterName]; !ok {
+		errMsg := "Invalid cluster name: %s"
+		return &gen.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
+	}
+	return nil
 }

@@ -153,8 +153,18 @@ CREATE TYPE domain (
 );
 
 CREATE TYPE domain_config (
-  retention int,
+  retention   int,
   emit_metric boolean
+);
+
+CREATE TYPE cluster_replication_config (
+  cluster_name text,
+);
+
+CREATE TYPE domain_replication_config (
+  active_cluster_name text,
+  failover_version    bigint,
+  clusters            list<frozen<cluster_replication_config>>
 );
 
 CREATE TYPE serialized_event_batch (
@@ -222,6 +232,7 @@ CREATE TABLE tasks (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
+-- this table is only used for storage of mapping of domain uuid to domain name
 CREATE TABLE domains (
   id     uuid,
   domain frozen<domain>,
@@ -232,9 +243,11 @@ CREATE TABLE domains (
   };
 
 CREATE TABLE domains_by_name (
-  name   text,
-  domain frozen<domain>,
-  config frozen<domain_config>,
+  name               text,
+  domain             frozen<domain>,
+  config             frozen<domain_config>,
+  replication_config frozen<domain_replication_config>, -- indicating active cluster and standby cluster used for replication
+  version            bigint, --indicate the version of the record, used for update
   PRIMARY KEY (name)
 )  WITH COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

@@ -27,6 +27,7 @@ import (
 
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
@@ -51,6 +52,7 @@ type (
 		RPCFactory       common.RPCFactory
 		PProfInitializer common.PProfInitializer
 		CassandraConfig  config.Cassandra
+		ClusterMetadata  cluster.Metadata
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
@@ -76,6 +78,7 @@ type (
 		metricsScope           tally.Scope
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		metricsClient          metrics.Client
+		clusterMetadata        cluster.Metadata
 	}
 )
 
@@ -90,6 +93,7 @@ func New(params *BootstrapParams) Service {
 		pprofInitializer:      params.PProfInitializer,
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
+		clusterMetadata:       params.ClusterMetadata,
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
 	sVice.metricsClient = metrics.NewClient(params.MetricScope, getMetricsServiceIdx(params.Name, params.Logger))
@@ -204,6 +208,11 @@ func (h *serviceImpl) GetHostInfo() *membership.HostInfo {
 
 func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
 	return h.dispatcher
+}
+
+// GetClusterMetadata returns the service cluster metadata
+func (h *serviceImpl) GetClusterMetadata() cluster.Metadata {
+	return h.clusterMetadata
 }
 
 func getMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.ServiceIdx {

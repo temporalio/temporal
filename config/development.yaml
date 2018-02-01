@@ -44,3 +44,11 @@ services:
         prefix: "cadence"
     pprof:
       port: 7937
+
+clustersInfo:
+  initialFailoverVersion: 0
+  failoverVersionIncrement: 10
+  currentClusterName: "sjc1"
+  clusterNames:
+    - "dca1"
+    - "sjc1"

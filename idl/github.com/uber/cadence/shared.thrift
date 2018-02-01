@@ -734,12 +734,22 @@ struct UpdateDomainInfo {
   20: optional string ownerEmail
 }
 
+struct ClusterReplicationConfiguration {
+ 10: optional string clusterName
+}
+
+struct DomainReplicationConfiguration {
+ 10: optional string activeClusterName
+ 20: optional list<ClusterReplicationConfiguration> clusters
+}
+
 struct RegisterDomainRequest {
   10: optional string name
   20: optional string description
   30: optional string ownerEmail
   40: optional i32 workflowExecutionRetentionPeriodInDays
   50: optional bool emitMetric
+  60: optional list<ClusterReplicationConfiguration> clusters
 }
 
 struct DescribeDomainRequest {
@@ -749,17 +759,22 @@ struct DescribeDomainRequest {
 struct DescribeDomainResponse {
   10: optional DomainInfo domainInfo
   20: optional DomainConfiguration configuration
+  30: optional DomainReplicationConfiguration replicationConfiguration
+  40: optional i64 (js.type = "Long") failoverVersion
 }
 
 struct UpdateDomainRequest {
  10: optional string name
  20: optional UpdateDomainInfo updatedInfo
  30: optional DomainConfiguration configuration
+ 40: optional DomainReplicationConfiguration replicationConfiguration
 }
 
 struct UpdateDomainResponse {
   10: optional DomainInfo domainInfo
   20: optional DomainConfiguration configuration
+  30: optional DomainReplicationConfiguration replicationConfiguration
+  40: optional i64 (js.type = "Long") failoverVersion
 }
 
 struct DeprecateDomainRequest {
