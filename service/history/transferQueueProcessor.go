@@ -606,10 +606,10 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 	var context *workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
 	context, release, err = t.cache.getOrCreateWorkflowExecution(domainID, execution)
-	defer release()
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
