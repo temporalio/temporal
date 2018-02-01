@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.5",
+  "MinCompatibleVersion": "0.5",
+  "Description": "add cross DC domain replication config",
+  "SchemaUpdateCqlFiles": [
+    "add_replication_config.cql"
+  ]
+}

@@ -30,7 +30,7 @@ type (
 		GetAllClusterNames() map[string]bool
 	}
 
-	MetadataImpl struct {
+	metadataImpl struct {
 		// initialFailoverVersion is the initial failover version
 		initialFailoverVersion int64
 		// failoverVersionIncrement is the increment of each cluster failover version
@@ -67,7 +67,7 @@ func NewMetadata(initialFailoverVersion int64, failoverVersionIncrement int64,
 		panic("Current cluster is not specified in all cluster names")
 	}
 
-	return &MetadataImpl{
+	return &metadataImpl{
 		initialFailoverVersion:   initialFailoverVersion,
 		failoverVersionIncrement: failoverVersionIncrement,
 		currentClusterName:       currentClusterName,
@@ -76,7 +76,7 @@ func NewMetadata(initialFailoverVersion int64, failoverVersionIncrement int64,
 }
 
 // GetNextFailoverVersion return the next failover version based on input
-func (metadata *MetadataImpl) GetNextFailoverVersion(currentFailoverVersion int64) int64 {
+func (metadata *metadataImpl) GetNextFailoverVersion(currentFailoverVersion int64) int64 {
 	failoverVersion := currentFailoverVersion/metadata.failoverVersionIncrement + metadata.initialFailoverVersion
 	if failoverVersion < currentFailoverVersion {
 		return failoverVersion + metadata.failoverVersionIncrement
@@ -85,11 +85,11 @@ func (metadata *MetadataImpl) GetNextFailoverVersion(currentFailoverVersion int6
 }
 
 // GetCurrentClusterName return the current cluster name
-func (metadata *MetadataImpl) GetCurrentClusterName() string {
+func (metadata *metadataImpl) GetCurrentClusterName() string {
 	return metadata.currentClusterName
 }
 
 // GetAllClusterNames return the all cluster names
-func (metadata *MetadataImpl) GetAllClusterNames() map[string]bool {
+func (metadata *metadataImpl) GetAllClusterNames() map[string]bool {
 	return metadata.clusterNames
 }
