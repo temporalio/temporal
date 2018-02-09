@@ -48,7 +48,7 @@ services:
 clustersInfo:
   initialFailoverVersion: 0
   failoverVersionIncrement: 10
-  currentClusterName: "sjc1"
+  currentClusterName: "active"
   clusterNames:
-    - "dca1"
-    - "sjc1"
+    - "active"
+    - "standby"

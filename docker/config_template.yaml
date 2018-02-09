@@ -42,3 +42,11 @@ services:
       statsd:
         hostPort: "${STATSD_ENDPOINT}"
         prefix: "cadence-history"
+
+clustersInfo:
+  initialFailoverVersion: 0
+  failoverVersionIncrement: 10
+  currentClusterName: "active"
+  clusterNames:
+    - "active"
+    - "standby"
