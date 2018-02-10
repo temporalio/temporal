@@ -64,6 +64,20 @@ func LogOperationPanicEvent(logger bark.Logger, msg string, err error) {
 	}).Fatalf("%v.  Error: %v", msg, err)
 }
 
+// LogInternalServiceError is used to log internal service error
+func LogInternalServiceError(logger bark.Logger, err error) {
+	logger.WithFields(bark.Fields{
+		TagErr: err,
+	}).Error("Internal service error")
+}
+
+// LogUncategorizedError is used to log error that are uncategorized
+func LogUncategorizedError(logger bark.Logger, err error) {
+	logger.WithFields(bark.Fields{
+		TagErr: err,
+	}).Error("Uncategorized error")
+}
+
 //
 // History service logging methods
 //
