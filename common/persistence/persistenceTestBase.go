@@ -27,15 +27,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gocql/gocql"
-	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
+
+	"github.com/gocql/gocql"
+	"github.com/pborman/uuid"
+	log "github.com/sirupsen/logrus"
+	"github.com/uber-common/bark"
 )
 
 const (
@@ -93,6 +93,7 @@ type (
 
 	// CassandraTestCluster allows executing cassandra operations in testing.
 	CassandraTestCluster struct {
+		port     int
 		keyspace string
 		cluster  *gocql.ClusterConfig
 		session  *gocql.Session
@@ -862,7 +863,8 @@ func (s *CassandraTestCluster) tearDownTestCluster() {
 	s.session.Close()
 }
 
-func (s *CassandraTestCluster) createCluster(clusterHosts string, port int, user, password, dc string,
+func (s *CassandraTestCluster) createCluster(
+	clusterHosts string, port int, user, password, dc string,
 	cons gocql.Consistency, keyspace string) {
 	s.cluster = common.NewCassandraCluster(clusterHosts, port, user, password, dc)
 	s.cluster.Consistency = cons
@@ -898,7 +900,7 @@ func (s *CassandraTestCluster) loadSchema(fileNames []string, schemaDir string) 
 		workflowSchemaDir = schemaDir + "/schema/cadence"
 	}
 
-	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace, true)
+	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Port, s.keyspace, true)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
@@ -910,7 +912,7 @@ func (s *CassandraTestCluster) loadVisibilitySchema(fileNames []string, schemaDi
 		workflowSchemaDir = schemaDir + "/schema/visibility"
 	}
 
-	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.keyspace, false)
+	err := common.LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Port, s.keyspace, false)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
