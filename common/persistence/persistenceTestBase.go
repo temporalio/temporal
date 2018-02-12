@@ -123,7 +123,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		testAllClusterNames,
 	)
 	// Setup Workflow keyspace and deploy schema for tests
-	s.CassandraTestCluster.setupTestCluster(options.KeySpace, options.DropKeySpace, options.SchemaDir)
+	s.CassandraTestCluster.setupTestCluster(options)
 	shardID := 0
 	var err error
 	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
@@ -843,15 +843,18 @@ func (s *TestBase) ClearTransferQueue() {
 	atomic.StoreInt64(&s.readLevel, 0)
 }
 
-func (s *CassandraTestCluster) setupTestCluster(keySpace string, dropKeySpace bool, schemaDir string) {
+func (s *CassandraTestCluster) setupTestCluster(options TestBaseOptions) {
+	keySpace := options.KeySpace
 	if keySpace == "" {
 		keySpace = generateRandomKeyspace(10)
 	}
-	s.createCluster(testWorkflowClusterHosts, testPort, testUser, testPassword, testDatacenter, gocql.Consistency(1),
-		keySpace)
-	s.createKeyspace(1, dropKeySpace)
-	s.loadSchema([]string{"schema.cql"}, schemaDir)
-	s.loadVisibilitySchema([]string{"schema.cql"}, schemaDir)
+	s.createCluster(
+		testWorkflowClusterHosts, options.ClusterPort, testUser, testPassword, testDatacenter,
+		gocql.Consistency(1), keySpace,
+	)
+	s.createKeyspace(1, options.DropKeySpace)
+	s.loadSchema([]string{"schema.cql"}, options.SchemaDir)
+	s.loadVisibilitySchema([]string{"schema.cql"}, options.SchemaDir)
 }
 
 func (s *CassandraTestCluster) tearDownTestCluster() {
