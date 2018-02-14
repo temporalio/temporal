@@ -3748,7 +3748,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 				return nil, []*workflow.Decision{{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
 					StartChildWorkflowExecutionDecisionAttributes: &workflow.StartChildWorkflowExecutionDecisionAttributes{
-						Domain:       common.StringPtr(s.domainName),
 						WorkflowId:   common.StringPtr(childID),
 						WorkflowType: childWorkflowType,
 						TaskList:     taskListChild,
@@ -3841,7 +3840,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
-	s.Equal(s.domainName, *completedAttributes.Domain)
+	s.Nil(completedAttributes.Domain)
 	s.Equal(childID, *completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, *completedAttributes.WorkflowType.Name)
 	s.Equal([]byte("Child Done."), completedAttributes.Result)
@@ -3913,11 +3912,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 				return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
 					ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-						WorkflowType: childWorkflowType,
-						TaskList:     taskList,
-						Input:        buf.Bytes(),
-						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
-						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+						Input: buf.Bytes(),
 					},
 				}}, nil
 			}
@@ -3945,12 +3940,8 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 						Domain:       common.StringPtr(s.domainName),
 						WorkflowId:   common.StringPtr(childID),
 						WorkflowType: childWorkflowType,
-						TaskList:     taskList,
 						Input:        buf.Bytes(),
-						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
-						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
-						Control:                             nil,
+						ChildPolicy:  common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 					},
 				}}, nil
 			} else if previousStartedEventID > 0 {

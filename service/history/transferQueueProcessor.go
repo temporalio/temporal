@@ -843,7 +843,7 @@ func (t *transferQueueProcessorImpl) recordChildExecutionStarted(task *persisten
 				return &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
 			}
 
-			domain := *initiatedAttributes.Domain
+			domain := initiatedAttributes.Domain
 			initiatedEventID := task.ScheduleID
 			ci, isRunning := msBuilder.GetChildExecutionInfo(initiatedEventID)
 			if !isRunning || ci.StartedID != emptyEventID {

@@ -1048,7 +1048,7 @@ Update_History_Loop:
 					continue Process_Decision_Loop
 				}
 				attributes := d.ContinueAsNewWorkflowExecutionDecisionAttributes
-				if err = validateContinueAsNewWorkflowExecutionAttributes(attributes); err != nil {
+				if err = validateContinueAsNewWorkflowExecutionAttributes(msBuilder.executionInfo, attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadContinueAsNewAttributes
 					break Process_Decision_Loop
@@ -1074,8 +1074,14 @@ Update_History_Loop:
 					metrics.DecisionTypeChildWorkflowCounter)
 				targetDomainID := domainID
 				attributes := d.StartChildWorkflowExecutionDecisionAttributes
+				if err = validateStartChildExecutionAttributes(msBuilder.executionInfo, attributes); err != nil {
+					failDecision = true
+					failCause = workflow.DecisionTaskFailedCauseBadStartChildExecutionAttributes
+					break Process_Decision_Loop
+				}
+
 				// First check if we need to use a different target domain to schedule child execution
-				if attributes.Domain == nil {
+				if attributes.Domain != nil {
 					// TODO: Error handling for DecisionType_StartChildWorkflowExecution failed when domain lookup fails
 					domainEntry, err := e.domainCache.GetDomain(*attributes.Domain)
 					if err != nil {
@@ -1974,25 +1980,66 @@ func validateSignalExternalWorkflowExecutionAttributes(attributes *workflow.Sign
 	return nil
 }
 
-func validateContinueAsNewWorkflowExecutionAttributes(attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) error {
+func validateContinueAsNewWorkflowExecutionAttributes(executionInfo *persistence.WorkflowExecutionInfo,
+	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) error {
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "ContinueAsNewWorkflowExecutionDecisionAttributes is not set on decision."}
 	}
 
-	if attributes.WorkflowType == nil || attributes.WorkflowType.Name == nil || *attributes.WorkflowType.Name == "" {
-		return &workflow.BadRequestError{Message: "WorkflowType is not set on decision."}
+	// Inherit workflow type from previous execution if not provided on decision
+	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
+		attributes.WorkflowType = &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)}
 	}
 
-	if attributes.TaskList == nil || attributes.TaskList.Name == nil || *attributes.TaskList.Name == "" {
-		return &workflow.BadRequestError{Message: "TaskList is not set on decision."}
+	// Inherit Tasklist from previous execution if not provided on decision
+	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
+		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)}
 	}
 
-	if attributes.ExecutionStartToCloseTimeoutSeconds == nil || *attributes.ExecutionStartToCloseTimeoutSeconds <= 0 {
-		return &workflow.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on decision."}
+	// Inherit workflow timeout from previous execution if not provided on decision
+	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.WorkflowTimeout)
 	}
 
-	if attributes.TaskStartToCloseTimeoutSeconds == nil || *attributes.TaskStartToCloseTimeoutSeconds <= 0 {
-		return &workflow.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on decision."}
+	// Inherit decision task timeout from previous execution if not provided on decision
+	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(executionInfo.DecisionTimeoutValue)
+	}
+
+	return nil
+}
+
+func validateStartChildExecutionAttributes(parentInfo *persistence.WorkflowExecutionInfo,
+	attributes *workflow.StartChildWorkflowExecutionDecisionAttributes) error {
+	if attributes == nil {
+		return &workflow.BadRequestError{Message: "StartChildWorkflowExecutionDecisionAttributes is not set on decision."}
+	}
+
+	if attributes.GetWorkflowId() == "" {
+		return &workflow.BadRequestError{Message: "Required field WorkflowID is not set on decision."}
+	}
+
+	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
+		return &workflow.BadRequestError{Message: "Required field WorkflowType is not set on decision."}
+	}
+
+	if attributes.ChildPolicy == nil {
+		return &workflow.BadRequestError{Message: "Required field ChildPolicy is not set on decision."}
+	}
+
+	// Inherit tasklist from parent workflow execution if not provided on decision
+	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
+		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(parentInfo.TaskList)}
+	}
+
+	// Inherit workflow timeout from parent workflow execution if not provided on decision
+	if attributes.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.WorkflowTimeout)
+	}
+
+	// Inherit decision task timeout from parent workflow execution if not provided on decision
+	if attributes.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+		attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(parentInfo.DecisionTimeoutValue)
 	}
 
 	return nil

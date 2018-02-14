@@ -5619,6 +5619,7 @@ const (
 	DecisionTaskFailedCauseResetStickyTasklist                                 DecisionTaskFailedCause = 12
 	DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure                      DecisionTaskFailedCause = 13
 	DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes                DecisionTaskFailedCause = 14
+	DecisionTaskFailedCauseBadStartChildExecutionAttributes                    DecisionTaskFailedCause = 15
 )
 
 // DecisionTaskFailedCause_Values returns all recognized values of DecisionTaskFailedCause.
@@ -5639,6 +5640,7 @@ func DecisionTaskFailedCause_Values() []DecisionTaskFailedCause {
 		DecisionTaskFailedCauseResetStickyTasklist,
 		DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure,
 		DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes,
+		DecisionTaskFailedCauseBadStartChildExecutionAttributes,
 	}
 }
 
@@ -5693,6 +5695,9 @@ func (v *DecisionTaskFailedCause) UnmarshalText(value []byte) error {
 		return nil
 	case "BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES":
 		*v = DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
+		return nil
+	case "BAD_START_CHILD_EXECUTION_ATTRIBUTES":
+		*v = DecisionTaskFailedCauseBadStartChildExecutionAttributes
 		return nil
 	default:
 		return fmt.Errorf("unknown enum value %q for %q", value, "DecisionTaskFailedCause")
@@ -5760,6 +5765,8 @@ func (v DecisionTaskFailedCause) String() string {
 		return "WORKFLOW_WORKER_UNHANDLED_FAILURE"
 	case 14:
 		return "BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES"
+	case 15:
+		return "BAD_START_CHILD_EXECUTION_ATTRIBUTES"
 	}
 	return fmt.Sprintf("DecisionTaskFailedCause(%d)", w)
 }
@@ -5808,6 +5815,8 @@ func (v DecisionTaskFailedCause) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"WORKFLOW_WORKER_UNHANDLED_FAILURE\""), nil
 	case 14:
 		return ([]byte)("\"BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES\""), nil
+	case 15:
+		return ([]byte)("\"BAD_START_CHILD_EXECUTION_ATTRIBUTES\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }
