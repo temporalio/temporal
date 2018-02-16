@@ -71,7 +71,7 @@ const (
 	// minimum current execution retention TTL when current execution is deleted, in seconds
 	minCurrentExecutionRetentionTTL = int32(24 * time.Hour / time.Second)
 
-	stickyTaskListTTL = int32(86400) // if sticky task_list stopped being updated, remove it in one day
+	stickyTaskListTTL = int32(24 * time.Hour / time.Second) // if sticky task_list stopped being updated, remove it in one day
 )
 
 const (
@@ -149,6 +149,7 @@ const (
 		`target_domain_id: ?, ` +
 		`target_workflow_id: ?, ` +
 		`target_run_id: ?, ` +
+		`target_child_workflow_only: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
 		`schedule_id: ?` +
@@ -203,7 +204,7 @@ const (
 
 	templateRequestCancelInfoType = `{` +
 		`initiated_id: ?, ` +
-		`cancel_request_id: ?` +
+		`cancel_request_id: ? ` +
 		`}`
 
 	templateSignalInfoType = `{` +
@@ -1800,6 +1801,7 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		var scheduleID int64
 		targetWorkflowID := transferTaskTransferTargetWorkflowID
 		targetRunID := transferTaskTypeTransferTargetRunID
+		targetChildWorkflowOnly := false
 
 		switch task.GetType() {
 		case TransferTaskTypeActivityTask:
@@ -1816,7 +1818,11 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			targetDomainID = task.(*CancelExecutionTask).TargetDomainID
 			targetWorkflowID = task.(*CancelExecutionTask).TargetWorkflowID
 			targetRunID = task.(*CancelExecutionTask).TargetRunID
-			scheduleID = task.(*CancelExecutionTask).ScheduleID
+			if targetRunID == "" {
+				targetRunID = transferTaskTypeTransferTargetRunID
+			}
+			targetChildWorkflowOnly = task.(*CancelExecutionTask).TargetChildWorkflowOnly
+			scheduleID = task.(*CancelExecutionTask).InitiatedID
 
 		case TransferTaskTypeSignalExecution:
 			targetDomainID = task.(*SignalExecutionTask).TargetDomainID
@@ -1825,6 +1831,7 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			if targetRunID == "" {
 				targetRunID = transferTaskTypeTransferTargetRunID
 			}
+			targetChildWorkflowOnly = task.(*SignalExecutionTask).TargetChildWorkflowOnly
 			scheduleID = task.(*SignalExecutionTask).InitiatedID
 
 		case TransferTaskTypeStartChildExecution:
@@ -1846,6 +1853,7 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			targetDomainID,
 			targetWorkflowID,
 			targetRunID,
+			targetChildWorkflowOnly,
 			taskList,
 			task.GetType(),
 			scheduleID,
@@ -2278,6 +2286,11 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.TargetWorkflowID = v.(string)
 		case "target_run_id":
 			info.TargetRunID = v.(gocql.UUID).String()
+			if info.TargetRunID == transferTaskTypeTransferTargetRunID {
+				info.TargetRunID = ""
+			}
+		case "target_child_workflow_only":
+			info.TargetChildWorkflowOnly = v.(bool)
 		case "task_list":
 			info.TaskList = v.(string)
 		case "type":
@@ -2524,9 +2537,4 @@ func SetVisibilityTSFrom(task Task, t time.Time) {
 	case TaskTypeDeleteHistoryEvent:
 		task.(*DeleteHistoryEventTask).VisibilityTimestamp = t
 	}
-}
-
-// GetTransferTaskTypeTransferTargetRunID - helper method to the default runID
-func GetTransferTaskTypeTransferTargetRunID() string {
-	return transferTaskTypeTransferTargetRunID
 }

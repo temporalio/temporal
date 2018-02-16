@@ -297,6 +297,7 @@ struct RequestCancelExternalWorkflowExecutionDecisionAttributes {
   20: optional string workflowId
   30: optional string runId
   40: optional binary control
+  50: optional bool childWorkflowOnly
 }
 
 struct SignalExternalWorkflowExecutionDecisionAttributes {
@@ -305,6 +306,7 @@ struct SignalExternalWorkflowExecutionDecisionAttributes {
   30: optional string signalName
   40: optional binary input
   50: optional binary control
+  60: optional bool childWorkflowOnly
 }
 
 struct RecordMarkerDecisionAttributes {
@@ -536,6 +538,7 @@ struct RequestCancelExternalWorkflowExecutionInitiatedEventAttributes {
   20: optional string domain
   30: optional WorkflowExecution workflowExecution
   40: optional binary control
+  50: optional bool childWorkflowOnly
 }
 
 struct RequestCancelExternalWorkflowExecutionFailedEventAttributes {
@@ -560,6 +563,7 @@ struct SignalExternalWorkflowExecutionInitiatedEventAttributes {
   40: optional string signalName
   50: optional binary input
   60: optional binary control
+  70: optional bool childWorkflowOnly
 }
 
 struct SignalExternalWorkflowExecutionFailedEventAttributes {

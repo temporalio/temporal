@@ -229,6 +229,11 @@ func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persis
 		return
 	}
 
+	// the transfer tasks are not guaranteed to be executed in serious.
+	// since there are multiple workers polling from this task channel
+	// so if one workflow, reports a series of decitions, one depend on another,
+	// e.g. 1. start child workflow; 2. signal this workflow, the execution order
+	// is not guatanteed.
 	for _, tsk := range tasks {
 		tasksCh <- tsk
 	}
@@ -510,8 +515,10 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	var err error
 	domainID := task.DomainID
 	targetDomainID := task.TargetDomainID
-	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId: common.StringPtr(task.RunID)}
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
 
 	var context *workflowExecutionContext
 	var release releaseWorkflowExecutionFunc
@@ -533,12 +540,11 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	}
 
 	initiatedEventID := task.ScheduleID
-	ri, isPending := msBuilder.GetRequestCancelInfo(initiatedEventID)
-	if !isPending {
+	ri, isRunning := msBuilder.GetRequestCancelInfo(initiatedEventID)
+	if !isRunning {
 		// No pending request cancellation for this initiatedID, complete this transfer task
 		return nil
 	}
-
 	cancelRequest := &history.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(targetDomainID),
 		CancelRequest: &workflow.RequestCancelWorkflowExecutionRequest{
@@ -551,12 +557,12 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
 			RequestId: common.StringPtr(ri.CancelRequestID),
 		},
-		// TODO (Bowei): looks like these External properties are not used
 		ExternalInitiatedEventId: common.Int64Ptr(task.ScheduleID),
 		ExternalWorkflowExecution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(task.WorkflowID),
 			RunId:      common.StringPtr(task.RunID),
 		},
+		ChildWorkflowOnly: common.BoolPtr(task.TargetChildWorkflowOnly),
 	}
 
 	op := func() error {
@@ -566,13 +572,16 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		t.logger.Debugf("Failed to cancel external workflow execution. Error: %v", err)
-
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by setting the err = nil
 		if common.IsServiceNonRetryableError(err) {
 			err = t.requestCancelFailed(task, context, cancelRequest)
 			if _, ok := err.(*workflow.EntityNotExistsError); ok {
 				// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+				return nil
+			} else if _, ok := err.(*workflow.CancellationAlreadyRequestedError); ok {
+				// this could happen if target workflow cancellation is alreay requested
+				// to make workflow cancellation idempotent, we should eat this error.
 				return nil
 			}
 		}
@@ -652,20 +661,13 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 		return err
 	}
 
-	targetRunID := task.TargetRunID
-	if targetRunID == persistence.GetTransferTaskTypeTransferTargetRunID() {
-		// when signal decision has empty runID, db will save default runID to transfer task.
-		// change it to empty string here, so that getOrCreateWorkflowExecution can return current runID for this workflow.
-		targetRunID = ""
-	}
-
 	signalRequest := &history.SignalWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(targetDomainID),
 		SignalRequest: &workflow.SignalWorkflowExecutionRequest{
 			Domain: common.StringPtr(targetDomainID),
 			WorkflowExecution: &workflow.WorkflowExecution{
 				WorkflowId: common.StringPtr(task.TargetWorkflowID),
-				RunId:      common.StringPtr(targetRunID),
+				RunId:      common.StringPtr(task.TargetRunID),
 			},
 			Identity:   common.StringPtr(identityHistoryService),
 			SignalName: common.StringPtr(ri.SignalName),
@@ -674,6 +676,11 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 			RequestId: common.StringPtr(ri.SignalRequestID),
 			Control:   ri.Control,
 		},
+		ExternalWorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(task.WorkflowID),
+			RunId:      common.StringPtr(task.RunID),
+		},
+		ChildWorkflowOnly: common.BoolPtr(task.TargetChildWorkflowOnly),
 	}
 
 	err = t.SignalExecutionWithRetry(signalRequest)
@@ -707,7 +714,7 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 		DomainUUID: common.StringPtr(targetDomainID),
 		WorkflowExecution: &workflow.WorkflowExecution{
 			WorkflowId: common.StringPtr(task.TargetWorkflowID),
-			RunId:      common.StringPtr(targetRunID),
+			RunId:      common.StringPtr(task.TargetRunID),
 		},
 		RequestId: common.StringPtr(ri.SignalRequestID),
 	}
@@ -923,7 +930,8 @@ func (t *transferQueueProcessorImpl) requestCancelCompleted(task *persistence.Tr
 				initiatedEventID,
 				*request.DomainUUID,
 				*request.CancelRequest.WorkflowExecution.WorkflowId,
-				common.StringDefault(request.CancelRequest.WorkflowExecution.RunId))
+				common.StringDefault(request.CancelRequest.WorkflowExecution.RunId),
+			)
 
 			return nil
 		})

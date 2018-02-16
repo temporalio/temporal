@@ -129,6 +129,8 @@ struct RecordDecisionTaskStartedResponse {
 struct SignalWorkflowExecutionRequest {
   10: optional string domainUUID
   20: optional shared.SignalWorkflowExecutionRequest signalRequest
+  30: optional shared.WorkflowExecution externalWorkflowExecution
+  40: optional bool childWorkflowOnly
 }
 
 struct RemoveSignalMutableStateRequest {
@@ -147,6 +149,7 @@ struct RequestCancelWorkflowExecutionRequest {
   20: optional shared.RequestCancelWorkflowExecutionRequest cancelRequest
   30: optional i64 (js.type = "Long") externalInitiatedEventId
   40: optional shared.WorkflowExecution externalWorkflowExecution
+  50: optional bool childWorkflowOnly
 }
 
 struct ScheduleDecisionTaskRequest {

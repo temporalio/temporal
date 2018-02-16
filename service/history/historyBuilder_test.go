@@ -465,6 +465,151 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	s.Equal(int64(12), activity2FailedEvent2.ActivityTaskFailedEventAttributes.GetStartedEventId())
 }
 
+func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() {
+	workflowType := "some random workflow type"
+	tasklist := "some random tasklist"
+	identity := "some random identity"
+	input := []byte("some random workflow input")
+	execTimeout := int32(60)
+	taskTimeout := int32(10)
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
+		workflowExecution, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+	)
+	s.validateWorkflowExecutionStartedEvent(
+		workflowStartedEvent, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+	)
+	s.Equal(int64(2), s.getNextEventID())
+
+	decisionInfo := s.addDecisionTaskScheduledEvent()
+	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, tasklist, taskTimeout)
+	s.Equal(int64(3), s.getNextEventID())
+	decisionInfo, decisionRunning := s.msBuilder.GetPendingDecision(2)
+	s.True(decisionRunning)
+	s.NotNil(decisionInfo)
+	s.Equal(int64(2), decisionInfo.ScheduleID)
+	s.Equal(emptyEventID, decisionInfo.StartedID)
+	s.Equal(emptyEventID, s.getPreviousDecisionStartedEventID())
+
+	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, tasklist, identity)
+	s.validateDecisionTaskStartedEvent(decisionStartedEvent, 3, 2, identity)
+	s.Equal(int64(4), s.getNextEventID())
+	decisionInfo, decisionRunning = s.msBuilder.GetPendingDecision(2)
+	s.True(decisionRunning)
+	s.NotNil(decisionInfo)
+	s.Equal(int64(2), decisionInfo.ScheduleID)
+	s.Equal(int64(3), decisionInfo.StartedID)
+	s.Equal(emptyEventID, s.getPreviousDecisionStartedEventID())
+
+	decisionContext := []byte("some random decision context")
+	decisionCompletedEvent := s.addDecisionTaskCompletedEvent(2, 3, decisionContext, identity)
+	s.validateDecisionTaskCompletedEvent(decisionCompletedEvent, 4, 2, 3, decisionContext, identity)
+	s.Equal(int64(5), s.getNextEventID())
+	decisionInfo, decisionRunning = s.msBuilder.GetPendingDecision(2)
+	s.False(decisionRunning)
+	s.Nil(decisionInfo)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	targetDomain := "some random target domain"
+	targetExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random target workflow ID"),
+		RunId:      common.StringPtr("some random target run ID"),
+	}
+	cancellationChildWorkflowOnly := true
+	cancellationInitiatedEvent := s.addRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		4, targetDomain, targetExecution, cancellationChildWorkflowOnly,
+	)
+	s.validateRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		cancellationInitiatedEvent, 5, 4, targetDomain, targetExecution, cancellationChildWorkflowOnly,
+	)
+	s.Equal(int64(6), s.getNextEventID())
+
+	cancellationRequestedEvent := s.addExternalWorkflowExecutionCancelRequested(
+		5, targetDomain, targetExecution.GetWorkflowId(), targetExecution.GetRunId(),
+	)
+	s.validateExternalWorkflowExecutionCancelRequested(
+		cancellationRequestedEvent, 6, 5, targetDomain, targetExecution,
+	)
+	s.Equal(int64(7), s.getNextEventID())
+}
+
+func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
+	workflowType := "some random workflow type"
+	tasklist := "some random tasklist"
+	identity := "some random identity"
+	input := []byte("some random workflow input")
+	execTimeout := int32(60)
+	taskTimeout := int32(10)
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	workflowStartedEvent := s.addWorkflowExecutionStartedEvent(
+		workflowExecution, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+	)
+	s.validateWorkflowExecutionStartedEvent(
+		workflowStartedEvent, workflowType, tasklist, input, execTimeout, taskTimeout, identity,
+	)
+	s.Equal(int64(2), s.getNextEventID())
+
+	decisionInfo := s.addDecisionTaskScheduledEvent()
+	s.validateDecisionTaskScheduledEvent(decisionInfo, 2, tasklist, taskTimeout)
+	s.Equal(int64(3), s.getNextEventID())
+	decisionInfo, decisionRunning := s.msBuilder.GetPendingDecision(2)
+	s.True(decisionRunning)
+	s.NotNil(decisionInfo)
+	s.Equal(int64(2), decisionInfo.ScheduleID)
+	s.Equal(emptyEventID, decisionInfo.StartedID)
+	s.Equal(emptyEventID, s.getPreviousDecisionStartedEventID())
+
+	decisionStartedEvent := s.addDecisionTaskStartedEvent(2, tasklist, identity)
+	s.validateDecisionTaskStartedEvent(decisionStartedEvent, 3, 2, identity)
+	s.Equal(int64(4), s.getNextEventID())
+	decisionInfo, decisionRunning = s.msBuilder.GetPendingDecision(2)
+	s.True(decisionRunning)
+	s.NotNil(decisionInfo)
+	s.Equal(int64(2), decisionInfo.ScheduleID)
+	s.Equal(int64(3), decisionInfo.StartedID)
+	s.Equal(emptyEventID, s.getPreviousDecisionStartedEventID())
+
+	decisionContext := []byte("some random decision context")
+	decisionCompletedEvent := s.addDecisionTaskCompletedEvent(2, 3, decisionContext, identity)
+	s.validateDecisionTaskCompletedEvent(decisionCompletedEvent, 4, 2, 3, decisionContext, identity)
+	s.Equal(int64(5), s.getNextEventID())
+	decisionInfo, decisionRunning = s.msBuilder.GetPendingDecision(2)
+	s.False(decisionRunning)
+	s.Nil(decisionInfo)
+	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
+
+	targetDomain := "some random target domain"
+	targetExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random target workflow ID"),
+		RunId:      common.StringPtr("some random target run ID"),
+	}
+	cancellationChildWorkflowOnly := true
+	cancellationFailedCause := workflow.CancelExternalWorkflowExecutionFailedCause(59)
+	cancellationInitiatedEvent := s.addRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		4, targetDomain, targetExecution, cancellationChildWorkflowOnly,
+	)
+	s.validateRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		cancellationInitiatedEvent, 5, 4, targetDomain, targetExecution, cancellationChildWorkflowOnly,
+	)
+	s.Equal(int64(6), s.getNextEventID())
+
+	cancellationRequestedEvent := s.addRequestCancelExternalWorkflowExecutionFailedEvent(
+		4, 5, targetDomain, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), cancellationFailedCause,
+	)
+	s.validateRequestCancelExternalWorkflowExecutionFailedEvent(
+		cancellationRequestedEvent, 6, 4, 5, targetDomain, targetExecution, cancellationFailedCause,
+	)
+	s.Equal(int64(7), s.getNextEventID())
+}
+
 func (s *historyBuilderSuite) getNextEventID() int64 {
 	return s.msBuilder.executionInfo.NextEventID
 }
@@ -559,6 +704,40 @@ func (s *historyBuilderSuite) addActivityTaskFailedEvent(scheduleID, startedID i
 	})
 
 	return e
+}
+
+func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	decisionCompletedEventID int64, targetDomain string, targetExecution workflow.WorkflowExecution,
+	childWorkflowOnly bool) *workflow.HistoryEvent {
+	e, _ := s.msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		decisionCompletedEventID,
+		uuid.New(),
+		&workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes{
+			Domain:            common.StringPtr(targetDomain),
+			WorkflowId:        targetExecution.WorkflowId,
+			RunId:             targetExecution.RunId,
+			ChildWorkflowOnly: common.BoolPtr(childWorkflowOnly),
+		},
+	)
+
+	return e
+}
+
+func (s *historyBuilderSuite) addExternalWorkflowExecutionCancelRequested(
+	initiatedID int64, domain, workflowID, runID string) *workflow.HistoryEvent {
+
+	return s.msBuilder.AddExternalWorkflowExecutionCancelRequested(
+		initiatedID, domain, workflowID, runID,
+	)
+}
+
+func (s *historyBuilderSuite) addRequestCancelExternalWorkflowExecutionFailedEvent(
+	decisionTaskCompletedEventID, initiatedID int64,
+	domain, workflowID, runID string, cause workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent {
+
+	return s.msBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
+		decisionTaskCompletedEventID, initiatedID, domain, workflowID, runID, cause,
+	)
 }
 
 func (s *historyBuilderSuite) validateWorkflowExecutionStartedEvent(event *workflow.HistoryEvent, workflowType,
@@ -660,6 +839,51 @@ func (s *historyBuilderSuite) validateActivityTaskFailedEvent(event *workflow.Hi
 	s.Equal(reason, *attributes.Reason)
 	s.Equal(details, attributes.Details)
 	s.Equal(identity, *attributes.Identity)
+}
+
+func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	event *workflow.HistoryEvent, eventID, decisionTaskCompletedEventID int64,
+	domain string, execution workflow.WorkflowExecution, childWorkflowOnly bool) {
+	s.NotNil(event)
+	s.Equal(workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated, *event.EventType)
+	s.Equal(eventID, *event.EventId)
+	attributes := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
+	s.NotNil(attributes)
+	s.Equal(decisionTaskCompletedEventID, *attributes.DecisionTaskCompletedEventId)
+	s.Equal(domain, attributes.GetDomain())
+	s.Equal(execution.GetWorkflowId(), attributes.WorkflowExecution.GetWorkflowId())
+	s.Equal(execution.GetRunId(), attributes.WorkflowExecution.GetRunId())
+	s.Equal(childWorkflowOnly, *attributes.ChildWorkflowOnly)
+}
+
+func (s *historyBuilderSuite) validateExternalWorkflowExecutionCancelRequested(
+	event *workflow.HistoryEvent, eventID, initiatedEventID int64,
+	domain string, execution workflow.WorkflowExecution) {
+	s.NotNil(event)
+	s.Equal(workflow.EventTypeExternalWorkflowExecutionCancelRequested, *event.EventType)
+	s.Equal(eventID, *event.EventId)
+	attributes := event.ExternalWorkflowExecutionCancelRequestedEventAttributes
+	s.NotNil(attributes)
+	s.Equal(initiatedEventID, attributes.GetInitiatedEventId())
+	s.Equal(domain, attributes.GetDomain())
+	s.Equal(execution.GetWorkflowId(), attributes.WorkflowExecution.GetWorkflowId())
+	s.Equal(execution.GetRunId(), attributes.WorkflowExecution.GetRunId())
+}
+
+func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionFailedEvent(
+	event *workflow.HistoryEvent, eventID, decisionTaskCompletedEventID, initiatedEventID int64,
+	domain string, execution workflow.WorkflowExecution, cause workflow.CancelExternalWorkflowExecutionFailedCause) {
+	s.NotNil(event)
+	s.Equal(workflow.EventTypeRequestCancelExternalWorkflowExecutionFailed, *event.EventType)
+	s.Equal(eventID, *event.EventId)
+	attributes := event.RequestCancelExternalWorkflowExecutionFailedEventAttributes
+	s.NotNil(attributes)
+	s.Equal(decisionTaskCompletedEventID, attributes.GetDecisionTaskCompletedEventId())
+	s.Equal(initiatedEventID, attributes.GetInitiatedEventId())
+	s.Equal(domain, attributes.GetDomain())
+	s.Equal(execution.GetWorkflowId(), attributes.WorkflowExecution.GetWorkflowId())
+	s.Equal(execution.GetRunId(), attributes.WorkflowExecution.GetRunId())
+	s.Equal(cause, *attributes.Cause)
 }
 
 func (s *historyBuilderSuite) printHistory() string {

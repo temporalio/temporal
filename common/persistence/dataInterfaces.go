@@ -166,16 +166,17 @@ type (
 
 	// TransferTaskInfo describes a transfer task
 	TransferTaskInfo struct {
-		DomainID         string
-		WorkflowID       string
-		RunID            string
-		TaskID           int64
-		TargetDomainID   string
-		TargetWorkflowID string
-		TargetRunID      string
-		TaskList         string
-		TaskType         int
-		ScheduleID       int64
+		DomainID                string
+		WorkflowID              string
+		RunID                   string
+		TaskID                  int64
+		TargetDomainID          string
+		TargetWorkflowID        string
+		TargetRunID             string
+		TargetChildWorkflowOnly bool
+		TaskList                string
+		TaskType                int
+		ScheduleID              int64
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -262,20 +263,22 @@ type (
 
 	// CancelExecutionTask identifies a transfer task for cancel of execution
 	CancelExecutionTask struct {
-		TaskID           int64
-		TargetDomainID   string
-		TargetWorkflowID string
-		TargetRunID      string
-		ScheduleID       int64
+		TaskID                  int64
+		TargetDomainID          string
+		TargetWorkflowID        string
+		TargetRunID             string
+		TargetChildWorkflowOnly bool
+		InitiatedID             int64
 	}
 
 	// SignalExecutionTask identifies a transfer task for signal execution
 	SignalExecutionTask struct {
-		TaskID           int64
-		TargetDomainID   string
-		TargetWorkflowID string
-		TargetRunID      string
-		InitiatedID      int64
+		TaskID                  int64
+		TargetDomainID          string
+		TargetWorkflowID        string
+		TargetRunID             string
+		TargetChildWorkflowOnly bool
+		InitiatedID             int64
 	}
 
 	// StartChildExecutionTask identifies a transfer task for starting child execution

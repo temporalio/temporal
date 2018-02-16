@@ -1,0 +1,1 @@
+ALTER TYPE transfer_task ADD target_child_workflow_only boolean;

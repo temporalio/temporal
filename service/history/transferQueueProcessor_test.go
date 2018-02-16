@@ -336,7 +336,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 		TargetDomainID:   targetDomain,
 		TargetWorkflowID: targetWorkflowID,
 		TargetRunID:      targetRunID,
-		ScheduleID:       *initiatedEvent.EventId,
+		InitiatedID:      *initiatedEvent.EventId,
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,
@@ -398,7 +398,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 		TargetDomainID:   targetDomain,
 		TargetWorkflowID: targetWorkflowID,
 		TargetRunID:      targetRunID,
-		ScheduleID:       *initiatedEvent.EventId,
+		InitiatedID:      *initiatedEvent.EventId,
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,

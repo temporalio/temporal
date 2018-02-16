@@ -88,9 +88,12 @@ var (
 	ErrActivityTaskNotFound = &workflow.EntityNotExistsError{Message: "Activity task not found."}
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = &workflow.EntityNotExistsError{Message: "Workflow execution already completed."}
+	// ErrWorkflowParent is the error to parent execution is given and mismatch
+	ErrWorkflowParent = &workflow.EntityNotExistsError{Message: "Workflow parent does not match."}
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = &workflow.BadRequestError{Message: "Error deserializing task token."}
-
+	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
+	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowCloseState = map[int]bool{
@@ -978,11 +981,16 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 
-				foreignDomainEntry, err := e.domainCache.GetDomain(*attributes.Domain)
-				if err != nil {
-					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.",
-							*attributes.Domain)}
+				foreignDomainID := ""
+				if attributes.GetDomain() == "" {
+					foreignDomainID = msBuilder.executionInfo.DomainID
+				} else {
+					foreignDomainEntry, err := e.domainCache.GetDomain(attributes.GetDomain())
+					if err != nil {
+						return &workflow.InternalServiceError{
+							Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.", attributes.GetDomain())}
+					}
+					foreignDomainID = foreignDomainEntry.Info.ID
 				}
 
 				cancelRequestID := uuid.New()
@@ -993,10 +1001,11 @@ Update_History_Loop:
 				}
 
 				transferTasks = append(transferTasks, &persistence.CancelExecutionTask{
-					TargetDomainID:   foreignDomainEntry.Info.ID,
-					TargetWorkflowID: *attributes.WorkflowId,
-					TargetRunID:      common.StringDefault(attributes.RunId),
-					ScheduleID:       *wfCancelReqEvent.EventId,
+					TargetDomainID:          foreignDomainID,
+					TargetWorkflowID:        attributes.GetWorkflowId(),
+					TargetRunID:             attributes.GetRunId(),
+					TargetChildWorkflowOnly: attributes.GetChildWorkflowOnly(),
+					InitiatedID:             wfCancelReqEvent.GetEventId(),
 				})
 
 			case workflow.DecisionTypeSignalExternalWorkflowExecution:
@@ -1010,11 +1019,16 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 
-				foreignDomainEntry, err := e.domainCache.GetDomain(attributes.GetDomain())
-				if err != nil {
-					return &workflow.InternalServiceError{
-						Message: fmt.Sprintf("Unable to signal workflow across domain: %v.",
-							attributes.GetDomain())}
+				foreignDomainID := ""
+				if attributes.GetDomain() == "" {
+					foreignDomainID = msBuilder.executionInfo.DomainID
+				} else {
+					foreignDomainEntry, err := e.domainCache.GetDomain(attributes.GetDomain())
+					if err != nil {
+						return &workflow.InternalServiceError{
+							Message: fmt.Sprintf("Unable to signal workflow across domain: %v.", attributes.GetDomain())}
+					}
+					foreignDomainID = foreignDomainEntry.Info.ID
 				}
 
 				signalRequestID := uuid.New() // for deduplicate
@@ -1025,10 +1039,11 @@ Update_History_Loop:
 				}
 
 				transferTasks = append(transferTasks, &persistence.SignalExecutionTask{
-					TargetDomainID:   foreignDomainEntry.Info.ID,
-					TargetWorkflowID: attributes.Execution.GetWorkflowId(),
-					TargetRunID:      attributes.Execution.GetRunId(),
-					InitiatedID:      wfSignalReqEvent.GetEventId(),
+					TargetDomainID:          foreignDomainID,
+					TargetWorkflowID:        attributes.Execution.GetWorkflowId(),
+					TargetRunID:             attributes.Execution.GetRunId(),
+					TargetChildWorkflowOnly: attributes.GetChildWorkflowOnly(),
+					InitiatedID:             wfSignalReqEvent.GetEventId(),
 				})
 
 			case workflow.DecisionTypeContinueAsNewWorkflowExecution:
@@ -1454,16 +1469,26 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		return err
 	}
 	request := req.CancelRequest
-
-	workflowExecution := workflow.WorkflowExecution{
+	parentExecution := req.ExternalWorkflowExecution
+	childWorkflowOnly := req.GetChildWorkflowOnly()
+	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	return e.updateWorkflowExecution(domainID, workflowExecution, false, true,
+	return e.updateWorkflowExecution(domainID, execution, false, true,
 		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.isWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
+			}
+
+			if childWorkflowOnly {
+				parentWorkflowID := msBuilder.executionInfo.ParentWorkflowID
+				parentRunID := msBuilder.executionInfo.ParentRunID
+				if parentExecution.GetWorkflowId() != parentWorkflowID ||
+					parentExecution.GetRunId() != parentRunID {
+					return nil, ErrWorkflowParent
+				}
 			}
 
 			isCancelRequested, cancelRequestID := msBuilder.isCancelRequested()
@@ -1475,10 +1500,9 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 						return nil, nil
 					}
 				}
-
-				return nil, &workflow.CancellationAlreadyRequestedError{
-					Message: "Cancellation already requested for this workflow execution.",
-				}
+				// if we consider workflow cancellation idempotent, then this error is redundant
+				// this error maybe useful if this API is invoked by external, not decision from transfer queue
+				return nil, ErrCancellationAlreadyRequested
 			}
 
 			if msBuilder.AddWorkflowExecutionCancelRequestedEvent("", req) == nil {
@@ -1495,6 +1519,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 		return err
 	}
 	request := signalRequest.SignalRequest
+	parentExecution := signalRequest.ExternalWorkflowExecution
+	childWorkflowOnly := signalRequest.GetChildWorkflowOnly()
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
@@ -1504,6 +1530,15 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.isWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
+			}
+
+			if childWorkflowOnly {
+				parentWorkflowID := msBuilder.executionInfo.ParentWorkflowID
+				parentRunID := msBuilder.executionInfo.ParentRunID
+				if parentExecution.GetWorkflowId() != parentWorkflowID ||
+					parentExecution.GetRunId() != parentRunID {
+					return nil, ErrWorkflowParent
+				}
 			}
 
 			// deduplicate by request id for signal decision
@@ -1946,10 +1981,8 @@ func validateCancelExternalWorkflowExecutionAttributes(attributes *workflow.Requ
 	if attributes.WorkflowId == nil {
 		return &workflow.BadRequestError{Message: "WorkflowId is not set on decision."}
 	}
-	if attributes.RunId == nil {
-		return &workflow.BadRequestError{Message: "RunId is not set on decision."}
-	}
-	if uuid.Parse(*attributes.RunId) == nil {
+	runID := attributes.GetRunId()
+	if runID != "" && uuid.Parse(runID) == nil {
 		return &workflow.BadRequestError{Message: "Invalid RunId set on decision."}
 	}
 

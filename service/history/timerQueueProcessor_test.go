@@ -336,7 +336,6 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 func (s *timerQueueProcessorSuite) waitForTimerTasksToProcess(p timerQueueProcessor) {
 	for i := 0; i < 10; i++ {
 		timerInfo, err := s.GetTimerIndexTasks()
-		//fmt.Printf("TestAfterTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
 			p.Stop()

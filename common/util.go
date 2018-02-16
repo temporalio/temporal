@@ -120,6 +120,8 @@ func IsServiceNonRetryableError(err error) bool {
 		return true
 	case *workflow.BadRequestError:
 		return true
+	case *workflow.CancellationAlreadyRequestedError:
+		return true
 	}
 
 	return false

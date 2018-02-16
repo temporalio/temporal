@@ -2675,6 +2675,7 @@ type RequestCancelWorkflowExecutionRequest struct {
 	CancelRequest             *shared.RequestCancelWorkflowExecutionRequest `json:"cancelRequest,omitempty"`
 	ExternalInitiatedEventId  *int64                                        `json:"externalInitiatedEventId,omitempty"`
 	ExternalWorkflowExecution *shared.WorkflowExecution                     `json:"externalWorkflowExecution,omitempty"`
+	ChildWorkflowOnly         *bool                                         `json:"childWorkflowOnly,omitempty"`
 }
 
 // ToWire translates a RequestCancelWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -2694,7 +2695,7 @@ type RequestCancelWorkflowExecutionRequest struct {
 //   }
 func (v *RequestCancelWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2730,6 +2731,14 @@ func (v *RequestCancelWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.ChildWorkflowOnly != nil {
+		w, err = wire.NewValueBool(*(v.ChildWorkflowOnly)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -2800,6 +2809,16 @@ func (v *RequestCancelWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ChildWorkflowOnly = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2813,7 +2832,7 @@ func (v *RequestCancelWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -2829,6 +2848,10 @@ func (v *RequestCancelWorkflowExecutionRequest) String() string {
 	}
 	if v.ExternalWorkflowExecution != nil {
 		fields[i] = fmt.Sprintf("ExternalWorkflowExecution: %v", v.ExternalWorkflowExecution)
+		i++
+	}
+	if v.ChildWorkflowOnly != nil {
+		fields[i] = fmt.Sprintf("ChildWorkflowOnly: %v", *(v.ChildWorkflowOnly))
 		i++
 	}
 
@@ -2852,6 +2875,9 @@ func (v *RequestCancelWorkflowExecutionRequest) Equals(rhs *RequestCancelWorkflo
 	if !((v.ExternalWorkflowExecution == nil && rhs.ExternalWorkflowExecution == nil) || (v.ExternalWorkflowExecution != nil && rhs.ExternalWorkflowExecution != nil && v.ExternalWorkflowExecution.Equals(rhs.ExternalWorkflowExecution))) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.ChildWorkflowOnly, rhs.ChildWorkflowOnly) {
+		return false
+	}
 
 	return true
 }
@@ -2871,6 +2897,16 @@ func (v *RequestCancelWorkflowExecutionRequest) GetDomainUUID() (o string) {
 func (v *RequestCancelWorkflowExecutionRequest) GetExternalInitiatedEventId() (o int64) {
 	if v.ExternalInitiatedEventId != nil {
 		return *v.ExternalInitiatedEventId
+	}
+
+	return
+}
+
+// GetChildWorkflowOnly returns the value of ChildWorkflowOnly if it is set or its
+// zero value if it is unset.
+func (v *RequestCancelWorkflowExecutionRequest) GetChildWorkflowOnly() (o bool) {
+	if v.ChildWorkflowOnly != nil {
+		return *v.ChildWorkflowOnly
 	}
 
 	return
@@ -3903,8 +3939,10 @@ func (v *ShardOwnershipLostError) Error() string {
 }
 
 type SignalWorkflowExecutionRequest struct {
-	DomainUUID    *string                                `json:"domainUUID,omitempty"`
-	SignalRequest *shared.SignalWorkflowExecutionRequest `json:"signalRequest,omitempty"`
+	DomainUUID                *string                                `json:"domainUUID,omitempty"`
+	SignalRequest             *shared.SignalWorkflowExecutionRequest `json:"signalRequest,omitempty"`
+	ExternalWorkflowExecution *shared.WorkflowExecution              `json:"externalWorkflowExecution,omitempty"`
+	ChildWorkflowOnly         *bool                                  `json:"childWorkflowOnly,omitempty"`
 }
 
 // ToWire translates a SignalWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -3924,7 +3962,7 @@ type SignalWorkflowExecutionRequest struct {
 //   }
 func (v *SignalWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -3944,6 +3982,22 @@ func (v *SignalWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.ExternalWorkflowExecution != nil {
+		w, err = v.ExternalWorkflowExecution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ChildWorkflowOnly != nil {
+		w, err = wire.NewValueBool(*(v.ChildWorkflowOnly)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
 
@@ -3996,6 +4050,24 @@ func (v *SignalWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.ExternalWorkflowExecution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ChildWorkflowOnly = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4009,7 +4081,7 @@ func (v *SignalWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [4]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -4017,6 +4089,14 @@ func (v *SignalWorkflowExecutionRequest) String() string {
 	}
 	if v.SignalRequest != nil {
 		fields[i] = fmt.Sprintf("SignalRequest: %v", v.SignalRequest)
+		i++
+	}
+	if v.ExternalWorkflowExecution != nil {
+		fields[i] = fmt.Sprintf("ExternalWorkflowExecution: %v", v.ExternalWorkflowExecution)
+		i++
+	}
+	if v.ChildWorkflowOnly != nil {
+		fields[i] = fmt.Sprintf("ChildWorkflowOnly: %v", *(v.ChildWorkflowOnly))
 		i++
 	}
 
@@ -4034,6 +4114,12 @@ func (v *SignalWorkflowExecutionRequest) Equals(rhs *SignalWorkflowExecutionRequ
 	if !((v.SignalRequest == nil && rhs.SignalRequest == nil) || (v.SignalRequest != nil && rhs.SignalRequest != nil && v.SignalRequest.Equals(rhs.SignalRequest))) {
 		return false
 	}
+	if !((v.ExternalWorkflowExecution == nil && rhs.ExternalWorkflowExecution == nil) || (v.ExternalWorkflowExecution != nil && rhs.ExternalWorkflowExecution != nil && v.ExternalWorkflowExecution.Equals(rhs.ExternalWorkflowExecution))) {
+		return false
+	}
+	if !_Bool_EqualsPtr(v.ChildWorkflowOnly, rhs.ChildWorkflowOnly) {
+		return false
+	}
 
 	return true
 }
@@ -4043,6 +4129,16 @@ func (v *SignalWorkflowExecutionRequest) Equals(rhs *SignalWorkflowExecutionRequ
 func (v *SignalWorkflowExecutionRequest) GetDomainUUID() (o string) {
 	if v.DomainUUID != nil {
 		return *v.DomainUUID
+	}
+
+	return
+}
+
+// GetChildWorkflowOnly returns the value of ChildWorkflowOnly if it is set or its
+// zero value if it is unset.
+func (v *SignalWorkflowExecutionRequest) GetChildWorkflowOnly() (o bool) {
+	if v.ChildWorkflowOnly != nil {
+		return *v.ChildWorkflowOnly
 	}
 
 	return

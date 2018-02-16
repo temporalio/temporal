@@ -406,7 +406,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Equal(TransferTaskTypeDecisionTask, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
 	s.Equal(transferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
-	s.Equal(transferTaskTypeTransferTargetRunID, task1.TargetRunID)
+	s.Equal("", task1.TargetRunID)
 
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.Nil(err3)
@@ -438,6 +438,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal("queue1", task1.TaskList)
 	s.Equal(TransferTaskTypeDecisionTask, task1.TaskType)
 	s.Equal(int64(2), task1.ScheduleID)
+	s.Equal("", task1.TargetRunID)
 
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.Nil(err3)
@@ -461,6 +462,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal("queue1", task2.TaskList)
 	s.Equal(TransferTaskTypeActivityTask, task2.TaskType)
 	s.Equal(int64(4), task2.ScheduleID)
+	s.Equal("", task2.TargetRunID)
 
 	err4 := s.CompleteTransferTask(task2.TaskID)
 	s.Nil(err4)
@@ -490,6 +492,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(*workflowExecution.WorkflowId, task3.WorkflowID)
 	s.Equal(*workflowExecution.RunId, task3.RunID)
 	s.Equal(TransferTaskTypeCloseExecution, task3.TaskType)
+	s.Equal("", task3.TargetRunID)
 
 	err8 := s.DeleteWorkflowExecution(info1)
 	s.Nil(err8)
@@ -503,8 +506,10 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 
 func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 	domainID := "aeac8287-527b-4b35-80a9-667cb47e7c6d"
-	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("get-decision-task-test"),
-		RunId: common.StringPtr("db20f7e2-1a1e-40d9-9278-d8b886738e05")}
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("cancel-workflow-test"),
+		RunId:      common.StringPtr("db20f7e2-1a1e-40d9-9278-d8b886738e05"),
+	}
 
 	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
 	s.Nil(err, "No error expected.")
@@ -515,39 +520,175 @@ func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.Nil(err)
 
-	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
-	info0 := state0.ExecutionInfo
-	s.NotNil(info0, "Valid Workflow info expected.")
-	updatedInfo := copyWorkflowExecutionInfo(info0)
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 
 	targetDomainID := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
-	targetWorkflowID := "target-workflow_id"
+	targetWorkflowID := "target-workflow-cancellation-id-1"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
+	targetChildWorkflowOnly := false
 	transferTasks := []Task{&CancelExecutionTask{
-		TaskID:           s.GetNextSequenceNumber(),
-		TargetDomainID:   targetDomainID,
-		TargetWorkflowID: targetWorkflowID,
-		TargetRunID:      targetRunID,
-		ScheduleID:       1,
+		TaskID:                  s.GetNextSequenceNumber(),
+		TargetDomainID:          targetDomainID,
+		TargetWorkflowID:        targetWorkflowID,
+		TargetRunID:             targetRunID,
+		TargetChildWorkflowOnly: targetChildWorkflowOnly,
+		InitiatedID:             1,
 	}}
-	err1 = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(3), transferTasks, nil)
-	s.Nil(err1, "No error expected.")
-
-	tasks, err := s.GetTransferTasks(1)
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
 	s.Nil(err, "No error expected.")
-	s.NotNil(tasks, "expected valid list of tasks.")
-	s.Equal(1, len(tasks), "Expected 1 cancel task.")
-	task := tasks[0]
-	s.Equal(TransferTaskTypeCancelExecution, task.TaskType)
-	s.Equal(domainID, task.DomainID)
-	s.Equal(*workflowExecution.WorkflowId, task.WorkflowID)
-	s.Equal(*workflowExecution.RunId, task.RunID)
-	s.Equal(targetDomainID, task.TargetDomainID)
-	s.Equal(targetWorkflowID, task.TargetWorkflowID)
-	s.Equal(targetRunID, task.TargetRunID)
 
-	err = s.CompleteTransferTask(task.TaskID)
+	tasks1, err := s.GetTransferTasks(1)
+	s.Nil(err, "No error expected.")
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
+	task1 := tasks1[0]
+	s.Equal(TransferTaskTypeCancelExecution, task1.TaskType)
+	s.Equal(domainID, task1.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, task1.WorkflowID)
+	s.Equal(*workflowExecution.RunId, task1.RunID)
+	s.Equal(targetDomainID, task1.TargetDomainID)
+	s.Equal(targetWorkflowID, task1.TargetWorkflowID)
+	s.Equal(targetRunID, task1.TargetRunID)
+	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
+
+	err = s.CompleteTransferTask(task1.TaskID)
+	s.Nil(err)
+
+	targetDomainID = "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetWorkflowID = "target-workflow-cancellation-id-2"
+	targetRunID = ""
+	targetChildWorkflowOnly = true
+	transferTasks = []Task{&CancelExecutionTask{
+		TaskID:                  s.GetNextSequenceNumber(),
+		TargetDomainID:          targetDomainID,
+		TargetWorkflowID:        targetWorkflowID,
+		TargetRunID:             targetRunID,
+		TargetChildWorkflowOnly: targetChildWorkflowOnly,
+		InitiatedID:             3,
+	}}
+
+	state2, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info2 := state2.ExecutionInfo
+	s.NotNil(info2, "Valid Workflow info expected.")
+	updatedInfo2 := copyWorkflowExecutionInfo(info2)
+
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
+	s.Nil(err, "No error expected.")
+
+	tasks2, err := s.GetTransferTasks(1)
+	s.Nil(err, "No error expected.")
+	s.NotNil(tasks2, "expected valid list of tasks.")
+	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
+	task2 := tasks2[0]
+	s.Equal(TransferTaskTypeCancelExecution, task2.TaskType)
+	s.Equal(domainID, task2.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, task2.WorkflowID)
+	s.Equal(*workflowExecution.RunId, task2.RunID)
+	s.Equal(targetDomainID, task2.TargetDomainID)
+	s.Equal(targetWorkflowID, task2.TargetWorkflowID)
+	s.Equal(targetRunID, task2.TargetRunID)
+	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
+
+	err = s.CompleteTransferTask(task2.TaskID)
+	s.Nil(err)
+}
+
+func (s *cassandraPersistenceSuite) TestSignalTransferTaskTasks() {
+	domainID := "aeac8287-527b-4b35-80a9-667cb47e7c6d"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("signal-workflow-test"),
+		RunId:      common.StringPtr("db20f7e2-1a1e-40d9-9278-d8b886738e05"),
+	}
+
+	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	taskD, err := s.GetTransferTasks(1)
+	s.Equal(1, len(taskD), "Expected 1 decision task.")
+	err = s.CompleteTransferTask(taskD[0].TaskID)
+	s.Nil(err)
+
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+
+	targetDomainID := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetWorkflowID := "target-workflow-signal-id-1"
+	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
+	targetChildWorkflowOnly := false
+	transferTasks := []Task{&SignalExecutionTask{
+		TaskID:                  s.GetNextSequenceNumber(),
+		TargetDomainID:          targetDomainID,
+		TargetWorkflowID:        targetWorkflowID,
+		TargetRunID:             targetRunID,
+		TargetChildWorkflowOnly: targetChildWorkflowOnly,
+		InitiatedID:             1,
+	}}
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
+	s.Nil(err, "No error expected.")
+
+	tasks1, err := s.GetTransferTasks(1)
+	s.Nil(err, "No error expected.")
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
+	task1 := tasks1[0]
+	s.Equal(TransferTaskTypeSignalExecution, task1.TaskType)
+	s.Equal(domainID, task1.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, task1.WorkflowID)
+	s.Equal(*workflowExecution.RunId, task1.RunID)
+	s.Equal(targetDomainID, task1.TargetDomainID)
+	s.Equal(targetWorkflowID, task1.TargetWorkflowID)
+	s.Equal(targetRunID, task1.TargetRunID)
+	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
+
+	err = s.CompleteTransferTask(task1.TaskID)
+	s.Nil(err)
+
+	targetDomainID = "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetWorkflowID = "target-workflow-signal-id-2"
+	targetRunID = ""
+	targetChildWorkflowOnly = true
+	transferTasks = []Task{&SignalExecutionTask{
+		TaskID:                  s.GetNextSequenceNumber(),
+		TargetDomainID:          targetDomainID,
+		TargetWorkflowID:        targetWorkflowID,
+		TargetRunID:             targetRunID,
+		TargetChildWorkflowOnly: targetChildWorkflowOnly,
+		InitiatedID:             3,
+	}}
+
+	state2, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info2 := state2.ExecutionInfo
+	s.NotNil(info2, "Valid Workflow info expected.")
+	updatedInfo2 := copyWorkflowExecutionInfo(info2)
+
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
+	s.Nil(err, "No error expected.")
+
+	tasks2, err := s.GetTransferTasks(1)
+	s.Nil(err, "No error expected.")
+	s.NotNil(tasks2, "expected valid list of tasks.")
+	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
+	task2 := tasks2[0]
+	s.Equal(TransferTaskTypeSignalExecution, task2.TaskType)
+	s.Equal(domainID, task2.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, task2.WorkflowID)
+	s.Equal(*workflowExecution.RunId, task2.RunID)
+	s.Equal(targetDomainID, task2.TargetDomainID)
+	s.Equal(targetWorkflowID, task2.TargetWorkflowID)
+	s.Equal(targetRunID, task2.TargetRunID)
+	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
+
+	err = s.CompleteTransferTask(task2.TaskID)
 	s.Nil(err)
 }
 
@@ -945,11 +1086,10 @@ func (s *cassandraPersistenceSuite) TestWorkflowMutableState_RequestCancel() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	cancelRequestID := uuid.New()
-	requestCancelInfos := []*RequestCancelInfo{
-		{
-			InitiatedID:     1,
-			CancelRequestID: cancelRequestID,
-		}}
+	requestCancelInfos := []*RequestCancelInfo{{
+		InitiatedID:     1,
+		CancelRequestID: cancelRequestID,
+	}}
 	err2 := s.UpsertRequestCancelState(updatedInfo, int64(3), requestCancelInfos)
 	s.Nil(err2, "No error expected.")
 
