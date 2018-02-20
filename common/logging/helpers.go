@@ -374,3 +374,45 @@ func LogQueryTaskFailedEvent(logger bark.Logger, domain, workflowID, runID, quer
 		"QueryType":        queryType,
 	}).Info("QueryWorkflowFailed.")
 }
+
+// LogReplicationTaskProcessorStartingEvent is used to log replication task processor starting
+func LogReplicationTaskProcessorStartingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorStarting,
+	}).Info("Replication task processor starting.")
+}
+
+// LogReplicationTaskProcessorStartedEvent is used to log replication task processor started
+func LogReplicationTaskProcessorStartedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorStarted,
+	}).Info("Replication task processor started.")
+}
+
+// LogReplicationTaskProcessorStartFailedEvent is used to log replication task processor started
+func LogReplicationTaskProcessorStartFailedEvent(logger bark.Logger, err error) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorStartFailed,
+	}).WithError(err).Warn("Replication task processor failed to start.")
+}
+
+// LogReplicationTaskProcessorShuttingDownEvent is used to log replication task processing shutting down
+func LogReplicationTaskProcessorShuttingDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorShuttingDown,
+	}).Info("Replication task processor shutting down.")
+}
+
+// LogReplicationTaskProcessorShutdownEvent is used to log replication task processor shutdown complete
+func LogReplicationTaskProcessorShutdownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorShutdown,
+	}).Info("Replication task processor shutdown.")
+}
+
+// LogReplicationTaskProcessorShutdownTimedoutEvent is used to log timeout during replication task processor shutdown
+func LogReplicationTaskProcessorShutdownTimedoutEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: ReplicationTaskProcessorShutdownTimedout,
+	}).Warn("Replication task processor timedout on shutdown.")
+}

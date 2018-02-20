@@ -1,7 +1,9 @@
 package: github.com/uber/cadence
+excludeDirs:
+- .gen
 import:
 - package: github.com/uber/tchannel-go
-  version: 2d75494d3a0ffabbd00bc2cb71ed039d94def186
+  version: ^1
   subpackages:
   - thrift
   - thrift/thrift-gen
@@ -23,8 +25,12 @@ import:
 - package: github.com/urfave/cli
 - package: gopkg.in/yaml.v2
 - package: gopkg.in/validator.v2
-- package: golang.org/x/time/rate
-- package: github.com/cactus/go-statsd-client/statsd
+- package: golang.org/x/time
+  subpackages:
+  - rate
+- package: github.com/cactus/go-statsd-client
+  subpackages:
+  - statsd
 - package: go.uber.org/thriftrw
   version: ^1.6
 - package: go.uber.org/yarpc
@@ -34,6 +40,7 @@ import:
   - encoding/thrift/thriftrw-plugin-yarpc
   - transport/http
   - transport/tchannel
+- package: github.com/uber-go/kafka-client
 
 # Added excludeDirs to prevent build from failing on the yarpc generated code.
 excludeDirs:

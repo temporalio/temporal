@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
 
@@ -39,7 +40,12 @@ import (
 	"go.uber.org/yarpc"
 )
 
-var cadenceServices = []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName}
+var cadenceServices = []string{
+	common.FrontendServiceName,
+	common.HistoryServiceName,
+	common.MatchingServiceName,
+	common.WorkerServiceName,
+}
 
 type (
 	// BootstrapParams holds the set of parameters
@@ -53,6 +59,8 @@ type (
 		PProfInitializer common.PProfInitializer
 		CassandraConfig  config.Cassandra
 		ClusterMetadata  cluster.Metadata
+		ReplicatorConfig config.Replicator
+		MessagingClient  messaging.Client
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
@@ -223,6 +231,8 @@ func getMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.Servic
 		return metrics.History
 	case common.MatchingServiceName:
 		return metrics.Matching
+	case common.WorkerServiceName:
+		return metrics.Worker
 	default:
 		logger.Fatalf("Unknown service name '%v' for metrics!", serviceName)
 	}

@@ -1,0 +1,77 @@
+// Copyright (c) 2017 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package messaging
+
+import (
+	"github.com/uber-go/kafka-client"
+	"github.com/uber-go/kafka-client/kafka"
+	"github.com/uber-go/tally"
+
+	"go.uber.org/zap"
+)
+
+type (
+	// KafkaConfig describes the configuration needed to connect to all kafka clusters
+	KafkaConfig struct {
+		Clusters map[string]ClusterConfig `yaml:"clusters"`
+		Topics   map[string]TopicConfig   `yaml:"topics"`
+	}
+
+	// ClusterConfig describes the configuration for a single Kafka cluster
+	ClusterConfig struct {
+		Brokers []string `yaml:"brokers"`
+	}
+
+	// TopicConfig describes the mapping from topic to Kafka cluster
+	TopicConfig struct {
+		Cluster string `yaml:"cluster"`
+	}
+)
+
+// NewKafkaClient is used to create an instance of KafkaClient
+func (k *KafkaConfig) NewKafkaClient(logger *zap.Logger, metricScope tally.Scope) Client {
+	// mapping from cluster name to list of broker ip addresses
+	brokers := map[string][]string{}
+	for cluster, cfg := range k.Clusters {
+		brokers[cluster] = cfg.Brokers
+	}
+
+	// mapping from topic name to cluster that has that topic
+	topicClusterAssignment := map[string][]string{}
+	for topic, cfg := range k.Topics {
+		topicClusterAssignment[topic] = []string{cfg.Cluster}
+	}
+
+	client := kafkaclient.New(kafka.NewStaticNameResolver(topicClusterAssignment, brokers), zap.NewNop(), tally.NoopScope)
+
+	return &kafkaClient{
+		config: k,
+		client: client,
+	}
+}
+
+func (k *KafkaConfig) getClusterForTopic(topic string) string {
+	return k.Topics[topic].Cluster
+}
+
+func (k *KafkaConfig) getBrokersForCluster(cluster string) []string {
+	return k.Clusters[cluster].Brokers
+}

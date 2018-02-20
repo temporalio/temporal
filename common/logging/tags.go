@@ -42,16 +42,20 @@ const (
 	TagDecisionFailCause    = "decision-fail-cause"
 	TagTaskID               = "task-id"
 	TagTaskType             = "task-type"
+	TagTopicName            = "topic-name"
+	TagConsumerName         = "consumer-name"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values
-	TagValueHistoryBuilderComponent = "history-builder"
-	TagValueHistoryEngineComponent  = "history-engine"
-	TagValueHistoryCacheComponent   = "history-cache"
-	TagValueTransferQueueComponent  = "transfer-queue-processor"
-	TagValueTimerQueueComponent     = "timer-queue-processor"
-	TagValueShardController         = "shard-controller"
-	TagValueMatchingEngineComponent = "matching-engine"
+	TagValueHistoryBuilderComponent           = "history-builder"
+	TagValueHistoryEngineComponent            = "history-engine"
+	TagValueHistoryCacheComponent             = "history-cache"
+	TagValueTransferQueueComponent            = "transfer-queue-processor"
+	TagValueTimerQueueComponent               = "timer-queue-processor"
+	TagValueShardController                   = "shard-controller"
+	TagValueMatchingEngineComponent           = "matching-engine"
+	TagValueReplicatorComponent               = "replicator"
+	TagValueReplicationTaskProcessorComponent = "replication-task-processor"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally/m3"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/ringpop-go/discovery"
 )
 
@@ -41,6 +42,8 @@ type (
 		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
 		// Services is a map of service name to service config items
 		Services map[string]Service `yaml:"services"`
+		// Kafka is the config for connecting to kafka
+		Kafka messaging.KafkaConfig `yaml:"kafka"`
 	}
 
 	// Service contains the service specific config items
@@ -107,6 +110,10 @@ type (
 		Datacenter string `yaml:"datacenter"`
 		// NumHistoryShards is the desired number of history shards
 		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
+	}
+
+	// Replicator describes the configuration of replicator
+	Replicator struct {
 	}
 
 	// Logger contains the config items for logger

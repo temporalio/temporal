@@ -45,6 +45,17 @@ services:
     pprof:
       port: 7937
 
+  worker:
+    rpc:
+      port: 7940
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence_active"
+    pprof:
+      port: 7941
+
 clustersInfo:
   initialFailoverVersion: 0
   failoverVersionIncrement: 10
@@ -52,3 +63,14 @@ clustersInfo:
   clusterNames:
     - "active"
     - "standby"
+
+kafka:
+  clusters:
+    test:
+      brokers:
+        - 127.0.0.1:9092
+  topics:
+    active:
+      cluster: test
+    standby:
+      cluster: test

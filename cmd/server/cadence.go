@@ -32,7 +32,10 @@ import (
 )
 
 // validServices is the list of all valid cadence services
-var validServices = []string{historyService, matchingService, frontendService}
+var validServices = []string{historyService, matchingService, frontendService, workerService}
+
+// inDevelopmentServices is the list of services we want to support skipping logic on startup if config does not exist
+var inDevelopmentServices = map[string]bool{workerService: true}
 
 // main entry point for the cadence server
 func main() {
@@ -60,9 +63,17 @@ func startHandler(c *cli.Context) {
 	if err := cassandra.VerifyCompatibleVersion(cassCfg, dir); err != nil {
 		log.Fatalf("Incompatible versions", err)
 	}
-	for _, svc := range getServices(c) {
+
+	services := getServices(c)
+LoadServiceLoop:
+	for _, svc := range services {
 		if _, ok := cfg.Services[svc]; !ok {
-			log.Fatalf("`%v` service missing config", svc)
+			if _, ok := inDevelopmentServices[svc]; len(services) > 1 && ok {
+				log.Printf("Config missing for development service `%v`. Skipping to load service.\n", svc)
+				continue LoadServiceLoop
+			} else {
+				log.Fatalf("`%v` service missing config", svc)
+			}
 		}
 		server := newServer(svc, &cfg)
 		server.Start()

@@ -18,35 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package messaging
 
-const (
-	// FirstEventID is the id of the first event in the history
-	FirstEventID int64 = 1
-	// EmptyEventID is the id of the empty event
-	EmptyEventID int64 = -23
-	// EndEventID is the id of the end event, here we use the int64 max
-	EndEventID int64 = 1<<63 - 1
-)
-
-const (
-	// FrontendServiceName is the name of the frontend service
-	FrontendServiceName = "cadence-frontend"
-	// HistoryServiceName is the name of the history service
-	HistoryServiceName = "cadence-history"
-	// MatchingServiceName is the name of the matching service
-	MatchingServiceName = "cadence-matching"
-	// WorkerServiceName is the name of the worker service
-	WorkerServiceName = "cadence-worker"
-)
-
-// Data encoding types
-const (
-	EncodingTypeJSON EncodingType = "json"
-	EncodingTypeGob               = "gob"
+import (
+	"github.com/uber-go/kafka-client/kafka"
 )
 
 type (
-	// EncodingType is an enum that represents various data encoding types
-	EncodingType string
+	// Client is the interface used to abstract out interaction with messaging system for replication
+	Client interface {
+		NewConsumer(topicName, consumerName string, concurrency int) (kafka.Consumer, error)
+	}
 )

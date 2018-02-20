@@ -79,6 +79,15 @@ const (
 	InvalidQueryTaskEventID = 6000
 	QueryTaskFailedEventID  = 6001
 
+	// Worker Service Events
+	ReplicationTaskProcessorStarting         = 7100
+	ReplicationTaskProcessorStarted          = 7101
+	ReplicationTaskProcessorStartFailed      = 7102
+	ReplicationTaskProcessorShuttingDown     = 7103
+	ReplicationTaskProcessorShutdown         = 7104
+	ReplicationTaskProcessorShutdownTimedout = 7105
+	ReplicationTaskProcessingFailed          = 7106
+
 	// General purpose events
 	OperationFailed = 9000
 	OperationPanic  = 9001

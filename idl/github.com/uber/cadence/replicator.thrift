@@ -18,35 +18,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+namespace java com.uber.cadence.replicator
 
-const (
-	// FirstEventID is the id of the first event in the history
-	FirstEventID int64 = 1
-	// EmptyEventID is the id of the empty event
-	EmptyEventID int64 = -23
-	// EndEventID is the id of the end event, here we use the int64 max
-	EndEventID int64 = 1<<63 - 1
-)
+enum ReplicationTaskType {
+  Domain
+  History
+}
 
-const (
-	// FrontendServiceName is the name of the frontend service
-	FrontendServiceName = "cadence-frontend"
-	// HistoryServiceName is the name of the history service
-	HistoryServiceName = "cadence-history"
-	// MatchingServiceName is the name of the matching service
-	MatchingServiceName = "cadence-matching"
-	// WorkerServiceName is the name of the worker service
-	WorkerServiceName = "cadence-worker"
-)
+struct DomainTaskAttributes {
+}
 
-// Data encoding types
-const (
-	EncodingTypeJSON EncodingType = "json"
-	EncodingTypeGob               = "gob"
-)
+struct HistoryTaskAttributes {
+}
 
-type (
-	// EncodingType is an enum that represents various data encoding types
-	EncodingType string
-)
+struct ReplicationTask {
+  10: optional ReplicationTaskType taskType
+  20: optional DomainTaskAttributes domainTaskAttributes
+  30: optional HistoryTaskAttributes historyTaskAttributes
+}
+

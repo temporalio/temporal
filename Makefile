@@ -15,6 +15,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/health.thrift \
   idl/github.com/uber/cadence/history.thrift \
   idl/github.com/uber/cadence/matching.thrift \
+  idl/github.com/uber/cadence/replicator.thrift \
   idl/github.com/uber/cadence/shared.thrift \
 
 PROGS = cadence

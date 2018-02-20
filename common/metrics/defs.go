@@ -57,6 +57,7 @@ const (
 	Frontend
 	History
 	Matching
+	Worker
 	NumServices
 )
 
@@ -387,6 +388,14 @@ const (
 	NumMatchingScopes
 )
 
+// -- Operation scopes for Worker service --
+const (
+	// ReplicationScope is the scope used by all metric emitted by replicator
+	ReplicatorScope = iota + NumCommonScopes
+
+	NumWorkerScopes
+)
+
 // ScopeDefs record the scopes for all services
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
@@ -529,6 +538,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
 		MatchingDescribeTaskListScope:          {operation: "DescribeTaskList"},
 	},
+	// Worker Scope Names
+	Worker: {
+		ReplicatorScope: {operation: "Replicator"},
+	},
 }
 
 // Common Metrics enum
@@ -620,6 +633,13 @@ const (
 	BufferThrottleCounter
 )
 
+// Worker metrics enum
+const (
+	ReplicatorMessages = iota + NumCommonMetrics
+	ReplicatorFailures
+	ReplicatorLatency
+)
+
 // MetricDefs record the metrics for all services
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
@@ -701,6 +721,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RespondQueryTaskFailedCounter: {metricName: "respond-query-failed"},
 		SyncThrottleCounter:           {metricName: "sync.throttle.count"},
 		BufferThrottleCounter:         {metricName: "buffer.throttle.count"},
+	},
+	Worker: {
+		ReplicatorMessages: {metricName: "replicator.messages"},
+		ReplicatorFailures: {metricName: "replicator.errors"},
+		ReplicatorLatency:  {metricName: "replicator.latency"},
 	},
 }
 
