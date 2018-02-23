@@ -44,9 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install cqlsh
 
-ENV GOLANG_VERSION 1.8.2
+ENV GOLANG_VERSION 1.9.3
 ENV GOLANG_DOWNLOAD_URL https://golang.org/dl/go$GOLANG_VERSION.linux-amd64.tar.gz
-ENV GOLANG_DOWNLOAD_SHA256 5477d6c9a4f96fa120847fafa88319d7b56b5d5068e41c3587eebe248b939be7
+ENV GOLANG_DOWNLOAD_SHA256 a4da5f4c07dfda8194c4621611aeb7ceaab98af0b38bfb29e1be2ebb04c3556c
 
 RUN set -eux; \
     wget -O golang.tar.gz "$GOLANG_DOWNLOAD_URL" \
