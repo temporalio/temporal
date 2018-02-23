@@ -19,7 +19,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "cadence_standby"
     pprof:
       port: 8936
 
@@ -30,7 +30,7 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "cadence_standby"
     pprof:
       port: 8938
 
@@ -41,9 +41,20 @@ services:
     metrics:
       statsd:
         hostPort: "127.0.0.1:8125"
-        prefix: "cadence"
+        prefix: "cadence_standby"
     pprof:
       port: 8937
+
+  worker:
+    rpc:
+      port: 8940
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence_standby"
+    pprof:
+      port: 8941
 
 clustersInfo:
   initialFailoverVersion: 1
@@ -52,3 +63,14 @@ clustersInfo:
   clusterNames:
     - "active"
     - "standby"
+
+kafka:
+  clusters:
+    test:
+      brokers:
+        - 127.0.0.1:9092
+  topics:
+    active:
+      cluster: test
+    standby:
+      cluster: test

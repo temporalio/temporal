@@ -120,7 +120,7 @@ imports:
 - name: github.com/uber-go/atomic
   version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
 - name: github.com/uber-go/kafka-client
-  version: 5d9967a526b6c6533a752a83036eb16ffd4e2b5a
+  version: 01a7eeb4f9ea6e4c16a6ec5d159076c88244c947
   subpackages:
   - internal/backoff
   - internal/consumer
