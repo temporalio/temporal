@@ -31,22 +31,23 @@ import (
 	"testing"
 	"time"
 
+	gohistory "github.com/uber/cadence/.gen/go/history"
+	"github.com/uber/cadence/.gen/go/matching"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/history"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-	"github.com/uber/cadence/client/history"
-
 	"github.com/uber-go/tally"
-	gohistory "github.com/uber/cadence/.gen/go/history"
-	"github.com/uber/cadence/.gen/go/matching"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -195,7 +196,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = 10 * time.Millisecond
+	s.matchingEngine.config.LongPollExpirationInterval = func(string) time.Duration { return 10 * time.Millisecond }
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -354,7 +355,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	s.matchingEngine.config.LongPollExpirationInterval = 10 * time.Millisecond
+	s.matchingEngine.config.LongPollExpirationInterval = func(string) time.Duration { return 10 * time.Millisecond }
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -468,7 +469,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = 50 * time.Millisecond
+	s.matchingEngine.config.LongPollExpirationInterval = func(string) time.Duration { return 50 * time.Millisecond }
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -491,7 +492,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dispatchTTL := time.Nanosecond
 	dPtr := _defaultTaskDispatchRPS
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, s.matchingEngine.config,
+		s.matchingEngine, tlID, tlKind, newTaskListConfig(tlID, s.matchingEngine.config),
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
@@ -614,7 +615,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = 20 * time.Millisecond
+	s.matchingEngine.config.LongPollExpirationInterval = func(string) time.Duration { return 20 * time.Millisecond }
 	dispatchLimitFn := func(wc int, tc int64) float64 {
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
 			return 0
@@ -650,7 +651,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	dPtr := _defaultTaskDispatchRPS
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, s.matchingEngine.config,
+		s.matchingEngine, tlID, tlKind, newTaskListConfig(tlID, s.matchingEngine.config),
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
@@ -1656,7 +1657,7 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 }
 
 func defaultTestConfig() *Config {
-	config := NewConfig()
-	config.LongPollExpirationInterval = 100 * time.Millisecond
+	config := NewConfig(dynamicconfig.NewNopCollection())
+	config.LongPollExpirationInterval = func(string) time.Duration { return 100 * time.Millisecond }
 	return config
 }

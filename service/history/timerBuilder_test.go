@@ -27,6 +27,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"encoding/hex"
 
@@ -68,7 +69,7 @@ func (s *timerBuilderProcessorSuite) SetupSuite() {
 	logger := log.New()
 	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
-	s.config = NewConfig(1)
+	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
 	s.tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
 }
 

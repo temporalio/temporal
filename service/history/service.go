@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 // Config represents configuration for cadence-history service
@@ -69,11 +70,11 @@ type Config struct {
 
 	// Time to hold a poll request before returning an empty response
 	// right now only used by GetMutableState
-	LongPollExpirationInterval time.Duration
+	LongPollExpirationInterval func() time.Duration
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(numberOfShards int) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                              numberOfShards,
 		HistoryCacheInitialSize:                     128,
@@ -99,7 +100,9 @@ func NewConfig(numberOfShards int) *Config {
 		ExecutionMgrNumConns:                        100,
 		HistoryMgrNumConns:                          100,
 		// history client: client/history/client.go set the client timeout 30s
-		LongPollExpirationInterval: time.Second * 20,
+		LongPollExpirationInterval: dc.GetDurationProperty(
+			dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20,
+		),
 	}
 }
 
@@ -117,11 +120,13 @@ type Service struct {
 }
 
 // NewService builds a new cadence-history service
-func NewService(params *service.BootstrapParams, config *Config) common.Daemon {
+func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),
-		config: config,
+		config: NewConfig(
+			dynamicconfig.NewCollection(params.DynamicConfig), params.CassandraConfig.NumHistoryShards,
+		),
 	}
 }
 

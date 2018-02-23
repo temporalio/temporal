@@ -45,10 +45,10 @@ type (
 )
 
 // NewService builds a new cadence-worker service
-func NewService(params *service.BootstrapParams, config *Config) common.Daemon {
+func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
-		config: config,
+		config: NewConfig(),
 		stopC:  make(chan struct{}),
 	}
 }

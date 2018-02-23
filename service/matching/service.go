@@ -26,20 +26,21 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 // Config represents configuration for cadence-matching service
 type Config struct {
 	EnableSyncMatch bool
-	// Time to hold a poll request before returning an empty response if there are no tasks
-	LongPollExpirationInterval time.Duration
 
 	// taskListManager configuration
-	RangeSize                  int64
-	GetTasksBatchSize          int
-	UpdateAckInterval          time.Duration
-	IdleTasklistCheckInterval  time.Duration
-	MinTaskThrottlingBurstSize int
+	RangeSize                 int64
+	GetTasksBatchSize         int
+	UpdateAckInterval         time.Duration
+	IdleTasklistCheckInterval time.Duration
+	// Time to hold a poll request before returning an empty response if there are no tasks
+	LongPollExpirationInterval func(string) time.Duration
+	MinTaskThrottlingBurstSize func(string) int
 
 	// taskWriter configuration
 	OutstandingTaskAppendsThreshold int
@@ -47,17 +48,21 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig() *Config {
+func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		EnableSyncMatch:                 true,
-		LongPollExpirationInterval:      time.Minute,
-		RangeSize:                       100000,
-		GetTasksBatchSize:               1000,
-		UpdateAckInterval:               10 * time.Second,
-		IdleTasklistCheckInterval:       5 * time.Minute,
+		EnableSyncMatch:           true,
+		RangeSize:                 100000,
+		GetTasksBatchSize:         1000,
+		UpdateAckInterval:         10 * time.Second,
+		IdleTasklistCheckInterval: 5 * time.Minute,
+		LongPollExpirationInterval: dc.GetDurationPropertyWithTaskList(
+			dynamicconfig.MatchingLongPollExpirationInterval, time.Minute,
+		),
+		MinTaskThrottlingBurstSize: dc.GetIntPropertyWithTaskList(
+			dynamicconfig.MinTaskThrottlingBurstSize, 1,
+		),
 		OutstandingTaskAppendsThreshold: 250,
 		MaxTaskBatchSize:                100,
-		MinTaskThrottlingBurstSize:      1,
 	}
 }
 
@@ -69,10 +74,10 @@ type Service struct {
 }
 
 // NewService builds a new cadence-matching service
-func NewService(params *service.BootstrapParams, config *Config) common.Daemon {
+func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
-		config: config,
+		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig)),
 		stopC:  make(chan struct{}),
 	}
 }

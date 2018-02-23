@@ -68,7 +68,9 @@ func (h *Handler) Start() error {
 		return err
 	}
 	h.metricsClient = h.Service.GetMetricsClient()
-	h.engine = NewEngine(h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient())
+	h.engine = NewEngine(
+		h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(),
+	)
 	h.startWG.Done()
 	return nil
 }

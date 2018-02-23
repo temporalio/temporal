@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -61,6 +62,7 @@ type (
 		ClusterMetadata  cluster.Metadata
 		ReplicatorConfig config.Replicator
 		MessagingClient  messaging.Client
+		DynamicConfig    dynamicconfig.Client
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
@@ -87,6 +89,7 @@ type (
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		metricsClient          metrics.Client
 		clusterMetadata        cluster.Metadata
+		dynamicCollection      *dynamicconfig.Collection
 	}
 )
 
@@ -102,6 +105,7 @@ func New(params *BootstrapParams) Service {
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
 		clusterMetadata:       params.ClusterMetadata,
+		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig),
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
 	sVice.metricsClient = metrics.NewClient(params.MetricScope, getMetricsServiceIdx(params.Name, params.Logger))

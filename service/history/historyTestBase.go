@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 const (
@@ -201,7 +202,7 @@ func (s *TestShardContext) GetTimeSource() common.TimeSource {
 func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOptions) {
 	s.TestBase.SetupWorkflowStoreWithOptions(options)
 	log := bark.NewLoggerFromLogrus(log.New())
-	config := NewConfig(1)
+	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	domainCache := cache.NewDomainCache(s.MetadataManager, log)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
@@ -211,7 +212,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.SetupWorkflowStore()
 	log := bark.NewLoggerFromLogrus(log.New())
-	config := NewConfig(1)
+	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	domainCache := cache.NewDomainCache(s.MetadataManager, log)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext

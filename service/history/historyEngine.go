@@ -406,7 +406,7 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 			return response, nil
 		}
 
-		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval)
+		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval())
 		defer timer.Stop()
 		for {
 			select {

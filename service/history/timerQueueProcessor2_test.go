@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -73,7 +74,7 @@ func (s *timerQueueProcessor2Suite) SetupSuite() {
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
-	s.config = NewConfig(1)
+	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
 }
 
 func (s *timerQueueProcessor2Suite) SetupTest() {

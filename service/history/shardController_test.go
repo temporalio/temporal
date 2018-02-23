@@ -39,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	mmocks "github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -65,7 +66,7 @@ func TestShardControllerSuite(t *testing.T) {
 
 func (s *shardControllerSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.config = NewConfig(1)
+	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.hostInfo = membership.NewHostInfo("shardController-host-test", nil)
 	s.mockShardManager = &mmocks.ShardManager{}

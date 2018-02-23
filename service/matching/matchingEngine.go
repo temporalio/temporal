@@ -26,8 +26,6 @@ import (
 	"math"
 	"sync"
 
-	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -37,6 +35,9 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+
+	"github.com/pborman/uuid"
+	"github.com/uber-common/bark"
 )
 
 // Implements matching.Engine
@@ -103,7 +104,8 @@ func NewEngine(taskManager persistence.TaskManager,
 	historyService history.Client,
 	config *Config,
 	logger bark.Logger,
-	metricsClient metrics.Client) Engine {
+	metricsClient metrics.Client,
+) Engine {
 
 	return &matchingEngineImpl{
 		taskManager:     taskManager,

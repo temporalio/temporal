@@ -47,7 +47,7 @@ type (
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
 		tlMgr        *taskListManagerImpl
-		config       *Config
+		config       *taskListConfig
 		taskListID   *taskListID
 		taskManager  persistence.TaskManager
 		appendCh     chan *writeTaskRequest

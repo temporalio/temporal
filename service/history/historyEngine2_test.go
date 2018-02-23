@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -79,7 +80,7 @@ func (s *engine2Suite) SetupSuite() {
 	l := log.New()
 	l.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(l)
-	s.config = NewConfig(1)
+	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
 }
 
 func (s *engine2Suite) TearDownSuite() {
