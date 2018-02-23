@@ -166,6 +166,12 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	// input validation on cluster names
 	clusterMetadata := wh.GetClusterMetadata()
 	activeClusterName := clusterMetadata.GetCurrentClusterName()
+	if registerRequest.ActiveClusterName != nil {
+		activeClusterName = registerRequest.GetActiveClusterName()
+		if err := wh.validateClusterName(activeClusterName); err != nil {
+			return wh.error(err, scope)
+		}
+	}
 	clusters := []*persistence.ClusterReplicationConfig{}
 	for _, cluster := range registerRequest.Clusters {
 		clusterName := cluster.GetClusterName()

@@ -755,6 +755,7 @@ struct RegisterDomainRequest {
   40: optional i32 workflowExecutionRetentionPeriodInDays
   50: optional bool emitMetric
   60: optional list<ClusterReplicationConfiguration> clusters
+  70: optional string activeClusterName
 }
 
 struct DescribeDomainRequest {

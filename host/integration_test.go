@@ -200,11 +200,15 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_NoDefault() {
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
+	activeClusterName := ""
 	clusters := []*workflow.ClusterReplicationConfiguration{}
 	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
+		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
+			activeClusterName = clusterName
+		}
 	}
 
 	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
@@ -214,6 +218,7 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_NoDefault() {
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
 	})
 	s.Nil(err)
 
@@ -227,7 +232,7 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_NoDefault() {
 	s.Equal(email, resp.DomainInfo.GetOwnerEmail())
 	s.Equal(retention, resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
 	s.Equal(emitMetric, resp.Configuration.GetEmitMetric())
-	s.Equal(s.ClusterMetadata.GetCurrentClusterName(), resp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(activeClusterName, resp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(clusters, resp.ReplicationConfiguration.Clusters)
 }
 

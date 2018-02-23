@@ -16037,6 +16037,7 @@ type RegisterDomainRequest struct {
 	WorkflowExecutionRetentionPeriodInDays *int32                             `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
 	EmitMetric                             *bool                              `json:"emitMetric,omitempty"`
 	Clusters                               []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
+	ActiveClusterName                      *string                            `json:"activeClusterName,omitempty"`
 }
 
 // ToWire translates a RegisterDomainRequest struct into a Thrift-level intermediate
@@ -16056,7 +16057,7 @@ type RegisterDomainRequest struct {
 //   }
 func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -16108,6 +16109,14 @@ func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ActiveClusterName != nil {
+		w, err = wire.NewValueString(*(v.ActiveClusterName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -16194,6 +16203,16 @@ func (v *RegisterDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 70:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActiveClusterName = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -16207,7 +16226,7 @@ func (v *RegisterDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -16231,6 +16250,10 @@ func (v *RegisterDomainRequest) String() string {
 	}
 	if v.Clusters != nil {
 		fields[i] = fmt.Sprintf("Clusters: %v", v.Clusters)
+		i++
+	}
+	if v.ActiveClusterName != nil {
+		fields[i] = fmt.Sprintf("ActiveClusterName: %v", *(v.ActiveClusterName))
 		i++
 	}
 
@@ -16258,6 +16281,9 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 		return false
 	}
 	if !((v.Clusters == nil && rhs.Clusters == nil) || (v.Clusters != nil && rhs.Clusters != nil && _List_ClusterReplicationConfiguration_Equals(v.Clusters, rhs.Clusters))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ActiveClusterName, rhs.ActiveClusterName) {
 		return false
 	}
 
@@ -16309,6 +16335,16 @@ func (v *RegisterDomainRequest) GetWorkflowExecutionRetentionPeriodInDays() (o i
 func (v *RegisterDomainRequest) GetEmitMetric() (o bool) {
 	if v.EmitMetric != nil {
 		return *v.EmitMetric
+	}
+
+	return
+}
+
+// GetActiveClusterName returns the value of ActiveClusterName if it is set or its
+// zero value if it is unset.
+func (v *RegisterDomainRequest) GetActiveClusterName() (o string) {
+	if v.ActiveClusterName != nil {
+		return *v.ActiveClusterName
 	}
 
 	return
