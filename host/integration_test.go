@@ -378,9 +378,9 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_Failover() {
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: activeClusterName,
-			FailoverVersion:   failoverVersion,
 			Clusters:          persistenceClusters,
 		},
+		FailoverVersion: failoverVersion,
 	})
 
 	// when doing the failover, the only thing can be updated is the active cluster

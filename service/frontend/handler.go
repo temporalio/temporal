@@ -209,6 +209,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 			ActiveClusterName: activeClusterName,
 			Clusters:          clusters,
 		},
+		FailoverVersion: 0,
 	})
 
 	if err != nil {
@@ -241,7 +242,7 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 	}
 
 	response := &gen.DescribeDomainResponse{
-		FailoverVersion: common.Int64Ptr(resp.ReplicationConfig.FailoverVersion),
+		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
 		resp.Info, resp.Config, resp.ReplicationConfig)
@@ -275,6 +276,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	clusterMetadate := wh.GetClusterMetadata()
 	currentCluster := clusterMetadate.GetCurrentClusterName()
 	isCurrentClusterActive := currentCluster == replicationConfig.ActiveClusterName
+	failoverVersion := getResponse.FailoverVersion
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -325,7 +327,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 				return nil, wh.error(err, scope)
 			}
 			replicationConfig.ActiveClusterName = currentCluster
-			replicationConfig.FailoverVersion = clusterMetadate.GetNextFailoverVersion(replicationConfig.FailoverVersion)
+			failoverVersion = clusterMetadate.GetNextFailoverVersion(failoverVersion)
 		}
 	}
 
@@ -358,7 +360,8 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 			Info:              info,
 			Config:            config,
 			ReplicationConfig: replicationConfig,
-			Version:           getResponse.Version,
+			FailoverVersion:   failoverVersion,
+			DBVersion:         getResponse.DBVersion,
 		})
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -366,7 +369,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	}
 
 	response := &gen.UpdateDomainResponse{
-		FailoverVersion: common.Int64Ptr(replicationConfig.FailoverVersion),
+		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
 		info, config, replicationConfig)
@@ -406,7 +409,8 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		Info:              getResponse.Info,
 		Config:            getResponse.Config,
 		ReplicationConfig: getResponse.ReplicationConfig,
-		Version:           getResponse.Version,
+		FailoverVersion:   getResponse.FailoverVersion,
+		DBVersion:         getResponse.DBVersion,
 	})
 
 	if err != nil {
