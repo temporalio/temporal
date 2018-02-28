@@ -21,10 +21,10 @@
 package messaging
 
 import (
+	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client"
 	"github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
-
 	"go.uber.org/zap"
 )
 
@@ -47,7 +47,7 @@ type (
 )
 
 // NewKafkaClient is used to create an instance of KafkaClient
-func (k *KafkaConfig) NewKafkaClient(logger *zap.Logger, metricScope tally.Scope) Client {
+func (k *KafkaConfig) NewKafkaClient(zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope) Client {
 	// mapping from cluster name to list of broker ip addresses
 	brokers := map[string][]string{}
 	for cluster, cfg := range k.Clusters {
@@ -60,11 +60,12 @@ func (k *KafkaConfig) NewKafkaClient(logger *zap.Logger, metricScope tally.Scope
 		topicClusterAssignment[topic] = []string{cfg.Cluster}
 	}
 
-	client := kafkaclient.New(kafka.NewStaticNameResolver(topicClusterAssignment, brokers), zap.NewNop(), tally.NoopScope)
+	client := kafkaclient.New(kafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
 	return &kafkaClient{
 		config: k,
 		client: client,
+		logger: logger,
 	}
 }
 

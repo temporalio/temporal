@@ -115,7 +115,7 @@ func (s *server) startService() common.Daemon {
 		s.cfg.ClustersInfo.ClusterNames,
 	)
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
-	params.MessagingClient = s.cfg.Kafka.NewKafkaClient(zap.NewNop(), params.MetricScope)
+	params.MessagingClient = s.cfg.Kafka.NewKafkaClient(zap.NewNop(), params.Logger, params.MetricScope)
 
 	var daemon common.Daemon
 

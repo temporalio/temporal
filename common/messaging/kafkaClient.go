@@ -21,6 +21,8 @@
 package messaging
 
 import (
+	"github.com/Shopify/sarama"
+	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client"
 	"github.com/uber-go/kafka-client/kafka"
 	"strings"
@@ -30,6 +32,7 @@ type (
 	kafkaClient struct {
 		config *KafkaConfig
 		client *kafkaclient.Client
+		logger bark.Logger
 	}
 )
 
@@ -64,4 +67,17 @@ func (c *kafkaClient) NewConsumer(topicName, consumerName string, concurrency in
 
 	consumer, err := c.client.NewConsumer(consumerConfig)
 	return consumer, err
+}
+
+// NewProducer is used to create a Kafka producer for shipping replication tasks
+func (c *kafkaClient) NewProducer(topicName string) (Producer, error) {
+	clusterName := c.config.getClusterForTopic(topicName)
+	brokers := c.config.getBrokersForCluster(clusterName)
+
+	producer, err := sarama.NewSyncProducer(brokers, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewKafkaProducer(topicName, producer, c.logger), nil
 }
