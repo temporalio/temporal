@@ -63,16 +63,18 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		ClusterHost        string
-		ClusterPort        int
-		ClusterUser        string
-		ClusterPassword    string
-		KeySpace           string
-		Datacenter         string
-		DropKeySpace       bool
-		SchemaDir          string
-		CurrentClusterName string
-		AllClusterNames    []string
+		ClusterHost     string
+		ClusterPort     int
+		ClusterUser     string
+		ClusterPassword string
+		KeySpace        string
+		Datacenter      string
+		DropKeySpace    bool
+		SchemaDir       string
+		// TODO this is used for global domain test
+		// when crtoss DC is public, remove EnableGlobalDomain
+		EnableGlobalDomain bool
+		IsMasterCluster    bool
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -117,12 +119,20 @@ func (g *testTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	log := bark.NewLoggerFromLogrus(log.New())
+
+	masterClusterName := testCurrentClusterName
+	if !options.IsMasterCluster {
+		masterClusterName = testAlternativeClusterName
+	}
 	s.ClusterMetadata = cluster.NewMetadata(
+		options.EnableGlobalDomain,
 		testInitialFailoverVersion,
 		testFailoverVersionIncrement,
+		masterClusterName,
 		testCurrentClusterName,
 		testAllClusterNames,
 	)
+
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options)
 	shardID := 0
@@ -803,8 +813,7 @@ func (s *TestBase) SetupWorkflowStore() {
 		ClusterUser:        testUser,
 		ClusterPassword:    testPassword,
 		DropKeySpace:       true,
-		CurrentClusterName: testCurrentClusterName,
-		AllClusterNames:    testAllClusterNames,
+		EnableGlobalDomain: false,
 	})
 }
 

@@ -92,6 +92,13 @@ var (
 	errNextPageTokenRunIDMismatch = &gen.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
 	errQueryNotSet                = &gen.BadRequestError{Message: "WorkflowQuery is not set on request."}
 	errQueryTypeNotSet            = &gen.BadRequestError{Message: "QueryType is not set on request."}
+
+	// err indicating that this cluster is not the master, so cannot do domain registration or update
+	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
+	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
+	errCannotRemoveClustersFromDomain  = &gen.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
+	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
+	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other paramaters are set."}
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
@@ -159,13 +166,22 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	clusterMetadata := wh.GetClusterMetadata()
+	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+		return wh.error(errNotMasterCluster, scope)
+	}
+	if !clusterMetadata.IsGlobalDomainEnabled() {
+		registerRequest.ActiveClusterName = nil
+		registerRequest.Clusters = nil
+	}
+
 	if len(registerRequest.GetName()) == 0 {
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	// input validation on cluster names
-	clusterMetadata := wh.GetClusterMetadata()
 	activeClusterName := clusterMetadata.GetCurrentClusterName()
+	// input validation on cluster names
 	if registerRequest.ActiveClusterName != nil {
 		activeClusterName = registerRequest.GetActiveClusterName()
 		if err := wh.validateClusterName(activeClusterName); err != nil {
@@ -197,19 +213,23 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	}
 
 	response, err := wh.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
-		Name:        *registerRequest.Name,
-		Status:      persistence.DomainStatusRegistered,
-		OwnerEmail:  common.StringDefault(registerRequest.OwnerEmail),
-		Description: common.StringDefault(registerRequest.Description),
+		Info: &persistence.DomainInfo{
+			ID:          uuid.New(),
+			Name:        registerRequest.GetName(),
+			Status:      persistence.DomainStatusRegistered,
+			OwnerEmail:  registerRequest.GetOwnerEmail(),
+			Description: registerRequest.GetDescription(),
+		},
 		Config: &persistence.DomainConfig{
-			Retention:  common.Int32Default(registerRequest.WorkflowExecutionRetentionPeriodInDays),
-			EmitMetric: common.BoolDefault(registerRequest.EmitMetric),
+			Retention:  registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
+			EmitMetric: registerRequest.GetEmitMetric(),
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: activeClusterName,
 			Clusters:          clusters,
 		},
-		FailoverVersion: 0,
+		IsGlobalDomain:  clusterMetadata.IsGlobalDomainEnabled(),
+		FailoverVersion: 0, // TODO do something?
 	})
 
 	if err != nil {
@@ -242,6 +262,7 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 	}
 
 	response := &gen.DescribeDomainResponse{
+		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
@@ -258,6 +279,12 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	clusterMetadata := wh.GetClusterMetadata()
+	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+	if !clusterMetadata.IsGlobalDomainEnabled() {
+		updateRequest.ReplicationConfiguration = nil
+	}
+
 	if updateRequest.Name == nil {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
@@ -273,15 +300,70 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	info := getResponse.Info
 	config := getResponse.Config
 	replicationConfig := getResponse.ReplicationConfig
-	clusterMetadate := wh.GetClusterMetadata()
-	currentCluster := clusterMetadate.GetCurrentClusterName()
-	isCurrentClusterActive := currentCluster == replicationConfig.ActiveClusterName
+	configVersion := getResponse.ConfigVersion
 	failoverVersion := getResponse.FailoverVersion
+	currentCluster := clusterMetadata.GetCurrentClusterName()
 
 	// whether active cluster is changed
 	activeClusterChanged := false
 	// whether anything other than active cluster is changed
 	configurationChanged := false
+
+	validateReplicationConfig := func(existingDomain *persistence.GetDomainResponse,
+		updatedActiveClusterName *string, updatedClusters []*gen.ClusterReplicationConfiguration) error {
+
+		if len(updatedClusters) != 0 {
+			configurationChanged = true
+			clusters := []*persistence.ClusterReplicationConfig{}
+			// this is used to prove that target cluster names is a superset of existing cluster names
+			targetClustersNames := make(map[string]bool)
+			for _, cluster := range updatedClusters {
+				clusterName := cluster.GetClusterName()
+				if err := wh.validateClusterName(clusterName); err != nil {
+					return err
+				}
+				clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
+				targetClustersNames[clusterName] = true
+			}
+			// validate that updated clusters is a superset of existing clusters
+			for _, cluster := range replicationConfig.Clusters {
+				if _, ok := targetClustersNames[cluster.ClusterName]; !ok {
+					return errCannotRemoveClustersFromDomain
+				}
+			}
+			replicationConfig.Clusters = clusters
+			// for local domain, the clusters should be 1 and only 1, being the current cluster
+			if len(replicationConfig.Clusters) > 1 && !existingDomain.IsGlobalDomain {
+				return errCannotAddClusterToLocalDomain
+			}
+		}
+
+		if updatedActiveClusterName != nil {
+			activeClusterChanged = true
+			if *updatedActiveClusterName != currentCluster {
+				errMsg := fmt.Sprintf("Can only set active cluster to current cluster: %s", currentCluster)
+				err := &gen.BadRequestError{Message: errMsg}
+				return err
+			}
+			replicationConfig.ActiveClusterName = currentCluster
+		}
+
+		// validate active cluster is also specified in all clusters
+		activeClusterInClusters := false
+	CheckActiveClusterNameInClusters:
+		for _, cluster := range replicationConfig.Clusters {
+			if cluster.ClusterName == replicationConfig.ActiveClusterName {
+				activeClusterInClusters = true
+				break CheckActiveClusterNameInClusters
+			}
+		}
+		if !activeClusterInClusters {
+			return errActiveClusterNotInClusters
+		}
+
+		return nil
+	}
+
 	if updateRequest.UpdatedInfo != nil {
 		updatedInfo := updateRequest.UpdatedInfo
 		if updatedInfo.Description != nil {
@@ -306,69 +388,47 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	}
 	if updateRequest.ReplicationConfiguration != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfiguration
-		if len(updateReplicationConfig.Clusters) != 0 {
-			configurationChanged = true
-			clusters := []*persistence.ClusterReplicationConfig{}
-			for _, cluster := range updateReplicationConfig.Clusters {
-				clusterName := cluster.GetClusterName()
-				if err := wh.validateClusterName(clusterName); err != nil {
-					return nil, wh.error(err, scope)
-				}
-				clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
-			}
-			replicationConfig.Clusters = clusters
-		}
-
-		if updateReplicationConfig.ActiveClusterName != nil {
-			activeClusterChanged = true
-			if updateReplicationConfig.GetActiveClusterName() != currentCluster {
-				errMsg := fmt.Sprintf("Can only set active cluster to current cluster: %s", currentCluster)
-				err := &gen.BadRequestError{Message: errMsg}
-				return nil, wh.error(err, scope)
-			}
-			replicationConfig.ActiveClusterName = currentCluster
-			failoverVersion = clusterMetadate.GetNextFailoverVersion(failoverVersion)
+		if err := validateReplicationConfig(getResponse,
+			updateReplicationConfig.ActiveClusterName, updateReplicationConfig.Clusters); err != nil {
+			return nil, wh.error(err, scope)
 		}
 	}
 
 	if configurationChanged && activeClusterChanged {
-		errMsg := "Cannot set active cluster to current cluster when other paramaters are set"
-		err := &gen.BadRequestError{Message: errMsg}
-		return nil, wh.error(err, scope)
+		return nil, wh.error(errCannotDoDomainFailoverAndUpdate, scope)
 	} else if configurationChanged || activeClusterChanged {
-		if configurationChanged && !isCurrentClusterActive {
-			errMsg := "Cannot update domain when current cluster is not active"
-			err := &gen.BadRequestError{Message: errMsg}
-			return nil, wh.error(err, scope)
+		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+		if configurationChanged && clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+			return nil, wh.error(errNotMasterCluster, scope)
 		}
 
-		// validate active cluster is also specified in all clusters
-		activeClusterInClusters := false
-		for _, cluster := range replicationConfig.Clusters {
-			if cluster.ClusterName == currentCluster {
-				activeClusterInClusters = true
-				break
-			}
+		// set the versions
+		if configurationChanged {
+			configVersion = configVersion + 1
 		}
-		if !activeClusterInClusters {
-			errMsg := "Active cluster is not contained in all clusters"
-			err := &gen.BadRequestError{Message: errMsg}
-			return nil, wh.error(err, scope)
+		if activeClusterChanged {
+			failoverVersion = clusterMetadata.GetNextFailoverVersion(failoverVersion)
 		}
 
 		err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
 			Info:              info,
 			Config:            config,
 			ReplicationConfig: replicationConfig,
+			ConfigVersion:     configVersion,
 			FailoverVersion:   failoverVersion,
 			DBVersion:         getResponse.DBVersion,
 		})
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
+	} else if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+		// although there is no attr updated, just prevent customer to use the non master cluster
+		// for update domain, ever (except if customer want to do a domain failover)
+		return nil, wh.error(errNotMasterCluster, scope)
 	}
 
 	response := &gen.UpdateDomainResponse{
+		IsGlobalDomain:  common.BoolPtr(getResponse.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
@@ -385,6 +445,12 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
+	clusterMetadata := wh.GetClusterMetadata()
+	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+	if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+		return wh.error(errNotMasterCluster, scope)
+	}
+
 	if deprecateRequest.Name == nil {
 		return wh.error(errDomainNotSet, scope)
 	}
@@ -397,13 +463,7 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(err0, scope)
 	}
 
-	currentCluster := wh.GetClusterMetadata().GetCurrentClusterName()
-	if currentCluster != getResponse.ReplicationConfig.ActiveClusterName {
-		errMsg := "DeprecateDomain cannot depreate domain when active cluster is not current cluster"
-		err := &gen.BadRequestError{Message: errMsg}
-		return wh.error(err, scope)
-	}
-
+	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
 	getResponse.Info.Status = persistence.DomainStatusDeprecated
 	err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
 		Info:              getResponse.Info,

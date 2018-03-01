@@ -7155,6 +7155,7 @@ type DescribeDomainResponse struct {
 	Configuration            *DomainConfiguration            `json:"configuration,omitempty"`
 	ReplicationConfiguration *DomainReplicationConfiguration `json:"replicationConfiguration,omitempty"`
 	FailoverVersion          *int64                          `json:"failoverVersion,omitempty"`
+	IsGlobalDomain           *bool                           `json:"isGlobalDomain,omitempty"`
 }
 
 // ToWire translates a DescribeDomainResponse struct into a Thrift-level intermediate
@@ -7174,7 +7175,7 @@ type DescribeDomainResponse struct {
 //   }
 func (v *DescribeDomainResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -7210,6 +7211,14 @@ func (v *DescribeDomainResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.IsGlobalDomain != nil {
+		w, err = wire.NewValueBool(*(v.IsGlobalDomain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -7290,6 +7299,16 @@ func (v *DescribeDomainResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.IsGlobalDomain = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -7303,7 +7322,7 @@ func (v *DescribeDomainResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.DomainInfo != nil {
 		fields[i] = fmt.Sprintf("DomainInfo: %v", v.DomainInfo)
@@ -7321,8 +7340,22 @@ func (v *DescribeDomainResponse) String() string {
 		fields[i] = fmt.Sprintf("FailoverVersion: %v", *(v.FailoverVersion))
 		i++
 	}
+	if v.IsGlobalDomain != nil {
+		fields[i] = fmt.Sprintf("IsGlobalDomain: %v", *(v.IsGlobalDomain))
+		i++
+	}
 
 	return fmt.Sprintf("DescribeDomainResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Bool_EqualsPtr(lhs, rhs *bool) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this DescribeDomainResponse match the
@@ -7342,6 +7375,9 @@ func (v *DescribeDomainResponse) Equals(rhs *DescribeDomainResponse) bool {
 	if !_I64_EqualsPtr(v.FailoverVersion, rhs.FailoverVersion) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.IsGlobalDomain, rhs.IsGlobalDomain) {
+		return false
+	}
 
 	return true
 }
@@ -7351,6 +7387,16 @@ func (v *DescribeDomainResponse) Equals(rhs *DescribeDomainResponse) bool {
 func (v *DescribeDomainResponse) GetFailoverVersion() (o int64) {
 	if v.FailoverVersion != nil {
 		return *v.FailoverVersion
+	}
+
+	return
+}
+
+// GetIsGlobalDomain returns the value of IsGlobalDomain if it is set or its
+// zero value if it is unset.
+func (v *DescribeDomainResponse) GetIsGlobalDomain() (o bool) {
+	if v.IsGlobalDomain != nil {
+		return *v.IsGlobalDomain
 	}
 
 	return
@@ -8317,16 +8363,6 @@ func (v *DomainConfiguration) String() string {
 	}
 
 	return fmt.Sprintf("DomainConfiguration{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _Bool_EqualsPtr(lhs, rhs *bool) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return (x == y)
-	}
-	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this DomainConfiguration match the
@@ -25636,6 +25672,7 @@ type UpdateDomainResponse struct {
 	Configuration            *DomainConfiguration            `json:"configuration,omitempty"`
 	ReplicationConfiguration *DomainReplicationConfiguration `json:"replicationConfiguration,omitempty"`
 	FailoverVersion          *int64                          `json:"failoverVersion,omitempty"`
+	IsGlobalDomain           *bool                           `json:"isGlobalDomain,omitempty"`
 }
 
 // ToWire translates a UpdateDomainResponse struct into a Thrift-level intermediate
@@ -25655,7 +25692,7 @@ type UpdateDomainResponse struct {
 //   }
 func (v *UpdateDomainResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -25691,6 +25728,14 @@ func (v *UpdateDomainResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.IsGlobalDomain != nil {
+		w, err = wire.NewValueBool(*(v.IsGlobalDomain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -25753,6 +25798,16 @@ func (v *UpdateDomainResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.IsGlobalDomain = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -25766,7 +25821,7 @@ func (v *UpdateDomainResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.DomainInfo != nil {
 		fields[i] = fmt.Sprintf("DomainInfo: %v", v.DomainInfo)
@@ -25782,6 +25837,10 @@ func (v *UpdateDomainResponse) String() string {
 	}
 	if v.FailoverVersion != nil {
 		fields[i] = fmt.Sprintf("FailoverVersion: %v", *(v.FailoverVersion))
+		i++
+	}
+	if v.IsGlobalDomain != nil {
+		fields[i] = fmt.Sprintf("IsGlobalDomain: %v", *(v.IsGlobalDomain))
 		i++
 	}
 
@@ -25805,6 +25864,9 @@ func (v *UpdateDomainResponse) Equals(rhs *UpdateDomainResponse) bool {
 	if !_I64_EqualsPtr(v.FailoverVersion, rhs.FailoverVersion) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.IsGlobalDomain, rhs.IsGlobalDomain) {
+		return false
+	}
 
 	return true
 }
@@ -25814,6 +25876,16 @@ func (v *UpdateDomainResponse) Equals(rhs *UpdateDomainResponse) bool {
 func (v *UpdateDomainResponse) GetFailoverVersion() (o int64) {
 	if v.FailoverVersion != nil {
 		return *v.FailoverVersion
+	}
+
+	return
+}
+
+// GetIsGlobalDomain returns the value of IsGlobalDomain if it is set or its
+// zero value if it is unset.
+func (v *UpdateDomainResponse) GetIsGlobalDomain() (o bool) {
+	if v.IsGlobalDomain != nil {
+		return *v.IsGlobalDomain
 	}
 
 	return

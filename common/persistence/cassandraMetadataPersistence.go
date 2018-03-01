@@ -24,7 +24,6 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
-	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -55,8 +54,8 @@ const (
 		`VALUES(?, {name: ?}) IF NOT EXISTS`
 
 	templateCreateDomainByNameQuery = `INSERT INTO domains_by_name (` +
-		`name, domain, config, replication_config, failover_version) ` +
-		`VALUES(?, ` + templateDomainType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?) IF NOT EXISTS`
+		`name, domain, config, replication_config, is_global_domain, failover_version) ` +
+		`VALUES(?, ` + templateDomainType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?) IF NOT EXISTS`
 
 	templateGetDomainQuery = `SELECT domain.name ` +
 		`FROM domains ` +
@@ -65,6 +64,8 @@ const (
 	templateGetDomainByNameQuery = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, config.retention, config.emit_metric, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
+		`is_global_domain, ` +
+		`config_version, ` +
 		`failover_version, ` +
 		`db_version ` +
 		`FROM domains_by_name ` +
@@ -74,6 +75,7 @@ const (
 		`SET domain = ` + templateDomainType + `, ` +
 		`config = ` + templateDomainConfigType + `, ` +
 		`replication_config = ` + templateDomainReplicationConfigType + `, ` +
+		`config_version = ? ,` +
 		`failover_version = ? ,` +
 		`db_version = ? ` +
 		`WHERE name = ? ` +
@@ -129,24 +131,24 @@ func (m *cassandraMetadataPersistence) Close() {
 // delete the orphaned entry from domains table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from domains table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistence) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
-	domainUUID := uuid.New()
-	if err := m.session.Query(templateCreateDomainQuery, domainUUID, request.Name).Exec(); err != nil {
+	if err := m.session.Query(templateCreateDomainQuery, request.Info.ID, request.Info.Name).Exec(); err != nil {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),
 		}
 	}
 
 	query := m.session.Query(templateCreateDomainByNameQuery,
-		request.Name,
-		domainUUID,
-		request.Name,
-		request.Status,
-		request.Description,
-		request.OwnerEmail,
+		request.Info.Name,
+		request.Info.ID,
+		request.Info.Name,
+		request.Info.Status,
+		request.Info.Description,
+		request.Info.OwnerEmail,
 		request.Config.Retention,
 		request.Config.EmitMetric,
 		request.ReplicationConfig.ActiveClusterName,
 		serializeClusterConfigs(request.ReplicationConfig.Clusters),
+		request.IsGlobalDomain,
 		request.FailoverVersion,
 	)
 
@@ -161,7 +163,7 @@ func (m *cassandraMetadataPersistence) CreateDomain(request *CreateDomainRequest
 
 	if !applied {
 		// Domain already exist.  Delete orphan domain record before returning back to user
-		if errDelete := m.session.Query(templateDeleteDomainQuery, domainUUID).Exec(); errDelete != nil {
+		if errDelete := m.session.Query(templateDeleteDomainQuery, request.Info.ID).Exec(); errDelete != nil {
 			m.logger.Warnf("Unable to delete orphan domain record. Error: %v", errDelete)
 		}
 
@@ -177,7 +179,7 @@ func (m *cassandraMetadataPersistence) CreateDomain(request *CreateDomainRequest
 		}
 	}
 
-	return &CreateDomainResponse{ID: domainUUID}, nil
+	return &CreateDomainResponse{ID: request.Info.ID}, nil
 }
 
 func (m *cassandraMetadataPersistence) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
@@ -189,6 +191,8 @@ func (m *cassandraMetadataPersistence) GetDomain(request *GetDomainRequest) (*Ge
 	var replicationClusters []map[string]interface{}
 	var dbVersion int64
 	var failoverVersion int64
+	var configVersion int64
+	var isGlobalDomain bool
 
 	if len(request.ID) > 0 && len(request.Name) > 0 {
 		return nil, &workflow.BadRequestError{
@@ -235,6 +239,8 @@ func (m *cassandraMetadataPersistence) GetDomain(request *GetDomainRequest) (*Ge
 		&config.EmitMetric,
 		&replicationConfig.ActiveClusterName,
 		&replicationClusters,
+		&isGlobalDomain,
+		&configVersion,
 		&failoverVersion,
 		&dbVersion,
 	)
@@ -251,6 +257,8 @@ func (m *cassandraMetadataPersistence) GetDomain(request *GetDomainRequest) (*Ge
 		Info:              info,
 		Config:            config,
 		ReplicationConfig: replicationConfig,
+		IsGlobalDomain:    isGlobalDomain,
+		ConfigVersion:     configVersion,
 		FailoverVersion:   failoverVersion,
 		DBVersion:         dbVersion,
 	}, nil
@@ -273,6 +281,7 @@ func (m *cassandraMetadataPersistence) UpdateDomain(request *UpdateDomainRequest
 		request.Config.EmitMetric,
 		request.ReplicationConfig.ActiveClusterName,
 		serializeClusterConfigs(request.ReplicationConfig.Clusters),
+		request.ConfigVersion,
 		request.FailoverVersion,
 		nextVersion,
 		request.Info.Name,
@@ -305,7 +314,7 @@ func (m *cassandraMetadataPersistence) DeleteDomain(request *DeleteDomainRequest
 func (m *cassandraMetadataPersistence) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQuery, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil

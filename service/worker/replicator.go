@@ -22,48 +22,53 @@ package worker
 
 import (
 	"fmt"
+
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
-		metadata      cluster.Metadata
-		config        *Config
-		client        messaging.Client
-		processors    []*replicationTaskProcessor
-		logger        bark.Logger
-		metricsClient metrics.Client
+		clusterMetadata  cluster.Metadata
+		domainReplicator DomainReplicator
+		config           *Config
+		client           messaging.Client
+		processors       []*replicationTaskProcessor
+		logger           bark.Logger
+		metricsClient    metrics.Client
 	}
 )
 
 // NewReplicator creates a new replicator for processing replication tasks
-func NewReplicator(metadata cluster.Metadata, config *Config, client messaging.Client, logger bark.Logger,
-	metricsClient metrics.Client) *Replicator {
+func NewReplicator(clusterMetadata cluster.Metadata, metadataManager persistence.MetadataManager,
+	config *Config, client messaging.Client, logger bark.Logger, metricsClient metrics.Client) *Replicator {
+	logger = logger.WithFields(bark.Fields{
+		logging.TagWorkflowComponent: logging.TagValueReplicatorComponent,
+	})
 	return &Replicator{
-		metadata: metadata,
-		config:   config,
-		client:   client,
-		logger: logger.WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueReplicatorComponent,
-		}),
-		metricsClient: metricsClient,
+		clusterMetadata:  clusterMetadata,
+		domainReplicator: NewDomainReplicator(metadataManager, logger),
+		config:           config,
+		client:           client,
+		logger:           logger,
+		metricsClient:    metricsClient,
 	}
 }
 
 // Start is called to start replicator
 func (r *Replicator) Start() error {
-	currentClusterName := r.metadata.GetCurrentClusterName()
-	for cluster := range r.metadata.GetAllClusterNames() {
+	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
+	for cluster := range r.clusterMetadata.GetAllClusterNames() {
 		if cluster != currentClusterName {
 			topicName := getTopicName(cluster)
 			consumerName := getConsumerName(currentClusterName, cluster)
 			r.processors = append(r.processors, newReplicationTaskProcessor(topicName, consumerName, r.client, r.config,
-				r.logger, r.metricsClient))
+				r.logger, r.metricsClient, r.domainReplicator))
 		}
 	}
 

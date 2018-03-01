@@ -109,8 +109,10 @@ func (s *server) startService() common.Daemon {
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	params.ClusterMetadata = cluster.NewMetadata(
+		s.cfg.ClustersInfo.EnableGlobalDomain,
 		s.cfg.ClustersInfo.InitialFailoverVersion,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,
+		s.cfg.ClustersInfo.MasterClusterName,
 		s.cfg.ClustersInfo.CurrentClusterName,
 		s.cfg.ClustersInfo.ClusterNames,
 	)

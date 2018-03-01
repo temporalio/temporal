@@ -23,6 +23,7 @@ package worker
 import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 )
 
@@ -70,7 +71,21 @@ func (s *Service) Start() {
 
 	s.metricsClient = base.GetMetricsClient()
 
-	replicator := NewReplicator(p.ClusterMetadata, s.config, p.MessagingClient, log, s.metricsClient)
+	metadataManager, err := persistence.NewCassandraMetadataPersistence(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
+		p.CassandraConfig.Datacenter,
+		p.CassandraConfig.Keyspace,
+		p.ClusterMetadata.GetCurrentClusterName(),
+		p.Logger)
+
+	if err != nil {
+		log.Fatalf("failed to create metadata manager: %v", err)
+	}
+	metadataManager = persistence.NewMetadataPersistenceClient(metadataManager, base.GetMetricsClient())
+
+	replicator := NewReplicator(p.ClusterMetadata, metadataManager, s.config, p.MessagingClient, log, s.metricsClient)
 	if err := replicator.Start(); err != nil {
 		replicator.Stop()
 		log.Fatalf("Fail to start replicator: %v", err)

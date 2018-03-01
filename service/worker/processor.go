@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"encoding/json"
+
 	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client/kafka"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -38,18 +39,25 @@ import (
 )
 
 type (
+
+	// DomainReplicator is the interface which can replicate the domain
+	DomainReplicator interface {
+		HandleReceiveTask(task *replicator.DomainTaskAttributes) error
+	}
+
 	replicationTaskProcessor struct {
-		topicName     string
-		consumerName  string
-		client        messaging.Client
-		consumer      kafka.Consumer
-		isStarted     int32
-		isStopped     int32
-		shutdownWG    sync.WaitGroup
-		shutdownCh    chan struct{}
-		config        *Config
-		logger        bark.Logger
-		metricsClient metrics.Client
+		topicName        string
+		consumerName     string
+		client           messaging.Client
+		consumer         kafka.Consumer
+		isStarted        int32
+		isStopped        int32
+		shutdownWG       sync.WaitGroup
+		shutdownCh       chan struct{}
+		config           *Config
+		logger           bark.Logger
+		metricsClient    metrics.Client
+		domainReplicator DomainReplicator
 	}
 )
 
@@ -61,7 +69,7 @@ var (
 )
 
 func newReplicationTaskProcessor(topic, consumer string, client messaging.Client, config *Config,
-	logger bark.Logger, metricsClient metrics.Client) *replicationTaskProcessor {
+	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator) *replicationTaskProcessor {
 	return &replicationTaskProcessor{
 		topicName:    topic,
 		consumerName: consumer,
@@ -73,7 +81,8 @@ func newReplicationTaskProcessor(topic, consumer string, client messaging.Client
 			logging.TagTopicName:         topic,
 			logging.TagConsumerName:      consumer,
 		}),
-		metricsClient: metricsClient,
+		metricsClient:    metricsClient,
+		domainReplicator: domainReplicator,
 	}
 }
 
@@ -166,9 +175,10 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 				} else {
 					switch task.GetTaskType() {
 					case replicator.ReplicationTaskTypeDomain:
-						p.logger.Info("Recieved replication task for domain.")
+						p.logger.Debugf("Recieved domain replication task %v.", task.DomainTaskAttributes)
+						p.domainReplicator.HandleReceiveTask(task.DomainTaskAttributes)
 					case replicator.ReplicationTaskTypeHistory:
-						p.logger.Info("Recieved replication task for history.")
+						p.logger.Debugf("Recieved history replication task %v.", task.HistoryTaskAttributes)
 					default:
 						err = ErrUnknownReplicationTask
 					}

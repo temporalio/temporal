@@ -128,10 +128,16 @@ type (
 
 	// ClustersInfo contains the all cluster names and active cluster
 	ClustersInfo struct {
+		// EnableGlobalDomain whether the global domain is enabled, this attr should be discarded when
+		// cross DC is made public
+		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
 		// InitialFailoverVersion is the initial failover version
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// FailoverVersionIncrement is the increment of each cluster failover version
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
+		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
+		// all clusters can do domain failover
+		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster
 		CurrentClusterName string `yaml:"currentClusterName"`
 		// ClusterNames contains all cluster names

@@ -57,8 +57,10 @@ services:
       port: 8941
 
 clustersInfo:
+  enableGlobalDomain: true
   initialFailoverVersion: 1
   failoverVersionIncrement: 10
+  masterClusterName: "active"
   currentClusterName: "standby"
   clusterNames:
     - "active"

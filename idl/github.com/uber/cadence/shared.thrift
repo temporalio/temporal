@@ -767,6 +767,7 @@ struct DescribeDomainResponse {
   20: optional DomainConfiguration configuration
   30: optional DomainReplicationConfiguration replicationConfiguration
   40: optional i64 (js.type = "Long") failoverVersion
+  50: optional bool isGlobalDomain
 }
 
 struct UpdateDomainRequest {
@@ -781,6 +782,7 @@ struct UpdateDomainResponse {
   20: optional DomainConfiguration configuration
   30: optional DomainReplicationConfiguration replicationConfiguration
   40: optional i64 (js.type = "Long") failoverVersion
+  50: optional bool isGlobalDomain
 }
 
 struct DeprecateDomainRequest {

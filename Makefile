@@ -92,7 +92,7 @@ test: vendor/glide.updated bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
-		go test -race -coverprofile=$@ "$$dir" | tee -a test.log; \
+		go test -timeout 15m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
