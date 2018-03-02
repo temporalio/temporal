@@ -42,7 +42,7 @@ type (
 
 	// DomainReplicator is the interface which can replicate the domain
 	DomainReplicator interface {
-		HandleReceiveTask(task *replicator.DomainTaskAttributes) error
+		HandleReceivingTask(task *replicator.DomainTaskAttributes) error
 	}
 
 	replicationTaskProcessor struct {
@@ -176,7 +176,7 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 					switch task.GetTaskType() {
 					case replicator.ReplicationTaskTypeDomain:
 						p.logger.Debugf("Recieved domain replication task %v.", task.DomainTaskAttributes)
-						p.domainReplicator.HandleReceiveTask(task.DomainTaskAttributes)
+						err = p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 					case replicator.ReplicationTaskTypeHistory:
 						p.logger.Debugf("Recieved history replication task %v.", task.HistoryTaskAttributes)
 					default:

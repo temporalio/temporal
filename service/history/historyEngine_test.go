@@ -1325,7 +1325,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
+	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
@@ -1836,7 +1836,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
+	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
@@ -2548,7 +2548,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 			Identity:  &identity,
 		},
 	})
-	s.EqualError(err, "BadRequestError{Message: No such activityID: %!d(string=aid)\n}")
+	s.EqualError(err, "BadRequestError{Message: No such activityID: aid\n}")
 }
 
 func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotScheduled() {

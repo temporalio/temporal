@@ -114,7 +114,12 @@ func (s *Service) Start() {
 
 	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
 
-	handler := NewWorkflowHandler(base, s.config, metadata, history, visibility)
+	kafkaProducer, err := base.GetMessagingClient().NewProducer(base.GetClusterMetadata().GetCurrentClusterName())
+	if err != nil {
+		log.Fatalf("Creating kafka producer failed: %v", err)
+	}
+
+	handler := NewWorkflowHandler(base, s.config, metadata, history, visibility, kafkaProducer)
 	handler.Start()
 
 	log.Infof("%v started", common.FrontendServiceName)

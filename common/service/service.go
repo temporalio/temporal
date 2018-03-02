@@ -89,6 +89,7 @@ type (
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		metricsClient          metrics.Client
 		clusterMetadata        cluster.Metadata
+		messagingClient        messaging.Client
 		dynamicCollection      *dynamicconfig.Collection
 	}
 )
@@ -105,6 +106,7 @@ func New(params *BootstrapParams) Service {
 		metricsScope:          params.MetricScope,
 		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
 		clusterMetadata:       params.ClusterMetadata,
+		messagingClient:       params.MessagingClient,
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig),
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
@@ -225,6 +227,11 @@ func (h *serviceImpl) GetDispatcher() *yarpc.Dispatcher {
 // GetClusterMetadata returns the service cluster metadata
 func (h *serviceImpl) GetClusterMetadata() cluster.Metadata {
 	return h.clusterMetadata
+}
+
+// GetMessagingClient returns the messaging client against Kafka
+func (h *serviceImpl) GetMessagingClient() messaging.Client {
+	return h.messagingClient
 }
 
 func getMetricsServiceIdx(serviceName string, logger bark.Logger) metrics.ServiceIdx {

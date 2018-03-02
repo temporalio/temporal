@@ -27,6 +27,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber/cadence/common/messaging"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -35,6 +37,7 @@ import (
 	"github.com/uber/cadence/.gen/go/health/metaserver"
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
+	"github.com/uber/cadence/.gen/go/replicator"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
@@ -65,6 +68,7 @@ type (
 		startWG            sync.WaitGroup
 		rateLimiter        common.TokenBucket
 		config             *Config
+		domainReplicator   DomainReplicator
 		service.Service
 	}
 
@@ -106,7 +110,8 @@ var (
 // NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(
 	sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
-	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager) *WorkflowHandler {
+	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager,
+	kafkaProducer messaging.Producer) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:            sVice,
 		config:             config,
@@ -117,6 +122,7 @@ func NewWorkflowHandler(
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetLogger()),
 		rateLimiter:        common.NewTokenBucket(config.RPS, common.NewRealTimeSource()),
+		domainReplicator:   NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)
@@ -214,7 +220,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(err, scope)
 	}
 
-	response, err := wh.metadataMgr.CreateDomain(&persistence.CreateDomainRequest{
+	domainRequest := &persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:          uuid.New(),
 			Name:        registerRequest.GetName(),
@@ -232,14 +238,25 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		},
 		IsGlobalDomain:  clusterMetadata.IsGlobalDomainEnabled(),
 		FailoverVersion: 0, // TODO do something?
-	})
+	}
 
+	domainResponse, err := wh.metadataMgr.CreateDomain(domainRequest)
 	if err != nil {
 		return wh.error(err, scope)
 	}
 
+	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+	if clusterMetadata.IsGlobalDomainEnabled() {
+		err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationCreate,
+			domainRequest.Info, domainRequest.Config, domainRequest.ReplicationConfig, 0, domainRequest.FailoverVersion)
+		if err != nil {
+			return wh.error(err, scope)
+		}
+	}
+
 	// TODO: Log through logging framework.  We need to have good auditing of domain CRUD
-	wh.GetLogger().Debugf("Register domain succeeded for name: %v, Id: %v", *registerRequest.Name, response.ID)
+	wh.GetLogger().Debugf("Register domain succeeded for name: %v, Id: %v", registerRequest.GetName(), domainResponse.ID)
+
 	return nil
 }
 
@@ -422,6 +439,14 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		})
 		if err != nil {
 			return nil, wh.error(err, scope)
+		}
+		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
+		if clusterMetadata.IsGlobalDomainEnabled() {
+			err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
+				info, config, replicationConfig, configVersion, failoverVersion)
+			if err != nil {
+				return nil, wh.error(err, scope)
+			}
 		}
 	} else if clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
 		// although there is no attr updated, just prevent customer to use the non master cluster

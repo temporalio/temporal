@@ -28,12 +28,14 @@ import (
 
 	"errors"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
@@ -197,9 +199,13 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	params.CassandraConfig.Hosts = "127.0.0.1"
 
+	// TODO when cross DC is public, remove this temporary override
+	kafkaProducer := &mocks.KafkaProducer{}
+	kafkaProducer.On("Publish", mock.Anything).Return(nil)
+
 	c.frontEndService = service.New(params)
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontend.NewConfig(), c.metadataMgr, c.historyMgr, c.visibilityMgr)
+		c.frontEndService, frontend.NewConfig(), c.metadataMgr, c.historyMgr, c.visibilityMgr, kafkaProducer)
 	err := c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")

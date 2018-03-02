@@ -70,7 +70,7 @@ func (s *domainReplicatorSuite) TearDownTest() {
 	s.TearDownWorkflowStore()
 }
 
-func (s *domainReplicatorSuite) TestReplicateRegisterDomainTask() {
+func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -113,7 +113,7 @@ func (s *domainReplicatorSuite) TestReplicateRegisterDomainTask() {
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	err := s.domainReplicator.HandleReceiveTask(task)
+	err := s.domainReplicator.HandleReceivingTask(task)
 	s.Nil(err)
 
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{ID: id})
@@ -127,13 +127,13 @@ func (s *domainReplicatorSuite) TestReplicateRegisterDomainTask() {
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfig(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.DBVersion)
 }
 
-func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
+func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -176,7 +176,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_Updat
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	err := s.domainReplicator.HandleReceiveTask(createTask)
+	err := s.domainReplicator.HandleReceivingTask(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -218,7 +218,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_Updat
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	err = s.domainReplicator.HandleReceiveTask(updateTask)
+	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -231,13 +231,13 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_Updat
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfig(updateClusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
 	s.Equal(updateFailoverVersion, resp.FailoverVersion)
 	s.Equal(int64(1), resp.DBVersion)
 }
 
-func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_NoUpdateActiveCluster() {
+func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateConfig_NoUpdateActiveCluster() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -280,7 +280,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_NoUpd
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	err := s.domainReplicator.HandleReceiveTask(createTask)
+	err := s.domainReplicator.HandleReceivingTask(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -322,7 +322,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_NoUpd
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	err = s.domainReplicator.HandleReceiveTask(updateTask)
+	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -335,13 +335,13 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_UpdateConfig_NoUpd
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfig(updateClusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(updateClusters), resp.ReplicationConfig.Clusters)
 	s.Equal(updateConfigVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(1), resp.DBVersion)
 }
 
-func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_UpdateActiveCluster() {
+func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdateConfig_UpdateActiveCluster() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -384,7 +384,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_Upd
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	err := s.domainReplicator.HandleReceiveTask(createTask)
+	err := s.domainReplicator.HandleReceivingTask(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -426,7 +426,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_Upd
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	err = s.domainReplicator.HandleReceiveTask(updateTask)
+	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -439,13 +439,13 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_Upd
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfig(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(updateFailoverVersion, resp.FailoverVersion)
 	s.Equal(int64(1), resp.DBVersion)
 }
 
-func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
+func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdateConfig_NoUpdateActiveCluster() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()
 	name := "some random domain test name"
@@ -488,7 +488,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_NoU
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
 
-	err := s.domainReplicator.HandleReceiveTask(createTask)
+	err := s.domainReplicator.HandleReceivingTask(createTask)
 	s.Nil(err)
 
 	// success update case
@@ -530,7 +530,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_NoU
 		ConfigVersion:   common.Int64Ptr(updateConfigVersion),
 		FailoverVersion: common.Int64Ptr(updateFailoverVersion),
 	}
-	err = s.domainReplicator.HandleReceiveTask(updateTask)
+	err = s.domainReplicator.HandleReceivingTask(updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
 	s.Nil(err)
@@ -543,7 +543,7 @@ func (s *domainReplicatorSuite) TestReplicateUpdateDomainTask_NoUpdateConfig_NoU
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
-	s.Equal(s.domainReplicator.convertClusterReplicationConfig(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
 	s.Equal(configVersion, resp.ConfigVersion)
 	s.Equal(failoverVersion, resp.FailoverVersion)
 	s.Equal(int64(0), resp.DBVersion)

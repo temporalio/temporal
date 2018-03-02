@@ -26,6 +26,7 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -50,6 +51,8 @@ var (
 	ErrInvalidDomainStatus = errors.New("invalid domain status attribute")
 )
 
+// NOTE: the counterpart of domain replication transmission logic is in service/fropntend package
+
 type (
 	domainReplicatorImpl struct {
 		metadataManager persistence.MetadataManager
@@ -65,8 +68,8 @@ func NewDomainReplicator(metadataManager persistence.MetadataManager, logger bar
 	}
 }
 
-// handleDomainReplicationTask handle the domain replication task
-func (domainReplicator *domainReplicatorImpl) HandleReceiveTask(task *replicator.DomainTaskAttributes) error {
+// HandleReceiveTask handle receiving of the domain replication task
+func (domainReplicator *domainReplicatorImpl) HandleReceivingTask(task *replicator.DomainTaskAttributes) error {
 	if err := domainReplicator.validateDomainReplicationTask(task); err != nil {
 		return err
 	}
@@ -84,7 +87,7 @@ func (domainReplicator *domainReplicatorImpl) HandleReceiveTask(task *replicator
 // handleDomainCreationReplicationTask handle the domain creation replication task
 func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTask(task *replicator.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatus(task.Info.Status)
+	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
 	if err != nil {
 		return err
 	}
@@ -103,7 +106,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-			Clusters:          domainReplicator.convertClusterReplicationConfig(task.ReplicationConfig.Clusters),
+			Clusters:          domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters),
 		},
 		IsGlobalDomain:  true, // local domain will not be replicated
 		FailoverVersion: task.GetFailoverVersion(),
@@ -116,7 +119,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 // handleDomainUpdateReplicationTask handle the domain update replication task
 func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(task *replicator.DomainTaskAttributes) error {
 	// task already validated
-	status, err := domainReplicator.convertDomainStatus(task.Info.Status)
+	status, err := domainReplicator.convertDomainStatusFromThrift(task.Info.Status)
 	if err != nil {
 		return err
 	}
@@ -154,7 +157,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 			Retention:  task.Config.GetWorkflowExecutionRetentionPeriodInDays(),
 			EmitMetric: task.Config.GetEmitMetric(),
 		}
-		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfig(task.ReplicationConfig.Clusters)
+		request.ReplicationConfig.Clusters = domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters)
 		request.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.FailoverVersion < task.GetFailoverVersion() {
@@ -193,7 +196,7 @@ func (domainReplicator *domainReplicatorImpl) validateDomainReplicationTask(task
 	return nil
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfig(
+func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFromThrift(
 	input []*shared.ClusterReplicationConfiguration) []*persistence.ClusterReplicationConfig {
 	output := []*persistence.ClusterReplicationConfig{}
 	for _, cluster := range input {
@@ -203,12 +206,22 @@ func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfig(
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertDomainStatus(status *shared.DomainStatus) (int, error) {
-	if status == nil {
+func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToThrift(
+	input []*persistence.ClusterReplicationConfig) []*shared.ClusterReplicationConfiguration {
+	output := []*shared.ClusterReplicationConfiguration{}
+	for _, cluster := range input {
+		clusterName := common.StringPtr(cluster.ClusterName)
+		output = append(output, &shared.ClusterReplicationConfiguration{ClusterName: clusterName})
+	}
+	return output
+}
+
+func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromThrift(input *shared.DomainStatus) (int, error) {
+	if input == nil {
 		return 0, ErrInvalidDomainStatus
 	}
 
-	switch *status {
+	switch *input {
 	case shared.DomainStatusRegistered:
 		return persistence.DomainStatusRegistered, nil
 	case shared.DomainStatusDeprecated:
@@ -216,4 +229,18 @@ func (domainReplicator *domainReplicatorImpl) convertDomainStatus(status *shared
 	default:
 		return 0, ErrInvalidDomainStatus
 	}
+}
+
+func (domainReplicator *domainReplicatorImpl) convertDomainStatusToThrift(input int) (*shared.DomainStatus, error) {
+	switch input {
+	case persistence.DomainStatusRegistered:
+		output := shared.DomainStatusRegistered
+		return &output, nil
+	case persistence.DomainStatusDeprecated:
+		output := shared.DomainStatusDeprecated
+		return &output, nil
+	default:
+		return nil, ErrInvalidDomainStatus
+	}
+
 }

@@ -1010,7 +1010,7 @@ func NewHistoryEventBatch(version int, events []*workflow.HistoryEvent) *History
 }
 
 func (b *HistoryEventBatch) String() string {
-	return fmt.Sprint("[version:%v, events:%v]", b.Version, b.Events)
+	return fmt.Sprintf("[version:%v, events:%v]", b.Version, b.Events)
 }
 
 // NewSerializedHistoryEventBatch constructs and returns a new instance of of SerializedHistoryEventBatch

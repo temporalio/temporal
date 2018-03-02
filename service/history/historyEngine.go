@@ -2121,7 +2121,7 @@ func getScheduleID(activityID string, msBuilder *mutableStateBuilder) (int64, er
 	}
 	scheduleID, ok := msBuilder.GetScheduleIDByActivityID(activityID)
 	if !ok {
-		return 0, &workflow.BadRequestError{Message: fmt.Sprintf("No such activityID: %d\n", activityID)}
+		return 0, &workflow.BadRequestError{Message: fmt.Sprintf("No such activityID: %s\n", activityID)}
 	}
 	return scheduleID, nil
 }
