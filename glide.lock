@@ -1,5 +1,5 @@
-hash: 961c13e43d7fb51e9c4e19d5fca098596754b882f54a276272717274c121a08d
-updated: 2018-02-13T15:58:53.770031-08:00
+hash: 692b6e00919597293746e2c2a0b2c645fc550be9be89951aa10afafd1a4e5c6b
+updated: 2018-02-20T18:14:25.806846-08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -42,6 +42,8 @@ imports:
   - utils
 - name: github.com/facebookgo/clock
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- name: github.com/fatih/color
+  version: 507f6050b8568533fb3f5504de8e5205fa62a114
 - name: github.com/gocql/gocql
   version: ca7d33956650d92d29e6db7fe901e23d0f0e3359
   subpackages:
@@ -53,17 +55,21 @@ imports:
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
-  version: c9c7427a2a70d2eb3bafa0ab2dc163e45f143317
+  version: 925541529c1fa6821df4e44ce2723319eb2be768
   subpackages:
   - proto
 - name: github.com/golang/snappy
   version: 553a641470496b2327abcac10b36396bd98e45c9
 - name: github.com/hailocab/go-hostpool
   version: e80d13ce29ede4452c43dea11e79b9bc8a15b478
+- name: github.com/mattn/go-runewidth
+  version: 97311d9f7767e3d6f422ea06661bc2c7a19e8a5d
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
   - pbutil
+- name: github.com/olekukonko/tablewriter
+  version: b8a9be070da40449e501c3c4730a889e42d87a9e
 - name: github.com/opentracing/opentracing-go
   version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
   subpackages:
@@ -118,11 +124,12 @@ imports:
 - name: github.com/uber-common/bark
   version: dbf558e8a7b65e2b54e1e01c14ee0e4207a865f5
 - name: github.com/uber-go/atomic
-  version: e682c1008ac17bf26d2e4b5ad6cdd08520ed0b22
+  version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
+  subpackages:
+  - utils
 - name: github.com/uber-go/kafka-client
   version: 01a7eeb4f9ea6e4c16a6ec5d159076c88244c947
   subpackages:
-  - internal/backoff
   - internal/consumer
   - internal/list
   - internal/metrics
@@ -133,7 +140,7 @@ imports:
   subpackages:
   - internal/mapstructure
 - name: github.com/uber-go/tally
-  version: 6c4631652c6aab57c64f65c2e0aaec2e9aae3a64
+  version: 522328b48efad0c6034dba92bf39228694e9d31f
   subpackages:
   - m3
   - m3/customtransports
@@ -171,7 +178,9 @@ imports:
 - name: github.com/urfave/cli
   version: cf33a9befefdd6c6ea1a236ab6d546e797a62cbf
 - name: go.uber.org/atomic
-  version: 4e336646b2ef9fc6e47be8e21594178f98e5ebcf
+  version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
+- name: go.uber.org/cadence
+  version: 570324de7bb1008983846c97ee4d80d24e277854
 - name: go.uber.org/multierr
   version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
 - name: go.uber.org/net/metrics
@@ -226,7 +235,7 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/net
-  version: f5dfe339be1d06f81b22525fe34671ee7d2c8904
+  version: cbe0f9307d0156177f9dd5dc85da1a31abc5f2fb
   repo: https://github.com/golang/net
   subpackages:
   - bpf

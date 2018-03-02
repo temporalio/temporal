@@ -81,10 +81,13 @@ copyright: cmd/tools/copyright/licensegen.go
 cadence-cassandra-tool: vendor/glide.updated $(TOOLS_SRC)
 	go build -i -o cadence-cassandra-tool cmd/tools/cassandra/main.go
 
-cadence: vendor/glide.updated $(ALL_SRC)
-	go build -i -o cadence cmd/server/cadence.go cmd/server/server.go
+cadence: vendor/glide.updated $(TOOLS_SRC)
+	go build -i -o cadence cmd/tools/cli/main.go
 
-bins_nothrift: lint copyright cadence-cassandra-tool cadence
+cadence-server: vendor/glide.updated $(ALL_SRC)
+	go build -i -o cadence-server cmd/server/cadence.go cmd/server/server.go
+
+bins_nothrift: lint copyright cadence-cassandra-tool cadence cadence-server
 
 bins: thriftc bins_nothrift
 
@@ -137,6 +140,7 @@ fmt:
 clean:
 	rm -f cadence
 	rm -f cadence-cassandra-tool
+	rm -f cadence-server
 	rm -Rf $(BUILD)
 
 install-schema: bins
@@ -148,7 +152,7 @@ install-schema: bins
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility update-schema -d ./schema/visibility/versioned
 
 start: bins
-	./cadence start
+	./cadence-server start
 
 install-schema-cdc: bins
 	@echo Setting up cadence_active key space
@@ -167,7 +171,7 @@ install-schema-cdc: bins
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_standby update-schema -d ./schema/visibility/versioned
 
 start-cdc-active: bins
-	./cadence --zone active start
+	./cadence-server --zone active start
 
 start-cdc-standby: bins
-	./cadence --zone standby start
+	./cadence-server --zone standby start

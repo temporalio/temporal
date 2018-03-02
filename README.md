@@ -32,7 +32,7 @@ make install-schema
 
 * Start the service:
 ```bash
-./cadence start
+./cadence-server start
 ```
 
 ### Using Docker

@@ -112,4 +112,4 @@ fi
 
 # fix up config
 envsubst < config/docker_template.yaml > config/docker.yaml
-./cadence --root $CADENCE_HOME --env docker start --services=$SERVICES
+./cadence-server --root $CADENCE_HOME --env docker start --services=$SERVICES

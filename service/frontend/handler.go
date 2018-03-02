@@ -1108,7 +1108,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	return resp, nil
 }
 
-// GetWorkflowExecutionHistory - retrieves the hisotry of workflow execution
+// GetWorkflowExecutionHistory - retrieves the history of workflow execution
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	getRequest *gen.GetWorkflowExecutionHistoryRequest) (*gen.GetWorkflowExecutionHistoryResponse, error) {

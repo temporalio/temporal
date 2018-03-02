@@ -23,6 +23,9 @@ import:
 - package: github.com/emirpasic/gods
 - package: github.com/davecgh/go-spew
 - package: github.com/urfave/cli
+- package: github.com/fatih/color
+- package: github.com/olekukonko/tablewriter
+- package: github.com/mattn/go-runewidth
 - package: gopkg.in/yaml.v2
 - package: gopkg.in/validator.v2
 - package: golang.org/x/time
@@ -31,6 +34,7 @@ import:
 - package: github.com/cactus/go-statsd-client
   subpackages:
   - statsd
+- package: go.uber.org/cadence
 - package: go.uber.org/thriftrw
   version: ^1.6
 - package: go.uber.org/yarpc

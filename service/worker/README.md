@@ -32,7 +32,7 @@ bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 -
 ```
 4. Start Cadence development server for active zone:
 ```
-./cadence --zone active start
+./cadence-server --zone active start
 ```
 
 

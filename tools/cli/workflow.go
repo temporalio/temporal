@@ -1,0 +1,307 @@
+// Copyright (c) 2017 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package cli
+
+import "github.com/urfave/cli"
+
+func newWorkflowCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:  "show",
+			Usage: "show workflow history",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintRawTimeWithAlias,
+					Usage: "Print raw time stamp",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFilenameWithAlias,
+					Usage: "Serialize history event to a file",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ShowHistory(c)
+			},
+		},
+		{
+			Name:        "showid",
+			Usage:       "show workflow history with given workflow_id and optional run_id (a shortcut of `show -w <wid> -r <rid>`)",
+			Description: "cadence workflow showid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
+			Action: func(c *cli.Context) {
+				ShowHistoryWithWID(c)
+			},
+		},
+		{
+			Name:  "start",
+			Usage: "start a new workflow execution",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagTaskListWithAlias,
+					Usage: "TaskList",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowTypeWithAlias,
+					Usage: "WorkflowTypeName",
+				},
+				cli.IntFlag{
+					Name:  FlagExecutionTimeoutWithAlias,
+					Usage: "Execution start to close timeout in seconds",
+				},
+				cli.IntFlag{
+					Name:  FlagDecisionTimeoutWithAlias,
+					Value: defaultDecisionTimeoutInSeconds,
+					Usage: "Decision task start to close timeout in seconds",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Optional input for the workflow, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
+				},
+				cli.StringFlag{
+					Name: FlagInputFileWithAlias,
+					Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+						"Input from file will be overwrite by input from command line",
+				},
+			},
+			Action: func(c *cli.Context) {
+				StartWorkflow(c)
+			},
+		},
+		{
+			Name:  "run",
+			Usage: "start a new workflow execution and get workflow progress",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagTaskListWithAlias,
+					Usage: "TaskList",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowTypeWithAlias,
+					Usage: "WorkflowTypeName",
+				},
+				cli.IntFlag{
+					Name:  FlagExecutionTimeoutWithAlias,
+					Usage: "Execution start to close timeout in seconds",
+				},
+				cli.IntFlag{
+					Name:  FlagDecisionTimeoutWithAlias,
+					Value: defaultDecisionTimeoutInSeconds,
+					Usage: "Decision task start to close timeout in seconds",
+				},
+				cli.IntFlag{
+					Name:  FlagContextTimeoutWithAlias,
+					Usage: "Optional timeout for start command context in seconds, default value is 120",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Optional input for the workflow, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
+				},
+				cli.StringFlag{
+					Name: FlagInputFileWithAlias,
+					Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+						"Input from file will be overwrite by input from command line",
+				},
+			},
+			Action: func(c *cli.Context) {
+				RunWorkflow(c)
+			},
+		},
+		{
+			Name:    "cancel",
+			Aliases: []string{"c"},
+			Usage:   "cancel a workflow execution",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+			},
+			Action: func(c *cli.Context) {
+				CancelWorkflow(c)
+			},
+		},
+		{
+			Name:    "signal",
+			Aliases: []string{"s"},
+			Usage:   "signal a workflow execution",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagNameWithAlias,
+					Usage: "SignalName",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Input for the signal, in JSON format.",
+				},
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input for the signal from JSON file.",
+				},
+			},
+			Action: func(c *cli.Context) {
+				SignalWorkflow(c)
+			},
+		},
+		{
+			Name:    "terminate",
+			Aliases: []string{"term"},
+			Usage:   "terminate a new workflow execution",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagReasonWithAlias,
+					Usage: "The reason you want to terminate the workflow",
+				},
+			},
+			Action: func(c *cli.Context) {
+				TerminateWorkflow(c)
+			},
+		},
+		{
+			Name:  "list",
+			Usage: "list open or closed workflow executions",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  FlagOpenWithAlias,
+					Usage: "list for open workflow executions, default is to list for closed ones",
+				},
+				cli.IntFlag{
+					Name:  FlagPageSizeWithAlias,
+					Value: 10,
+					Usage: "Result page size",
+				},
+				cli.StringFlag{
+					Name:  FlagEarliestTimeWithAlias,
+					Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+				},
+				cli.StringFlag{
+					Name:  FlagLatestTimeWithAlias,
+					Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowTypeWithAlias,
+					Usage: "WorkflowTypeName",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintRawTimeWithAlias,
+					Usage: "Print raw time stamp",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ListWorkflow(c)
+			},
+		},
+		{
+			Name:  "query",
+			Usage: "query workflow execution",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagQueryTypeWithAlias,
+					Usage: "The query type you want to run",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Optional input for the query, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
+				},
+				cli.StringFlag{
+					Name: FlagInputFileWithAlias,
+					Usage: "Optional input for the query from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+						"Input from file will be overwrite by input from command line",
+				},
+			},
+			Action: func(c *cli.Context) {
+				QueryWorkflow(c)
+			},
+		},
+		{
+			Name:  "stack",
+			Usage: "query workflow execution with __stack_trace as query type",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagInputWithAlias,
+					Usage: "Optional input for the query, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
+				},
+				cli.StringFlag{
+					Name: FlagInputFileWithAlias,
+					Usage: "Optional input for the query from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
+						"Input from file will be overwrite by input from command line",
+				},
+			},
+			Action: func(c *cli.Context) {
+				QueryWorkflowUsingStackTrace(c)
+			},
+		},
+	}
+}
