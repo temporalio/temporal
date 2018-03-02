@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -44,6 +45,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"go.uber.org/yarpc/yarpcerrors"
 )
 
 var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
@@ -1575,15 +1577,38 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	)
 
 	queryRequest.Execution.RunId = response.Execution.RunId
-	if len(response.StickyTaskList.GetName()) == 0 {
-		matchingRequest.TaskList = response.TaskList
-	} else if !clientFeature.SupportStickyQuery() {
-		// sticky enabled on the client side, but client chose to use non sticky, which is also the default
-		matchingRequest.TaskList = response.TaskList
-	} else {
+	if len(response.StickyTaskList.GetName()) != 0 && clientFeature.SupportStickyQuery() {
 		matchingRequest.TaskList = response.StickyTaskList
+		stickyDecisionTimeout := response.GetStickyTaskListScheduleToStartTimeout()
+		// using a clean new context in case customer provide a context which has
+		// a really short deadline, causing we clear the stickyness
+		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(stickyDecisionTimeout)*time.Second)
+		matchingResp, err := wh.matching.QueryWorkflow(stickyContext, matchingRequest)
+		cancel()
+		if err == nil {
+			return matchingResp, nil
+		}
+		if yarpcError, ok := err.(*yarpcerrors.Status); !ok || yarpcError.Code() != yarpcerrors.CodeDeadlineExceeded {
+			// this means query failure
+			logging.LogQueryTaskFailedEvent(wh.GetLogger(),
+				queryRequest.GetDomain(),
+				queryRequest.Execution.GetWorkflowId(),
+				queryRequest.Execution.GetRunId(),
+				queryRequest.Query.GetQueryType())
+			return nil, wh.error(err, scope)
+		}
+		// this means sticky timeout, should try using the normal tasklist
+		// we should clear the stickyness of this workflow
+		_, err = wh.history.ResetStickyTaskList(ctx, &h.ResetStickyTaskListRequest{
+			DomainUUID: common.StringPtr(domainID),
+			Execution:  queryRequest.Execution,
+		})
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
 	}
 
+	matchingRequest.TaskList = response.TaskList
 	matchingResp, err := wh.matching.QueryWorkflow(ctx, matchingRequest)
 	if err != nil {
 		logging.LogQueryTaskFailedEvent(wh.GetLogger(),

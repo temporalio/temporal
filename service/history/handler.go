@@ -723,6 +723,39 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	return nil
 }
 
+// ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
+// Volatile information are the information related to client, such as:
+// 1. StickyTaskList
+// 2. StickyScheduleToStartTimeout
+// 3. ClientLibraryVersion
+// 4. ClientFeatureVersion
+// 5. ClientImpl
+func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.ResetStickyTaskListRequest) (*hist.ResetStickyTaskListResponse, error) {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryResetStickyTaskListScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryResetStickyTaskListScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if resetRequest.DomainUUID == nil {
+		return nil, errDomainNotSet
+	}
+
+	engine, err := h.controller.GetEngine(resetRequest.Execution.GetWorkflowId())
+	if err != nil {
+		h.updateErrorMetric(metrics.HistoryResetStickyTaskListScope, err)
+		return nil, err
+	}
+
+	resp, err := engine.ResetStickyTaskList(resetRequest)
+	if err != nil {
+		h.updateErrorMetric(metrics.HistoryResetStickyTaskListScope, h.convertError(err))
+		return nil, h.convertError(err)
+	}
+
+	return resp, nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

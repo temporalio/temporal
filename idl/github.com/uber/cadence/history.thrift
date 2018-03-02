@@ -60,6 +60,17 @@ struct GetMutableStateResponse {
   80: optional string clientFeatureVersion
   90: optional string clientImpl
   100: optional bool isWorkflowRunning
+  110: optional i32 stickyTaskListScheduleToStartTimeout
+}
+
+struct ResetStickyTaskListRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+}
+
+struct ResetStickyTaskListResponse {
+  // The reason to keep this response is to allow returning
+  // information in the future.
 }
 
 struct RespondDecisionTaskCompletedRequest {
@@ -201,6 +212,23 @@ service HistoryService {
   * It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
   **/
   GetMutableStateResponse GetMutableState(1: GetMutableStateRequest getRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * Reset the sticky tasklist related information in mutable state of a given workflow.
+  * Things cleared are:
+  * 1. StickyTaskList
+  * 2. StickyScheduleToStartTimeout
+  * 3. ClientLibraryVersion
+  * 4. ClientFeatureVersion
+  * 5. ClientImpl
+  **/
+  ResetStickyTaskListResponse ResetStickyTaskList(1: ResetStickyTaskListRequest resetRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
@@ -411,5 +439,4 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
     )
-
 }

@@ -321,6 +321,39 @@ func (mr *_MockClientRecorder) RequestCancelWorkflowExecution(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RequestCancelWorkflowExecution", args...)
 }
 
+// ResetStickyTaskList responds to a ResetStickyTaskList call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ResetStickyTaskList(gomock.Any(), ...).Return(...)
+// 	... := client.ResetStickyTaskList(...)
+func (m *MockClient) ResetStickyTaskList(
+	ctx context.Context,
+	_ResetRequest *history.ResetStickyTaskListRequest,
+	opts ...yarpc.CallOption,
+) (success *history.ResetStickyTaskListResponse, err error) {
+
+	args := []interface{}{ctx, _ResetRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ResetStickyTaskList", args...)
+	success, _ = ret[i].(*history.ResetStickyTaskListResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ResetStickyTaskList(
+	ctx interface{},
+	_ResetRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ResetRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ResetStickyTaskList", args...)
+}
+
 // RespondActivityTaskCanceled responds to a RespondActivityTaskCanceled call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

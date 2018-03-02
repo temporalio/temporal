@@ -490,16 +490,17 @@ func (v *GetMutableStateRequest) GetExpectedNextEventId() (o int64) {
 }
 
 type GetMutableStateResponse struct {
-	Execution            *shared.WorkflowExecution `json:"execution,omitempty"`
-	WorkflowType         *shared.WorkflowType      `json:"workflowType,omitempty"`
-	NextEventId          *int64                    `json:"NextEventId,omitempty"`
-	LastFirstEventId     *int64                    `json:"LastFirstEventId,omitempty"`
-	TaskList             *shared.TaskList          `json:"taskList,omitempty"`
-	StickyTaskList       *shared.TaskList          `json:"stickyTaskList,omitempty"`
-	ClientLibraryVersion *string                   `json:"clientLibraryVersion,omitempty"`
-	ClientFeatureVersion *string                   `json:"clientFeatureVersion,omitempty"`
-	ClientImpl           *string                   `json:"clientImpl,omitempty"`
-	IsWorkflowRunning    *bool                     `json:"isWorkflowRunning,omitempty"`
+	Execution                            *shared.WorkflowExecution `json:"execution,omitempty"`
+	WorkflowType                         *shared.WorkflowType      `json:"workflowType,omitempty"`
+	NextEventId                          *int64                    `json:"NextEventId,omitempty"`
+	LastFirstEventId                     *int64                    `json:"LastFirstEventId,omitempty"`
+	TaskList                             *shared.TaskList          `json:"taskList,omitempty"`
+	StickyTaskList                       *shared.TaskList          `json:"stickyTaskList,omitempty"`
+	ClientLibraryVersion                 *string                   `json:"clientLibraryVersion,omitempty"`
+	ClientFeatureVersion                 *string                   `json:"clientFeatureVersion,omitempty"`
+	ClientImpl                           *string                   `json:"clientImpl,omitempty"`
+	IsWorkflowRunning                    *bool                     `json:"isWorkflowRunning,omitempty"`
+	StickyTaskListScheduleToStartTimeout *int32                    `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
 }
 
 // ToWire translates a GetMutableStateResponse struct into a Thrift-level intermediate
@@ -519,7 +520,7 @@ type GetMutableStateResponse struct {
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -603,6 +604,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		w, err = wire.NewValueI32(*(v.StickyTaskListScheduleToStartTimeout)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -735,6 +744,16 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.StickyTaskListScheduleToStartTimeout = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -748,7 +767,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [11]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -790,11 +809,25 @@ func (v *GetMutableStateResponse) String() string {
 		fields[i] = fmt.Sprintf("IsWorkflowRunning: %v", *(v.IsWorkflowRunning))
 		i++
 	}
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		fields[i] = fmt.Sprintf("StickyTaskListScheduleToStartTimeout: %v", *(v.StickyTaskListScheduleToStartTimeout))
+		i++
+	}
 
 	return fmt.Sprintf("GetMutableStateResponse{%v}", strings.Join(fields[:i], ", "))
 }
 
 func _Bool_EqualsPtr(lhs, rhs *bool) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+func _I32_EqualsPtr(lhs, rhs *int32) bool {
 	if lhs != nil && rhs != nil {
 
 		x := *lhs
@@ -837,6 +870,9 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 		return false
 	}
 	if !_Bool_EqualsPtr(v.IsWorkflowRunning, rhs.IsWorkflowRunning) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.StickyTaskListScheduleToStartTimeout, rhs.StickyTaskListScheduleToStartTimeout) {
 		return false
 	}
 
@@ -898,6 +934,16 @@ func (v *GetMutableStateResponse) GetClientImpl() (o string) {
 func (v *GetMutableStateResponse) GetIsWorkflowRunning() (o bool) {
 	if v.IsWorkflowRunning != nil {
 		return *v.IsWorkflowRunning
+	}
+
+	return
+}
+
+// GetStickyTaskListScheduleToStartTimeout returns the value of StickyTaskListScheduleToStartTimeout if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetStickyTaskListScheduleToStartTimeout() (o int32) {
+	if v.StickyTaskListScheduleToStartTimeout != nil {
+		return *v.StickyTaskListScheduleToStartTimeout
 	}
 
 	return
@@ -2910,6 +2956,222 @@ func (v *RequestCancelWorkflowExecutionRequest) GetChildWorkflowOnly() (o bool) 
 	}
 
 	return
+}
+
+type ResetStickyTaskListRequest struct {
+	DomainUUID *string                   `json:"domainUUID,omitempty"`
+	Execution  *shared.WorkflowExecution `json:"execution,omitempty"`
+}
+
+// ToWire translates a ResetStickyTaskListRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ResetStickyTaskListRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ResetStickyTaskListRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ResetStickyTaskListRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ResetStickyTaskListRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ResetStickyTaskListRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ResetStickyTaskListRequest
+// struct.
+func (v *ResetStickyTaskListRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+
+	return fmt.Sprintf("ResetStickyTaskListRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ResetStickyTaskListRequest match the
+// provided ResetStickyTaskListRequest.
+//
+// This function performs a deep comparison.
+func (v *ResetStickyTaskListRequest) Equals(rhs *ResetStickyTaskListRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomainUUID returns the value of DomainUUID if it is set or its
+// zero value if it is unset.
+func (v *ResetStickyTaskListRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+
+	return
+}
+
+type ResetStickyTaskListResponse struct {
+}
+
+// ToWire translates a ResetStickyTaskListResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ResetStickyTaskListResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [0]wire.Field
+		i      int = 0
+	)
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ResetStickyTaskListResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ResetStickyTaskListResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ResetStickyTaskListResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ResetStickyTaskListResponse) FromWire(w wire.Value) error {
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ResetStickyTaskListResponse
+// struct.
+func (v *ResetStickyTaskListResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [0]string
+	i := 0
+
+	return fmt.Sprintf("ResetStickyTaskListResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ResetStickyTaskListResponse match the
+// provided ResetStickyTaskListResponse.
+//
+// This function performs a deep comparison.
+func (v *ResetStickyTaskListResponse) Equals(rhs *ResetStickyTaskListResponse) bool {
+
+	return true
 }
 
 type RespondActivityTaskCanceledRequest struct {
