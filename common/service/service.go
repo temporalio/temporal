@@ -107,7 +107,7 @@ func New(params *BootstrapParams) Service {
 		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
 		clusterMetadata:       params.ClusterMetadata,
 		messagingClient:       params.MessagingClient,
-		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig),
+		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 	}
 	sVice.runtimeMetricsReporter = metrics.NewRuntimeMetricsReporter(params.MetricScope, time.Minute, sVice.logger)
 	sVice.metricsClient = metrics.NewClient(params.MetricScope, getMetricsServiceIdx(params.Name, params.Logger))

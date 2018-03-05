@@ -21,37 +21,14 @@
 package dynamicconfig
 
 import (
-	"errors"
 	"time"
+
+	"github.com/uber-common/bark"
 )
 
-// Client allows fetching values from a dynamic configuration system NOTE: This does not have async
-// options right now. In the interest of keeping it minimal, we can add when requirement arises.
-type Client interface {
-	GetValue(name Key) (interface{}, error)
-	GetValueWithFilters(name Key, filters map[Filter]interface{}) (interface{}, error)
-}
-
-type nopClient struct{}
-
-func (mc *nopClient) GetValue(name Key) (interface{}, error) {
-	return nil, errors.New("unable to find key")
-}
-
-func (mc *nopClient) GetValueWithFilters(
-	name Key, filters map[Filter]interface{},
-) (interface{}, error) {
-	return nil, errors.New("unable to find key")
-}
-
-// NewNopCollection creates a new nop collection
-func NewNopCollection() *Collection {
-	return NewCollection(&nopClient{})
-}
-
 // NewCollection creates a new collection
-func NewCollection(client Client) *Collection {
-	return &Collection{client}
+func NewCollection(client Client, logger bark.Logger) *Collection {
+	return &Collection{client, logger}
 }
 
 // Collection wraps dynamic config client with a closure so that across the code, the config values
@@ -59,73 +36,88 @@ func NewCollection(client Client) *Collection {
 // code
 type Collection struct {
 	client Client
+	logger bark.Logger
 }
 
-// GetIntPropertyWithTaskList gets property with taskList filter and asserts that it's an integer
-func (c *Collection) GetIntPropertyWithTaskList(key Key, defaultVal int) func(string) int {
-	return func(taskList string) int {
-		return c.getPropertyWithStringFilter(key, defaultVal, TaskListName)(taskList).(int)
-	}
+func (c *Collection) logNoValue(key Key, err error) {
+	c.logger.Debugf("Failed to fetch key: %s from dynamic config with err: %s", key.String(), err.Error())
 }
 
-// GetDurationPropertyWithTaskList gets property with taskList filter and asserts that it's time.Duration
-func (c *Collection) GetDurationPropertyWithTaskList(
-	key Key, defaultVal time.Duration,
-) func(string) time.Duration {
-	return func(taskList string) time.Duration {
-		return c.getPropertyWithStringFilter(key, defaultVal, TaskListName)(taskList).(time.Duration)
-	}
-}
+// PropertyFn is a wrapper to get property from dynamic config
+type PropertyFn func() interface{}
 
-func (c *Collection) getPropertyWithStringFilter(
-	key Key, defaultVal interface{}, filter Filter,
-) func(string) interface{} {
-	return func(filterVal string) interface{} {
-		filters := make(map[Filter]interface{})
-		filters[filter] = filterVal
-		val, err := c.client.GetValueWithFilters(key, filters)
-		if err != nil {
-			return defaultVal
-		}
-		return val
-	}
-}
+// IntPropertyFn is a wrapper to get int property from dynamic config
+type IntPropertyFn func(opts ...FilterOption) int
 
-// GetProperty gets a eface property and returns defaultVal if property is not found
-func (c *Collection) GetProperty(key Key, defaultVal interface{}) func() interface{} {
+// FloatPropertyFn is a wrapper to get float property from dynamic config
+type FloatPropertyFn func(opts ...FilterOption) float64
+
+// DurationPropertyFn is a wrapper to get duration property from dynamic config
+type DurationPropertyFn func(opts ...FilterOption) time.Duration
+
+// BoolPropertyFn is a wrapper to get bool property from dynamic config
+type BoolPropertyFn func(opts ...FilterOption) bool
+
+// GetProperty gets a eface property and returns defaultValue if property is not found
+func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 	return func() interface{} {
-		val, err := c.client.GetValue(key)
+		val, err := c.client.GetValue(key, defaultValue)
 		if err != nil {
-			return defaultVal
+			c.logNoValue(key, err)
 		}
 		return val
 	}
+}
+
+func getFilterMap(opts ...FilterOption) map[Filter]interface{} {
+	l := len(opts)
+	m := make(map[Filter]interface{}, l)
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // GetIntProperty gets property and asserts that it's an integer
-func (c *Collection) GetIntProperty(key Key, defaultVal int) func() int {
-	return func() int {
-		return c.GetProperty(key, defaultVal)().(int)
+func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
+	return func(opts ...FilterOption) int {
+		val, err := c.client.GetIntValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
 	}
 }
 
 // GetFloat64Property gets property and asserts that it's a float64
-func (c *Collection) GetFloat64Property(key Key, defaultVal float64) func() float64 {
-	return func() float64 {
-		return c.GetProperty(key, defaultVal)().(float64)
+func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatPropertyFn {
+	return func(opts ...FilterOption) float64 {
+		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
 	}
 }
 
 // GetDurationProperty gets property and asserts that it's a duration
-func (c *Collection) GetDurationProperty(key Key, defaultVal time.Duration) func() time.Duration {
-	return func() time.Duration {
-		return c.GetProperty(key, defaultVal)().(time.Duration)
+func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) DurationPropertyFn {
+	return func(opts ...FilterOption) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
 	}
 }
 
 // GetBoolProperty gets property and asserts that it's an bool
-func (c *Collection) GetBoolProperty(key Key, defaultVal bool) func() bool {
-	return func() bool {
-		return c.GetProperty(key, defaultVal)().(bool)
+func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
+	return func(opts ...FilterOption) bool {
+		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
 	}
 }

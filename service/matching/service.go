@@ -31,16 +31,16 @@ import (
 
 // Config represents configuration for cadence-matching service
 type Config struct {
-	EnableSyncMatch bool
+	EnableSyncMatch dynamicconfig.BoolPropertyFn
 
 	// taskListManager configuration
 	RangeSize                 int64
-	GetTasksBatchSize         int
-	UpdateAckInterval         time.Duration
-	IdleTasklistCheckInterval time.Duration
+	GetTasksBatchSize         dynamicconfig.IntPropertyFn
+	UpdateAckInterval         dynamicconfig.DurationPropertyFn
+	IdleTasklistCheckInterval dynamicconfig.DurationPropertyFn
 	// Time to hold a poll request before returning an empty response if there are no tasks
-	LongPollExpirationInterval func(string) time.Duration
-	MinTaskThrottlingBurstSize func(string) int
+	LongPollExpirationInterval dynamicconfig.DurationPropertyFn
+	MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFn
 
 	// taskWriter configuration
 	OutstandingTaskAppendsThreshold int
@@ -50,16 +50,24 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		EnableSyncMatch:           true,
-		RangeSize:                 100000,
-		GetTasksBatchSize:         1000,
-		UpdateAckInterval:         10 * time.Second,
-		IdleTasklistCheckInterval: 5 * time.Minute,
-		LongPollExpirationInterval: dc.GetDurationPropertyWithTaskList(
+		EnableSyncMatch: dc.GetBoolProperty(
+			dynamicconfig.MatchingEnableSyncMatch, true,
+		),
+		RangeSize: 100000,
+		GetTasksBatchSize: dc.GetIntProperty(
+			dynamicconfig.MatchingMaxTaskBatchSize, 1000,
+		),
+		UpdateAckInterval: dc.GetDurationProperty(
+			dynamicconfig.MatchingUpdateAckInterval, 10*time.Second,
+		),
+		IdleTasklistCheckInterval: dc.GetDurationProperty(
+			dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute,
+		),
+		LongPollExpirationInterval: dc.GetDurationProperty(
 			dynamicconfig.MatchingLongPollExpirationInterval, time.Minute,
 		),
-		MinTaskThrottlingBurstSize: dc.GetIntPropertyWithTaskList(
-			dynamicconfig.MinTaskThrottlingBurstSize, 1,
+		MinTaskThrottlingBurstSize: dc.GetIntProperty(
+			dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1,
 		),
 		OutstandingTaskAppendsThreshold: 250,
 		MaxTaskBatchSize:                100,
@@ -77,7 +85,7 @@ type Service struct {
 func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
-		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig)),
+		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
 		stopC:  make(chan struct{}),
 	}
 }

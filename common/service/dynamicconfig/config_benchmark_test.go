@@ -23,13 +23,15 @@ package dynamicconfig
 import (
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/uber-common/bark"
 )
 
 func BenchmarkGetIntProperty(b *testing.B) {
 	client := newInMemoryClient()
-	cln := NewCollection(client)
-	key := MaxTaskBatchSize
+	cln := NewCollection(client, bark.NewLoggerFromLogrus(logrus.New()))
+	key := MatchingMaxTaskBatchSize
 	for i := 0; i < b.N; i++ {
 		size := cln.GetIntProperty(key, 10)
 		assert.Equal(b, 10, size())

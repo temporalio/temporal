@@ -22,41 +22,71 @@ package dynamicconfig
 
 import (
 	"errors"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber-common/bark"
 )
 
 type inMemoryClient struct {
-	values map[Key]interface{}
-	sync.RWMutex
+	globalValues atomic.Value
 }
 
 func newInMemoryClient() *inMemoryClient {
-	return &inMemoryClient{values: make(map[Key]interface{})}
+	var globalValues atomic.Value
+	globalValues.Store(make(map[Key]interface{}))
+	return &inMemoryClient{globalValues: globalValues}
 }
 
 func (mc *inMemoryClient) SetValue(key Key, value interface{}) {
-	mc.Lock()
-	defer mc.Unlock()
-	mc.values[key] = value
+	v := mc.globalValues.Load().(map[Key]interface{})
+	v[key] = value
+	mc.globalValues.Store(v)
 }
 
-func (mc *inMemoryClient) GetValue(key Key) (interface{}, error) {
-	mc.RLock()
-	defer mc.RUnlock()
-	if val, ok := mc.values[key]; ok {
+func (mc *inMemoryClient) GetValue(key Key, defaultValue interface{}) (interface{}, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[key]; ok {
 		return val, nil
 	}
-	return nil, errors.New("unable to find key")
+	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetValueWithFilters(
-	name Key, filters map[Filter]interface{},
+	name Key, filters map[Filter]interface{}, defaultValue interface{},
 ) (interface{}, error) {
-	return mc.GetValue(name)
+	return mc.GetValue(name, defaultValue)
+}
+
+func (mc *inMemoryClient) GetIntValue(name Key, filters map[Filter]interface{}, defaultValue int) (int, error) {
+	return defaultValue, errors.New("unable to find key")
+}
+
+func (mc *inMemoryClient) GetFloatValue(name Key, filters map[Filter]interface{}, defaultValue float64) (float64, error) {
+	return defaultValue, errors.New("unable to find key")
+}
+
+func (mc *inMemoryClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
+	return defaultValue, errors.New("unable to find key")
+}
+
+func (mc *inMemoryClient) GetStringValue(name Key, filters map[Filter]interface{}, defaultValue string) (string, error) {
+	return defaultValue, errors.New("unable to find key")
+}
+
+func (mc *inMemoryClient) GetMapValue(
+	name Key, filters map[Filter]interface{}, defaultValue map[string]interface{},
+) (map[string]interface{}, error) {
+	return defaultValue, errors.New("unable to find key")
+}
+
+func (mc *inMemoryClient) GetDurationValue(
+	name Key, filters map[Filter]interface{}, defaultValue time.Duration,
+) (time.Duration, error) {
+	return defaultValue, errors.New("unable to find key")
 }
 
 type configSuite struct {
@@ -72,25 +102,19 @@ func TestConfigSuite(t *testing.T) {
 
 func (s *configSuite) SetupSuite() {
 	s.client = newInMemoryClient()
-	s.cln = NewCollection(s.client)
+	s.cln = NewCollection(s.client, bark.NewLoggerFromLogrus(logrus.New()))
 }
 
-func (s *configSuite) TestGetIntProperty() {
-	key := MaxTaskBatchSize
-	size := s.cln.GetIntProperty(key, 10)
+func (s *configSuite) TestGetPropertyInt() {
+	key := MatchingMaxTaskBatchSize
+	size := s.cln.GetProperty(key, 10)
 	s.Equal(10, size())
 	s.client.SetValue(key, 50)
-	s.Equal(50, size())
-	s.client.SetValue(key, "hello world")
-	s.Panics(func() { size() }, "Should panic")
+	s.Equal(50, size().(int))
 }
 
 func (s *configSuite) TestGetDurationProperty() {
 	key := MatchingLongPollExpirationInterval
 	interval := s.cln.GetDurationProperty(key, time.Second)
 	s.Equal(time.Second, interval())
-	s.client.SetValue(key, time.Minute)
-	s.Equal(time.Minute, interval())
-	s.client.SetValue(key, 10)
-	s.Panics(func() { interval() }, "Should panic")
 }

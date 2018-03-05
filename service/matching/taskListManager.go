@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/uber/cadence/common/service/dynamicconfig"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
@@ -66,15 +68,14 @@ type taskListManager interface {
 }
 
 type taskListConfig struct {
-	EnableSyncMatch bool
+	EnableSyncMatch func() bool
 	// Time to hold a poll request before returning an empty response if there are no tasks
 	LongPollExpirationInterval func() time.Duration
 	RangeSize                  int64
-	GetTasksBatchSize          int
-	UpdateAckInterval          time.Duration
-	IdleTasklistCheckInterval  time.Duration
+	GetTasksBatchSize          func() int
+	UpdateAckInterval          func() time.Duration
+	IdleTasklistCheckInterval  func() time.Duration
 	MinTaskThrottlingBurstSize func() int
-
 	// taskWriter configuration
 	OutstandingTaskAppendsThreshold int
 	MaxTaskBatchSize                int
@@ -82,18 +83,29 @@ type taskListConfig struct {
 
 func newTaskListConfig(id *taskListID, config *Config) *taskListConfig {
 	taskListName := id.taskListName
+	tlOpt := dynamicconfig.TaskListFilter(taskListName)
 	return &taskListConfig{
-		RangeSize:                 config.RangeSize,
-		GetTasksBatchSize:         config.GetTasksBatchSize,
-		UpdateAckInterval:         config.UpdateAckInterval,
-		IdleTasklistCheckInterval: config.IdleTasklistCheckInterval,
+		RangeSize: config.RangeSize,
+		GetTasksBatchSize: func() int {
+			return config.GetTasksBatchSize(tlOpt)
+		},
+		UpdateAckInterval: func() time.Duration {
+			return config.UpdateAckInterval(tlOpt)
+		},
+		IdleTasklistCheckInterval: func() time.Duration {
+			return config.IdleTasklistCheckInterval(tlOpt)
+		},
 		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(taskListName)
+			return config.MinTaskThrottlingBurstSize(tlOpt)
 		},
-		EnableSyncMatch: config.EnableSyncMatch,
+		EnableSyncMatch: func() bool {
+			return config.EnableSyncMatch(tlOpt)
+		},
 		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(taskListName)
+			return config.LongPollExpirationInterval(tlOpt)
 		},
+		OutstandingTaskAppendsThreshold: config.OutstandingTaskAppendsThreshold,
+		MaxTaskBatchSize:                config.MaxTaskBatchSize,
 	}
 }
 
@@ -170,11 +182,12 @@ func newTaskListManager(
 	e *matchingEngineImpl, taskList *taskListID, taskListKind *s.TaskListKind, config *Config,
 ) taskListManager {
 	dPtr := _defaultTaskDispatchRPS
+	taskListConfig := newTaskListConfig(taskList, config)
 	rl := newRateLimiter(
-		&dPtr, _defaultTaskDispatchRPSTTL, config.MinTaskThrottlingBurstSize(taskList.taskListName),
+		&dPtr, _defaultTaskDispatchRPSTTL, taskListConfig.MinTaskThrottlingBurstSize(),
 	)
 	return newTaskListManagerWithRateLimiter(
-		e, taskList, taskListKind, newTaskListConfig(taskList, config), rl,
+		e, taskList, taskListKind, taskListConfig, rl,
 	)
 }
 
@@ -183,7 +196,7 @@ func newTaskListManagerWithRateLimiter(
 	rl rateLimiter,
 ) taskListManager {
 	// To perform one db operation if there are no pollers
-	taskBufferSize := config.GetTasksBatchSize - 1
+	taskBufferSize := config.GetTasksBatchSize() - 1
 	ctx, cancel := context.WithCancel(context.Background())
 	tlMgr := &taskListManagerImpl{
 		engine:                  e,
@@ -562,7 +575,7 @@ func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLeve
 			DomainID:     c.taskListID.domainID,
 			TaskList:     c.taskListID.taskListName,
 			TaskType:     c.taskListID.taskType,
-			BatchSize:    c.config.GetTasksBatchSize,
+			BatchSize:    c.config.GetTasksBatchSize(),
 			RangeID:      rangeID,
 			ReadLevel:    readLevel,    // exclusive
 			MaxReadLevel: maxReadLevel, // inclusive
@@ -653,7 +666,7 @@ func (c *taskListManagerImpl) GetAllPollerInfo() []*pollerInfo {
 // and sent to a poller. So it not necessary to persist it.
 // Returns (nil, nil) if there is no waiting poller which indicates that task has to be persisted.
 func (c *taskListManagerImpl) trySyncMatch(task *persistence.TaskInfo) (*persistence.CreateTasksResponse, error) {
-	if !c.config.EnableSyncMatch {
+	if !c.config.EnableSyncMatch() {
 		return nil, nil
 	}
 	// Request from the point of view of Add(Activity|Decision)Task operation.
@@ -712,8 +725,8 @@ func (c *taskListManagerImpl) getTasksPump() {
 	c.startWG.Wait()
 
 	go c.deliverBufferTasksForPoll()
-	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval)
-	checkPollerTimer := time.NewTimer(c.config.IdleTasklistCheckInterval)
+	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
+	checkPollerTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
 getTasksPumpLoop:
 	for {
 		select {
@@ -765,7 +778,7 @@ getTasksPumpLoop:
 					// keep going as saving ack is not critical
 				}
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
-				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval)
+				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
 			}
 		case <-checkPollerTimer.C:
 			{
@@ -773,7 +786,7 @@ getTasksPumpLoop:
 				if len(pollers) == 0 {
 					c.Stop()
 				}
-				checkPollerTimer = time.NewTimer(c.config.IdleTasklistCheckInterval)
+				checkPollerTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
 			}
 		}
 	}

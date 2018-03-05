@@ -198,6 +198,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.ClusterMetadata = c.clusterMetadata
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	params.CassandraConfig.Hosts = "127.0.0.1"
+	params.DynamicConfig = dynamicconfig.NewNopClient()
 
 	// TODO when cross DC is public, remove this temporary override
 	kafkaProducer := &mocks.KafkaProducer{}

@@ -31,17 +31,20 @@ func (k Key) String() string {
 }
 
 const (
-	_matchingRoot         = "matching."
-	_matchingTaskListRoot = _matchingRoot + "taskList."
-	_historyRoot          = "history."
+	_matchingRoot               = "matching."
+	_matchingDomainTaskListRoot = _matchingRoot + "domain." + "taskList."
+	_historyRoot                = "history."
 )
 
 var keys = []string{
 	"unknownKey",
-	_matchingTaskListRoot + "MinTaskThrottlingBurstSize",
-	_matchingTaskListRoot + "MaxTaskBatchSize",
-	_matchingTaskListRoot + "LongPollExpirationInterval",
-	_historyRoot + "LongPollExpirationInterval",
+	_matchingDomainTaskListRoot + "minTaskThrottlingBurstSize",
+	_matchingDomainTaskListRoot + "maxTaskBatchSize",
+	_matchingDomainTaskListRoot + "longPollExpirationInterval",
+	_matchingDomainTaskListRoot + "enableSyncMatch",
+	_matchingDomainTaskListRoot + "updateAckInterval",
+	_matchingDomainTaskListRoot + "idleTasklistCheckInterval",
+	_historyRoot + "longPollExpirationInterval",
 }
 
 const (
@@ -49,12 +52,18 @@ const (
 	unknownKey Key = iota
 	// Matching keys
 
-	// MinTaskThrottlingBurstSize is the minimum burst size for task list throttling
-	MinTaskThrottlingBurstSize
-	// MaxTaskBatchSize is the maximum batch size to fetch from the task buffer
-	MaxTaskBatchSize
+	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
+	MatchingMinTaskThrottlingBurstSize
+	// MatchingMaxTaskBatchSize is the maximum batch size to fetch from the task buffer
+	MatchingMaxTaskBatchSize
 	// MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service
 	MatchingLongPollExpirationInterval
+	// MatchingEnableSyncMatch is to enable sync match
+	MatchingEnableSyncMatch
+	// MatchingUpdateAckInterval is the interval for update ack
+	MatchingUpdateAckInterval
+	// MatchingIdleTasklistCheckInterval is the IdleTasklistCheckInterval
+	MatchingIdleTasklistCheckInterval
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval
 )
@@ -62,16 +71,17 @@ const (
 // Filter represents a filter on the dynamic config key
 type Filter int
 
-func (k Filter) String() string {
-	keys := []string{
-		"unknownFilter",
-		"domainName",
-		"taskListName",
+func (f Filter) String() string {
+	if f <= unknownFilter || f > TaskListName {
+		return filters[unknownFilter]
 	}
-	if k <= unknownFilter || k > TaskListName {
-		return keys[unknownFilter]
-	}
-	return keys[k]
+	return filters[f]
+}
+
+var filters = []string{
+	"unknownFilter",
+	"domainName",
+	"taskListName",
 }
 
 const (
@@ -81,3 +91,20 @@ const (
 	// TaskListName is the tasklist name
 	TaskListName
 )
+
+// FilterOption is used to provide filters for dynamic config keys
+type FilterOption func(filterMap map[Filter]interface{})
+
+// TaskListFilter filters by task list name
+func TaskListFilter(name string) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[TaskListName] = name
+	}
+}
+
+// DomainFilter filters by domain name
+func DomainFilter(name string) FilterOption {
+	return func(filterMap map[Filter]interface{}) {
+		filterMap[DomainName] = name
+	}
+}
