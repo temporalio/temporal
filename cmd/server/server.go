@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/service/frontend"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
@@ -118,6 +119,7 @@ func (s *server) startService() common.Daemon {
 	)
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
 	params.MessagingClient = s.cfg.Kafka.NewKafkaClient(zap.NewNop(), params.Logger, params.MetricScope)
+	params.DynamicConfig = dynamicconfig.NewNopClient()
 
 	var daemon common.Daemon
 
