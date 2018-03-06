@@ -22,6 +22,8 @@ package frontend
 
 import (
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 )
@@ -114,9 +116,15 @@ func (s *Service) Start() {
 
 	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
 
-	kafkaProducer, err := base.GetMessagingClient().NewProducer(base.GetClusterMetadata().GetCurrentClusterName())
-	if err != nil {
-		log.Fatalf("Creating kafka producer failed: %v", err)
+	// TODO when global domain is enabled, uncomment the line below and remove the line after
+	var kafkaProducer messaging.Producer
+	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
+		kafkaProducer, err = base.GetMessagingClient().NewProducer(base.GetClusterMetadata().GetCurrentClusterName())
+		if err != nil {
+			log.Fatalf("Creating kafka producer failed: %v", err)
+		}
+	} else {
+		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
 	handler := NewWorkflowHandler(base, s.config, metadata, history, visibility, kafkaProducer)
