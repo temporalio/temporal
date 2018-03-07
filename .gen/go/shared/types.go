@@ -15646,6 +15646,290 @@ func (v *QueryWorkflowResponse) Equals(rhs *QueryWorkflowResponse) bool {
 	return true
 }
 
+type RecordActivityTaskHeartbeatByIDRequest struct {
+	Domain     *string `json:"domain,omitempty"`
+	WorkflowID *string `json:"workflowID,omitempty"`
+	RunID      *string `json:"runID,omitempty"`
+	ActivityID *string `json:"activityID,omitempty"`
+	Details    []byte  `json:"details,omitempty"`
+	Identity   *string `json:"identity,omitempty"`
+}
+
+// ToWire translates a RecordActivityTaskHeartbeatByIDRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RecordActivityTaskHeartbeatByIDRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [6]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowID != nil {
+		w, err = wire.NewValueString(*(v.WorkflowID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunID != nil {
+		w, err = wire.NewValueString(*(v.RunID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ActivityID != nil {
+		w, err = wire.NewValueString(*(v.ActivityID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Details != nil {
+		w, err = wire.NewValueBinary(v.Details), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a RecordActivityTaskHeartbeatByIDRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RecordActivityTaskHeartbeatByIDRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RecordActivityTaskHeartbeatByIDRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RecordActivityTaskHeartbeatByIDRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ActivityID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				v.Details, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RecordActivityTaskHeartbeatByIDRequest
+// struct.
+func (v *RecordActivityTaskHeartbeatByIDRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [6]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.WorkflowID != nil {
+		fields[i] = fmt.Sprintf("WorkflowID: %v", *(v.WorkflowID))
+		i++
+	}
+	if v.RunID != nil {
+		fields[i] = fmt.Sprintf("RunID: %v", *(v.RunID))
+		i++
+	}
+	if v.ActivityID != nil {
+		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
+		i++
+	}
+	if v.Details != nil {
+		fields[i] = fmt.Sprintf("Details: %v", v.Details)
+		i++
+	}
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+
+	return fmt.Sprintf("RecordActivityTaskHeartbeatByIDRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RecordActivityTaskHeartbeatByIDRequest match the
+// provided RecordActivityTaskHeartbeatByIDRequest.
+//
+// This function performs a deep comparison.
+func (v *RecordActivityTaskHeartbeatByIDRequest) Equals(rhs *RecordActivityTaskHeartbeatByIDRequest) bool {
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowID, rhs.WorkflowID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunID, rhs.RunID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ActivityID, rhs.ActivityID) {
+		return false
+	}
+	if !((v.Details == nil && rhs.Details == nil) || (v.Details != nil && rhs.Details != nil && bytes.Equal(v.Details, rhs.Details))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskHeartbeatByIDRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+
+	return
+}
+
+// GetWorkflowID returns the value of WorkflowID if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskHeartbeatByIDRequest) GetWorkflowID() (o string) {
+	if v.WorkflowID != nil {
+		return *v.WorkflowID
+	}
+
+	return
+}
+
+// GetRunID returns the value of RunID if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskHeartbeatByIDRequest) GetRunID() (o string) {
+	if v.RunID != nil {
+		return *v.RunID
+	}
+
+	return
+}
+
+// GetActivityID returns the value of ActivityID if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskHeartbeatByIDRequest) GetActivityID() (o string) {
+	if v.ActivityID != nil {
+		return *v.ActivityID
+	}
+
+	return
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskHeartbeatByIDRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
 type RecordActivityTaskHeartbeatRequest struct {
 	TaskToken []byte  `json:"taskToken,omitempty"`
 	Details   []byte  `json:"details,omitempty"`

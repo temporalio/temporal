@@ -1458,6 +1458,12 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			}
 
 			scheduleID := token.ScheduleID
+			if scheduleID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduleID by activityID
+				scheduleID, err0 = getScheduleID(token.ActivityID, msBuilder)
+				if err0 != nil {
+					return nil, err0
+				}
+			}
 			ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in

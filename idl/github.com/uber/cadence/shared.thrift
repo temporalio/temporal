@@ -871,6 +871,15 @@ struct RecordActivityTaskHeartbeatRequest {
   30: optional string identity
 }
 
+struct RecordActivityTaskHeartbeatByIDRequest {
+  10: optional string domain
+  20: optional string workflowID
+  30: optional string runID
+  40: optional string activityID
+  50: optional binary details
+  60: optional string identity
+}
+
 struct RecordActivityTaskHeartbeatResponse {
   10: optional bool cancelRequested
 }

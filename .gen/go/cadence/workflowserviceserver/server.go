@@ -89,6 +89,11 @@ type Interface interface {
 		HeartbeatRequest *shared.RecordActivityTaskHeartbeatRequest,
 	) (*shared.RecordActivityTaskHeartbeatResponse, error)
 
+	RecordActivityTaskHeartbeatByID(
+		ctx context.Context,
+		HeartbeatRequest *shared.RecordActivityTaskHeartbeatByIDRequest,
+	) (*shared.RecordActivityTaskHeartbeatResponse, error)
+
 	RegisterDomain(
 		ctx context.Context,
 		RegisterRequest *shared.RegisterDomainRequest,
@@ -298,6 +303,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "RecordActivityTaskHeartbeatByID",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.RecordActivityTaskHeartbeatByID),
+				},
+				Signature:    "RecordActivityTaskHeartbeatByID(HeartbeatRequest *shared.RecordActivityTaskHeartbeatByIDRequest) (*shared.RecordActivityTaskHeartbeatResponse)",
+				ThriftModule: cadence.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RegisterDomain",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -464,7 +480,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 26)
+	procedures := make([]transport.Procedure, 0, 27)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -671,6 +687,25 @@ func (h handler) RecordActivityTaskHeartbeat(ctx context.Context, body wire.Valu
 
 	hadError := err != nil
 	result, err := cadence.WorkflowService_RecordActivityTaskHeartbeat_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) RecordActivityTaskHeartbeatByID(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args cadence.WorkflowService_RecordActivityTaskHeartbeatByID_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.RecordActivityTaskHeartbeatByID(ctx, args.HeartbeatRequest)
+
+	hadError := err != nil
+	result, err := cadence.WorkflowService_RecordActivityTaskHeartbeatByID_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

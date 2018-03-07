@@ -248,6 +248,8 @@ const (
 	FrontendPollForActivityTaskScope
 	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
 	FrontendRecordActivityTaskHeartbeatScope
+	// FrontendRecordActivityTaskHeartbeatByIDScope is the metric scope for frontend.RespondDecisionTaskCompleted
+	FrontendRecordActivityTaskHeartbeatByIDScope
 	// FrontendRespondDecisionTaskCompletedScope is the metric scope for frontend.RespondDecisionTaskCompleted
 	FrontendRespondDecisionTaskCompletedScope
 	// FrontendRespondDecisionTaskFailedScope is the metric scope for frontend.RespondDecisionTaskFailed
@@ -473,6 +475,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},
 		FrontendPollForActivityTaskScope:              {operation: "PollForActivityTask"},
 		FrontendRecordActivityTaskHeartbeatScope:      {operation: "RecordActivityTaskHeartbeat"},
+		FrontendRecordActivityTaskHeartbeatByIDScope:  {operation: "RecordActivityTaskHeartbeatByID"},
 		FrontendRespondDecisionTaskCompletedScope:     {operation: "RespondDecisionTaskCompleted"},
 		FrontendRespondDecisionTaskFailedScope:        {operation: "RespondDecisionTaskFailed"},
 		FrontendRespondQueryTaskCompletedScope:        {operation: "RespondQueryTaskCompleted"},

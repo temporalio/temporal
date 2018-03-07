@@ -174,6 +174,20 @@ service WorkflowService {
     )
 
   /**
+  * RecordActivityTaskHeartbeatByID is called by application worker while it is processing an ActivityTask.  If worker fails
+  * to heartbeat within 'heartbeatTimeoutSeconds' interval for the ActivityTask, then it will be marked as timedout and
+  * 'ActivityTaskTimedOut' event will be written to the workflow history.  Calling 'RecordActivityTaskHeartbeatByID' will
+  * fail with 'EntityNotExistsError' in such situations.  Instead of using 'taskToken' like in RecordActivityTaskHeartbeat,
+  * use Domain, WorkflowID and ActivityID
+  **/
+  shared.RecordActivityTaskHeartbeatResponse RecordActivityTaskHeartbeatByID(1: shared.RecordActivityTaskHeartbeatByIDRequest heartbeatRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
+
+  /**
   * RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
   * result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
   * created for the workflow so new decisions could be made.  Use the 'taskToken' provided as response of
@@ -190,7 +204,7 @@ service WorkflowService {
   /**
   * RespondActivityTaskCompletedByID is called by application worker when it is done processing an ActivityTask.
   * It will result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new DecisionTask
-  * created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use DomainID,
+  * created for the workflow so new decisions could be made.  Similar to RespondActivityTaskCompleted but use Domain,
   * WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
   * if the these IDs are not valid anymore due to activity timeout.
   **/
@@ -219,7 +233,7 @@ service WorkflowService {
   * RespondActivityTaskFailedByID is called by application worker when it is done processing an ActivityTask.
   * It will result in a new 'ActivityTaskFailed' event being written to the workflow history and a new DecisionTask
   * created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskFailed but use
-  * DomainID, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
+  * Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
   * if the these IDs are not valid anymore due to activity timeout.
   **/
   void  RespondActivityTaskFailedByID(1: shared.RespondActivityTaskFailedByIDRequest failRequest)
@@ -247,7 +261,7 @@ service WorkflowService {
   * RespondActivityTaskCanceledByID is called by application worker when it is successfully canceled an ActivityTask.
   * It will result in a new 'ActivityTaskCanceled' event being written to the workflow history and a new DecisionTask
   * created for the workflow instance so new decisions could be made.  Similar to RespondActivityTaskCanceled but use
-  * DomainID, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
+  * Domain, WorkflowID and ActivityID instead of 'taskToken' for completion. It fails with 'EntityNotExistsError'
   * if the these IDs are not valid anymore due to activity timeout.
   **/
   void RespondActivityTaskCanceledByID(1: shared.RespondActivityTaskCanceledByIDRequest canceledRequest)

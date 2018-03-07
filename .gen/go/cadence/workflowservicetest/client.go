@@ -423,6 +423,39 @@ func (mr *_MockClientRecorder) RecordActivityTaskHeartbeat(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RecordActivityTaskHeartbeat", args...)
 }
 
+// RecordActivityTaskHeartbeatByID responds to a RecordActivityTaskHeartbeatByID call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().RecordActivityTaskHeartbeatByID(gomock.Any(), ...).Return(...)
+// 	... := client.RecordActivityTaskHeartbeatByID(...)
+func (m *MockClient) RecordActivityTaskHeartbeatByID(
+	ctx context.Context,
+	_HeartbeatRequest *shared.RecordActivityTaskHeartbeatByIDRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.RecordActivityTaskHeartbeatResponse, err error) {
+
+	args := []interface{}{ctx, _HeartbeatRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "RecordActivityTaskHeartbeatByID", args...)
+	success, _ = ret[i].(*shared.RecordActivityTaskHeartbeatResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) RecordActivityTaskHeartbeatByID(
+	ctx interface{},
+	_HeartbeatRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _HeartbeatRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "RecordActivityTaskHeartbeatByID", args...)
+}
+
 // RegisterDomain responds to a RegisterDomain call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

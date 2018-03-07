@@ -2318,6 +2318,53 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
+func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
+	domainID := "domainId"
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr("rId"),
+	}
+	tl := "testTaskList"
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := []byte("input1")
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	})
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	decisionStartedEvent := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	decisionCompletedEvent := addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID,
+		*decisionStartedEvent.EventId, nil, identity)
+	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, *decisionCompletedEvent.EventId, activityID,
+		activityType, tl, activityInput, 100, 10, 0)
+	addActivityTaskStartedEvent(msBuilder, *activityScheduledEvent.EventId, tl, identity)
+
+	// No HeartBeat timer running.
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+
+	detais := []byte("details")
+
+	_, err := s.mockHistoryEngine.RecordActivityTaskHeartbeat(&history.RecordActivityTaskHeartbeatRequest{
+		DomainUUID: common.StringPtr(domainID),
+		HeartbeatRequest: &workflow.RecordActivityTaskHeartbeatRequest{
+			TaskToken: taskToken,
+			Identity:  &identity,
+			Details:   detais,
+		},
+	})
+	s.Nil(err)
+}
+
 func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	domainID := "domainId"
 	we := workflow.WorkflowExecution{
@@ -3345,7 +3392,7 @@ func addDecisionTaskCompletedEvent(builder *mutableStateBuilder, scheduleID, sta
 }
 
 func addActivityTaskScheduledEvent(builder *mutableStateBuilder, decisionCompletedID int64, activityID, activityType,
-	taskList string, input []byte, timeout, queueTimeout, hearbeatTimeout int32) (*workflow.HistoryEvent,
+	taskList string, input []byte, timeout, queueTimeout, heartbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	return builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
 		ActivityId:   common.StringPtr(activityID),
@@ -3354,7 +3401,7 @@ func addActivityTaskScheduledEvent(builder *mutableStateBuilder, decisionComplet
 		Input:        input,
 		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
-		HeartbeatTimeoutSeconds:       common.Int32Ptr(hearbeatTimeout),
+		HeartbeatTimeoutSeconds:       common.Int32Ptr(heartbeatTimeout),
 		StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 	})
 }

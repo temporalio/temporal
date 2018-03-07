@@ -666,6 +666,65 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(
 	return resp, nil
 }
 
+// RecordActivityTaskHeartbeatByID - Record Activity Task Heart beat.
+func (wh *WorkflowHandler) RecordActivityTaskHeartbeatByID(
+	ctx context.Context,
+	heartbeatRequest *gen.RecordActivityTaskHeartbeatByIDRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
+
+	scope := metrics.FrontendRecordActivityTaskHeartbeatByIDScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	wh.rateLimiter.TryConsume(1)
+
+	wh.Service.GetLogger().Debug("Received RecordActivityTaskHeartbeatByID")
+	domainID, err := wh.domainCache.GetDomainID(heartbeatRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	workflowID := heartbeatRequest.GetWorkflowID()
+	runID := heartbeatRequest.GetRunID() // runID is optional so can be empty
+	activityID := heartbeatRequest.GetActivityID()
+
+	if domainID == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+	if workflowID == "" {
+		return nil, wh.error(errWorkflowIDNotSet, scope)
+	}
+	if activityID == "" {
+		return nil, wh.error(errActivityIDNotSet, scope)
+	}
+
+	taskToken := &common.TaskToken{
+		DomainID:   domainID,
+		RunID:      runID,
+		WorkflowID: workflowID,
+		ScheduleID: common.EmptyEventID,
+		ActivityID: activityID,
+	}
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	req := &gen.RecordActivityTaskHeartbeatRequest{
+		TaskToken: token,
+		Details:   heartbeatRequest.Details,
+		Identity:  heartbeatRequest.Identity,
+	}
+
+	resp, err := wh.history.RecordActivityTaskHeartbeat(ctx, &h.RecordActivityTaskHeartbeatRequest{
+		DomainUUID:       common.StringPtr(taskToken.DomainID),
+		HeartbeatRequest: req,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return resp, nil
+}
+
 // RespondActivityTaskCompleted - response to an activity task
 func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx context.Context,
@@ -762,7 +821,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx context.Context,
 	failedRequest *gen.RespondActivityTaskFailedRequest) error {
 
-	scope := metrics.FrontendRespondActivityTaskFailedByIDScope
+	scope := metrics.FrontendRespondActivityTaskFailedScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
