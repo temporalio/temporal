@@ -60,6 +60,12 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate cadence workflow",
 			Subcommands: newWorkflowCommands(),
 		},
+		{
+			Name:        "tasklist",
+			Aliases:     []string{"tl"},
+			Usage:       "Operate cadence tasklist",
+			Subcommands: newTaskListCommands(),
+		},
 	}
 
 	// set builder if not customized

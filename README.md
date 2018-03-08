@@ -43,6 +43,10 @@ You can also [build and run](docker/README.md) the service using Docker.
 
 Try out the sample recipes [here](https://github.com/samarabbas/cadence-samples) to get started.
 
+### Use CLI  
+
+Try out [Cadence command-line tool](tools/cli/README.md) to perform various tasks on Cadence
+
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
 

@@ -11,6 +11,7 @@ also start workflow, show workflow history, signal workflow ... and many other t
 Run `./cadence` to view help message. There are some top level commands and global options.   
 Run `./cadence domain` to view help message about operations on domain  
 Run `./cadence workflow` to view help message about operations on workflow  
+Run `./cadence tasklist` to view help message about operations on tasklist  
 (`./cadence help`, `./cadence help [domain|workflow]` will also print help messages)
 
 **Note:** make sure you have cadence server running before using CLI 
@@ -57,6 +58,12 @@ and it takes a string as input, so there is the `-i '"cadence"'`. Single quote `
 
 **Note:** you need to start worker so that workflow can make progress.  
 (Run `make && ./bin/helloworld -m worker` in cadence-samples to start the worker)
+
+- Show running workers of a tasklist
+```
+./cadence tasklist desc --tl helloWorldGroup
+
+```
 
 - Start workflow: 
 ```

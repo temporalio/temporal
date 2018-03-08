@@ -32,6 +32,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -59,6 +60,8 @@ const (
 	FlagRunIDWithAlias            = FlagRunID + ", rid, r"
 	FlagTaskList                  = "tasklist"
 	FlagTaskListWithAlias         = FlagTaskList + ", tl"
+	FlagTaskListType              = "tasklisttype"
+	FlagTaskListTypeWithAlias     = FlagTaskListType + ", tlt"
 	FlagWorkflowType              = "workflow_type"
 	FlagWorkflowTypeWithAlias     = FlagWorkflowType + ", wt"
 	FlagExecutionTimeout          = "execution_timeout"
@@ -693,6 +696,35 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 	return response.Executions, response.NextPageToken
 }
 
+// DescribeTaskList show pollers info of a given tasklist
+func DescribeTaskList(c *cli.Context) {
+	wfClient := getWorkflowClient(c)
+	taskList := getRequiredOption(c, FlagTaskList)
+	taskListType := strToTaskListType(c.String(FlagTaskListType)) // default type is decision
+
+	ctx, cancel := newContext()
+	defer cancel()
+	response, err := wfClient.DescribeTaskList(ctx, taskList, taskListType)
+	if err != nil {
+		ErrorAndExit("DescribeTaskList failed", err)
+	}
+
+	pollers := response.Pollers
+	if len(pollers) == 0 {
+		fmt.Println(colorMagenta("No poller for tasklist: " + taskList))
+		return
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.Append([]string{"Poller Identity", "Last Access Time"})
+	for _, poller := range pollers {
+		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime())})
+	}
+	table.Render()
+}
+
 func getDomainClient(c *cli.Context) client.DomainClient {
 	service, err := cBuilder.BuildServiceClient(c)
 	if err != nil {
@@ -770,6 +802,13 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 	}
 
 	return resultValue
+}
+
+func strToTaskListType(str string) s.TaskListType {
+	if strings.ToLower(str) == "activity" {
+		return s.TaskListTypeActivity
+	}
+	return s.TaskListTypeDecision
 }
 
 func getPtrOrNilIfEmpty(value string) *string {
