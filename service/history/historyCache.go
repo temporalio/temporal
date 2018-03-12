@@ -21,6 +21,8 @@
 package history
 
 import (
+	"sync/atomic"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
@@ -42,6 +44,11 @@ type (
 		logger           bark.Logger
 		config           *Config
 	}
+)
+
+const (
+	cacheNotReleased int32 = 0
+	cacheReleased    int32 = 1
 )
 
 var (
@@ -107,9 +114,12 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 
 	// This will create a closure on every request.
 	// Consider revisiting this if it causes too much GC activity
+	status := cacheNotReleased
 	releaseFunc := func() {
-		context.Unlock()
-		c.Release(key)
+		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			context.Unlock()
+			c.Release(key)
+		}
 	}
 
 	context.Lock()
