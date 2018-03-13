@@ -3502,7 +3502,6 @@ func addCompleteWorkflowEvent(builder *mutableStateBuilder, decisionCompletedEve
 }
 
 func createMutableState(builder *mutableStateBuilder) *persistence.WorkflowMutableState {
-	builder.FlushBufferedEvents()
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	activityInfos := make(map[int64]*persistence.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {

@@ -166,14 +166,13 @@ func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow
 	builder.Load(state)
 
 	di := addDecisionTaskScheduledEvent(builder)
-	startedEvent := addDecisionTaskStartedEvent(builder, di.ScheduleID, state.ExecutionInfo.TaskList, "identity")
+	addDecisionTaskStartedEvent(builder, di.ScheduleID, state.ExecutionInfo.TaskList, "identity")
 
 	timeOutTask := tb.AddDecisionTimoutTask(di.ScheduleID, di.Attempt, 1)
 	timerTasks := []persistence.Task{timeOutTask}
 
 	s.updateTimerSeqNumbers(timerTasks)
 
-	addDecisionTaskCompletedEvent(builder, di.ScheduleID, startedEvent.GetEventId(), nil, "identity")
 	err2 := s.UpdateWorkflowExecution(state.ExecutionInfo, nil, nil, condition, timerTasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 	return timerTasks

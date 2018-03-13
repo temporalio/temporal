@@ -85,10 +85,6 @@ enum TimeoutType {
   HEARTBEAT,
 }
 
-// whenever this list of decision is changed
-// do change the mutableStateBuilder.go
-// function shouldBufferEvent
-// to make sure wo do the correct event ordering
 enum DecisionType {
   ScheduleActivityTask,
   RequestCancelActivityTask,

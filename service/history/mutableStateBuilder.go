@@ -378,54 +378,26 @@ func (e *mutableStateBuilder) createNewHistoryEvent(eventType workflow.EventType
 }
 
 func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bool {
+	if !e.HasInFlightDecisionTask() {
+		// do not buffer event if there is no in-flight decision
+		return false
+	}
+
 	switch eventType {
-	case // do not buffer for workflow state change
-		workflow.EventTypeWorkflowExecutionStarted,
+	case workflow.EventTypeDecisionTaskCompleted,
+		workflow.EventTypeDecisionTaskFailed,
+		workflow.EventTypeDecisionTaskTimedOut,
 		workflow.EventTypeWorkflowExecutionCompleted,
 		workflow.EventTypeWorkflowExecutionFailed,
 		workflow.EventTypeWorkflowExecutionTimedOut,
 		workflow.EventTypeWorkflowExecutionTerminated,
 		workflow.EventTypeWorkflowExecutionContinuedAsNew,
 		workflow.EventTypeWorkflowExecutionCanceled:
+		// do not buffer event if it is any type of close decision or close workflow
 		return false
-	case // decision event should not be buffered
-		workflow.EventTypeDecisionTaskScheduled,
-		workflow.EventTypeDecisionTaskStarted,
-		workflow.EventTypeDecisionTaskCompleted,
-		workflow.EventTypeDecisionTaskFailed,
-		workflow.EventTypeDecisionTaskTimedOut:
-		return false
-	case // events generated directly from decisions should not be buffered
-		// workflow complete, failed, cancelled and continue-as-new events are duplication of above
-		// just put is here for reference
-		// workflow.EventTypeWorkflowExecutionCompleted,
-		// workflow.EventTypeWorkflowExecutionFailed,
-		// workflow.EventTypeWorkflowExecutionCanceled,
-		// workflow.EventTypeWorkflowExecutionContinuedAsNew,
-		workflow.EventTypeActivityTaskScheduled,
-		workflow.EventTypeActivityTaskCancelRequested,
-		workflow.EventTypeTimerStarted,
-		// DecisionTypeCancelTimer is an excption. This decision will be mapped
-		// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
-		// So both should not be buffered. Ref: historyEngine, search for "workflow.DecisionTypeCancelTimer"
-		workflow.EventTypeTimerCanceled,
-		workflow.EventTypeCancelTimerFailed,
-		workflow.EventTypeRequestCancelExternalWorkflowExecutionInitiated,
-		workflow.EventTypeMarkerRecorded,
-		workflow.EventTypeStartChildWorkflowExecutionInitiated,
-		workflow.EventTypeSignalExternalWorkflowExecutionInitiated:
-		// do not buffer event if event is directly generated from a corresponding decision
-
-		// sanity check there is no decision on the fly
-		if e.HasInFlightDecisionTask() {
-			msg := fmt.Sprintf("history mutable state is processing event: %v while there is decision pending. "+
-				"domainID: %v, workflow ID: %v, run ID: %v.", eventType, e.executionInfo.DomainID, e.executionInfo.WorkflowID, e.executionInfo.RunID)
-			panic(msg)
-		}
-		return false
-	default:
-		return true
 	}
+
+	return true
 }
 
 func (e *mutableStateBuilder) createNewHistoryEventWithTimestamp(eventID int64, eventType workflow.EventType,
