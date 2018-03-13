@@ -499,9 +499,10 @@ func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.Tra
 		switch err.(type) {
 		case *workflow.EntityNotExistsError:
 			err = nil
-		default:
-			return err
 		}
+	}
+	if err != nil {
+		return err
 	}
 
 	// Record closing in visibility store
