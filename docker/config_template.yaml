@@ -44,8 +44,10 @@ services:
         prefix: "cadence-history"
 
 clustersInfo:
+  enableGlobalDomain: false
   initialFailoverVersion: 0
   failoverVersionIncrement: 10
+  masterClusterName: "active"
   currentClusterName: "active"
   clusterNames:
     - "active"
