@@ -46,7 +46,22 @@ CREATE TYPE workflow_execution (
   sticky_schedule_to_start_timeout int,
   client_library_version           text,
   client_feature_version           text,
-	client_impl                      text,
+  client_impl                      text,
+);
+
+-- Replication information for each cluster
+CREATE TYPE replication_info (
+  version       bigint,
+  last_event_id bigint,
+);
+
+-- This is used to store replication information for a workflow execution
+CREATE TYPE replication_state (
+  current_version                  bigint, -- current version for domain, incremented on failover
+  start_version                    bigint, -- version of domain when the workflow execution was started
+  last_write_version               bigint, -- version of domain when the last event was written to history
+  last_write_event_id              bigint, -- last written event id for a given version
+  last_replication_info            map<text, frozen<replication_info>>, -- information about replication events from other clusters
 );
 
 -- TODO: Remove fields that are left over from activity and workflow tasks.
@@ -60,8 +75,12 @@ CREATE TYPE transfer_task (
   target_run_id              uuid,   -- The external run ID that this transfer task is doing work for.
   target_child_workflow_only boolean, -- The whether target child workflow only.
   task_list                  text,
-  type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution}
+  type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution, ReplicationTask}
   schedule_id                bigint,
+  first_event_id             bigint,  -- Used by ReplicationTask to set the first event ID of the applied transaction
+  next_event_id              bigint,  -- Used by ReplicationTask to set the next event ID of the applied transaction
+  version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
+  last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
 );
 
 CREATE TYPE timer_task (
@@ -195,6 +214,7 @@ CREATE TABLE executions (
   signal_map           map<bigint, frozen<signal_info>>,
   signal_requested     set<uuid>,
   buffered_events_list list<frozen<serialized_event_batch>>,
+  replication_state    frozen<replication_state>, -- Replication information part of mutable state
   PRIMARY KEY  (shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

@@ -43,6 +43,12 @@ struct DomainTaskAttributes {
 }
 
 struct HistoryTaskAttributes {
+  10: optional string domainId
+  20: optional string workflowId
+  30: optional string runId
+  40: optional i64 (js.type = "Long") firstEventId
+  50: optional i64 (js.type = "Long") nextEventId
+  60: optional i64 (js.type = "Long") version
 }
 
 struct ReplicationTask {

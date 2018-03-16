@@ -1287,6 +1287,284 @@ func (s *cassandraPersistenceSuite) TestContinueAsNew() {
 	s.Equal(*newWorkflowExecution.RunId, newRunID)
 }
 
+func (s *cassandraPersistenceSuite) TestReplicationTransferTaskTasks() {
+	domainID := "2466d7de-6602-4ad8-b939-fb8f8c36c711"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("replication-transfer-task-test"),
+		RunId:      common.StringPtr("dcde9d85-5d7a-43c7-8b18-cb2cae0e29e0"),
+	}
+
+	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	taskD, err := s.GetTransferTasks(1)
+	s.Equal(1, len(taskD), "Expected 1 decision task.")
+	err = s.CompleteTransferTask(taskD[0].TaskID)
+	s.Nil(err)
+
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+
+	transferTasks := []Task{&ReplicationTask{
+		TaskID:       s.GetNextSequenceNumber(),
+		FirstEventID: int64(1),
+		NextEventID:  int64(3),
+		Version:      int64(9),
+		LastReplicationInfo: map[string]*ReplicationInfo{
+			"dc1": &ReplicationInfo{
+				Version:     int64(3),
+				LastEventID: int64(1),
+			},
+			"dc2": &ReplicationInfo{
+				Version:     int64(5),
+				LastEventID: int64(2),
+			},
+		},
+	}}
+	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
+	s.Nil(err, "No error expected.")
+
+	tasks1, err := s.GetTransferTasks(1)
+	s.Nil(err, "No error expected.")
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 replication task.")
+	task1 := tasks1[0]
+	s.Equal(TransferTaskTypeReplicationTask, task1.TaskType)
+	s.Equal(domainID, task1.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, task1.WorkflowID)
+	s.Equal(*workflowExecution.RunId, task1.RunID)
+	s.Equal(int64(1), task1.FirstEventID)
+	s.Equal(int64(3), task1.NextEventID)
+	s.Equal(int64(9), task1.Version)
+	s.Equal(2, len(task1.LastReplicationInfo))
+	for k, v := range task1.LastReplicationInfo {
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		switch k {
+		case "dc1":
+			s.Equal(int64(3), v.Version)
+			s.Equal(int64(1), v.LastEventID)
+		case "dc2":
+			s.Equal(int64(5), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		default:
+			s.Fail("Unexpected key")
+		}
+	}
+
+	err = s.CompleteTransferTask(task1.TaskID)
+	s.Nil(err)
+}
+
+func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
+	domainID := uuid.New()
+	runID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-workflow-replication-state-test"),
+		RunId:      common.StringPtr(runID),
+	}
+
+	replicationTasks := []Task{&ReplicationTask{
+		TaskID:       s.GetNextSequenceNumber(),
+		FirstEventID: int64(1),
+		NextEventID:  int64(3),
+		Version:      int64(9),
+		LastReplicationInfo: map[string]*ReplicationInfo{
+			"dc1": &ReplicationInfo{
+				Version:     int64(3),
+				LastEventID: int64(1),
+			},
+			"dc2": &ReplicationInfo{
+				Version:     int64(5),
+				LastEventID: int64(2),
+			},
+		},
+	}}
+
+	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, "taskList", "wType", 20, 13, 3,
+		0, 2, &ReplicationState{
+			CurrentVersion:   int64(9),
+			StartVersion:     int64(8),
+			LastWriteVersion: int64(7),
+			LastWriteEventID: int64(6),
+			LastReplicationInfo: map[string]*ReplicationInfo{
+				"dc1": {
+					Version:     int64(3),
+					LastEventID: int64(1),
+				},
+				"dc2": {
+					Version:     int64(5),
+					LastEventID: int64(2),
+				},
+			},
+		}, replicationTasks)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	taskD, err := s.GetTransferTasks(2)
+	s.Equal(2, len(taskD), "Expected 1 decision task.")
+	for _, tsk := range taskD {
+		switch tsk.TaskType {
+		case TransferTaskTypeDecisionTask:
+			err = s.CompleteTransferTask(taskD[0].TaskID)
+			s.Nil(err)
+		case TransferTaskTypeReplicationTask:
+			s.Equal(domainID, tsk.DomainID)
+			s.Equal(*workflowExecution.WorkflowId, tsk.WorkflowID)
+			s.Equal(*workflowExecution.RunId, tsk.RunID)
+			s.Equal(int64(1), tsk.FirstEventID)
+			s.Equal(int64(3), tsk.NextEventID)
+			s.Equal(int64(9), tsk.Version)
+			s.Equal(2, len(tsk.LastReplicationInfo))
+			for k, v := range tsk.LastReplicationInfo {
+				log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+				switch k {
+				case "dc1":
+					s.Equal(int64(3), v.Version)
+					s.Equal(int64(1), v.LastEventID)
+				case "dc2":
+					s.Equal(int64(5), v.Version)
+					s.Equal(int64(2), v.LastEventID)
+				default:
+					s.Fail("Unexpected key")
+				}
+			}
+			err = s.CompleteTransferTask(taskD[0].TaskID)
+			s.Nil(err)
+		}
+	}
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	replicationState0 := state0.ReplicationState
+	s.NotNil(info0, "Valid Workflow info expected.")
+	s.Equal(domainID, info0.DomainID)
+	s.Equal("taskList", info0.TaskList)
+	s.Equal("wType", info0.WorkflowTypeName)
+	s.Equal(int32(20), info0.WorkflowTimeout)
+	s.Equal(int32(13), info0.DecisionTimeoutValue)
+	s.Equal(int64(3), info0.NextEventID)
+	s.Equal(int64(0), info0.LastProcessedEvent)
+	s.Equal(int64(2), info0.DecisionScheduleID)
+	s.Equal(int64(9), replicationState0.CurrentVersion)
+	s.Equal(int64(8), replicationState0.StartVersion)
+	s.Equal(int64(7), replicationState0.LastWriteVersion)
+	s.Equal(int64(6), replicationState0.LastWriteEventID)
+	s.Equal(2, len(replicationState0.LastReplicationInfo))
+	for k, v := range replicationState0.LastReplicationInfo {
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		switch k {
+		case "dc1":
+			s.Equal(int64(3), v.Version)
+			s.Equal(int64(1), v.LastEventID)
+		case "dc2":
+			s.Equal(int64(5), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		default:
+			s.Fail("Unexpected key")
+		}
+	}
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	updatedReplicationState := copyReplicationState(replicationState0)
+	updatedReplicationState.CurrentVersion = int64(10)
+	updatedReplicationState.StartVersion = int64(11)
+	updatedReplicationState.LastWriteVersion = int64(12)
+	updatedReplicationState.LastWriteEventID = int64(13)
+	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(4)
+	updatedReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(2)
+
+	replicationTasks1 := []Task{&ReplicationTask{
+		TaskID:       s.GetNextSequenceNumber(),
+		FirstEventID: int64(3),
+		NextEventID:  int64(5),
+		Version:      int64(10),
+		LastReplicationInfo: map[string]*ReplicationInfo{
+			"dc1": &ReplicationInfo{
+				Version:     int64(4),
+				LastEventID: int64(2),
+			},
+			"dc2": &ReplicationInfo{
+				Version:     int64(5),
+				LastEventID: int64(2),
+			},
+		},
+	}}
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, int64(3), replicationTasks1)
+	s.Nil(err2, "No error expected.")
+
+	taskD1, err := s.GetTransferTasks(2)
+	s.Equal(1, len(taskD1), "Expected 1 decision task.")
+	for _, tsk := range taskD1 {
+		switch tsk.TaskType {
+		case TransferTaskTypeDecisionTask:
+			err = s.CompleteTransferTask(taskD1[0].TaskID)
+			s.Nil(err)
+		case TransferTaskTypeReplicationTask:
+			s.Equal(domainID, tsk.DomainID)
+			s.Equal(*workflowExecution.WorkflowId, tsk.WorkflowID)
+			s.Equal(*workflowExecution.RunId, tsk.RunID)
+			s.Equal(int64(3), tsk.FirstEventID)
+			s.Equal(int64(5), tsk.NextEventID)
+			s.Equal(int64(10), tsk.Version)
+			s.Equal(2, len(tsk.LastReplicationInfo))
+			for k, v := range tsk.LastReplicationInfo {
+				log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+				switch k {
+				case "dc1":
+					s.Equal(int64(4), v.Version)
+					s.Equal(int64(2), v.LastEventID)
+				case "dc2":
+					s.Equal(int64(5), v.Version)
+					s.Equal(int64(2), v.LastEventID)
+				default:
+					s.Fail("Unexpected key")
+				}
+			}
+			err = s.CompleteTransferTask(taskD1[0].TaskID)
+			s.Nil(err)
+		}
+	}
+
+	state1, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	info1 := state1.ExecutionInfo
+	replicationState1 := state1.ReplicationState
+	s.NotNil(info1, "Valid Workflow info expected.")
+	s.Equal(domainID, info1.DomainID)
+	s.Equal("taskList", info1.TaskList)
+	s.Equal("wType", info1.WorkflowTypeName)
+	s.Equal(int32(20), info1.WorkflowTimeout)
+	s.Equal(int32(13), info1.DecisionTimeoutValue)
+	s.Equal(int64(5), info1.NextEventID)
+	s.Equal(int64(2), info1.LastProcessedEvent)
+	s.Equal(int64(2), info1.DecisionScheduleID)
+	s.Equal(int64(10), replicationState1.CurrentVersion)
+	s.Equal(int64(11), replicationState1.StartVersion)
+	s.Equal(int64(12), replicationState1.LastWriteVersion)
+	s.Equal(int64(13), replicationState1.LastWriteEventID)
+	s.Equal(2, len(replicationState1.LastReplicationInfo))
+	for k, v := range replicationState1.LastReplicationInfo {
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		switch k {
+		case "dc1":
+			s.Equal(int64(4), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		case "dc2":
+			s.Equal(int64(5), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		default:
+			s.Fail("Unexpected key")
+		}
+	}
+}
+
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {
 	return &WorkflowExecutionInfo{
 		DomainID:             sourceInfo.DomainID,
@@ -1311,5 +1589,29 @@ func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecu
 		DecisionStartedID:    sourceInfo.DecisionStartedID,
 		DecisionRequestID:    sourceInfo.DecisionRequestID,
 		DecisionTimeout:      sourceInfo.DecisionTimeout,
+	}
+}
+
+func copyReplicationState(sourceState *ReplicationState) *ReplicationState {
+	state := &ReplicationState{
+		CurrentVersion:   sourceState.CurrentVersion,
+		StartVersion:     sourceState.StartVersion,
+		LastWriteVersion: sourceState.LastWriteVersion,
+		LastWriteEventID: sourceState.LastWriteEventID,
+	}
+	if sourceState.LastReplicationInfo != nil {
+		state.LastReplicationInfo = map[string]*ReplicationInfo{}
+		for k, v := range sourceState.LastReplicationInfo {
+			state.LastReplicationInfo[k] = copyReplicationInfo(v)
+		}
+	}
+
+	return state
+}
+
+func copyReplicationInfo(sourceInfo *ReplicationInfo) *ReplicationInfo {
+	return &ReplicationInfo{
+		Version:     sourceInfo.Version,
+		LastEventID: sourceInfo.LastEventID,
 	}
 }

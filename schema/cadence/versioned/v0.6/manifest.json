@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.6",
+  "MinCompatibleVersion": "0.6",
+  "Description": "Persistence support for replication of workflow execution",
+  "SchemaUpdateCqlFiles": [
+    "history_replication_task.cql"
+  ]
+}

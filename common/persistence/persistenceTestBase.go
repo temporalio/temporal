@@ -262,6 +262,39 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 	return response, err
 }
 
+// CreateWorkflowExecution is a utility method to create workflow executions
+func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workflowExecution workflow.WorkflowExecution,
+	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
+	lastProcessedEventID int64, decisionScheduleID int64, state *ReplicationState, txTasks []Task) (
+	*CreateWorkflowExecutionResponse, error) {
+	transferTasks := txTasks
+	transferTasks = append(transferTasks, &DecisionTask{
+		TaskID:     s.GetNextSequenceNumber(),
+		DomainID:   domainID,
+		TaskList:   taskList,
+		ScheduleID: decisionScheduleID,
+	})
+	response, err := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
+		RequestID:                   uuid.New(),
+		DomainID:                    domainID,
+		Execution:                   workflowExecution,
+		TaskList:                    taskList,
+		WorkflowTypeName:            wType,
+		WorkflowTimeout:             wTimeout,
+		DecisionTimeoutValue:        decisionTimeout,
+		NextEventID:                 nextEventID,
+		LastProcessedEvent:          lastProcessedEventID,
+		RangeID:                     s.ShardInfo.RangeID,
+		TransferTasks:               transferTasks,
+		DecisionScheduleID:          decisionScheduleID,
+		DecisionStartedID:           common.EmptyEventID,
+		DecisionStartToCloseTimeout: 1,
+		ReplicationState:            state,
+	})
+
+	return response, err
+}
+
 // CreateWorkflowExecutionManyTasks is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionManyTasks(domainID string, workflowExecution workflow.WorkflowExecution,
 	taskList string, executionContext []byte, nextEventID int64, lastProcessedEventID int64,
@@ -517,6 +550,13 @@ func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *WorkflowExecutionInf
 		nil, nil, nil, deleteSignalsRequestedID)
 }
 
+// DeleteSignalsRequestedState is a utility method to delete mutable state of workflow execution
+func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *WorkflowExecutionInfo,
+	updatedReplicationState *ReplicationState, condition int64, txTasks []Task) error {
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, nil, nil,
+		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+}
+
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
@@ -525,7 +565,21 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 	upsertCancelInfos []*RequestCancelInfo, deleteCancelInfo *int64,
 	upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
-	transferTasks := []Task{}
+	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, decisionScheduleIDs, activityScheduleIDs, rangeID,
+		condition, timerTasks, []Task{}, deleteTimerTask, upsertActivityInfos, deleteActivityInfo, upsertTimerInfos, deleteTimerInfos,
+		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
+		upsertSignalRequestedIDs, deleteSignalRequestedID)
+}
+
+// UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
+func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowExecutionInfo,
+	updatedReplicationState *ReplicationState, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
+	condition int64, timerTasks []Task, txTasks []Task, deleteTimerTask Task, upsertActivityInfos []*ActivityInfo,
+	deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo, deleteTimerInfos []string,
+	upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*RequestCancelInfo,
+	deleteCancelInfo *int64, upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
+	deleteSignalRequestedID string) error {
+	transferTasks := txTasks
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{
 			TaskID:     s.GetNextSequenceNumber(),
@@ -544,6 +598,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             updatedInfo,
+		ReplicationState:          updatedReplicationState,
 		TransferTasks:             transferTasks,
 		TimerTasks:                timerTasks,
 		Condition:                 condition,

@@ -520,6 +520,12 @@ func (v *DomainTaskAttributes) GetFailoverVersion() (o int64) {
 }
 
 type HistoryTaskAttributes struct {
+	DomainId     *string `json:"domainId,omitempty"`
+	WorkflowId   *string `json:"workflowId,omitempty"`
+	RunId        *string `json:"runId,omitempty"`
+	FirstEventId *int64  `json:"firstEventId,omitempty"`
+	NextEventId  *int64  `json:"nextEventId,omitempty"`
+	Version      *int64  `json:"version,omitempty"`
 }
 
 // ToWire translates a HistoryTaskAttributes struct into a Thrift-level intermediate
@@ -539,9 +545,60 @@ type HistoryTaskAttributes struct {
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [0]wire.Field
+		fields [6]wire.Field
 		i      int = 0
+		w      wire.Value
+		err    error
 	)
+
+	if v.DomainId != nil {
+		w, err = wire.NewValueString(*(v.DomainId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowId != nil {
+		w, err = wire.NewValueString(*(v.WorkflowId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.RunId != nil {
+		w, err = wire.NewValueString(*(v.RunId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.FirstEventId != nil {
+		w, err = wire.NewValueI64(*(v.FirstEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.NextEventId != nil {
+		w, err = wire.NewValueI64(*(v.NextEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.Version != nil {
+		w, err = wire.NewValueI64(*(v.Version)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -564,9 +621,70 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 //   }
 //   return &v, nil
 func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
+	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RunId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.FirstEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NextEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Version = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -580,8 +698,32 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [0]string
+	var fields [6]string
 	i := 0
+	if v.DomainId != nil {
+		fields[i] = fmt.Sprintf("DomainId: %v", *(v.DomainId))
+		i++
+	}
+	if v.WorkflowId != nil {
+		fields[i] = fmt.Sprintf("WorkflowId: %v", *(v.WorkflowId))
+		i++
+	}
+	if v.RunId != nil {
+		fields[i] = fmt.Sprintf("RunId: %v", *(v.RunId))
+		i++
+	}
+	if v.FirstEventId != nil {
+		fields[i] = fmt.Sprintf("FirstEventId: %v", *(v.FirstEventId))
+		i++
+	}
+	if v.NextEventId != nil {
+		fields[i] = fmt.Sprintf("NextEventId: %v", *(v.NextEventId))
+		i++
+	}
+	if v.Version != nil {
+		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
+		i++
+	}
 
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
@@ -591,8 +733,86 @@ func (v *HistoryTaskAttributes) String() string {
 //
 // This function performs a deep comparison.
 func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
+	if !_String_EqualsPtr(v.DomainId, rhs.DomainId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowId, rhs.WorkflowId) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RunId, rhs.RunId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.FirstEventId, rhs.FirstEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NextEventId, rhs.NextEventId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Version, rhs.Version) {
+		return false
+	}
 
 	return true
+}
+
+// GetDomainId returns the value of DomainId if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetDomainId() (o string) {
+	if v.DomainId != nil {
+		return *v.DomainId
+	}
+
+	return
+}
+
+// GetWorkflowId returns the value of WorkflowId if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+
+	return
+}
+
+// GetRunId returns the value of RunId if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetRunId() (o string) {
+	if v.RunId != nil {
+		return *v.RunId
+	}
+
+	return
+}
+
+// GetFirstEventId returns the value of FirstEventId if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetFirstEventId() (o int64) {
+	if v.FirstEventId != nil {
+		return *v.FirstEventId
+	}
+
+	return
+}
+
+// GetNextEventId returns the value of NextEventId if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetNextEventId() (o int64) {
+	if v.NextEventId != nil {
+		return *v.NextEventId
+	}
+
+	return
+}
+
+// GetVersion returns the value of Version if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetVersion() (o int64) {
+	if v.Version != nil {
+		return *v.Version
+	}
+
+	return
 }
 
 type ReplicationTask struct {

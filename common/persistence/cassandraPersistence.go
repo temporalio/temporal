@@ -141,6 +141,14 @@ const (
 		`client_impl: ?` +
 		`}`
 
+	templateReplicationStateType = `{` +
+		`current_version: ?, ` +
+		`start_version: ?, ` +
+		`last_write_version: ?, ` +
+		`last_write_event_id: ?, ` +
+		`last_replication_info: ?` +
+		`}`
+
 	templateTransferTaskType = `{` +
 		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
@@ -152,7 +160,11 @@ const (
 		`target_child_workflow_only: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
-		`schedule_id: ?` +
+		`schedule_id: ?,` +
+		`first_event_id: ?,` +
+		`next_event_id: ?,` +
+		`version: ?,` +
+		`last_replication_info: ?` +
 		`}`
 
 	templateTimerTaskType = `{` +
@@ -215,6 +227,11 @@ const (
 		`control: ?` +
 		`}`
 
+	templateReplicationInfoType = `{` +
+		`version: ?, ` +
+		`last_event_id: ?` +
+		`}`
+
 	templateTaskListType = `{` +
 		`domain_id: ?, ` +
 		`name: ?, ` +
@@ -271,8 +288,8 @@ const (
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}) IF NOT EXISTS USING TTL 0 `
 
 	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
-		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id) ` +
-		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?) `
+		`shard_id, domain_id, workflow_id, run_id, type, execution, replication_state, next_event_id, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ` + templateReplicationStateType + `, ?, ?, ?) `
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, transfer, visibility_ts, task_id) ` +
@@ -293,7 +310,7 @@ const (
 		`and task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetWorkflowExecutionQuery = `SELECT execution, activity_map, timer_map, child_executions_map, request_cancel_map, signal_map, signal_requested, buffered_events_list ` +
+	templateGetWorkflowExecutionQuery = `SELECT execution, replication_state, activity_map, timer_map, child_executions_map, request_cancel_map, signal_map, signal_requested, buffered_events_list ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -314,7 +331,7 @@ const (
 		`and task_id = ?`
 
 	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
-		`SET execution = ` + templateWorkflowExecutionType + `, next_event_id = ? ` +
+		`SET execution = ` + templateWorkflowExecutionType + `, replication_state = ` + templateReplicationStateType + `, next_event_id = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -596,8 +613,18 @@ const (
 )
 
 var (
-	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
+	defaultDateTime                  = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	defaultVisibilityTimestamp       = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
+	emptyVersion               int64 = -24
+	emptyReplicationInfo             = map[string]*ReplicationInfo{}
+	emptyReplicationInfoMap          = map[string]map[string]interface{}{}
+	emptyReplicationState            = &ReplicationState{
+		CurrentVersion:      emptyVersion,
+		StartVersion:        emptyVersion,
+		LastWriteVersion:    emptyVersion,
+		LastWriteEventID:    common.EmptyEventID,
+		LastReplicationInfo: emptyReplicationInfo,
+	}
 )
 
 type (
@@ -948,6 +975,17 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		)
 	}
 
+	var lastReplicationInfo map[string]map[string]interface{}
+	if request.ReplicationState == nil {
+		request.ReplicationState = emptyReplicationState
+		lastReplicationInfo = emptyReplicationInfoMap
+	} else {
+		lastReplicationInfo = make(map[string]map[string]interface{})
+		for k, v := range request.ReplicationState.LastReplicationInfo {
+			lastReplicationInfo[k] = createReplicationInfoMap(v)
+		}
+	}
+
 	batch.Query(templateCreateWorkflowExecutionQuery2,
 		d.shardID,
 		request.DomainID,
@@ -988,6 +1026,11 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		"", // client_library_version
 		"", // client_feature_version
 		"", // client_impl
+		request.ReplicationState.CurrentVersion,
+		request.ReplicationState.StartVersion,
+		request.ReplicationState.LastWriteVersion,
+		request.ReplicationState.LastWriteEventID,
+		lastReplicationInfo,
 		request.NextEventID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
@@ -1026,6 +1069,9 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 	state := &WorkflowMutableState{}
 	info := createWorkflowExecutionInfo(result["execution"].(map[string]interface{}))
 	state.ExecutionInfo = info
+
+	replicationState := createReplicationState(result["replication_state"].(map[string]interface{}))
+	state.ReplicationState = replicationState
 
 	activityInfos := make(map[int64]*ActivityInfo)
 	aMap := result["activity_map"].(map[int64]map[string]interface{})
@@ -1087,6 +1133,17 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *GetWorkflowExecutio
 
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
 	executionInfo := request.ExecutionInfo
+	replicationState := request.ReplicationState
+	var lastReplicationInfo map[string]map[string]interface{}
+	if replicationState == nil {
+		replicationState = emptyReplicationState
+		lastReplicationInfo = emptyReplicationInfoMap
+	} else {
+		lastReplicationInfo = make(map[string]map[string]interface{})
+		for k, v := range replicationState.LastReplicationInfo {
+			lastReplicationInfo[k] = createReplicationInfoMap(v)
+		}
+	}
 	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -1125,6 +1182,11 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		executionInfo.ClientLibraryVersion,
 		executionInfo.ClientFeatureVersion,
 		executionInfo.ClientImpl,
+		replicationState.CurrentVersion,
+		replicationState.StartVersion,
+		replicationState.LastWriteVersion,
+		replicationState.LastWriteEventID,
+		lastReplicationInfo,
 		executionInfo.NextEventID,
 		d.shardID,
 		rowTypeExecution,
@@ -1801,6 +1863,11 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		targetWorkflowID := transferTaskTransferTargetWorkflowID
 		targetRunID := transferTaskTypeTransferTargetRunID
 		targetChildWorkflowOnly := false
+		// Replication transfer task specific information
+		firstEventID := common.EmptyEventID
+		nextEventID := common.EmptyEventID
+		version := int64(0)
+		var lastReplicationInfo map[string]map[string]interface{}
 
 		switch task.GetType() {
 		case TransferTaskTypeActivityTask:
@@ -1837,6 +1904,15 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			targetDomainID = task.(*StartChildExecutionTask).TargetDomainID
 			targetWorkflowID = task.(*StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*StartChildExecutionTask).InitiatedID
+
+		case TransferTaskTypeReplicationTask:
+			firstEventID = task.(*ReplicationTask).FirstEventID
+			nextEventID = task.(*ReplicationTask).NextEventID
+			version = task.(*ReplicationTask).Version
+			lastReplicationInfo = make(map[string]map[string]interface{})
+			for k, v := range task.(*ReplicationTask).LastReplicationInfo {
+				lastReplicationInfo[k] = createReplicationInfoMap(v)
+			}
 		}
 
 		batch.Query(templateCreateTransferTaskQuery,
@@ -1856,6 +1932,10 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			taskList,
 			task.GetType(),
 			scheduleID,
+			firstEventID,
+			nextEventID,
+			version,
+			lastReplicationInfo,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -2267,6 +2347,30 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *WorkflowExecuti
 	return info
 }
 
+func createReplicationState(result map[string]interface{}) *ReplicationState {
+	info := &ReplicationState{}
+	for k, v := range result {
+		switch k {
+		case "current_version":
+			info.CurrentVersion = v.(int64)
+		case "start_version":
+			info.StartVersion = v.(int64)
+		case "last_write_version":
+			info.LastWriteVersion = v.(int64)
+		case "last_write_event_id":
+			info.LastWriteEventID = v.(int64)
+		case "last_replication_info":
+			info.LastReplicationInfo = make(map[string]*ReplicationInfo)
+			replicationInfoMap := v.(map[string]map[string]interface{})
+			for key, value := range replicationInfoMap {
+				info.LastReplicationInfo[key] = createReplicationInfo(value)
+			}
+		}
+	}
+
+	return info
+}
+
 func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 	info := &TransferTaskInfo{}
 	for k, v := range result {
@@ -2296,6 +2400,18 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.TaskType = v.(int)
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
+		case "first_event_id":
+			info.FirstEventID = v.(int64)
+		case "next_event_id":
+			info.NextEventID = v.(int64)
+		case "version":
+			info.Version = v.(int64)
+		case "last_replication_info":
+			info.LastReplicationInfo = make(map[string]*ReplicationInfo)
+			replicationInfoMap := v.(map[string]map[string]interface{})
+			for key, value := range replicationInfoMap {
+				info.LastReplicationInfo[key] = createReplicationInfo(value)
+			}
 		}
 	}
 
@@ -2476,6 +2592,28 @@ func createTimerTaskInfo(result map[string]interface{}) *TimerTaskInfo {
 	}
 
 	return info
+}
+
+func createReplicationInfo(result map[string]interface{}) *ReplicationInfo {
+	info := &ReplicationInfo{}
+	for k, v := range result {
+		switch k {
+		case "version":
+			info.Version = v.(int64)
+		case "last_event_id":
+			info.LastEventID = v.(int64)
+		}
+	}
+
+	return info
+}
+
+func createReplicationInfoMap(info *ReplicationInfo) map[string]interface{} {
+	rInfoMap := make(map[string]interface{})
+	rInfoMap["version"] = info.Version
+	rInfoMap["last_event_id"] = info.LastEventID
+
+	return rInfoMap
 }
 
 func isTimeoutError(err error) bool {
