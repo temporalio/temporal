@@ -142,6 +142,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
+	s.validateActivityTaskStartedEvent(activityStartedEvent, bufferedEventID, 5, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity)
 	s.Equal(int64(8), s.getNextEventID())
 	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
@@ -150,6 +152,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	activityCompletedEvent := s.addActivityTaskCompletedEvent(5, 7, activity1Result, identity)
+	s.validateActivityTaskCompletedEvent(activityCompletedEvent, bufferedEventID, 5, 7, activity1Result,
+		identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateActivityTaskCompletedEvent(activityCompletedEvent, 8, 5, 7, activity1Result,
 		identity)
 	s.Equal(int64(9), s.getNextEventID())
@@ -166,6 +171,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 	s.Equal(int64(3), s.getPreviousDecisionStartedEventID())
 
 	activity2StartedEvent := s.addActivityTaskStartedEvent(6, activityTaskList, identity)
+	s.validateActivityTaskStartedEvent(activity2StartedEvent, bufferedEventID, 6, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateActivityTaskStartedEvent(activity2StartedEvent, 10, 6, identity)
 	s.Equal(int64(11), s.getNextEventID())
 	ai4, activity2Running1 := s.msBuilder.GetActivityInfo(6)
@@ -175,6 +182,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {
 
 	activity2FailedEvent := s.addActivityTaskFailedEvent(6, 10, activity2Reason, activity2Details,
 		identity)
+	s.validateActivityTaskFailedEvent(activity2FailedEvent, bufferedEventID, 6, 10, activity2Reason,
+		activity2Details, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateActivityTaskFailedEvent(activity2FailedEvent, 11, 6, 10, activity2Reason,
 		activity2Details, identity)
 	s.Equal(int64(12), s.getNextEventID())
@@ -387,6 +397,8 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 7 activity1 started
 	activityStartedEvent := s.addActivityTaskStartedEvent(5, activityTaskList, identity)
+	s.validateActivityTaskStartedEvent(activityStartedEvent, bufferedEventID, 5, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateActivityTaskStartedEvent(activityStartedEvent, 7, 5, identity)
 	s.Equal(int64(8), s.getNextEventID())
 	ai3, activity1Running1 := s.msBuilder.GetActivityInfo(5)
@@ -396,8 +408,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 
 	// 8 activity1 completed
 	activityCompletedEvent := s.addActivityTaskCompletedEvent(5, 7, activity1Result, identity)
-	s.validateActivityTaskCompletedEvent(activityCompletedEvent, 8, 5, 7, activity1Result,
-		identity)
+	s.validateActivityTaskCompletedEvent(activityCompletedEvent, bufferedEventID, 5, 7, activity1Result, identity)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
+	s.validateActivityTaskCompletedEvent(activityCompletedEvent, 8, 5, 7, activity1Result, identity)
 	s.Equal(int64(9), s.getNextEventID())
 	_, activity1Running2 := s.msBuilder.GetActivityInfo(5)
 	s.False(activity1Running2)
@@ -532,9 +545,9 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationRequested() 
 	cancellationRequestedEvent := s.addExternalWorkflowExecutionCancelRequested(
 		5, targetDomain, targetExecution.GetWorkflowId(), targetExecution.GetRunId(),
 	)
-	s.validateExternalWorkflowExecutionCancelRequested(
-		cancellationRequestedEvent, 6, 5, targetDomain, targetExecution,
-	)
+	s.validateExternalWorkflowExecutionCancelRequested(cancellationRequestedEvent, bufferedEventID, 5, targetDomain, targetExecution)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
+	s.validateExternalWorkflowExecutionCancelRequested(cancellationRequestedEvent, 6, 5, targetDomain, targetExecution)
 	s.Equal(int64(7), s.getNextEventID())
 }
 
@@ -605,6 +618,10 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 	cancellationRequestedEvent := s.addRequestCancelExternalWorkflowExecutionFailedEvent(
 		4, 5, targetDomain, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), cancellationFailedCause,
 	)
+	s.validateRequestCancelExternalWorkflowExecutionFailedEvent(
+		cancellationRequestedEvent, bufferedEventID, 4, 5, targetDomain, targetExecution, cancellationFailedCause,
+	)
+	s.Nil(s.msBuilder.FlushBufferedEvents())
 	s.validateRequestCancelExternalWorkflowExecutionFailedEvent(
 		cancellationRequestedEvent, 6, 4, 5, targetDomain, targetExecution, cancellationFailedCause,
 	)
