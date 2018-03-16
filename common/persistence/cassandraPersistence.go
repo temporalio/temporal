@@ -602,10 +602,9 @@ var (
 
 type (
 	cassandraPersistence struct {
-		session      *gocql.Session
-		lowConslevel gocql.Consistency
-		shardID      int
-		logger       bark.Logger
+		session *gocql.Session
+		shardID int
+		logger  bark.Logger
 	}
 )
 
@@ -624,13 +623,13 @@ func NewCassandraShardPersistence(hosts string, port int, user, password, dc str
 		return nil, err
 	}
 
-	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One, logger: logger}, nil
+	return &cassandraPersistence{shardID: -1, session: session, logger: logger}, nil
 }
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewCassandraWorkflowExecutionPersistence(shardID int, session *gocql.Session,
 	logger bark.Logger) (ExecutionManager, error) {
-	return &cassandraPersistence{shardID: shardID, session: session, lowConslevel: gocql.One, logger: logger}, nil
+	return &cassandraPersistence{shardID: shardID, session: session, logger: logger}, nil
 }
 
 // NewCassandraTaskPersistence is used to create an instance of TaskManager implementation
@@ -647,7 +646,7 @@ func NewCassandraTaskPersistence(hosts string, port int, user, password, dc stri
 	if err != nil {
 		return nil, err
 	}
-	return &cassandraPersistence{shardID: -1, session: session, lowConslevel: gocql.One, logger: logger}, nil
+	return &cassandraPersistence{shardID: -1, session: session, logger: logger}, nil
 }
 
 // Close releases the underlying resources held by this object
@@ -710,7 +709,7 @@ func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResp
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
-		rowTypeShardTaskID).Consistency(d.lowConslevel)
+		rowTypeShardTaskID)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
