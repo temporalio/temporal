@@ -78,7 +78,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                              numberOfShards,
 		HistoryCacheInitialSize:                     128,
-		HistoryCacheMaxSize:                         256,
+		HistoryCacheMaxSize:                         512,
 		HistoryCacheTTL:                             time.Hour,
 		RangeSizeBits:                               20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                        time.Minute,
