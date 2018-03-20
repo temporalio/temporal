@@ -173,7 +173,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			return err
 		}
 		// NOTE: domain retention is in days, so we need to do a conversion
-		finishExecutionTTL = domainEntry.Config.Retention * secondsInDay
+		finishExecutionTTL = domainEntry.GetConfig().Retention * secondsInDay
 	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,

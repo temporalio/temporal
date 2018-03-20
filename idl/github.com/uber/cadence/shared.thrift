@@ -54,6 +54,14 @@ exception QueryFailedError {
   1: required string message
 }
 
+exception DomainNotActiveError {
+  1: required string message
+  2: required string domainName
+  3: required string currentCluster
+  4: required string activeCluster
+}
+
+
 enum WorkflowIdReusePolicy {
   /*
    * allow start a workflow execution using the same workflow ID,

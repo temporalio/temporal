@@ -120,17 +120,9 @@ func (g *testTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	log := bark.NewLoggerFromLogrus(log.New())
 
-	masterClusterName := testCurrentClusterName
-	if !options.IsMasterCluster {
-		masterClusterName = testAlternativeClusterName
-	}
-	s.ClusterMetadata = cluster.NewMetadata(
+	s.ClusterMetadata = cluster.GetTestClusterMetadata(
 		options.EnableGlobalDomain,
-		testInitialFailoverVersion,
-		testFailoverVersionIncrement,
-		masterClusterName,
-		testCurrentClusterName,
-		testAllClusterNames,
+		options.IsMasterCluster,
 	)
 
 	// Setup Workflow keyspace and deploy schema for tests

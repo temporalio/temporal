@@ -40,6 +40,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -101,12 +102,13 @@ func (s *engine2Suite) SetupTest() {
 	s.shardClosedCh = make(chan int, 100)
 	s.eventSerializer = newJSONHistoryEventSerializer()
 
+	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
 	mockShard := &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
 		historyMgr:                s.mockHistoryMgr,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		domainCache:               domainCache,
 		shardManager:              s.mockShardManager,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   s.shardClosedCh,
@@ -116,7 +118,6 @@ func (s *engine2Suite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(mockShard, s.logger)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	h := &historyEngineImpl{
 		shard:              mockShard,
 		executionManager:   s.mockExecutionMgr,

@@ -840,7 +840,7 @@ Update_History_Loop:
 					if err != nil {
 						return &workflow.InternalServiceError{Message: "Unable to schedule activity across domain."}
 					}
-					targetDomainID = domainEntry.Info.ID
+					targetDomainID = domainEntry.GetInfo().ID
 				}
 
 				if err = validateActivityScheduleAttributes(attributes); err != nil {
@@ -1020,7 +1020,7 @@ Update_History_Loop:
 						return &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.", attributes.GetDomain())}
 					}
-					foreignDomainID = foreignDomainEntry.Info.ID
+					foreignDomainID = foreignDomainEntry.GetInfo().ID
 				}
 
 				cancelRequestID := uuid.New()
@@ -1058,7 +1058,7 @@ Update_History_Loop:
 						return &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to signal workflow across domain: %v.", attributes.GetDomain())}
 					}
-					foreignDomainID = foreignDomainEntry.Info.ID
+					foreignDomainID = foreignDomainEntry.GetInfo().ID
 				}
 
 				signalRequestID := uuid.New() // for deduplicate
@@ -1132,7 +1132,7 @@ Update_History_Loop:
 					if err != nil {
 						return &workflow.InternalServiceError{Message: "Unable to schedule child execution across domain."}
 					}
-					targetDomainID = domainEntry.Info.ID
+					targetDomainID = domainEntry.GetInfo().ID
 				}
 
 				requestID := uuid.New()
@@ -1811,7 +1811,7 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 			return nil, nil, err
 		}
 	} else {
-		retentionInDays = domainEntry.Config.Retention
+		retentionInDays = domainEntry.GetConfig().Retention
 	}
 	cleanupTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
 

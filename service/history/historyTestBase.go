@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 
 	log "github.com/sirupsen/logrus"
 
@@ -203,7 +204,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 	s.TestBase.SetupWorkflowStoreWithOptions(options)
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
-	domainCache := cache.NewDomainCache(s.MetadataManager, log)
+	domainCache := cache.NewDomainCache(s.MetadataManager, cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster), log)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
@@ -213,7 +214,7 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.SetupWorkflowStore()
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
-	domainCache := cache.NewDomainCache(s.MetadataManager, log)
+	domainCache := cache.NewDomainCache(s.MetadataManager, cluster.GetTestClusterMetadata(false, false), log)
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

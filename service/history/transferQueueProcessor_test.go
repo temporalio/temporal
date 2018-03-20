@@ -35,6 +35,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -91,7 +92,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
+	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
 	h := &historyEngineImpl{
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,

@@ -28,6 +28,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -87,6 +88,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.shardClosedCh = make(chan int, 100)
 
+	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
 	s.mockShard = &shardContextImpl{
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
@@ -97,12 +99,11 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		closeCh:                   s.shardClosedCh,
 		config:                    s.config,
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.logger),
+		domainCache:               domainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
 	historyCache := newHistoryCache(s.mockShard, s.logger)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.logger)
 	h := &historyEngineImpl{
 		shard:              s.mockShard,
 		historyMgr:         s.mockHistoryMgr,

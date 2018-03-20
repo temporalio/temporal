@@ -8640,6 +8640,194 @@ func (v *DomainInfo) GetOwnerEmail() (o string) {
 	return
 }
 
+type DomainNotActiveError struct {
+	Message        string `json:"message,required"`
+	DomainName     string `json:"domainName,required"`
+	CurrentCluster string `json:"currentCluster,required"`
+	ActiveCluster  string `json:"activeCluster,required"`
+}
+
+// ToWire translates a DomainNotActiveError struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DomainNotActiveError) ToWire() (wire.Value, error) {
+	var (
+		fields [4]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	w, err = wire.NewValueString(v.Message), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 1, Value: w}
+	i++
+
+	w, err = wire.NewValueString(v.DomainName), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 2, Value: w}
+	i++
+
+	w, err = wire.NewValueString(v.CurrentCluster), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 3, Value: w}
+	i++
+
+	w, err = wire.NewValueString(v.ActiveCluster), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 4, Value: w}
+	i++
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a DomainNotActiveError struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DomainNotActiveError struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DomainNotActiveError
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DomainNotActiveError) FromWire(w wire.Value) error {
+	var err error
+
+	messageIsSet := false
+	domainNameIsSet := false
+	currentClusterIsSet := false
+	activeClusterIsSet := false
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TBinary {
+				v.Message, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				messageIsSet = true
+			}
+		case 2:
+			if field.Value.Type() == wire.TBinary {
+				v.DomainName, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				domainNameIsSet = true
+			}
+		case 3:
+			if field.Value.Type() == wire.TBinary {
+				v.CurrentCluster, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				currentClusterIsSet = true
+			}
+		case 4:
+			if field.Value.Type() == wire.TBinary {
+				v.ActiveCluster, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				activeClusterIsSet = true
+			}
+		}
+	}
+
+	if !messageIsSet {
+		return errors.New("field Message of DomainNotActiveError is required")
+	}
+
+	if !domainNameIsSet {
+		return errors.New("field DomainName of DomainNotActiveError is required")
+	}
+
+	if !currentClusterIsSet {
+		return errors.New("field CurrentCluster of DomainNotActiveError is required")
+	}
+
+	if !activeClusterIsSet {
+		return errors.New("field ActiveCluster of DomainNotActiveError is required")
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DomainNotActiveError
+// struct.
+func (v *DomainNotActiveError) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [4]string
+	i := 0
+	fields[i] = fmt.Sprintf("Message: %v", v.Message)
+	i++
+	fields[i] = fmt.Sprintf("DomainName: %v", v.DomainName)
+	i++
+	fields[i] = fmt.Sprintf("CurrentCluster: %v", v.CurrentCluster)
+	i++
+	fields[i] = fmt.Sprintf("ActiveCluster: %v", v.ActiveCluster)
+	i++
+
+	return fmt.Sprintf("DomainNotActiveError{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this DomainNotActiveError match the
+// provided DomainNotActiveError.
+//
+// This function performs a deep comparison.
+func (v *DomainNotActiveError) Equals(rhs *DomainNotActiveError) bool {
+	if !(v.Message == rhs.Message) {
+		return false
+	}
+	if !(v.DomainName == rhs.DomainName) {
+		return false
+	}
+	if !(v.CurrentCluster == rhs.CurrentCluster) {
+		return false
+	}
+	if !(v.ActiveCluster == rhs.ActiveCluster) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DomainNotActiveError) Error() string {
+	return v.String()
+}
+
 type DomainReplicationConfiguration struct {
 	ActiveClusterName *string                            `json:"activeClusterName,omitempty"`
 	Clusters          []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
