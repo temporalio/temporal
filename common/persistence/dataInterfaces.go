@@ -698,6 +698,7 @@ type (
 		Config            *DomainConfig
 		ReplicationConfig *DomainReplicationConfig
 		IsGlobalDomain    bool
+		ConfigVersion     int64
 		FailoverVersion   int64
 	}
 

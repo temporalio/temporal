@@ -54,8 +54,8 @@ const (
 		`VALUES(?, {name: ?}) IF NOT EXISTS`
 
 	templateCreateDomainByNameQuery = `INSERT INTO domains_by_name (` +
-		`name, domain, config, replication_config, is_global_domain, failover_version) ` +
-		`VALUES(?, ` + templateDomainType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?) IF NOT EXISTS`
+		`name, domain, config, replication_config, is_global_domain, config_version, failover_version) ` +
+		`VALUES(?, ` + templateDomainType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetDomainQuery = `SELECT domain.name ` +
 		`FROM domains ` +
@@ -149,6 +149,7 @@ func (m *cassandraMetadataPersistence) CreateDomain(request *CreateDomainRequest
 		request.ReplicationConfig.ActiveClusterName,
 		serializeClusterConfigs(request.ReplicationConfig.Clusters),
 		request.IsGlobalDomain,
+		request.ConfigVersion,
 		request.FailoverVersion,
 	)
 

@@ -133,6 +133,69 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	s.Equal(int64(0), resp.DBVersion)
 }
 
+func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainNotExist() {
+	operation := replicator.DomainOperationUpdate
+	id := uuid.New()
+	name := "some random domain test name"
+	status := shared.DomainStatusRegistered
+	description := "some random test description"
+	ownerEmail := "some random test owner"
+	retention := int32(10)
+	emitMetric := true
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(12)
+	failoverVersion := int64(59)
+	clusters := []*shared.ClusterReplicationConfiguration{
+		&shared.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterActive),
+		},
+		&shared.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterStandby),
+		},
+	}
+
+	updateTask := &replicator.DomainTaskAttributes{
+		DomainOperation: &operation,
+		ID:              common.StringPtr(id),
+		Info: &shared.DomainInfo{
+			Name:        common.StringPtr(name),
+			Status:      &status,
+			Description: common.StringPtr(description),
+			OwnerEmail:  common.StringPtr(ownerEmail),
+		},
+		Config: &shared.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+		},
+		ReplicationConfig: &shared.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterActive),
+			Clusters:          clusters,
+		},
+		ConfigVersion:   common.Int64Ptr(configVersion),
+		FailoverVersion: common.Int64Ptr(failoverVersion),
+	}
+
+	err := s.domainReplicator.HandleReceivingTask(updateTask)
+	s.Nil(err)
+
+	resp, err := s.MetadataManager.GetDomain(&persistence.GetDomainRequest{Name: name})
+	s.Nil(err)
+	s.NotNil(resp)
+	s.Equal(id, resp.Info.ID)
+	s.Equal(name, resp.Info.Name)
+	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
+	s.Equal(description, resp.Info.Description)
+	s.Equal(ownerEmail, resp.Info.OwnerEmail)
+	s.Equal(retention, resp.Config.Retention)
+	s.Equal(emitMetric, resp.Config.EmitMetric)
+	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.domainReplicator.convertClusterReplicationConfigFromThrift(clusters), resp.ReplicationConfig.Clusters)
+	s.Equal(configVersion, resp.ConfigVersion)
+	s.Equal(failoverVersion, resp.FailoverVersion)
+	s.Equal(int64(0), resp.DBVersion)
+}
+
 func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateConfig_UpdateActiveCluster() {
 	operation := replicator.DomainOperationCreate
 	id := uuid.New()

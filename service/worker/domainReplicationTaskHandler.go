@@ -26,7 +26,6 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -109,6 +108,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 			Clusters:          domainReplicator.convertClusterReplicationConfigFromThrift(task.ReplicationConfig.Clusters),
 		},
 		IsGlobalDomain:  true, // local domain will not be replicated
+		ConfigVersion:   task.GetConfigVersion(),
 		FailoverVersion: task.GetFailoverVersion(),
 	}
 
@@ -131,6 +131,11 @@ func (domainReplicator *domainReplicatorImpl) handleDomainUpdateReplicationTask(
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			// this can happen if the create domain replication task is to processed.
+			// e.g. new cluster being lanuched
+			return domainReplicator.handleDomainCreationReplicationTask(task)
+		}
 		return err
 	}
 
@@ -206,16 +211,6 @@ func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigFro
 	return output
 }
 
-func (domainReplicator *domainReplicatorImpl) convertClusterReplicationConfigToThrift(
-	input []*persistence.ClusterReplicationConfig) []*shared.ClusterReplicationConfiguration {
-	output := []*shared.ClusterReplicationConfiguration{}
-	for _, cluster := range input {
-		clusterName := common.StringPtr(cluster.ClusterName)
-		output = append(output, &shared.ClusterReplicationConfiguration{ClusterName: clusterName})
-	}
-	return output
-}
-
 func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromThrift(input *shared.DomainStatus) (int, error) {
 	if input == nil {
 		return 0, ErrInvalidDomainStatus
@@ -229,18 +224,4 @@ func (domainReplicator *domainReplicatorImpl) convertDomainStatusFromThrift(inpu
 	default:
 		return 0, ErrInvalidDomainStatus
 	}
-}
-
-func (domainReplicator *domainReplicatorImpl) convertDomainStatusToThrift(input int) (*shared.DomainStatus, error) {
-	switch input {
-	case persistence.DomainStatusRegistered:
-		output := shared.DomainStatusRegistered
-		return &output, nil
-	case persistence.DomainStatusDeprecated:
-		output := shared.DomainStatusDeprecated
-		return &output, nil
-	default:
-		return nil, ErrInvalidDomainStatus
-	}
-
 }

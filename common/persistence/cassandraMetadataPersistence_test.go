@@ -73,6 +73,7 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 	retention := int32(10)
 	emitMetric := true
 	isGlobalDomain := false
+	configVersion := int64(0)
 	failoverVersion := int64(0)
 
 	resp0, err0 := m.CreateDomain(
@@ -89,6 +90,7 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 		},
 		&DomainReplicationConfig{},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 
@@ -111,7 +113,7 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 	m.Equal(testCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.ReplicationConfig.Clusters))
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
-	m.Equal(int64(0), resp1.ConfigVersion)
+	m.Equal(configVersion, resp1.ConfigVersion)
 	m.Equal(failoverVersion, resp1.FailoverVersion)
 	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == testCurrentClusterName)
 	m.Equal(int64(0), resp1.DBVersion)
@@ -130,6 +132,7 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 		},
 		&DomainReplicationConfig{},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 	m.NotNil(err2)
@@ -148,6 +151,7 @@ func (m *metadataPersistenceSuite) TestGetDomain() {
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
+	configVersion := int64(11)
 	failoverVersion := int64(59)
 	isGlobalDomain := true
 	clusters := []*ClusterReplicationConfig{
@@ -181,6 +185,7 @@ func (m *metadataPersistenceSuite) TestGetDomain() {
 			Clusters:          clusters,
 		},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 	m.Nil(err1)
@@ -203,7 +208,7 @@ func (m *metadataPersistenceSuite) TestGetDomain() {
 		m.Equal(clusters[index], resp2.ReplicationConfig.Clusters[index])
 	}
 	m.Equal(isGlobalDomain, resp2.IsGlobalDomain)
-	m.Equal(int64(0), resp2.ConfigVersion)
+	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp2.FailoverVersion)
 	m.Equal(int64(0), resp2.DBVersion)
 
@@ -223,7 +228,7 @@ func (m *metadataPersistenceSuite) TestGetDomain() {
 		m.Equal(clusters[index], resp3.ReplicationConfig.Clusters[index])
 	}
 	m.Equal(isGlobalDomain, resp2.IsGlobalDomain)
-	m.Equal(int64(0), resp2.ConfigVersion)
+	m.Equal(configVersion, resp2.ConfigVersion)
 	m.Equal(failoverVersion, resp3.FailoverVersion)
 	m.Equal(int64(0), resp3.DBVersion)
 
@@ -244,6 +249,7 @@ func (m *metadataPersistenceSuite) TestUpdateDomain() {
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
 	failoverVersion := int64(59)
 	isGlobalDomain := true
 	clusters := []*ClusterReplicationConfig{
@@ -272,6 +278,7 @@ func (m *metadataPersistenceSuite) TestUpdateDomain() {
 			Clusters:          clusters,
 		},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 	m.Nil(err1)
@@ -371,6 +378,7 @@ func (m *metadataPersistenceSuite) TestDeleteDomain() {
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
 	failoverVersion := int64(59)
 	isGlobalDomain := true
 	clusters := []*ClusterReplicationConfig{
@@ -399,6 +407,7 @@ func (m *metadataPersistenceSuite) TestDeleteDomain() {
 			Clusters:          clusters,
 		},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 	m.Nil(err1)
@@ -438,6 +447,7 @@ func (m *metadataPersistenceSuite) TestDeleteDomain() {
 			Clusters:          clusters,
 		},
 		isGlobalDomain,
+		configVersion,
 		failoverVersion,
 	)
 	m.Nil(err6)
@@ -458,12 +468,13 @@ func (m *metadataPersistenceSuite) TestDeleteDomain() {
 }
 
 func (m *metadataPersistenceSuite) CreateDomain(info *DomainInfo, config *DomainConfig,
-	replicationConfig *DomainReplicationConfig, isGlobaldomain bool, failoverVersion int64) (*CreateDomainResponse, error) {
+	replicationConfig *DomainReplicationConfig, isGlobaldomain bool, configVersion int64, failoverVersion int64) (*CreateDomainResponse, error) {
 	return m.MetadataManager.CreateDomain(&CreateDomainRequest{
 		Info:              info,
 		Config:            config,
 		ReplicationConfig: replicationConfig,
 		IsGlobalDomain:    isGlobaldomain,
+		ConfigVersion:     configVersion,
 		FailoverVersion:   failoverVersion,
 	})
 }
