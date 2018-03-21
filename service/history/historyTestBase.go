@@ -25,16 +25,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -48,6 +48,7 @@ type (
 	// TestShardContext shard context for testing.
 	TestShardContext struct {
 		sync.RWMutex
+		service                service.Service
 		shardInfo              *persistence.ShardInfo
 		transferSequenceNumber int64
 		historyMgr             persistence.HistoryManager
@@ -67,9 +68,14 @@ type (
 
 var _ ShardContext = (*TestShardContext)(nil)
 
-func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, domainCache cache.DomainCache, config *Config, logger bark.Logger) *TestShardContext {
+func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
+	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager,
+	metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, config *Config,
+	logger bark.Logger) *TestShardContext {
+	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, logger)
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	return &TestShardContext{
+		service:                service.NewTestService(clusterMetadata, nil, metricsClient, logger),
 		shardInfo:              shardInfo,
 		transferSequenceNumber: transferSequenceNumber,
 		historyMgr:             historyMgr,
@@ -77,8 +83,13 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 		domainCache:            domainCache,
 		config:                 config,
 		logger:                 logger,
-		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient:          metricsClient,
 	}
+}
+
+// GetService test implementation
+func (s *TestShardContext) GetService() service.Service {
+	return s.service
 }
 
 // GetExecutionManager test implementation
@@ -204,8 +215,9 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 	s.TestBase.SetupWorkflowStoreWithOptions(options)
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
-	domainCache := cache.NewDomainCache(s.MetadataManager, cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster), log)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
+	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, clusterMetadata,
+		config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 
@@ -214,7 +226,8 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase.SetupWorkflowStore()
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
-	domainCache := cache.NewDomainCache(s.MetadataManager, cluster.GetTestClusterMetadata(false, false), log)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, domainCache, config, log)
+	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, clusterMetadata,
+		config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

@@ -41,6 +41,8 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/service"
 )
 
 type (
@@ -51,13 +53,17 @@ type (
 		config           *Config
 		logger           bark.Logger
 
-		mockHistoryEngine  *historyEngineImpl
-		mockMatchingClient *mocks.MatchingClient
-		mockMetadataMgr    *mocks.MetadataManager
-		mockVisibilityMgr  *mocks.VisibilityManager
-		mockExecutionMgr   *mocks.ExecutionManager
-		mockHistoryMgr     *mocks.HistoryManager
-		mockShard          ShardContext
+		mockHistoryEngine   *historyEngineImpl
+		mockMatchingClient  *mocks.MatchingClient
+		mockMetadataMgr     *mocks.MetadataManager
+		mockVisibilityMgr   *mocks.VisibilityManager
+		mockExecutionMgr    *mocks.ExecutionManager
+		mockHistoryMgr      *mocks.HistoryManager
+		mockShard           ShardContext
+		mockClusterMetadata *mocks.ClusterMetadata
+		mockProducer        *mocks.KafkaProducer
+		mockMessagingClient messaging.Client
+		mockService         service.Service
 	}
 )
 
@@ -86,10 +92,16 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockHistoryMgr = &mocks.HistoryManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockClusterMetadata = &mocks.ClusterMetadata{}
+	s.mockProducer = &mocks.KafkaProducer{}
 	s.shardClosedCh = make(chan int, 100)
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
 
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
 	s.mockShard = &shardContextImpl{
+		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: shardID, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
@@ -126,6 +138,8 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
+	s.mockClusterMetadata.AssertExpectations(s.T())
+	s.mockProducer.AssertExpectations(s.T())
 }
 
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
@@ -172,6 +186,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(errors.New("FAILED")).Once()
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil)
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
@@ -179,6 +194,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 
 	// Start timer Processor.
 	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
@@ -233,6 +249,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}

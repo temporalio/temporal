@@ -125,8 +125,9 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		}
 	}()
 
+	createReplicationTask := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
 	// Take a snapshot of all updates we have accumulated for this execution
-	updates, err := c.msBuilder.CloseUpdateSession()
+	updates, err := c.msBuilder.CloseUpdateSession(createReplicationTask)
 	if err != nil {
 		return err
 	}
@@ -175,9 +176,18 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		// NOTE: domain retention is in days, so we need to do a conversion
 		finishExecutionTTL = domainEntry.GetConfig().Retention * secondsInDay
 	}
+
+	var replicationTasks []persistence.Task
+	if updates.replicationTask != nil {
+		// Support for global domains is enabled and we are performing an update for global domain
+		// Let's create a replication task as part of this update
+		replicationTasks = append(replicationTasks, updates.replicationTask)
+	}
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,
+		ReplicationState:          c.msBuilder.replicationState,
 		TransferTasks:             transferTasks,
+		ReplicationTasks:          replicationTasks,
 		TimerTasks:                timerTasks,
 		Condition:                 c.updateCondition,
 		DeleteTimerTask:           c.deleteTimerTask,

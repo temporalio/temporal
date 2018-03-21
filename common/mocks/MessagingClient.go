@@ -18,37 +18,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package mocks
 
-const (
-	// FirstEventID is the id of the first event in the history
-	FirstEventID int64 = 1
-	// EmptyEventID is the id of the empty event
-	EmptyEventID int64 = -23
-	// EmptyVersion is used as the default value for failover version when no value is provided
-	EmptyVersion int64 = -24
-	// EndEventID is the id of the end event, here we use the int64 max
-	EndEventID int64 = 1<<63 - 1
-)
-
-const (
-	// FrontendServiceName is the name of the frontend service
-	FrontendServiceName = "cadence-frontend"
-	// HistoryServiceName is the name of the history service
-	HistoryServiceName = "cadence-history"
-	// MatchingServiceName is the name of the matching service
-	MatchingServiceName = "cadence-matching"
-	// WorkerServiceName is the name of the worker service
-	WorkerServiceName = "cadence-worker"
-)
-
-// Data encoding types
-const (
-	EncodingTypeJSON EncodingType = "json"
-	EncodingTypeGob               = "gob"
+import (
+	"github.com/uber-go/kafka-client/kafka"
+	"github.com/uber/cadence/common/messaging"
 )
 
 type (
-	// EncodingType is an enum that represents various data encoding types
-	EncodingType string
+	// Service is the mock implementation for Service interface
+	MessagingClient struct {
+		consumerMock  kafka.Consumer
+		publisherMock messaging.Producer
+	}
 )
+
+var _ messaging.Client = (*MessagingClient)(nil)
+
+func NewMockMessagingClient(publisher messaging.Producer, consumer kafka.Consumer) messaging.Client {
+	return &MessagingClient{
+		publisherMock: publisher,
+		consumerMock:  consumer,
+	}
+}
+
+// GetHostName returns the name of host running the service
+func (c *MessagingClient) NewConsumer(topicName, consumerName string, concurrency int) (kafka.Consumer, error) {
+	return c.consumerMock, nil
+}
+
+func (c *MessagingClient) NewProducer(topicName string) (messaging.Producer, error) {
+	return c.publisherMock, nil
+}

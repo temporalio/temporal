@@ -37,19 +37,22 @@ const (
 
 type (
 	historyBuilder struct {
-		serializer persistence.HistorySerializer
-		history    []*workflow.HistoryEvent
-		msBuilder  *mutableStateBuilder
-		logger     bark.Logger
+		firstEventID int64
+		nextEventID  int64
+		serializer   persistence.HistorySerializer
+		history      []*workflow.HistoryEvent
+		msBuilder    *mutableStateBuilder
+		logger       bark.Logger
 	}
 )
 
 func newHistoryBuilder(msBuilder *mutableStateBuilder, logger bark.Logger) *historyBuilder {
 	return &historyBuilder{
-		serializer: persistence.NewJSONHistorySerializer(),
-		history:    []*workflow.HistoryEvent{},
-		msBuilder:  msBuilder,
-		logger:     logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
+		firstEventID: msBuilder.GetNextEventID(),
+		serializer:   persistence.NewJSONHistorySerializer(),
+		history:      []*workflow.HistoryEvent{},
+		msBuilder:    msBuilder,
+		logger:       logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
 	}
 }
 
@@ -416,6 +419,7 @@ func (b *historyBuilder) AddChildWorkflowExecutionTimedOutEvent(domain *string, 
 
 func (b *historyBuilder) addEventToHistory(event *workflow.HistoryEvent) *workflow.HistoryEvent {
 	b.history = append(b.history, event)
+	b.nextEventID = b.msBuilder.GetNextEventID() // Keep track of nextEventID for generating replication task
 	return event
 }
 

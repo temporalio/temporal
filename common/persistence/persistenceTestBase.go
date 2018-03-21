@@ -79,17 +79,18 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
-		ShardMgr            ShardManager
-		ExecutionMgrFactory ExecutionManagerFactory
-		WorkflowMgr         ExecutionManager
-		TaskMgr             TaskManager
-		HistoryMgr          HistoryManager
-		MetadataManager     MetadataManager
-		VisibilityMgr       VisibilityManager
-		ShardInfo           *ShardInfo
-		TaskIDGenerator     TransferTaskIDGenerator
-		ClusterMetadata     cluster.Metadata
-		readLevel           int64
+		ShardMgr             ShardManager
+		ExecutionMgrFactory  ExecutionManagerFactory
+		WorkflowMgr          ExecutionManager
+		TaskMgr              TaskManager
+		HistoryMgr           HistoryManager
+		MetadataManager      MetadataManager
+		VisibilityMgr        VisibilityManager
+		ShardInfo            *ShardInfo
+		TaskIDGenerator      TransferTaskIDGenerator
+		ClusterMetadata      cluster.Metadata
+		readLevel            int64
+		replicationReadLevel int64
 		CassandraTestCluster
 	}
 
@@ -173,10 +174,12 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 
 	// Create a shard for test
 	s.readLevel = 0
+	s.replicationReadLevel = 0
 	s.ShardInfo = &ShardInfo{
-		ShardID:          shardID,
-		RangeID:          0,
-		TransferAckLevel: 0,
+		ShardID:             shardID,
+		RangeID:             0,
+		TransferAckLevel:    0,
+		ReplicationAckLevel: 0,
 	}
 
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
@@ -254,12 +257,24 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 	return response, err
 }
 
-// CreateWorkflowExecution is a utility method to create workflow executions
+// CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workflowExecution workflow.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
 	lastProcessedEventID int64, decisionScheduleID int64, state *ReplicationState, txTasks []Task) (
 	*CreateWorkflowExecutionResponse, error) {
-	transferTasks := txTasks
+	var transferTasks []Task
+	var replicationTasks []Task
+	for _, task := range txTasks {
+		switch t := task.(type) {
+		case *DecisionTask, *ActivityTask, *CloseExecutionTask, *CancelExecutionTask, *StartChildExecutionTask, *SignalExecutionTask:
+			transferTasks = append(transferTasks, t)
+		case *HistoryReplicationTask:
+			replicationTasks = append(replicationTasks, t)
+		default:
+			panic("Unknown transfer task type.")
+		}
+	}
+
 	transferTasks = append(transferTasks, &DecisionTask{
 		TaskID:     s.GetNextSequenceNumber(),
 		DomainID:   domainID,
@@ -278,6 +293,7 @@ func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workf
 		LastProcessedEvent:          lastProcessedEventID,
 		RangeID:                     s.ShardInfo.RangeID,
 		TransferTasks:               transferTasks,
+		ReplicationTasks:            replicationTasks,
 		DecisionScheduleID:          decisionScheduleID,
 		DecisionStartedID:           common.EmptyEventID,
 		DecisionStartToCloseTimeout: 1,
@@ -542,7 +558,7 @@ func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *WorkflowExecutionInf
 		nil, nil, nil, deleteSignalsRequestedID)
 }
 
-// DeleteSignalsRequestedState is a utility method to delete mutable state of workflow execution
+// UpdateWorklowStateAndReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *WorkflowExecutionInfo,
 	updatedReplicationState *ReplicationState, condition int64, txTasks []Task) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, nil, nil,
@@ -563,7 +579,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 		upsertSignalRequestedIDs, deleteSignalRequestedID)
 }
 
-// UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
+// UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowExecutionInfo,
 	updatedReplicationState *ReplicationState, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []Task, txTasks []Task, deleteTimerTask Task, upsertActivityInfos []*ActivityInfo,
@@ -571,7 +587,18 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowE
 	upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*RequestCancelInfo,
 	deleteCancelInfo *int64, upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
 	deleteSignalRequestedID string) error {
-	transferTasks := txTasks
+	var transferTasks []Task
+	var replicationTasks []Task
+	for _, task := range txTasks {
+		switch t := task.(type) {
+		case *DecisionTask, *ActivityTask, *CloseExecutionTask, *CancelExecutionTask, *StartChildExecutionTask, *SignalExecutionTask:
+			transferTasks = append(transferTasks, t)
+		case *HistoryReplicationTask:
+			replicationTasks = append(replicationTasks, t)
+		default:
+			panic("Unknown transfer task type.")
+		}
+	}
 	for _, decisionScheduleID := range decisionScheduleIDs {
 		transferTasks = append(transferTasks, &DecisionTask{
 			TaskID:     s.GetNextSequenceNumber(),
@@ -592,6 +619,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowE
 		ExecutionInfo:             updatedInfo,
 		ReplicationState:          updatedReplicationState,
 		TransferTasks:             transferTasks,
+		ReplicationTasks:          replicationTasks,
 		TimerTasks:                timerTasks,
 		Condition:                 condition,
 		DeleteTimerTask:           deleteTimerTask,
@@ -673,7 +701,7 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 // GetTransferTasks is a utility method to get tasks from transfer task queue
 func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		ReadLevel:    s.GetReadLevel(),
+		ReadLevel:    s.GetTransferReadLevel(),
 		MaxReadLevel: int64(math.MaxInt64),
 		BatchSize:    batchSize,
 	})
@@ -689,10 +717,37 @@ func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) 
 	return response.Tasks, nil
 }
 
+// GetReplicationTasks is a utility method to get tasks from replication task queue
+func (s *TestBase) GetReplicationTasks(batchSize int) ([]*ReplicationTaskInfo, error) {
+	response, err := s.WorkflowMgr.GetReplicationTasks(&GetReplicationTasksRequest{
+		ReadLevel:    s.GetReplicationReadLevel(),
+		MaxReadLevel: int64(math.MaxInt64),
+		BatchSize:    batchSize,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range response.Tasks {
+		atomic.StoreInt64(&s.replicationReadLevel, task.TaskID)
+	}
+
+	return response.Tasks, nil
+}
+
 // CompleteTransferTask is a utility method to complete a transfer task
 func (s *TestBase) CompleteTransferTask(taskID int64) error {
 
 	return s.WorkflowMgr.CompleteTransferTask(&CompleteTransferTaskRequest{
+		TaskID: taskID,
+	})
+}
+
+// CompleteReplicationTask is a utility method to complete a replication task
+func (s *TestBase) CompleteReplicationTask(taskID int64) error {
+
+	return s.WorkflowMgr.CompleteReplicationTask(&CompleteReplicationTaskRequest{
 		TaskID: taskID,
 	})
 }
@@ -875,15 +930,26 @@ func (s *TestBase) GetNextSequenceNumber() int64 {
 	return taskID
 }
 
-// GetReadLevel returns the current read level for shard
-func (s *TestBase) GetReadLevel() int64 {
+// GetTransferReadLevel returns the current read level for shard
+func (s *TestBase) GetTransferReadLevel() int64 {
 	return atomic.LoadInt64(&s.readLevel)
+}
+
+// GetReplicationReadLevel returns the current read level for shard
+func (s *TestBase) GetReplicationReadLevel() int64 {
+	return atomic.LoadInt64(&s.replicationReadLevel)
+}
+
+// ClearTasks completes all transfer tasks and replication tasks
+func (s *TestBase) ClearTasks() {
+	s.ClearTransferQueue()
+	s.ClearReplicationQueue()
 }
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
 	log.Infof("Clearing transfer tasks (RangeID: %v, ReadLevel: %v)",
-		s.ShardInfo.RangeID, s.GetReadLevel())
+		s.ShardInfo.RangeID, s.GetTransferReadLevel())
 	tasks, err := s.GetTransferTasks(100)
 	if err != nil {
 		log.Fatalf("Error during cleanup: %v", err)
@@ -898,6 +964,26 @@ func (s *TestBase) ClearTransferQueue() {
 
 	log.Infof("Deleted '%v' transfer tasks.", counter)
 	atomic.StoreInt64(&s.readLevel, 0)
+}
+
+// ClearReplicationQueue completes all tasks in replication queue
+func (s *TestBase) ClearReplicationQueue() {
+	log.Infof("Clearing replication tasks (RangeID: %v, ReadLevel: %v)",
+		s.ShardInfo.RangeID, s.GetReplicationReadLevel())
+	tasks, err := s.GetReplicationTasks(100)
+	if err != nil {
+		log.Fatalf("Error during cleanup: %v", err)
+	}
+
+	counter := 0
+	for _, t := range tasks {
+		log.Infof("Deleting replication task with ID: %v", t.TaskID)
+		s.CompleteReplicationTask(t.TaskID)
+		counter++
+	}
+
+	log.Infof("Deleted '%v' replication tasks.", counter)
+	atomic.StoreInt64(&s.replicationReadLevel, 0)
 }
 
 func (s *CassandraTestCluster) setupTestCluster(options TestBaseOptions) {

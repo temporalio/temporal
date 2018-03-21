@@ -61,6 +61,20 @@ func (_m *ExecutionManager) CompleteTransferTask(request *persistence.CompleteTr
 	return r0
 }
 
+// CompleteReplicationTask provides a mock function with given fields: request
+func (_m *ExecutionManager) CompleteReplicationTask(request *persistence.CompleteReplicationTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.CompleteReplicationTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateWorkflowExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)
@@ -136,6 +150,29 @@ func (_m *ExecutionManager) GetTransferTasks(request *persistence.GetTransferTas
 
 	var r1 error
 	if rf, ok := ret.Get(1).(func(*persistence.GetTransferTasksRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetReplicationTasks provides a mock function with given fields: request
+func (_m *ExecutionManager) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.GetReplicationTasksResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetReplicationTasksResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetReplicationTasksRequest) *persistence.GetReplicationTasksResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetReplicationTasksResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetReplicationTasksRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

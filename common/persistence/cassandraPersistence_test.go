@@ -64,7 +64,7 @@ func (s *cassandraPersistenceSuite) TearDownSuite() {
 func (s *cassandraPersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ClearTransferQueue()
+	s.ClearTasks()
 }
 
 func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
@@ -352,6 +352,7 @@ func (s *cassandraPersistenceSuite) TestGetCurrentWorkflow() {
 		WorkflowId: common.StringPtr("get-current-workflow-test"),
 		RunId:      common.StringPtr("6cae4054-6ba7-46d3-8755-e3c2db6f74ea"),
 	}
+
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
@@ -1309,7 +1310,7 @@ func (s *cassandraPersistenceSuite) TestReplicationTransferTaskTasks() {
 	s.NotNil(info1, "Valid Workflow info expected.")
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 
-	transferTasks := []Task{&ReplicationTask{
+	replicationTasks := []Task{&HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
@@ -1325,15 +1326,15 @@ func (s *cassandraPersistenceSuite) TestReplicationTransferTaskTasks() {
 			},
 		},
 	}}
-	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, int64(3), replicationTasks)
 	s.Nil(err, "No error expected.")
 
-	tasks1, err := s.GetTransferTasks(1)
+	tasks1, err := s.GetReplicationTasks(1)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
-	s.Equal(TransferTaskTypeReplicationTask, task1.TaskType)
+	s.Equal(ReplicationTaskTypeHistory, task1.TaskType)
 	s.Equal(domainID, task1.DomainID)
 	s.Equal(*workflowExecution.WorkflowId, task1.WorkflowID)
 	s.Equal(*workflowExecution.RunId, task1.RunID)
@@ -1367,7 +1368,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 		RunId:      common.StringPtr(runID),
 	}
 
-	replicationTasks := []Task{&ReplicationTask{
+	replicationTasks := []Task{&HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
@@ -1405,37 +1406,37 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
 	taskD, err := s.GetTransferTasks(2)
-	s.Equal(2, len(taskD), "Expected 1 decision task.")
-	for _, tsk := range taskD {
-		switch tsk.TaskType {
-		case TransferTaskTypeDecisionTask:
-			err = s.CompleteTransferTask(taskD[0].TaskID)
-			s.Nil(err)
-		case TransferTaskTypeReplicationTask:
-			s.Equal(domainID, tsk.DomainID)
-			s.Equal(*workflowExecution.WorkflowId, tsk.WorkflowID)
-			s.Equal(*workflowExecution.RunId, tsk.RunID)
-			s.Equal(int64(1), tsk.FirstEventID)
-			s.Equal(int64(3), tsk.NextEventID)
-			s.Equal(int64(9), tsk.Version)
-			s.Equal(2, len(tsk.LastReplicationInfo))
-			for k, v := range tsk.LastReplicationInfo {
-				log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
-				switch k {
-				case "dc1":
-					s.Equal(int64(3), v.Version)
-					s.Equal(int64(1), v.LastEventID)
-				case "dc2":
-					s.Equal(int64(5), v.Version)
-					s.Equal(int64(2), v.LastEventID)
-				default:
-					s.Fail("Unexpected key")
-				}
-			}
-			err = s.CompleteTransferTask(taskD[0].TaskID)
-			s.Nil(err)
+	s.Equal(1, len(taskD), "Expected 1 decision task.")
+	s.Equal(TransferTaskTypeDecisionTask, taskD[0].TaskType)
+	err = s.CompleteTransferTask(taskD[0].TaskID)
+	s.Nil(err)
+
+	taskR, err := s.GetReplicationTasks(1)
+	s.Equal(1, len(taskR), "Expected 1 replication task.")
+	tsk := taskR[0]
+	s.Equal(ReplicationTaskTypeHistory, tsk.TaskType)
+	s.Equal(domainID, tsk.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, tsk.WorkflowID)
+	s.Equal(*workflowExecution.RunId, tsk.RunID)
+	s.Equal(int64(1), tsk.FirstEventID)
+	s.Equal(int64(3), tsk.NextEventID)
+	s.Equal(int64(9), tsk.Version)
+	s.Equal(2, len(tsk.LastReplicationInfo))
+	for k, v := range tsk.LastReplicationInfo {
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		switch k {
+		case "dc1":
+			s.Equal(int64(3), v.Version)
+			s.Equal(int64(1), v.LastEventID)
+		case "dc2":
+			s.Equal(int64(5), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		default:
+			s.Fail("Unexpected key")
 		}
 	}
+	err = s.CompleteReplicationTask(taskR[0].TaskID)
+	s.Nil(err)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err1, "No error expected.")
@@ -1480,7 +1481,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	updatedReplicationState.LastReplicationInfo["dc1"].Version = int64(4)
 	updatedReplicationState.LastReplicationInfo["dc1"].LastEventID = int64(2)
 
-	replicationTasks1 := []Task{&ReplicationTask{
+	replicationTasks1 := []Task{&HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(3),
 		NextEventID:  int64(5),
@@ -1499,38 +1500,32 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, int64(3), replicationTasks1)
 	s.Nil(err2, "No error expected.")
 
-	taskD1, err := s.GetTransferTasks(2)
-	s.Equal(1, len(taskD1), "Expected 1 decision task.")
-	for _, tsk := range taskD1 {
-		switch tsk.TaskType {
-		case TransferTaskTypeDecisionTask:
-			err = s.CompleteTransferTask(taskD1[0].TaskID)
-			s.Nil(err)
-		case TransferTaskTypeReplicationTask:
-			s.Equal(domainID, tsk.DomainID)
-			s.Equal(*workflowExecution.WorkflowId, tsk.WorkflowID)
-			s.Equal(*workflowExecution.RunId, tsk.RunID)
-			s.Equal(int64(3), tsk.FirstEventID)
-			s.Equal(int64(5), tsk.NextEventID)
-			s.Equal(int64(10), tsk.Version)
-			s.Equal(2, len(tsk.LastReplicationInfo))
-			for k, v := range tsk.LastReplicationInfo {
-				log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
-				switch k {
-				case "dc1":
-					s.Equal(int64(4), v.Version)
-					s.Equal(int64(2), v.LastEventID)
-				case "dc2":
-					s.Equal(int64(5), v.Version)
-					s.Equal(int64(2), v.LastEventID)
-				default:
-					s.Fail("Unexpected key")
-				}
-			}
-			err = s.CompleteTransferTask(taskD1[0].TaskID)
-			s.Nil(err)
+	taskR1, err := s.GetReplicationTasks(1)
+	s.Equal(1, len(taskR1), "Expected 1 replication task.")
+	tsk1 := taskR1[0]
+	s.Equal(ReplicationTaskTypeHistory, tsk1.TaskType)
+	s.Equal(domainID, tsk1.DomainID)
+	s.Equal(*workflowExecution.WorkflowId, tsk1.WorkflowID)
+	s.Equal(*workflowExecution.RunId, tsk1.RunID)
+	s.Equal(int64(3), tsk1.FirstEventID)
+	s.Equal(int64(5), tsk1.NextEventID)
+	s.Equal(int64(10), tsk1.Version)
+	s.Equal(2, len(tsk1.LastReplicationInfo))
+	for k, v := range tsk1.LastReplicationInfo {
+		log.Infof("ReplicationInfo for %v: {Version: %v, LastEventID: %v}", k, v.Version, v.LastEventID)
+		switch k {
+		case "dc1":
+			s.Equal(int64(4), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		case "dc2":
+			s.Equal(int64(5), v.Version)
+			s.Equal(int64(2), v.LastEventID)
+		default:
+			s.Fail("Unexpected key")
 		}
 	}
+	err = s.CompleteReplicationTask(taskR1[0].TaskID)
+	s.Nil(err)
 
 	state1, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err2, "No error expected.")

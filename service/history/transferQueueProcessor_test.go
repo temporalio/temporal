@@ -83,7 +83,7 @@ func (s *transferQueueProcessorSuite) TearDownTest() {
 
 func (s *transferQueueProcessorSuite) SetupTest() {
 	// First cleanup transfer tasks from other tests and reset shard context
-	s.ClearTransferQueue()
+	s.ClearTasks()
 	s.ShardContext.Reset()
 
 	s.mockMatching = &mocks.MatchingClient{}

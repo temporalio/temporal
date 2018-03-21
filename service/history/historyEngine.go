@@ -255,6 +255,17 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		})
 	}
 
+	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	var replicationState *persistence.ReplicationState
+	if createReplicationTask {
+		replicationState = &persistence.ReplicationState{
+			CurrentVersion:   common.EmptyVersion,
+			StartVersion:     common.EmptyVersion,
+			LastWriteVersion: common.EmptyVersion,
+			LastWriteEventID: decisionScheduleID,
+		}
+	}
+
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
@@ -277,6 +288,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			TimerTasks:                  timerTasks,
 			ContinueAsNew:               !isBrandNew,
 			PreviousRunID:               prevRunID,
+			ReplicationState:            replicationState,
 		})
 
 		if err != nil {

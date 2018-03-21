@@ -70,12 +70,13 @@ type (
 		updateBufferedEvents *persistence.SerializedHistoryEventBatch   // buffered history events that needs to be persisted
 		clearBufferedEvents  bool                                       // delete buffered events from persistence
 
-		executionInfo   *persistence.WorkflowExecutionInfo // Workflow mutable state info.
-		continueAsNew   *persistence.CreateWorkflowExecutionRequest
-		hBuilder        *historyBuilder
-		eventSerializer historyEventSerializer
-		config          *Config
-		logger          bark.Logger
+		executionInfo    *persistence.WorkflowExecutionInfo // Workflow mutable state info.
+		replicationState *persistence.ReplicationState
+		continueAsNew    *persistence.CreateWorkflowExecutionRequest
+		hBuilder         *historyBuilder
+		eventSerializer  historyEventSerializer
+		config           *Config
+		logger           bark.Logger
 	}
 
 	mutableStateSessionUpdates struct {
@@ -95,6 +96,7 @@ type (
 		continueAsNew              *persistence.CreateWorkflowExecutionRequest
 		newBufferedEvents          *persistence.SerializedHistoryEventBatch
 		clearBufferedEvents        bool
+		replicationTask            persistence.Task
 	}
 
 	// TODO: This should be part of persistence layer
@@ -129,13 +131,13 @@ func newMutableStateBuilder(config *Config, logger bark.Logger) *mutableStateBui
 		config:                          config,
 		logger:                          logger,
 	}
-	s.hBuilder = newHistoryBuilder(s, logger)
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		NextEventID:        firstEventID,
 		State:              persistence.WorkflowStateCreated,
 		CloseStatus:        persistence.WorkflowCloseStatusNone,
 		LastProcessedEvent: emptyEventID,
 	}
+	s.hBuilder = newHistoryBuilder(s, logger)
 
 	return s
 }
@@ -148,6 +150,8 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.pendingSignalInfoIDs = state.SignalInfos
 	e.pendingSignalRequestedIDs = state.SignalRequestedIDs
 	e.executionInfo = state.ExecutionInfo
+
+	e.replicationState = state.ReplicationState
 	e.bufferedEvents = state.BufferedEvents
 	for _, ai := range state.ActivitInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
@@ -226,7 +230,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	return nil
 }
 
-func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates, error) {
+func (e *mutableStateBuilder) CloseUpdateSession(createReplicationTask bool) (*mutableStateSessionUpdates, error) {
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, err
 	}
@@ -248,6 +252,10 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 		continueAsNew:              e.continueAsNew,
 		newBufferedEvents:          e.updateBufferedEvents,
 		clearBufferedEvents:        e.clearBufferedEvents,
+	}
+
+	if createReplicationTask {
+		updates.replicationTask = e.createReplicationTask()
 	}
 
 	// Clear all updates to prepare for the next session
@@ -272,6 +280,15 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	}
 
 	return updates, nil
+}
+
+func (e *mutableStateBuilder) createReplicationTask() *persistence.HistoryReplicationTask {
+	return &persistence.HistoryReplicationTask{
+		FirstEventID:        e.hBuilder.firstEventID,
+		NextEventID:         e.hBuilder.nextEventID,
+		Version:             e.replicationState.CurrentVersion,
+		LastReplicationInfo: e.replicationState.LastReplicationInfo,
+	}
 }
 
 func getSignalRequestedIDs(signalReqIDs map[string]struct{}) []string {

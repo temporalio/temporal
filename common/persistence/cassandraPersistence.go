@@ -38,7 +38,7 @@ import (
 // Where x is any hexadecimal value, E represents the entity type valid values are:
 // E = {DomainID = 1, WorkflowID = 2, RunID = 3}
 // R represents row type in executions table, valid values are:
-// R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4}
+// R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
 	cassandraProtoVersion = 4
 	defaultSessionTimeout = 10 * time.Second
@@ -62,6 +62,10 @@ const (
 	rowTypeTimerDomainID   = "10000000-4000-f000-f000-000000000000"
 	rowTypeTimerWorkflowID = "20000000-4000-f000-f000-000000000000"
 	rowTypeTimerRunID      = "30000000-4000-f000-f000-000000000000"
+	// Row Constants for Replication Task Row
+	rowTypeReplicationDomainID   = "10000000-5000-f000-f000-000000000000"
+	rowTypeReplicationWorkflowID = "20000000-5000-f000-f000-000000000000"
+	rowTypeReplicationRunID      = "30000000-5000-f000-f000-000000000000"
 	// Special TaskId constants
 	rowTypeExecutionTaskID  = int64(-10)
 	rowTypeShardTaskID      = int64(-11)
@@ -80,6 +84,7 @@ const (
 	rowTypeExecution
 	rowTypeTransferTask
 	rowTypeTimerTask
+	rowTypeReplicationTask
 )
 
 const (
@@ -101,6 +106,7 @@ const (
 		`stolen_since_renew: ?, ` +
 		`updated_at: ?, ` +
 		`transfer_ack_level: ?, ` +
+		`replication_ack_level: ?, ` +
 		`timer_ack_level: ?` +
 		`}`
 
@@ -160,7 +166,15 @@ const (
 		`target_child_workflow_only: ?, ` +
 		`task_list: ?, ` +
 		`type: ?, ` +
-		`schedule_id: ?,` +
+		`schedule_id: ?` +
+		`}`
+
+	templateReplicationTaskType = `{` +
+		`domain_id: ?, ` +
+		`workflow_id: ?, ` +
+		`run_id: ?, ` +
+		`task_id: ?, ` +
+		`type: ?, ` +
 		`first_event_id: ?,` +
 		`next_event_id: ?,` +
 		`version: ?,` +
@@ -294,6 +308,10 @@ const (
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, transfer, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateTransferTaskType + `, ?, ?)`
+
+	templateCreateReplicationTaskQuery = `INSERT INTO executions (` +
+		`shard_id, type, domain_id, workflow_id, run_id, replication, visibility_ts, task_id) ` +
+		`VALUES(?, ?, ?, ?, ?, ` + templateReplicationTaskType + `, ?, ?)`
 
 	templateCreateTimerTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, timer, visibility_ts, task_id) ` +
@@ -519,6 +537,17 @@ const (
 		`and task_id > ? ` +
 		`and task_id <= ? LIMIT ?`
 
+	templateGetReplicationTasksQuery = `SELECT replication ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ? LIMIT ?`
+
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -613,15 +642,14 @@ const (
 )
 
 var (
-	defaultDateTime                  = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp       = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
-	emptyVersion               int64 = -24
-	emptyReplicationInfo             = map[string]*ReplicationInfo{}
-	emptyReplicationInfoMap          = map[string]map[string]interface{}{}
-	emptyReplicationState            = &ReplicationState{
-		CurrentVersion:      emptyVersion,
-		StartVersion:        emptyVersion,
-		LastWriteVersion:    emptyVersion,
+	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	defaultVisibilityTimestamp = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
+	emptyReplicationInfo       = map[string]*ReplicationInfo{}
+	emptyReplicationInfoMap    = map[string]map[string]interface{}{}
+	emptyReplicationState      = &ReplicationState{
+		CurrentVersion:      common.EmptyVersion,
+		StartVersion:        common.EmptyVersion,
+		LastWriteVersion:    common.EmptyVersion,
 		LastWriteEventID:    common.EmptyEventID,
 		LastReplicationInfo: emptyReplicationInfo,
 	}
@@ -700,6 +728,7 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 		shardInfo.StolenSinceRenew,
 		cqlNowTimestamp,
 		shardInfo.TransferAckLevel,
+		shardInfo.ReplicationAckLevel,
 		shardInfo.TimerAckLevel,
 		shardInfo.RangeID)
 
@@ -771,6 +800,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		shardInfo.StolenSinceRenew,
 		cqlNowTimestamp,
 		shardInfo.TransferAckLevel,
+		shardInfo.ReplicationAckLevel,
 		shardInfo.TimerAckLevel,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
@@ -820,7 +850,9 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 	d.CreateWorkflowExecutionWithinBatch(request, batch, cqlNowTimestamp)
 
 	d.createTransferTasks(batch, request.TransferTasks, request.DomainID, *request.Execution.WorkflowId,
-		*request.Execution.RunId, cqlNowTimestamp)
+		*request.Execution.RunId)
+	d.createReplicationTasks(batch, request.ReplicationTasks, request.DomainID, *request.Execution.WorkflowId,
+		*request.Execution.RunId)
 	d.createTimerTasks(batch, request.TimerTasks, nil, request.DomainID, *request.Execution.WorkflowId,
 		*request.Execution.RunId, cqlNowTimestamp)
 
@@ -1198,7 +1230,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		request.Condition)
 
 	d.createTransferTasks(batch, request.TransferTasks, executionInfo.DomainID, executionInfo.WorkflowID,
-		executionInfo.RunID, cqlNowTimestamp)
+		executionInfo.RunID)
+
+	d.createReplicationTasks(batch, request.ReplicationTasks, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID)
 
 	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask, request.ExecutionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
@@ -1228,7 +1263,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		startReq := request.ContinueAsNew
 		d.CreateWorkflowExecutionWithinBatch(startReq, batch, cqlNowTimestamp)
 		d.createTransferTasks(batch, startReq.TransferTasks, startReq.DomainID, startReq.Execution.GetWorkflowId(),
-			startReq.Execution.GetRunId(), cqlNowTimestamp)
+			startReq.Execution.GetRunId())
 		d.createTimerTasks(batch, startReq.TimerTasks, nil, startReq.DomainID, startReq.Execution.GetWorkflowId(),
 			startReq.Execution.GetRunId(), cqlNowTimestamp)
 	} else if request.FinishExecution {
@@ -1448,6 +1483,47 @@ func (d *cassandraPersistence) GetTransferTasks(request *GetTransferTasksRequest
 	return response, nil
 }
 
+func (d *cassandraPersistence) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse,
+	error) {
+
+	// Reading replication tasks need to be quorum level consistent, otherwise we could loose task
+	query := d.session.Query(templateGetReplicationTasksQuery,
+		d.shardID,
+		rowTypeReplicationTask,
+		rowTypeReplicationDomainID,
+		rowTypeReplicationWorkflowID,
+		rowTypeReplicationRunID,
+		defaultVisibilityTimestamp,
+		request.ReadLevel,
+		request.MaxReadLevel,
+		request.BatchSize)
+
+	iter := query.Iter()
+	if iter == nil {
+		return nil, &workflow.InternalServiceError{
+			Message: "GetReplicationTasks operation failed.  Not able to create query iterator.",
+		}
+	}
+
+	response := &GetReplicationTasksResponse{}
+	task := make(map[string]interface{})
+	for iter.MapScan(task) {
+		t := createReplicationTaskInfo(task["replication"].(map[string]interface{}))
+		// Reset task map to get it ready for next scan
+		task = make(map[string]interface{})
+
+		response.Tasks = append(response.Tasks, t)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetReplicationTasks operation failed. Error: %v", err),
+		}
+	}
+
+	return response, nil
+}
+
 func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
@@ -1467,6 +1543,31 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
+	query := d.session.Query(templateCompleteTransferTaskQuery,
+		d.shardID,
+		rowTypeReplicationTask,
+		rowTypeReplicationDomainID,
+		rowTypeReplicationWorkflowID,
+		rowTypeReplicationRunID,
+		defaultVisibilityTimestamp,
+		request.TaskID)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err),
 		}
 	}
 
@@ -1855,7 +1956,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 }
 
 func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferTasks []Task, domainID, workflowID,
-	runID string, cqlNowTimestamp int64) {
+	runID string) {
 	targetDomainID := domainID
 	for _, task := range transferTasks {
 		var taskList string
@@ -1863,11 +1964,6 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 		targetWorkflowID := transferTaskTransferTargetWorkflowID
 		targetRunID := transferTaskTypeTransferTargetRunID
 		targetChildWorkflowOnly := false
-		// Replication transfer task specific information
-		firstEventID := common.EmptyEventID
-		nextEventID := common.EmptyEventID
-		version := int64(0)
-		var lastReplicationInfo map[string]map[string]interface{}
 
 		switch task.GetType() {
 		case TransferTaskTypeActivityTask:
@@ -1905,14 +2001,11 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			targetWorkflowID = task.(*StartChildExecutionTask).TargetWorkflowID
 			scheduleID = task.(*StartChildExecutionTask).InitiatedID
 
-		case TransferTaskTypeReplicationTask:
-			firstEventID = task.(*ReplicationTask).FirstEventID
-			nextEventID = task.(*ReplicationTask).NextEventID
-			version = task.(*ReplicationTask).Version
-			lastReplicationInfo = make(map[string]map[string]interface{})
-			for k, v := range task.(*ReplicationTask).LastReplicationInfo {
-				lastReplicationInfo[k] = createReplicationInfoMap(v)
-			}
+		case TransferTaskTypeCloseExecution:
+			// No explicit property needs to be set
+
+		default:
+			d.logger.Fatal("Unknown Transfer Task.")
 		}
 
 		batch.Query(templateCreateTransferTaskQuery,
@@ -1932,6 +2025,46 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			taskList,
 			task.GetType(),
 			scheduleID,
+			defaultVisibilityTimestamp,
+			task.GetTaskID())
+	}
+}
+
+func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replicationTasks []Task, domainID, workflowID,
+	runID string) {
+
+	for _, task := range replicationTasks {
+		// Replication task specific information
+		firstEventID := common.EmptyEventID
+		nextEventID := common.EmptyEventID
+		version := int64(0)
+		var lastReplicationInfo map[string]map[string]interface{}
+
+		switch task.GetType() {
+		case ReplicationTaskTypeHistory:
+			firstEventID = task.(*HistoryReplicationTask).FirstEventID
+			nextEventID = task.(*HistoryReplicationTask).NextEventID
+			version = task.(*HistoryReplicationTask).Version
+			lastReplicationInfo = make(map[string]map[string]interface{})
+			for k, v := range task.(*HistoryReplicationTask).LastReplicationInfo {
+				lastReplicationInfo[k] = createReplicationInfoMap(v)
+			}
+
+		default:
+			d.logger.Fatal("Unknown Replication Task.")
+		}
+
+		batch.Query(templateCreateReplicationTaskQuery,
+			d.shardID,
+			rowTypeReplicationTask,
+			rowTypeReplicationDomainID,
+			rowTypeReplicationWorkflowID,
+			rowTypeReplicationRunID,
+			domainID,
+			workflowID,
+			runID,
+			task.GetTaskID(),
+			task.GetType(),
 			firstEventID,
 			nextEventID,
 			version,
@@ -2261,6 +2394,8 @@ func createShardInfo(result map[string]interface{}) *ShardInfo {
 			info.UpdatedAt = v.(time.Time)
 		case "transfer_ack_level":
 			info.TransferAckLevel = v.(int64)
+		case "replication_ack_level":
+			info.ReplicationAckLevel = v.(int64)
 		case "timer_ack_level":
 			info.TimerAckLevel = v.(time.Time)
 		}
@@ -2400,6 +2535,26 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.TaskType = v.(int)
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
+		}
+	}
+
+	return info
+}
+
+func createReplicationTaskInfo(result map[string]interface{}) *ReplicationTaskInfo {
+	info := &ReplicationTaskInfo{}
+	for k, v := range result {
+		switch k {
+		case "domain_id":
+			info.DomainID = v.(gocql.UUID).String()
+		case "workflow_id":
+			info.WorkflowID = v.(string)
+		case "run_id":
+			info.RunID = v.(gocql.UUID).String()
+		case "task_id":
+			info.TaskID = v.(int64)
+		case "type":
+			info.TaskType = v.(int)
 		case "first_event_id":
 			info.FirstEventID = v.(int64)
 		case "next_event_id":

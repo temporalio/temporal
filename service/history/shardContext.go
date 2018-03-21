@@ -35,11 +35,13 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/service"
 )
 
 type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
+		GetService() service.Service
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
 		GetDomainCache() cache.DomainCache
@@ -63,6 +65,7 @@ type (
 
 	shardContextImpl struct {
 		shardID          int
+		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
 		historyMgr       persistence.HistoryManager
@@ -83,6 +86,10 @@ type (
 )
 
 var _ ShardContext = (*shardContextImpl)(nil)
+
+func (s *shardContextImpl) GetService() service.Service {
+	return s.service
+}
 
 func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
@@ -452,9 +459,10 @@ func (s *shardContextImpl) GetTimeSource() common.TimeSource {
 }
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
-func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr persistence.HistoryManager,
-	executionMgr persistence.ExecutionManager, domainCache cache.DomainCache, owner string, closeCh chan<- int, config *Config,
-	logger bark.Logger, metricsClient metrics.Client) (ShardContext, error) {
+func acquireShard(shardID int, svc service.Service, shardManager persistence.ShardManager,
+	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager, domainCache cache.DomainCache,
+	owner string, closeCh chan<- int, config *Config, logger bark.Logger, metricsClient metrics.Client) (ShardContext,
+	error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
 		return nil, err0
@@ -466,6 +474,7 @@ func acquireShard(shardID int, shardManager persistence.ShardManager, historyMgr
 
 	context := &shardContextImpl{
 		shardID:          shardID,
+		service:          svc,
 		shardManager:     shardManager,
 		historyMgr:       historyMgr,
 		executionManager: executionMgr,

@@ -73,7 +73,12 @@ const (
 	TransferTaskTypeCancelExecution
 	TransferTaskTypeStartChildExecution
 	TransferTaskTypeSignalExecution
-	TransferTaskTypeReplicationTask
+)
+
+// Types of replication tasks
+const (
+	ReplicationTaskTypeHistory = iota
+	ReplicationTaskTypeHeartbeat
 )
 
 // Types of timers
@@ -118,13 +123,14 @@ type (
 
 	// ShardInfo describes a shard
 	ShardInfo struct {
-		ShardID          int
-		Owner            string
-		RangeID          int64
-		StolenSinceRenew int
-		UpdatedAt        time.Time
-		TransferAckLevel int64
-		TimerAckLevel    time.Time
+		ShardID             int
+		Owner               string
+		RangeID             int64
+		StolenSinceRenew    int
+		UpdatedAt           time.Time
+		TransferAckLevel    int64
+		ReplicationAckLevel int64
+		TimerAckLevel       time.Time
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
@@ -188,10 +194,19 @@ type (
 		TaskList                string
 		TaskType                int
 		ScheduleID              int64
-		FirstEventID            int64
-		NextEventID             int64
-		Version                 int64
-		LastReplicationInfo     map[string]*ReplicationInfo
+	}
+
+	// ReplicationTaskInfo describes the replication task created for replication of history events
+	ReplicationTaskInfo struct {
+		DomainID            string
+		WorkflowID          string
+		RunID               string
+		TaskID              int64
+		TaskType            int
+		FirstEventID        int64
+		NextEventID         int64
+		Version             int64
+		LastReplicationInfo map[string]*ReplicationInfo
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -319,8 +334,8 @@ type (
 		EventID             int64
 	}
 
-	// ReplicationTask is the transfer task created for shipping history replication events to other clusters
-	ReplicationTask struct {
+	// HistoryReplicationTask is the transfer task created for shipping history replication events to other clusters
+	HistoryReplicationTask struct {
 		TaskID              int64
 		FirstEventID        int64
 		NextEventID         int64
@@ -437,6 +452,7 @@ type (
 		NextEventID                 int64
 		LastProcessedEvent          int64
 		TransferTasks               []Task
+		ReplicationTasks            []Task
 		TimerTasks                  []Task
 		RangeID                     int64
 		DecisionScheduleID          int64
@@ -444,7 +460,6 @@ type (
 		DecisionStartToCloseTimeout int32
 		ContinueAsNew               bool
 		PreviousRunID               string
-		ExecutionInfo               *WorkflowExecutionInfo
 		ReplicationState            *ReplicationState
 	}
 
@@ -484,6 +499,7 @@ type (
 		ReplicationState     *ReplicationState
 		TransferTasks        []Task
 		TimerTasks           []Task
+		ReplicationTasks     []Task
 		DeleteTimerTask      Task
 		Condition            int64
 		RangeID              int64
@@ -527,8 +543,25 @@ type (
 		Tasks []*TransferTaskInfo
 	}
 
+	// GetReplicationTasksRequest is used to read tasks from the replication task queue
+	GetReplicationTasksRequest struct {
+		ReadLevel    int64
+		MaxReadLevel int64
+		BatchSize    int
+	}
+
+	// GetReplicationTasksResponse is the response to GetReplicationTask
+	GetReplicationTasksResponse struct {
+		Tasks []*ReplicationTaskInfo
+	}
+
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
 	CompleteTransferTaskRequest struct {
+		TaskID int64
+	}
+
+	// CompleteReplicationTaskRequest is used to complete a task in the replication task queue
+	CompleteReplicationTaskRequest struct {
 		TaskID int64
 	}
 
@@ -767,6 +800,10 @@ type (
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
+
+		// Replication task related methods
+		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
+		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
@@ -1036,17 +1073,17 @@ func (u *StartChildExecutionTask) SetTaskID(id int64) {
 }
 
 // GetType returns the type of the activity task
-func (a *ReplicationTask) GetType() int {
-	return TransferTaskTypeReplicationTask
+func (a *HistoryReplicationTask) GetType() int {
+	return ReplicationTaskTypeHistory
 }
 
 // GetTaskID returns the sequence ID of the activity task
-func (a *ReplicationTask) GetTaskID() int64 {
+func (a *HistoryReplicationTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
 // SetTaskID sets the sequence ID of the activity task
-func (a *ReplicationTask) SetTaskID(id int64) {
+func (a *HistoryReplicationTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 

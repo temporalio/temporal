@@ -113,11 +113,13 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	updatedOwner := "updatedOwner"
 	updatedRangeID := int64(142)
 	updatedTransferAckLevel := int64(1000)
+	updatedReplicationAckLevel := int64(2000)
 	updatedStolenSinceRenew := 10
 	updatedInfo := copyShardInfo(shardInfo)
 	updatedInfo.Owner = updatedOwner
 	updatedInfo.RangeID = updatedRangeID
 	updatedInfo.TransferAckLevel = updatedTransferAckLevel
+	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
 	updatedTimerAckLevel := time.Now()
 	updatedInfo.TimerAckLevel = updatedTimerAckLevel
@@ -130,11 +132,14 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedOwner, info1.Owner)
 	s.Equal(updatedRangeID, info1.RangeID)
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
+	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
 	s.Equal(updatedTimerAckLevel.Unix(), info1.TimerAckLevel.Unix())
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
 	failedUpdateInfo.Owner = "failed_owner"
+	failedUpdateInfo.TransferAckLevel = int64(4000)
+	failedUpdateInfo.ReplicationAckLevel = int64(5000)
 	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.RangeID)
 	s.NotNil(err4)
 	s.IsType(&ShardOwnershipLostError{}, err4)
@@ -146,17 +151,19 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedOwner, info2.Owner)
 	s.Equal(updatedRangeID, info2.RangeID)
 	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
+	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
 	s.Equal(updatedTimerAckLevel.Unix(), info1.TimerAckLevel.Unix())
 }
 
 func copyShardInfo(sourceInfo *ShardInfo) *ShardInfo {
 	return &ShardInfo{
-		ShardID:          sourceInfo.ShardID,
-		Owner:            sourceInfo.Owner,
-		RangeID:          sourceInfo.RangeID,
-		TransferAckLevel: sourceInfo.TransferAckLevel,
-		StolenSinceRenew: sourceInfo.StolenSinceRenew,
-		TimerAckLevel:    sourceInfo.TimerAckLevel,
+		ShardID:             sourceInfo.ShardID,
+		Owner:               sourceInfo.Owner,
+		RangeID:             sourceInfo.RangeID,
+		TransferAckLevel:    sourceInfo.TransferAckLevel,
+		ReplicationAckLevel: sourceInfo.ReplicationAckLevel,
+		StolenSinceRenew:    sourceInfo.StolenSinceRenew,
+		TimerAckLevel:       sourceInfo.TimerAckLevel,
 	}
 }

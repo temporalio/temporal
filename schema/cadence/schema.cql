@@ -1,14 +1,15 @@
 CREATE TYPE shard (
-  shard_id            int,
-  owner               text, -- Host identifier processing the shard
+  shard_id              int,
+  owner                 text, -- Host identifier processing the shard
   -- Range identifier used for generating ack ids for tasks within shard.
   -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
-  range_id            bigint,
+  range_id              bigint,
   -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
-  stolen_since_renew  int,
-  updated_at          timestamp,
-  transfer_ack_level  bigint,
-  timer_ack_level     timestamp,
+  stolen_since_renew    int,
+  updated_at            timestamp,
+  transfer_ack_level    bigint,
+  replication_ack_level bigint,
+  timer_ack_level       timestamp,
 );
 
 --- Workflow execution and mutable state ---
@@ -77,6 +78,14 @@ CREATE TYPE transfer_task (
   task_list                  text,
   type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution, ReplicationTask}
   schedule_id                bigint,
+);
+
+CREATE TYPE replication_task (
+  domain_id                  uuid,   -- The domain ID that this replication task belongs to
+  workflow_id                text,   -- The workflow ID that this replication task belongs to
+  run_id                     uuid,   -- The run ID that this replication task belongs to
+  task_id                    bigint,
+  type                       int,    -- enum TaskType {History, Heartbeat}
   first_event_id             bigint,  -- Used by ReplicationTask to set the first event ID of the applied transaction
   next_event_id              bigint,  -- Used by ReplicationTask to set the next event ID of the applied transaction
   version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
@@ -194,7 +203,7 @@ CREATE TYPE serialized_event_batch (
 
 CREATE TABLE executions (
   shard_id             int,
-  type                 int, -- enum RowType { Shard, Execution, TransferTask, TimerTask}
+  type                 int, -- enum RowType { Shard, Execution, TransferTask, TimerTask, ReplicationTask}
   domain_id            uuid,
   workflow_id          text,
   run_id               uuid,
@@ -204,6 +213,7 @@ CREATE TABLE executions (
   shard                frozen<shard>,
   execution            frozen<workflow_execution>,
   transfer             frozen<transfer_task>,
+  replication          frozen<replication_task>,
   timer                frozen<timer_task>,
   next_event_id        bigint,  -- This is needed to make conditional updates on session history
   range_id             bigint, -- Increasing sequence identifier for transfer queue, checkpointed into shard info
