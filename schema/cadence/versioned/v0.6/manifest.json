@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.6",
   "MinCompatibleVersion": "0.6",
-  "Description": "Persistence support for replication of workflow execution",
+  "Description": "Persistence support for replication of workflow execution, add cross DC shard attr cluster_transfer_ack_level and cluster_timer_ack_level",
   "SchemaUpdateCqlFiles": [
-    "history_replication_task.cql"
+    "history_replication_task.cql",
+    "add_shard_cluster_ack_level.cql"
   ]
 }

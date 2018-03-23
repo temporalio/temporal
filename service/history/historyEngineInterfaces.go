@@ -87,7 +87,7 @@ type (
 
 	timerQueueProcessor interface {
 		common.Daemon
-		NotifyNewTimer(timerTask []persistence.Task)
+		NotifyNewTimers(timerTask []persistence.Task)
 	}
 
 	historyEventNotifier interface {

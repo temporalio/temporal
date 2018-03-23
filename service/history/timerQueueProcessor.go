@@ -129,7 +129,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimer - Notify the processor about the new timer arrival.
 // This should be called each time new timer created, otherwise timer maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimer(timerTasks []persistence.Task) {
+func (t *timerQueueProcessorImpl) NotifyNewTimers(timerTasks []persistence.Task) {
 	if len(timerTasks) == 0 {
 		return
 	}
@@ -453,7 +453,7 @@ Update_History_Loop:
 					// Update the task ID tracking the corresponding timer task.
 					ti.TaskID = nextTask.GetTaskID()
 					msBuilder.UpdateUserTimer(ti.TimerID, ti)
-					defer t.NotifyNewTimer(timerTasks)
+					defer t.NotifyNewTimers(timerTasks)
 				}
 
 				// Done!
@@ -614,7 +614,7 @@ Update_History_Loop:
 				}
 			}
 
-			t.NotifyNewTimer(timerTasks)
+			t.NotifyNewTimers(timerTasks)
 			return nil
 		}
 
@@ -816,7 +816,7 @@ func (t *timerQueueProcessorImpl) updateWorkflowExecution(
 			t.Stop()
 		}
 	}
-	t.NotifyNewTimer(timerTasks)
+	t.NotifyNewTimers(timerTasks)
 	return err
 }
 

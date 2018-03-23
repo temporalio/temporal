@@ -105,9 +105,11 @@ const (
 		`range_id: ?, ` +
 		`stolen_since_renew: ?, ` +
 		`updated_at: ?, ` +
-		`transfer_ack_level: ?, ` +
 		`replication_ack_level: ?, ` +
-		`timer_ack_level: ?` +
+		`transfer_ack_level: ?, ` +
+		`timer_ack_level: ?, ` +
+		`cluster_transfer_ack_level: ?, ` +
+		`cluster_timer_ack_level: ?` +
 		`}`
 
 	templateWorkflowExecutionType = `{` +
@@ -663,15 +665,16 @@ var (
 
 type (
 	cassandraPersistence struct {
-		session *gocql.Session
-		shardID int
-		logger  bark.Logger
+		session            *gocql.Session
+		shardID            int
+		currentClusterName string
+		logger             bark.Logger
 	}
 )
 
 // NewCassandraShardPersistence is used to create an instance of ShardManager implementation
 func NewCassandraShardPersistence(hosts string, port int, user, password, dc string, keyspace string,
-	logger bark.Logger) (ShardManager, error) {
+	currentClusterName string, logger bark.Logger) (ShardManager, error) {
 	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -684,7 +687,7 @@ func NewCassandraShardPersistence(hosts string, port int, user, password, dc str
 		return nil, err
 	}
 
-	return &cassandraPersistence{shardID: -1, session: session, logger: logger}, nil
+	return &cassandraPersistence{shardID: -1, session: session, currentClusterName: currentClusterName, logger: logger}, nil
 }
 
 // NewCassandraWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
@@ -733,9 +736,11 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 		shardInfo.RangeID,
 		shardInfo.StolenSinceRenew,
 		cqlNowTimestamp,
-		shardInfo.TransferAckLevel,
 		shardInfo.ReplicationAckLevel,
+		shardInfo.TransferAckLevel,
 		shardInfo.TimerAckLevel,
+		shardInfo.ClusterTransferAckLevel,
+		shardInfo.ClusterTimerAckLevel,
 		shardInfo.RangeID)
 
 	previous := make(map[string]interface{})
@@ -790,7 +795,7 @@ func (d *cassandraPersistence) GetShard(request *GetShardRequest) (*GetShardResp
 		}
 	}
 
-	info := createShardInfo(result["shard"].(map[string]interface{}))
+	info := createShardInfo(d.currentClusterName, result["shard"].(map[string]interface{}))
 
 	return &GetShardResponse{ShardInfo: info}, nil
 }
@@ -805,9 +810,11 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		shardInfo.RangeID,
 		shardInfo.StolenSinceRenew,
 		cqlNowTimestamp,
-		shardInfo.TransferAckLevel,
 		shardInfo.ReplicationAckLevel,
+		shardInfo.TransferAckLevel,
 		shardInfo.TimerAckLevel,
+		shardInfo.ClusterTransferAckLevel,
+		shardInfo.ClusterTimerAckLevel,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -2030,6 +2037,9 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 
 		response.Timers = append(response.Timers, t)
 	}
+	nextPageToken := iter.PageState()
+	response.NextPageToken = make([]byte, len(nextPageToken))
+	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
 		if isThrottlingError(err) {
@@ -2468,7 +2478,7 @@ func (d *cassandraPersistence) updateBufferedEvents(batch *gocql.Batch, newBuffe
 	}
 }
 
-func createShardInfo(result map[string]interface{}) *ShardInfo {
+func createShardInfo(currentCluster string, result map[string]interface{}) *ShardInfo {
 	info := &ShardInfo{}
 	for k, v := range result {
 		switch k {
@@ -2482,12 +2492,27 @@ func createShardInfo(result map[string]interface{}) *ShardInfo {
 			info.StolenSinceRenew = v.(int)
 		case "updated_at":
 			info.UpdatedAt = v.(time.Time)
-		case "transfer_ack_level":
-			info.TransferAckLevel = v.(int64)
 		case "replication_ack_level":
 			info.ReplicationAckLevel = v.(int64)
+		case "transfer_ack_level":
+			info.TransferAckLevel = v.(int64)
 		case "timer_ack_level":
 			info.TimerAckLevel = v.(time.Time)
+		case "cluster_transfer_ack_level":
+			info.ClusterTransferAckLevel = v.(map[string]int64)
+		case "cluster_timer_ack_level":
+			info.ClusterTimerAckLevel = v.(map[string]time.Time)
+		}
+	}
+
+	if info.ClusterTransferAckLevel == nil {
+		info.ClusterTransferAckLevel = map[string]int64{
+			currentCluster: info.TransferAckLevel,
+		}
+	}
+	if info.ClusterTimerAckLevel == nil {
+		info.ClusterTimerAckLevel = map[string]time.Time{
+			currentCluster: info.TimerAckLevel,
 		}
 	}
 

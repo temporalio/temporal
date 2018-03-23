@@ -200,7 +200,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
-	processor.NotifyNewTimer([]persistence.Task{&persistence.DecisionTimeoutTask{
+	processor.NotifyNewTimers([]persistence.Task{&persistence.DecisionTimeoutTask{
 		VisibilityTimestamp: timerTask.VisibilityTimestamp,
 		EventID:             timerTask.EventID,
 	}})
@@ -262,7 +262,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	<-waitCh
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil)
-	processor.NotifyNewTimer([]persistence.Task{&persistence.WorkflowTimeoutTask{
+	processor.NotifyNewTimers([]persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: timerTask.VisibilityTimestamp,
 	}})
 

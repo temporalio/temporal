@@ -123,14 +123,16 @@ type (
 
 	// ShardInfo describes a shard
 	ShardInfo struct {
-		ShardID             int
-		Owner               string
-		RangeID             int64
-		StolenSinceRenew    int
-		UpdatedAt           time.Time
-		TransferAckLevel    int64
-		ReplicationAckLevel int64
-		TimerAckLevel       time.Time
+		ShardID                 int
+		Owner                   string
+		RangeID                 int64
+		StolenSinceRenew        int
+		UpdatedAt               time.Time
+		ReplicationAckLevel     int64
+		TransferAckLevel        int64     // TO BE DEPRECATED IN FAVOR OF ClusterTransferAckLevel
+		TimerAckLevel           time.Time // TO BE DEPRECATED IN FAVOR OF ClusteerTimerAckLevel
+		ClusterTransferAckLevel map[string]int64
+		ClusterTimerAckLevel    map[string]time.Time
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
@@ -642,7 +644,8 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers []*TimerTaskInfo
+		Timers        []*TimerTaskInfo
+		NextPageToken []byte
 	}
 
 	// SerializedHistoryEventBatch represents a serialized batch of history events

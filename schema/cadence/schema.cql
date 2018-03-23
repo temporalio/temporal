@@ -1,15 +1,19 @@
 CREATE TYPE shard (
-  shard_id              int,
-  owner                 text, -- Host identifier processing the shard
+  shard_id                   int,
+  owner                      text, -- Host identifier processing the shard
   -- Range identifier used for generating ack ids for tasks within shard.
   -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
-  range_id              bigint,
+  range_id                   bigint,
   -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
-  stolen_since_renew    int,
-  updated_at            timestamp,
-  transfer_ack_level    bigint,
-  replication_ack_level bigint,
-  timer_ack_level       timestamp,
+  stolen_since_renew         int,
+  updated_at                 timestamp,
+  replication_ack_level      bigint,
+  transfer_ack_level         bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
+  timer_ack_level            timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
+  -- Mapping of cluster to corresponding transfer ack level
+  cluster_transfer_ack_level map<text, bigint>,
+  -- Mapping of cluster to corresponding timer ack level
+  cluster_timer_ack_level    map<text, timestamp>,
 );
 
 --- Workflow execution and mutable state ---

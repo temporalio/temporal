@@ -1123,7 +1123,7 @@ Update_History_Loop:
 			return err
 		}
 
-		t.historyService.timerProcessor.NotifyNewTimer(timerTasks)
+		t.historyService.timerProcessor.NotifyNewTimers(timerTasks)
 
 		return nil
 	}

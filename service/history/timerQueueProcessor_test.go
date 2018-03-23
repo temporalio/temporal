@@ -44,7 +44,9 @@ type (
 		suite.Suite
 		TestBase
 		engineImpl       *historyEngineImpl
+		domainCache      cache.DomainCache
 		mockShardManager *mocks.ShardManager
+		clusterMetadata  cluster.Metadata
 		shardClosedCh    chan int
 		logger           bark.Logger
 
@@ -73,18 +75,21 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	historyCache.disabled = true
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
+	s.clusterMetadata = cluster.GetTestClusterMetadata(false, false)
+	s.domainCache = cache.NewDomainCache(s.mockMetadataMgr, s.clusterMetadata, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,
-		domainCache:        domainCache,
+		domainCache:        s.domainCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.engineImpl.txProcessor = newTransferQueueProcessor(s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{})
+	s.engineImpl.txProcessor = newTransferQueueProcessor(
+		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{},
+	)
 
 }
 
@@ -244,17 +249,18 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 	identity := "testIdentity"
 	_, tt := s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{1})
 
-	timerInfo, err := s.GetTimerIndexTasks()
+	timerInfo, nextToken, err := s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(timerInfo, "Expected non empty timers list")
+	s.Equal(0, len(nextToken))
 	s.Equal(1, len(timerInfo))
 
 	processor := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
-	processor.NotifyNewTimer(tt)
+	processor.NotifyNewTimers(tt)
 
 	for {
-		timerInfo, err := s.GetTimerIndexTasks()
+		timerInfo, _, err := s.GetTimerIndexTasks()
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
 			processor.Stop()
@@ -263,9 +269,10 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	timerInfo, err = s.GetTimerIndexTasks()
+	timerInfo, nextToken, err = s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
+	s.Equal(0, len(nextToken))
 }
 
 func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
@@ -277,18 +284,19 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	identity := "testIdentity"
 	_, tt := s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{1, 2, 3})
 
-	timerInfo, err := s.GetTimerIndexTasks()
+	timerInfo, nextToken, err := s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(timerInfo, "Expected non empty timers list")
 	s.Equal(1, len(timerInfo))
+	s.Equal(0, len(nextToken))
 
 	processor := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
-	processor.NotifyNewTimer(tt)
+	processor.NotifyNewTimers(tt)
 
 	for {
-		timerInfo, err := s.GetTimerIndexTasks()
+		timerInfo, _, err := s.GetTimerIndexTasks()
 		s.logger.Infof("TestManyTimerTasks: GetTimerIndexTasks: Response Count: %d \n", len(timerInfo))
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
@@ -298,9 +306,10 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 		time.Sleep(1000 * time.Millisecond)
 	}
 
-	timerInfo, err = s.GetTimerIndexTasks()
+	timerInfo, nextToken, err = s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
+	s.Equal(0, len(nextToken))
 
 	s.Equal(uint64(3), processor.timerFiredCount)
 }
@@ -315,29 +324,31 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, identity, []int32{})
 
-	timerInfo, err := s.GetTimerIndexTasks()
+	timerInfo, nextToken, err := s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.Empty(timerInfo, "Expected empty timers list")
+	s.Equal(0, len(nextToken))
 
 	processor := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := s.addDecisionTimer(domainID, workflowExecution, tBuilder)
-	processor.NotifyNewTimer(tt)
+	processor.NotifyNewTimers(tt)
 
 	s.waitForTimerTasksToProcess(processor)
 
-	timerInfo, err = s.GetTimerIndexTasks()
+	timerInfo, nextToken, err = s.GetTimerIndexTasks()
 	s.Nil(err, "No error expected.")
 	s.Equal(0, len(timerInfo))
+	s.Equal(0, len(nextToken))
 
 	s.Equal(uint64(1), processor.timerFiredCount)
 }
 
 func (s *timerQueueProcessorSuite) waitForTimerTasksToProcess(p timerQueueProcessor) {
 	for i := 0; i < 10; i++ {
-		timerInfo, err := s.GetTimerIndexTasks()
+		timerInfo, _, err := s.GetTimerIndexTasks()
 		s.Nil(err, "No error expected.")
 		if len(timerInfo) == 0 {
 			p.Stop()
@@ -420,7 +431,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	processor.NotifyNewTimer(timerTasks)
+	processor.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
@@ -463,7 +474,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -505,7 +516,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	processor.NotifyNewTimer(timerTasks)
+	processor.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.timerFiredCount)
@@ -547,7 +558,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -593,7 +604,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -634,7 +645,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -677,7 +688,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -724,7 +735,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
@@ -748,7 +759,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	ase, timerTasks := s.addHeartBeatTimer(domainID, workflowExecution, tBuilder)
 
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
 	running := s.checkTimedOutEventFor(domainID, workflowExecution, *ase.EventId)
@@ -770,7 +781,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	timerID := "tid1"
 	timerTasks := s.addUserTimer(domainID, workflowExecution, timerID, tBuilder)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.timerFiredCount)
 	running := s.checkTimedOutEventForUserTimer(domainID, workflowExecution, timerID)
@@ -811,7 +822,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	timerTasks = append(timerTasks, t)
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimer(timerTasks)
+	p.NotifyNewTimers(timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(len(timerTasks)), p.timerFiredCount)
@@ -823,7 +834,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 
 func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
-	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("closed-workflow-test"),
+	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("closed-workflow-test-desicion-timer"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
 	taskList := "closed-workflow-queue"
@@ -846,7 +857,7 @@ func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	// close workflow
 	s.closeWorkflow(domainID, workflowExecution)
 
-	p.NotifyNewTimer(tt)
+	p.NotifyNewTimers(tt)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(3), p.timerFiredCount)
 

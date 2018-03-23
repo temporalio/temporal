@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/cluster"
 )
 
 type (
@@ -110,12 +111,12 @@ func (m *metadataPersistenceSuite) TestCreateDomain() {
 	m.Equal(owner, resp1.Info.OwnerEmail)
 	m.Equal(retention, resp1.Config.Retention)
 	m.Equal(emitMetric, resp1.Config.EmitMetric)
-	m.Equal(testCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
+	m.Equal(cluster.TestCurrentClusterName, resp1.ReplicationConfig.ActiveClusterName)
 	m.Equal(1, len(resp1.ReplicationConfig.Clusters))
 	m.Equal(isGlobalDomain, resp1.IsGlobalDomain)
 	m.Equal(configVersion, resp1.ConfigVersion)
 	m.Equal(failoverVersion, resp1.FailoverVersion)
-	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == testCurrentClusterName)
+	m.True(resp1.ReplicationConfig.Clusters[0].ClusterName == cluster.TestCurrentClusterName)
 	m.Equal(int64(0), resp1.DBVersion)
 
 	resp2, err2 := m.CreateDomain(

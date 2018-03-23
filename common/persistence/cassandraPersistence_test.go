@@ -32,6 +32,7 @@ import (
 
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 )
 
 type (
@@ -872,9 +873,10 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks, err1 := s.GetTimerIndexTasks()
+	timerTasks, nextToken, err1 := s.GetTimerIndexTasks()
 	s.Nil(err1, "No error expected.")
 	s.NotNil(timerTasks, "expected valid list of tasks.")
+	s.Equal(0, len(nextToken))
 	s.Equal(3, len(timerTasks))
 	s.Equal(TaskTypeWorkflowTimeout, timerTasks[1].TaskType)
 	s.Equal(TaskTypeDeleteHistoryEvent, timerTasks[2].TaskType)
@@ -889,9 +891,10 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 = s.CompleteTimerTask(timerTasks[2].VisibilityTimestamp, timerTasks[2].TaskID)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks2, err2 := s.GetTimerIndexTasks()
+	timerTasks2, nextToken, err2 := s.GetTimerIndexTasks()
 	s.Nil(err2, "No error expected.")
 	s.Empty(timerTasks2, "expected empty task list.")
+	s.Equal(0, len(nextToken))
 }
 
 func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {
@@ -1585,6 +1588,122 @@ func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecu
 		DecisionRequestID:    sourceInfo.DecisionRequestID,
 		DecisionTimeout:      sourceInfo.DecisionTimeout,
 	}
+}
+
+func (s *cassandraPersistenceSuite) TestCreateGetShard_Backfill() {
+	shardID := 4
+	rangeID := int64(59)
+
+	// test create && get
+	currentReplicationAck := int64(27)
+	currentClusterTransferAck := int64(21)
+	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
+	shardInfo := &ShardInfo{
+		ShardID:             shardID,
+		Owner:               "some random owner",
+		RangeID:             rangeID,
+		StolenSinceRenew:    12,
+		UpdatedAt:           timestampConvertor(time.Now()),
+		ReplicationAckLevel: currentReplicationAck,
+		TransferAckLevel:    currentClusterTransferAck,
+		TimerAckLevel:       currentClusterTimerAck,
+	}
+	createRequest := &CreateShardRequest{
+		ShardInfo: shardInfo,
+	}
+	s.Nil(s.ShardMgr.CreateShard(createRequest))
+
+	shardInfo.ClusterTransferAckLevel = map[string]int64{
+		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTransferAck,
+	}
+	shardInfo.ClusterTimerAckLevel = map[string]time.Time{
+		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
+	}
+	resp, err := s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
+	s.Nil(err)
+	s.Equal(shardInfo, resp.ShardInfo)
+}
+
+func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
+	shardID := 8
+	rangeID := int64(59)
+
+	// test create && get
+	currentReplicationAck := int64(27)
+	currentClusterTransferAck := int64(21)
+	alternativeClusterTransferAck := int64(32)
+	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
+	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
+	shardInfo := &ShardInfo{
+		ShardID:             shardID,
+		Owner:               "some random owner",
+		RangeID:             rangeID,
+		StolenSinceRenew:    12,
+		UpdatedAt:           timestampConvertor(time.Now()),
+		ReplicationAckLevel: currentReplicationAck,
+		TransferAckLevel:    currentClusterTransferAck,
+		TimerAckLevel:       currentClusterTimerAck,
+		ClusterTransferAckLevel: map[string]int64{
+			cluster.TestCurrentClusterName:     currentClusterTransferAck,
+			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+		},
+		ClusterTimerAckLevel: map[string]time.Time{
+			cluster.TestCurrentClusterName:     currentClusterTimerAck,
+			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+		},
+	}
+	createRequest := &CreateShardRequest{
+		ShardInfo: shardInfo,
+	}
+	s.Nil(s.ShardMgr.CreateShard(createRequest))
+
+	resp, err := s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
+	s.Nil(err)
+	s.Equal(shardInfo, resp.ShardInfo)
+
+	// test update && get
+	currentReplicationAck = int64(270)
+	currentClusterTransferAck = int64(210)
+	alternativeClusterTransferAck = int64(320)
+	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
+	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
+	shardInfo = &ShardInfo{
+		ShardID:             shardID,
+		Owner:               "some random owner",
+		RangeID:             int64(28),
+		StolenSinceRenew:    4,
+		UpdatedAt:           timestampConvertor(time.Now()),
+		ReplicationAckLevel: currentReplicationAck,
+		TransferAckLevel:    currentClusterTransferAck,
+		TimerAckLevel:       currentClusterTimerAck,
+		ClusterTransferAckLevel: map[string]int64{
+			cluster.TestCurrentClusterName:     currentClusterTransferAck,
+			cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+		},
+		ClusterTimerAckLevel: map[string]time.Time{
+			cluster.TestCurrentClusterName:     currentClusterTimerAck,
+			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+		},
+	}
+	updateRequest := &UpdateShardRequest{
+		ShardInfo:       shardInfo,
+		PreviousRangeID: rangeID,
+	}
+	s.Nil(s.ShardMgr.UpdateShard(updateRequest))
+
+	resp, err = s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
+	s.Nil(err)
+	s.Equal(shardInfo, resp.ShardInfo)
+}
+
+// Note: cassandra only provide milisecond precision timestamp
+// ref: https://docs.datastax.com/en/cql/3.3/cql/cql_reference/timestamp_type_r.html
+// so to use equal function, we need to do conversion, getting rid of sub miliseconds
+func timestampConvertor(t time.Time) time.Time {
+	return time.Unix(
+		0,
+		common.CQLTimestampToUnixNano(common.UnixNanoToCQLTimestamp(t.UnixNano())),
+	).UTC()
 }
 
 func copyReplicationState(sourceState *ReplicationState) *ReplicationState {

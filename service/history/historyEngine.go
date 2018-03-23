@@ -363,7 +363,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	if err == nil {
-		e.timerProcessor.NotifyNewTimer(timerTasks)
+		e.timerProcessor.NotifyNewTimers(timerTasks)
 
 		return &workflow.StartWorkflowExecutionResponse{
 			RunId: common.StringPtr(resultRunID),
@@ -639,7 +639,7 @@ Update_History_Loop:
 		// Start a timer for the decision task.
 		timeOutTask := tBuilder.AddDecisionTimoutTask(scheduleID, di.Attempt, di.DecisionTimeout)
 		timerTasks := []persistence.Task{timeOutTask}
-		defer e.timerProcessor.NotifyNewTimer(timerTasks)
+		defer e.timerProcessor.NotifyNewTimers(timerTasks)
 
 		// Generate a transaction ID for appending events to history
 		transactionID, err2 := e.shard.GetNextTransferTaskID()
@@ -1237,7 +1237,7 @@ Update_History_Loop:
 		// add continueAsNewTimerTask
 		timerTasks = append(timerTasks, continueAsNewTimerTasks...)
 		// Inform timer about the new ones.
-		e.timerProcessor.NotifyNewTimer(timerTasks)
+		e.timerProcessor.NotifyNewTimers(timerTasks)
 
 		return err
 	}
@@ -1801,7 +1801,7 @@ Update_History_Loop:
 			}
 			return err
 		}
-		e.timerProcessor.NotifyNewTimer(timerTasks)
+		e.timerProcessor.NotifyNewTimers(timerTasks)
 		return nil
 	}
 	return ErrMaxAttemptsExceeded
