@@ -37,6 +37,10 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "RunID",
 				},
 				cli.BoolFlag{
+					Name:  FlagPrintDateTimeWithAlias,
+					Usage: "Print time stamp",
+				},
+				cli.BoolFlag{
 					Name:  FlagPrintRawTimeWithAlias,
 					Usage: "Print raw time stamp",
 				},
@@ -53,6 +57,20 @@ func newWorkflowCommands() []cli.Command {
 			Name:        "showid",
 			Usage:       "show workflow history with given workflow_id and optional run_id (a shortcut of `show -w <wid> -r <rid>`)",
 			Description: "cadence workflow showid <workflow_id> <run_id>. workflow_id is required; run_id is optional",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  FlagPrintDateTimeWithAlias,
+					Usage: "Print time stamp",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintRawTimeWithAlias,
+					Usage: "Print raw time stamp",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFilenameWithAlias,
+					Usage: "Serialize history event to a file",
+				},
+			},
 			Action: func(c *cli.Context) {
 				ShowHistoryWithWID(c)
 			},
@@ -210,12 +228,18 @@ func newWorkflowCommands() []cli.Command {
 			},
 		},
 		{
-			Name:  "list",
-			Usage: "list open or closed workflow executions",
+			Name:        "list",
+			Aliases:     []string{"l"},
+			Usage:       "list open or closed workflow executions",
+			Description: "list one page (default size 10 items) by default, use flag --pagesize to change page size",
 			Flags: []cli.Flag{
 				cli.BoolFlag{
 					Name:  FlagOpenWithAlias,
-					Usage: "list for open workflow executions, default is to list for closed ones",
+					Usage: "List for open workflow executions, default is to list for closed ones",
+				},
+				cli.BoolFlag{
+					Name:  FlagMoreWithAlias,
+					Usage: "List more pages, default is to list one page of default page size 10",
 				},
 				cli.IntFlag{
 					Name:  FlagPageSizeWithAlias,
@@ -242,9 +266,51 @@ func newWorkflowCommands() []cli.Command {
 					Name:  FlagPrintRawTimeWithAlias,
 					Usage: "Print raw time stamp",
 				},
+				cli.BoolFlag{
+					Name:  FlagPrintDateTimeWithAlias,
+					Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+				},
 			},
 			Action: func(c *cli.Context) {
 				ListWorkflow(c)
+			},
+		},
+		{
+			Name:    "listall",
+			Aliases: []string{"la"},
+			Usage:   "list all open or closed workflow executions",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  FlagOpenWithAlias,
+					Usage: "List for open workflow executions, default is to list for closed ones",
+				},
+				cli.StringFlag{
+					Name:  FlagEarliestTimeWithAlias,
+					Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+				},
+				cli.StringFlag{
+					Name:  FlagLatestTimeWithAlias,
+					Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05Z07:00' and raw UnixNano",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowTypeWithAlias,
+					Usage: "WorkflowTypeName",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintRawTimeWithAlias,
+					Usage: "Print raw time stamp",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintDateTimeWithAlias,
+					Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ListAllWorkflow(c)
 			},
 		},
 		{

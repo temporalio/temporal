@@ -21,7 +21,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -78,6 +77,8 @@ const (
 	FlagReasonWithAlias           = FlagReason + ", re"
 	FlagOpen                      = "open"
 	FlagOpenWithAlias             = FlagOpen + ", op"
+	FlagMore                      = "more"
+	FlagMoreWithAlias             = FlagMore + ", m"
 	FlagPageSize                  = "pagesize"
 	FlagPageSizeWithAlias         = FlagPageSize + ", ps"
 	FlagEarliestTime              = "earliest_time"
@@ -86,6 +87,8 @@ const (
 	FlagLatestTimeWithAlias       = FlagLatestTime + ", lt"
 	FlagPrintRawTime              = "print_raw_time"
 	FlagPrintRawTimeWithAlias     = FlagPrintRawTime + ", prt"
+	FlagPrintDateTime             = "print_datetime"
+	FlagPrintDateTimeWithAlias    = FlagPrintDateTime + ", pdt"
 	FlagDescription               = "description"
 	FlagDescriptionWithAlias      = FlagDescription + ", desc"
 	FlagOwnerEmail                = "owner_email"
@@ -106,11 +109,14 @@ const (
 	localHostPort = "127.0.0.1:7933"
 
 	maxOutputStringLength = 200 // max length for output string
+	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
 
-	defaultTimeFormat                = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
+	defaultTimeFormat                = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
+	defaultDateTimeFormat            = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
 	defaultDomainRetentionDays       = 3
 	defaultContextTimeoutForLongPoll = 2 * time.Minute
 	defaultDecisionTimeoutInSeconds  = 10
+	defaultPageSizeForList           = 500
 )
 
 // For color output to terminal
@@ -118,6 +124,8 @@ var (
 	colorRed     = color.New(color.FgRed).SprintFunc()
 	colorMagenta = color.New(color.FgMagenta).SprintFunc()
 	colorGreen   = color.New(color.FgGreen).SprintFunc()
+
+	tableHeaderBlue = tablewriter.Colors{tablewriter.FgHiBlueColor}
 )
 
 // cBuilder is used to create cadence clients
@@ -297,6 +305,7 @@ func ShowHistoryWithWID(c *cli.Context) {
 func showHistoryHelper(c *cli.Context, wid, rid string) {
 	wfClient := getWorkflowClient(c)
 
+	printDateTime := c.Bool(FlagPrintDateTime)
 	printRawTime := c.Bool(FlagPrintRawTime)
 	outputFileName := c.String(FlagOutputFilename)
 
@@ -307,13 +316,19 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		ExitIfError(err)
 	}
 
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("")
 	for _, e := range history.Events {
 		if printRawTime {
-			fmt.Printf("%d, %d, %s\n", e.GetEventId(), e.GetTimestamp(), HistoryEventToString(e))
+			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), strconv.FormatInt(e.GetTimestamp(), 10), ColorEvent(e), HistoryEventToString(e)})
+		} else if printDateTime {
+			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), convertTime(e.GetTimestamp(), false), ColorEvent(e), HistoryEventToString(e)})
 		} else {
-			fmt.Printf("%d, %s, %s\n", e.GetEventId(), convertTime(e.GetTimestamp()), HistoryEventToString(e))
+			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), ColorEvent(e), HistoryEventToString(e)})
 		}
 	}
+	table.Render()
 
 	if outputFileName != "" {
 		serializer := &JSONHistorySerializer{}
@@ -456,7 +471,7 @@ func RunWorkflow(c *cli.Context) {
 				removePrevious2LinesFromTerminal()
 				isTimeElapseExist = false
 			}
-			fmt.Printf("  %d, %s, %v\n", event.GetEventId(), convertTime(event.GetTimestamp()), event.GetEventType())
+			fmt.Printf("  %d, %s, %v\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), event.GetEventType())
 			lastEvent = event
 		}
 		doneChan <- true
@@ -598,52 +613,110 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 
 // ListWorkflow list workflow executions based on filters
 func ListWorkflow(c *cli.Context) {
+	more := c.Bool(FlagMore)
+	pageSize := c.Int(FlagPageSize)
+
+	table := createTableForListWorkflow(false)
+	prepareTable := listWorkflow(c, table)
+
+	if !more { // default mode only show one page items
+		prepareTable(nil)
+		table.Render()
+	} else { // require input Enter to view next page
+		var resultSize int
+		var nextPageToken []byte
+		for {
+			nextPageToken, resultSize = prepareTable(nextPageToken)
+			table.Render()
+			table.ClearRows()
+
+			if resultSize < pageSize {
+				break
+			}
+
+			fmt.Printf("Press %s to show next page, press %s to quit: ",
+				color.GreenString("Enter"), color.RedString("any other key then Enter"))
+			var input string
+			fmt.Scanln(&input)
+			if strings.Trim(input, " ") == "" {
+				continue
+			} else {
+				break
+			}
+		}
+	}
+}
+
+// ListAllWorkflow list all workflow executions based on filters
+func ListAllWorkflow(c *cli.Context) {
+	table := createTableForListWorkflow(true)
+	prepareTable := listWorkflow(c, table)
+	var resultSize int
+	var nextPageToken []byte
+	for {
+		nextPageToken, resultSize = prepareTable(nextPageToken)
+		if resultSize < defaultPageSizeForList {
+			break
+		}
+	}
+	table.Render()
+}
+
+func createTableForListWorkflow(listAll bool) *tablewriter.Table {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetBorder(false)
+	table.SetColumnSeparator("|")
+	table.SetHeader([]string{"Workflow Type", "Workflow ID", "Run ID", "Start Time", "End Time"})
+	if !listAll { // color is only friendly to ANSI terminal
+		table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue)
+	}
+	table.SetHeaderLine(false)
+	return table
+}
+
+func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte, int) {
 	wfClient := getWorkflowClient(c)
 
 	queryOpen := c.Bool(FlagOpen)
-	pageSize := c.Int(FlagPageSize)
 	earliestTime := parseTime(c.String(FlagEarliestTime), 0)
 	latestTime := parseTime(c.String(FlagLatestTime), time.Now().UnixNano())
 	workflowID := c.String(FlagWorkflowID)
 	workflowType := c.String(FlagWorkflowType)
 	printRawTime := c.Bool(FlagPrintRawTime)
+	printDateTime := c.Bool(FlagPrintDateTime)
+	pageSize := c.Int(FlagPageSize)
+	if pageSize <= 0 {
+		pageSize = defaultPageSizeForList
+	}
 
 	if len(workflowID) > 0 && len(workflowType) > 0 {
 		ExitIfError(errors.New("you can filter on workflow_id or workflow_type, but not on both"))
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	var result []*s.WorkflowExecutionInfo
-	var nextPageToken []byte
-	for {
+	prepareTable := func(next []byte) ([]byte, int) {
+		var result []*s.WorkflowExecutionInfo
+		var nextPageToken []byte
 		if queryOpen {
-			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, nextPageToken)
+			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next)
 		} else {
-			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, nextPageToken)
+			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next)
 		}
 
 		for _, e := range result {
-			fmt.Printf("%s, -w %s -r %s", e.Type.GetName(), e.Execution.GetWorkflowId(), e.Execution.GetRunId())
+			var startTime, closeTime string
 			if printRawTime {
-				fmt.Printf(" [%d, %d]\n", e.GetStartTime(), e.GetCloseTime())
+				startTime = fmt.Sprintf("%d", e.GetStartTime())
+				closeTime = fmt.Sprintf("%d", e.GetCloseTime())
 			} else {
-				fmt.Printf(" [%s, %s]\n", convertTime(e.GetStartTime()), convertTime(e.GetCloseTime()))
+				startTime = convertTime(e.GetStartTime(), !printDateTime)
+				closeTime = convertTime(e.GetCloseTime(), !printDateTime)
 			}
+			table.Append([]string{trimWorkflowType(e.Type.GetName()), e.Execution.GetWorkflowId(), e.Execution.GetRunId(), startTime, closeTime})
 		}
 
-		if len(result) < pageSize {
-			break
-		}
-
-		fmt.Println("Press C then Enter to show more result, press any other key then Enter to quit: ")
-		input, _ := reader.ReadString('\n')
-		c := []byte(input)[0]
-		if c == 'C' || c == 'c' {
-			continue
-		} else {
-			break
-		}
+		return nextPageToken, len(result)
 	}
+	return prepareTable
 }
 
 func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string, nextPageToken []byte) ([]*s.WorkflowExecutionInfo, []byte) {
@@ -718,9 +791,11 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.Append([]string{"Poller Identity", "Last Access Time"})
+	table.SetHeader([]string{"Poller Identity", "Last Access Time"})
+	table.SetHeaderLine(false)
+	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime())})
+		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
 	}
 	table.Render()
 }
@@ -779,9 +854,15 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) string {
 	return value
 }
 
-func convertTime(unixNano int64) string {
-	t2 := time.Unix(0, unixNano)
-	return t2.Format(defaultTimeFormat)
+func convertTime(unixNano int64, onlyTime bool) string {
+	t := time.Unix(0, unixNano)
+	var result string
+	if onlyTime {
+		result = t.Format(defaultTimeFormat)
+	} else {
+		result = t.Format(defaultDateTimeFormat)
+	}
+	return result
 }
 
 func parseTime(timeStr string, defaultValue int64) int64 {
@@ -902,4 +983,19 @@ func printRunStatus(event *s.HistoryEvent) {
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
 		fmt.Printf("  Detail: %s\n", string(event.WorkflowExecutionCanceledEventAttributes.Details))
 	}
+}
+
+// in case workflow type is too long to show in table, trim it like .../example.Workflow
+func trimWorkflowType(str string) string {
+	res := str
+	if len(str) >= maxWorkflowTypeLength {
+		items := strings.Split(str, "/")
+		res = items[len(items)-1]
+		if len(res) >= maxWorkflowTypeLength {
+			res = "..." + res[len(res)-maxWorkflowTypeLength:]
+		} else {
+			res = ".../" + res
+		}
+	}
+	return res
 }

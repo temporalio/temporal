@@ -90,9 +90,12 @@ User need to run `show` to view workflow history/progress.
 ./cadence workflow showid 3ea6b242-b23c-4279-bb13-f215661b4717
 ```
 
-- List open or closed workflow executions
+- List closed or open workflow executions
 ```
 ./cadence workflow list
+
+# default will only show one page, to view more items, use --more flag
+./cadence workflow list -m
 ```
 
 - Query workflow execution
