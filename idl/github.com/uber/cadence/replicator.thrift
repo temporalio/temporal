@@ -49,6 +49,7 @@ struct HistoryTaskAttributes {
   40: optional i64 (js.type = "Long") firstEventId
   50: optional i64 (js.type = "Long") nextEventId
   60: optional i64 (js.type = "Long") version
+  70: optional shared.History history
 }
 
 struct ReplicationTask {

@@ -54,6 +54,7 @@ const (
 	TagValueHistoryCacheComponent             = "history-cache"
 	TagValueTransferQueueComponent            = "transfer-queue-processor"
 	TagValueTimerQueueComponent               = "timer-queue-processor"
+	TagValueReplicatorQueueComponent          = "replicator-queue-processor"
 	TagValueShardController                   = "shard-controller"
 	TagValueMatchingEngineComponent           = "matching-engine"
 	TagValueReplicatorComponent               = "replicator"

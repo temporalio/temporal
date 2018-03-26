@@ -230,6 +230,13 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	return nil
 }
 
+func (e *mutableStateBuilder) ApplyReplicationStateUpdates(failoverVersion int64) {
+	e.replicationState.CurrentVersion = failoverVersion
+	e.replicationState.LastWriteVersion = failoverVersion
+	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
+	e.replicationState.LastWriteEventID = e.hBuilder.nextEventID - 1
+}
+
 func (e *mutableStateBuilder) CloseUpdateSession(createReplicationTask bool) (*mutableStateSessionUpdates, error) {
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, err
@@ -1625,6 +1632,26 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		initiatedID = e.executionInfo.InitiatedID
 	}
 
+	var replicationState *persistence.ReplicationState
+	var replicationTasks []persistence.Task
+	if e.replicationState != nil {
+		failoverVersion := e.replicationState.CurrentVersion
+		replicationState = &persistence.ReplicationState{
+			CurrentVersion:   failoverVersion,
+			StartVersion:     failoverVersion,
+			LastWriteVersion: failoverVersion,
+			LastWriteEventID: di.ScheduleID,
+		}
+
+		replicationTask := &persistence.HistoryReplicationTask{
+			FirstEventID:        newStateBuilder.hBuilder.firstEventID,
+			NextEventID:         newStateBuilder.hBuilder.nextEventID,
+			Version:             failoverVersion,
+			LastReplicationInfo: nil,
+		}
+		replicationTasks = append(replicationTasks, replicationTask)
+	}
+
 	e.continueAsNew = &persistence.CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
 		DomainID:             domainID,
@@ -1649,6 +1676,8 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		DecisionStartToCloseTimeout: di.DecisionTimeout,
 		ContinueAsNew:               true,
 		PreviousRunID:               prevRunID,
+		ReplicationState:            replicationState,
+		ReplicationTasks:            replicationTasks,
 	}
 
 	return e.hBuilder.AddContinuedAsNewEvent(decisionCompletedEventID, newRunID, attributes), newStateBuilder, nil

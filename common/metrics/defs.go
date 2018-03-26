@@ -370,6 +370,10 @@ const (
 	TimerTaskDeleteHistoryEvent
 	// HistoryEventNotificationScope is the scope used by shard history event nitification
 	HistoryEventNotificationScope
+	// ReplicatorQueueProcessorScope is the scope used by all metric emitted by replicator queue processor
+	ReplicatorQueueProcessorScope
+	// ReplicatorTaskHistoryScope is the scope used for history task processing by replicator queue processor
+	ReplicatorTaskHistoryScope
 
 	NumHistoryScopes
 )

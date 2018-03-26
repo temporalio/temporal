@@ -1801,7 +1801,7 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 	}
 
 	for _, e := range response.Events {
-		setSerializedHistoryDefaults(&e)
+		persistence.SetSerializedHistoryDefaults(&e)
 		s, _ := wh.hSerializerFactory.Get(e.EncodingType)
 		history, err1 := s.Deserialize(&e)
 		if err1 != nil {
@@ -1819,18 +1819,6 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 	executionHistory := &gen.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, nextPageToken, nil
-}
-
-// sets the version and encoding types to defaults if they
-// are missing from persistence. This is purely for backwards
-// compatibility
-func setSerializedHistoryDefaults(history *persistence.SerializedHistoryEventBatch) {
-	if history.Version == 0 {
-		history.Version = persistence.GetDefaultHistoryVersion()
-	}
-	if len(history.EncodingType) == 0 {
-		history.EncodingType = persistence.DefaultEncodingType
-	}
 }
 
 func (wh *WorkflowHandler) getLoggerForTask(taskToken []byte) bark.Logger {

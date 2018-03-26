@@ -128,9 +128,15 @@ func (s *TestShardContext) UpdateTransferAckLevel(ackLevel int64) error {
 	return nil
 }
 
-// GetTransferSequenceNumber test implementation
-func (s *TestShardContext) GetTransferSequenceNumber() int64 {
-	return atomic.LoadInt64(&s.transferSequenceNumber)
+// GetReplicatorAckLevel test implementation
+func (s *TestShardContext) GetReplicatorAckLevel() int64 {
+	return atomic.LoadInt64(&s.shardInfo.ReplicationAckLevel)
+}
+
+// UpdateReplicatorAckLevel test implementation
+func (s *TestShardContext) UpdateReplicatorAckLevel(ackLevel int64) error {
+	atomic.StoreInt64(&s.shardInfo.ReplicationAckLevel, ackLevel)
+	return nil
 }
 
 // GetTimerAckLevel test implementation

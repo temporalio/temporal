@@ -122,17 +122,18 @@ func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, 20)).Once().Return(nil)
 			if task.ScheduleID == firstEventID+1 {
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -173,16 +174,17 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(2), transferTasks, builder.updateActivityInfos)
 	s.Nil(err1)
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.TaskType == persistence.TransferTaskTypeActivityTask {
 				s.mockMatching.On("AddActivityTask", mock.Anything, createAddRequestFromTask(task, timeoutSeconds)).Once().Return(nil)
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -220,12 +222,13 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
@@ -243,7 +246,7 @@ workerPump:
 				}, nil)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -283,12 +286,13 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotE
 	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
 				if task.ScheduleID == firstEventID+1 {
@@ -298,7 +302,7 @@ workerPump:
 				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(nil, &workflow.EntityNotExistsError{})
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -344,12 +348,13 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 		builder.updateRequestCancelInfos)
 	s.Nil(err1, "No error expected.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
@@ -361,7 +366,7 @@ workerPump:
 					task.TargetDomainID, task.TargetWorkflowID, task.TargetRunID)
 				s.mockHistoryClient.On("RequestCancelWorkflowExecution", mock.Anything, mock.Anything).Return(nil).Once()
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -406,12 +411,13 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 		builder.updateRequestCancelInfos)
 	s.Nil(err1, "No error expected.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			s.logger.Infof("Processing transfer task type: %v, TaskID: %v, Task.ScheduleID: %v", task.TaskType,
 				task.TaskID, task.ScheduleID)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
@@ -423,7 +429,7 @@ workerPump:
 				s.mockHistoryClient.On("RequestCancelWorkflowExecution", mock.Anything, mock.Anything).
 					Return(&workflow.EntityNotExistsError{}).Once()
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -470,12 +476,13 @@ func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask() {
 		builder.updateSignalInfos)
 	s.Nil(err1, "No error expected.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
@@ -488,7 +495,7 @@ workerPump:
 				s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.Anything).Return(nil).Once()
 				s.mockHistoryClient.On("RemoveSignalMutableState", mock.Anything, mock.Anything).Return(nil).Once()
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -535,12 +542,13 @@ func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask_Failed() {
 		builder.updateSignalInfos)
 	s.Nil(err1, "No error expected.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			s.logger.Infof("Processing transfer task type: %v", task.TaskType)
 			if task.TaskType == persistence.TransferTaskTypeDecisionTask {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, createAddRequestFromTask(task, wtimeout)).Once().Return(nil)
@@ -552,7 +560,7 @@ workerPump:
 					task.TargetDomainID, task.TargetWorkflowID, task.TargetRunID)
 				s.mockHistoryClient.On("SignalWorkflowExecution", mock.Anything, mock.Anything).Return(&workflow.EntityNotExistsError{}).Once()
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -568,17 +576,18 @@ func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.ScheduleID == firstEventID+1 {
 				s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(&workflow.EntityNotExistsError{})
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -602,7 +611,8 @@ func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasks() {
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.TaskType == persistence.TransferTaskTypeStartChildExecution {
 				s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.Anything).Once().Return(
 					&workflow.StartWorkflowExecutionResponse{
@@ -610,7 +620,7 @@ workerPump:
 					}, nil)
 				s.mockHistoryClient.On("ScheduleDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -634,7 +644,8 @@ func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasksChildC
 workerPump:
 	for {
 		select {
-		case task := <-tasksCh:
+		case t := <-tasksCh:
+			task := t.(*persistence.TransferTaskInfo)
 			if task.TaskType == persistence.TransferTaskTypeStartChildExecution {
 				s.mockHistoryClient.On("StartWorkflowExecution", mock.Anything, mock.Anything).Once().Return(
 					&workflow.StartWorkflowExecutionResponse{
@@ -643,7 +654,7 @@ workerPump:
 				s.mockHistoryClient.On("ScheduleDecisionTask", mock.Anything, mock.Anything).Once().Return(
 					&workflow.EntityNotExistsError{})
 			}
-			s.processor.processTransferTask(task)
+			s.processor.processWithRetry(task)
 		default:
 			break workerPump
 		}
@@ -651,7 +662,7 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) createChildExecutionState(domain, domainID string,
-	workflowExecution workflow.WorkflowExecution, taskList, identity string) chan *persistence.TransferTaskInfo {
+	workflowExecution workflow.WorkflowExecution, taskList, identity string) chan queueTaskInfo {
 	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
 	s.Nil(err0, "No error expected.")
 	s.mockMatching.On("AddDecisionTask", mock.Anything, mock.Anything).Once().Return(nil)
@@ -681,8 +692,8 @@ func (s *transferQueueProcessorSuite) createChildExecutionState(domain, domainID
 		builder.updateChildExecutionInfos)
 	s.Nil(err1, "No error expected.")
 
-	tasksCh := make(chan *persistence.TransferTaskInfo, 10)
-	s.processor.processTransferTasks(tasksCh)
+	tasksCh := make(chan queueTaskInfo, 10)
+	s.processor.processBatch(tasksCh)
 
 	return tasksCh
 }
@@ -714,14 +725,4 @@ func createAddRequestFromTask(task *persistence.TransferTaskInfo, scheduleToStar
 		}
 	}
 	return res
-}
-
-func containsID(list []int64, scheduleID int64) bool {
-	for _, id := range list {
-		if id == scheduleID {
-			return true
-		}
-	}
-
-	return false
 }

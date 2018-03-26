@@ -43,6 +43,8 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
@@ -62,11 +64,13 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		domainName        string
-		foreignDomainName string
-		host              Cadence
-		engine            wsc.Interface
-		logger            bark.Logger
+		domainName          string
+		foreignDomainName   string
+		mockMessagingClient messaging.Client
+		mockProducer        messaging.Producer
+		host                Cadence
+		engine              wsc.Interface
+		logger              bark.Logger
 		suite.Suite
 		persistence.TestBase
 	}
@@ -142,7 +146,11 @@ func (s *integrationSuite) setupTest(enableGlobalDomain bool, isMasterCluster bo
 
 	s.setupShards()
 
-	s.host = NewCadence(s.ClusterMetadata, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	// TODO: Use mock messaging client until we support kafka setup onebox to write end-to-end integration test
+	s.mockProducer = &mocks.KafkaProducer{}
+	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
+
+	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger)
 
 	s.host.Start()

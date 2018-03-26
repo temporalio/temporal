@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -57,6 +58,7 @@ type (
 		metricsClient         metrics.Client
 		config                *Config
 		historyEventNotifier  historyEventNotifier
+		publisher             messaging.Producer
 		service.Service
 	}
 )
@@ -109,9 +111,19 @@ func (h *Handler) Start() error {
 
 	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {
-		h.Service.GetLogger().Fatalf("Unable to get history service resolver.")
+		h.Service.GetLogger().Fatalf("Unable to get history service resolver: ", err1)
 	}
 	h.hServiceResolver = hServiceResolver
+
+	// TODO when global domain is enabled, uncomment the line below and remove the line after
+	if h.GetClusterMetadata().IsGlobalDomainEnabled() {
+		var err error
+		h.publisher, err = h.GetMessagingClient().NewProducer(h.GetClusterMetadata().GetCurrentClusterName())
+		if err != nil {
+			h.GetLogger().Fatalf("Creating kafka producer failed: %v", err)
+		}
+	}
+
 	h.controller = newShardController(h.Service, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
 		h.metadataMgr, h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
 	h.metricsClient = h.GetMetricsClient()
@@ -138,7 +150,7 @@ func (h *Handler) Stop() {
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
 	return NewEngineWithShardContext(context, context.GetDomainCache(), h.visibilityMgr,
-		h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier)
+		h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier, h.publisher)
 }
 
 // Health is for health check

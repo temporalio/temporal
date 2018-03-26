@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -55,6 +56,7 @@ type (
 		executionManager     persistence.ExecutionManager
 		txProcessor          transferQueueProcessor
 		timerProcessor       timerQueueProcessor
+		replicatorProcessor  queueProcessor
 		historyEventNotifier historyEventNotifier
 		tokenSerializer      common.TaskTokenSerializer
 		hSerializerFactory   persistence.HistorySerializerFactory
@@ -69,6 +71,7 @@ type (
 	shardContextWrapper struct {
 		ShardContext
 		txProcessor          transferQueueProcessor
+		replcatorProcessor   queueProcessor
 		historyEventNotifier historyEventNotifier
 	}
 )
@@ -107,7 +110,7 @@ var (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache,
 	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client,
-	historyEventNotifier historyEventNotifier) Engine {
+	historyEventNotifier historyEventNotifier, publisher messaging.Producer) Engine {
 	shardWrapper := &shardContextWrapper{
 		ShardContext:         shard,
 		historyEventNotifier: historyEventNotifier,
@@ -117,12 +120,13 @@ func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard, logger)
+	historySerializerFactory := persistence.NewHistorySerializerFactory()
 	historyEngImpl := &historyEngineImpl{
 		shard:              shard,
 		historyMgr:         historyManager,
 		executionManager:   executionManager,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		hSerializerFactory: historySerializerFactory,
 		historyCache:       historyCache,
 		domainCache:        domainCache,
 		logger: logger.WithFields(bark.Fields{
@@ -135,6 +139,15 @@ func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, executionManager, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
+
+	// Only start the replicator processor if valid publisher is passed in
+	if publisher != nil {
+		replicatorProcessor := newReplicatorQueueProcessor(shard, publisher, executionManager, historyManager,
+			historySerializerFactory)
+		historyEngImpl.replicatorProcessor = replicatorProcessor
+		shardWrapper.replcatorProcessor = replicatorProcessor
+	}
+
 	return historyEngImpl
 }
 
@@ -147,6 +160,9 @@ func (e *historyEngineImpl) Start() {
 
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
+	if e.replicatorProcessor != nil {
+		e.replicatorProcessor.Start()
+	}
 }
 
 // Stop the service.
@@ -156,6 +172,9 @@ func (e *historyEngineImpl) Stop() {
 
 	e.txProcessor.Stop()
 	e.timerProcessor.Stop()
+	if e.replicatorProcessor != nil {
+		e.replicatorProcessor.Stop()
+	}
 }
 
 // StartWorkflowExecution starts a workflow execution
@@ -257,13 +276,28 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 
 	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
 	var replicationState *persistence.ReplicationState
+	var replicationTasks []persistence.Task
 	if createReplicationTask {
+		domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+		if err != nil {
+			return nil, err
+		}
+
+		failoverVersion := domainEntry.GetFailoverVersion()
 		replicationState = &persistence.ReplicationState{
-			CurrentVersion:   common.EmptyVersion,
-			StartVersion:     common.EmptyVersion,
-			LastWriteVersion: common.EmptyVersion,
+			CurrentVersion:   failoverVersion,
+			StartVersion:     failoverVersion,
+			LastWriteVersion: failoverVersion,
 			LastWriteEventID: decisionScheduleID,
 		}
+
+		replicationTask := &persistence.HistoryReplicationTask{
+			FirstEventID:        msBuilder.hBuilder.firstEventID,
+			NextEventID:         msBuilder.hBuilder.nextEventID,
+			Version:             failoverVersion,
+			LastReplicationInfo: nil,
+		}
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
@@ -282,6 +316,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          emptyEventID,
 			TransferTasks:               transferTasks,
+			ReplicationTasks:            replicationTasks,
 			DecisionScheduleID:          decisionScheduleID,
 			DecisionStartedID:           decisionStartID,
 			DecisionStartToCloseTimeout: decisionTimeout,
@@ -1857,18 +1892,6 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 	return response
 }
 
-// sets the version and encoding types to defaults if they
-// are missing from persistence. This is purely for backwards
-// compatibility
-func setSerializedHistoryDefaults(history *persistence.SerializedHistoryEventBatch) {
-	if history.Version == 0 {
-		history.Version = persistence.GetDefaultHistoryVersion()
-	}
-	if len(history.EncodingType) == 0 {
-		history.EncodingType = persistence.DefaultEncodingType
-	}
-}
-
 func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, scheduleID, startedID int64,
 	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) (*mutableStateBuilder,
 	error) {
@@ -1901,6 +1924,9 @@ func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.Updat
 		if len(request.TransferTasks) > 0 {
 			s.txProcessor.NotifyNewTask()
 		}
+		if len(request.ReplicationTasks) > 0 {
+			s.replcatorProcessor.NotifyNewTask()
+		}
 	}
 	return err
 }
@@ -1911,6 +1937,9 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 	if err == nil {
 		if len(request.TransferTasks) > 0 {
 			s.txProcessor.NotifyNewTask()
+		}
+		if len(request.ReplicationTasks) > 0 {
+			s.replcatorProcessor.NotifyNewTask()
 		}
 	}
 	return resp, err

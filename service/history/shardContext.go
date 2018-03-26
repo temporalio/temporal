@@ -46,10 +46,11 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		GetDomainCache() cache.DomainCache
 		GetNextTransferTaskID() (int64, error)
-		GetTransferSequenceNumber() int64
 		GetTransferMaxReadLevel() int64
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error
+		GetReplicatorAckLevel() int64
+		UpdateReplicatorAckLevel(ackLevel int64) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
@@ -110,13 +111,6 @@ func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
 	return s.getNextTransferTaskIDLocked()
 }
 
-func (s *shardContextImpl) GetTransferSequenceNumber() int64 {
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.transferSequenceNumber - 1
-}
-
 func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
@@ -134,6 +128,21 @@ func (s *shardContextImpl) UpdateTransferAckLevel(ackLevel int64) error {
 	s.Lock()
 	defer s.Unlock()
 	s.shardInfo.TransferAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetReplicatorAckLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.ReplicationAckLevel
+}
+
+func (s *shardContextImpl) UpdateReplicatorAckLevel(ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+	s.shardInfo.ReplicationAckLevel = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -171,6 +180,17 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 		task.SetTaskID(id)
 		transferMaxReadLevel = id
 	}
+
+	for _, task := range request.ReplicationTasks {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return nil, err
+		}
+		s.logger.Debugf("Assigning replication task ID: %v", id)
+		task.SetTaskID(id)
+		transferMaxReadLevel = id
+	}
+
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	s.allocateTimerIDsLocked(request.TimerTasks)
@@ -236,6 +256,16 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		transferMaxReadLevel = id
 	}
 
+	for _, task := range request.ReplicationTasks {
+		id, err := s.getNextTransferTaskIDLocked()
+		if err != nil {
+			return err
+		}
+		s.logger.Debugf("Assigning replication task ID: %v", id)
+		task.SetTaskID(id)
+		transferMaxReadLevel = id
+	}
+
 	if request.ContinueAsNew != nil {
 		for _, task := range request.ContinueAsNew.TransferTasks {
 			id, err := s.getNextTransferTaskIDLocked()
@@ -243,6 +273,16 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 				return err
 			}
 			s.logger.Debugf("Assigning transfer task ID: %v", id)
+			task.SetTaskID(id)
+			transferMaxReadLevel = id
+		}
+
+		for _, task := range request.ContinueAsNew.ReplicationTasks {
+			id, err := s.getNextTransferTaskIDLocked()
+			if err != nil {
+				return err
+			}
+			s.logger.Debugf("Assigning replication task ID: %v", id)
 			task.SetTaskID(id)
 			transferMaxReadLevel = id
 		}

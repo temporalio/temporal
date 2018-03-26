@@ -21,14 +21,11 @@
 package history
 
 import (
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/uber-common/bark"
 
-	"fmt"
-
+	"errors"
 	"github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -47,266 +44,116 @@ const identityHistoryService = "history-service"
 type (
 	transferQueueProcessorImpl struct {
 		shard             ShardContext
-		ackMgr            *ackManager
 		executionManager  persistence.ExecutionManager
 		visibilityManager persistence.VisibilityManager
 		matchingClient    matching.Client
 		historyClient     hc.Client
 		cache             *historyCache
 		domainCache       cache.DomainCache
-		rateLimiter       common.TokenBucket // Read rate limiter
-		appendCh          chan struct{}
-		isStarted         int32
-		isStopped         int32
-		shutdownWG        sync.WaitGroup
-		shutdownCh        chan struct{}
-		config            *Config
-		logger            bark.Logger
-		metricsClient     metrics.Client
 		historyService    *historyEngineImpl
+		*queueProcessorBase
 	}
+)
 
-	// ackManager is created by transferQueueProcessor to keep track of the transfer queue ackLevel for the shard.
-	// It keeps track of read level when dispatching transfer tasks to processor and maintains a map of outstanding tasks.
-	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
-	// for the shard when all preceding tasks are acknowledged.
-	ackManager struct {
-		processor     *transferQueueProcessorImpl
-		shard         ShardContext
-		executionMgr  persistence.ExecutionManager
-		logger        bark.Logger
-		metricsClient metrics.Client
-		lastUpdated   time.Time
-		config        *Config
-
-		sync.RWMutex
-		outstandingTasks map[int64]bool
-		readLevel        int64
-		maxReadLevel     int64
-		ackLevel         int64
-	}
+var (
+	errUnknownTransferTask = errors.New("Unknown transfer task")
 )
 
 func newTransferQueueProcessor(shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client) transferQueueProcessor {
 	executionManager := shard.GetExecutionManager()
-	logger := shard.GetLogger()
 	config := shard.GetConfig()
+	options := &QueueProcessorOptions{
+		BatchSize:           config.TransferTaskBatchSize,
+		WorkerCount:         config.TransferTaskWorkerCount,
+		MaxPollRPS:          config.TransferProcessorMaxPollRPS,
+		MaxPollInterval:     config.TransferProcessorMaxPollInterval,
+		UpdateAckInterval:   config.TransferProcessorUpdateAckInterval,
+		ForceUpdateInterval: config.TransferProcessorForceUpdateInterval,
+		MaxRetryCount:       config.TransferTaskMaxRetryCount,
+		MetricScope:         metrics.TransferQueueProcessorScope,
+	}
+
 	processor := &transferQueueProcessorImpl{
-		historyService:    historyService,
 		shard:             shard,
 		executionManager:  executionManager,
+		historyService:    historyService,
 		matchingClient:    matching,
 		historyClient:     historyClient,
 		visibilityManager: visibilityMgr,
 		cache:             historyService.historyCache,
 		domainCache:       historyService.domainCache,
-		rateLimiter:       common.NewTokenBucket(config.TransferProcessorMaxPollRPS, common.NewRealTimeSource()),
-		appendCh:          make(chan struct{}, 1),
-		shutdownCh:        make(chan struct{}),
-		config:            config,
-		logger: logger.WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueTransferQueueComponent,
-		}),
-		metricsClient: shard.GetMetricsClient(),
 	}
-	processor.ackMgr = newAckManager(processor, shard, executionManager, logger, shard.GetMetricsClient())
+	baseProcessor := newQueueProcessor(shard, options, processor, shard.GetTransferAckLevel())
+	processor.queueProcessorBase = baseProcessor
 
 	return processor
 }
 
-func newAckManager(processor *transferQueueProcessorImpl, shard ShardContext, executionMgr persistence.ExecutionManager,
-	logger bark.Logger, metricsClient metrics.Client) *ackManager {
-	ackLevel := shard.GetTransferAckLevel()
-	config := shard.GetConfig()
-	return &ackManager{
-		processor:        processor,
-		shard:            shard,
-		executionMgr:     executionMgr,
-		outstandingTasks: make(map[int64]bool),
-		readLevel:        ackLevel,
-		ackLevel:         ackLevel,
-		logger:           logger,
-		metricsClient:    metricsClient,
-		lastUpdated:      time.Now(),
-		config:           config,
-	}
+func (t *transferQueueProcessorImpl) GetName() string {
+	return logging.TagValueTransferQueueComponent
 }
 
-func (t *transferQueueProcessorImpl) Start() {
-	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
-		return
+func (t *transferQueueProcessorImpl) Process(qTask queueTaskInfo) error {
+	task, ok := qTask.(*persistence.TransferTaskInfo)
+	if !ok {
+		return errUnexpectedQueueTask
 	}
 
-	logging.LogTransferQueueProcesorStartingEvent(t.logger)
-	defer logging.LogTransferQueueProcesorStartedEvent(t.logger)
-
-	t.shutdownWG.Add(1)
-	t.NotifyNewTask()
-	go t.processorPump()
-}
-
-func (t *transferQueueProcessorImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&t.isStopped, 0, 1) {
-		return
+	var err error
+	scope := metrics.TransferQueueProcessorScope
+	switch task.TaskType {
+	case persistence.TransferTaskTypeActivityTask:
+		scope = metrics.TransferTaskActivityScope
+		err = t.processActivityTask(task)
+	case persistence.TransferTaskTypeDecisionTask:
+		scope = metrics.TransferTaskDecisionScope
+		err = t.processDecisionTask(task)
+	case persistence.TransferTaskTypeCloseExecution:
+		scope = metrics.TransferTaskCloseExecutionScope
+		err = t.processCloseExecution(task)
+	case persistence.TransferTaskTypeCancelExecution:
+		scope = metrics.TransferTaskCancelExecutionScope
+		err = t.processCancelExecution(task)
+	case persistence.TransferTaskTypeSignalExecution:
+		scope = metrics.TransferTaskSignalExecutionScope
+		err = t.processSignalExecution(task)
+	case persistence.TransferTaskTypeStartChildExecution:
+		scope = metrics.TransferTaskStartChildExecutionScope
+		err = t.processStartChildExecution(task)
+	default:
+		err = errUnknownTransferTask
 	}
-
-	logging.LogTransferQueueProcesorShuttingDownEvent(t.logger)
-	defer logging.LogTransferQueueProcesorShutdownEvent(t.logger)
-
-	if atomic.LoadInt32(&t.isStarted) == 1 {
-		close(t.shutdownCh)
-	}
-
-	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
-		logging.LogTransferQueueProcesorShutdownTimedoutEvent(t.logger)
-	}
-}
-
-func (t *transferQueueProcessorImpl) NotifyNewTask() {
-	var event struct{}
-	select {
-	case t.appendCh <- event:
-	default: // channel already has an event, don't block
-	}
-}
-
-func (t *transferQueueProcessorImpl) processorPump() {
-	defer t.shutdownWG.Done()
-	tasksCh := make(chan *persistence.TransferTaskInfo, t.config.TransferTaskBatchSize)
-
-	var workerWG sync.WaitGroup
-	for i := 0; i < t.config.TransferTaskWorkerCount; i++ {
-		workerWG.Add(1)
-		go t.taskWorker(tasksCh, &workerWG)
-	}
-
-	pollTimer := time.NewTimer(t.config.TransferProcessorMaxPollInterval)
-	updateAckTimer := time.NewTimer(t.config.TransferProcessorUpdateAckInterval)
-
-processorPumpLoop:
-	for {
-		select {
-		case <-t.shutdownCh:
-			break processorPumpLoop
-		case <-t.appendCh:
-			t.processTransferTasks(tasksCh)
-		case <-pollTimer.C:
-			t.processTransferTasks(tasksCh)
-			pollTimer = time.NewTimer(t.config.TransferProcessorMaxPollInterval)
-		case <-updateAckTimer.C:
-			t.ackMgr.updateAckLevel()
-			updateAckTimer = time.NewTimer(t.config.TransferProcessorUpdateAckInterval)
-		}
-	}
-
-	t.logger.Info("Transfer queue processor pump shutting down.")
-	// This is the only pump which writes to tasksCh, so it is safe to close channel here
-	close(tasksCh)
-	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-		t.logger.Warn("Transfer queue processor timed out on worker shutdown.")
-	}
-	updateAckTimer.Stop()
-	pollTimer.Stop()
-}
-
-func (t *transferQueueProcessorImpl) processTransferTasks(tasksCh chan<- *persistence.TransferTaskInfo) {
-
-	if !t.rateLimiter.Consume(1, t.config.TransferProcessorMaxPollInterval) {
-		t.NotifyNewTask() // re-enqueue the event
-		return
-	}
-
-	tasks, err := t.ackMgr.readTransferTasks()
 
 	if err != nil {
-		t.logger.Warnf("Processor unable to retrieve transfer tasks: %v", err)
-		t.NotifyNewTask() // re-enqueue the event
-		return
+		t.metricsClient.IncCounter(scope, metrics.TaskRequests)
 	}
-
-	if len(tasks) == 0 {
-		return
-	}
-
-	// the transfer tasks are not guaranteed to be executed in serious.
-	// since there are multiple workers polling from this task channel
-	// so if one workflow, reports a series of decitions, one depend on another,
-	// e.g. 1. start child workflow; 2. signal this workflow, the execution order
-	// is not guatanteed.
-	for _, tsk := range tasks {
-		tasksCh <- tsk
-	}
-
-	if len(tasks) == t.config.TransferTaskBatchSize {
-		// There might be more task
-		// We return now to yield, but enqueue an event to poll later
-		t.NotifyNewTask()
-	}
-	return
+	return err
 }
 
-func (t *transferQueueProcessorImpl) taskWorker(tasksCh <-chan *persistence.TransferTaskInfo, workerWG *sync.WaitGroup) {
-	defer workerWG.Done()
-	for {
-		select {
-		case task, ok := <-tasksCh:
-			if !ok {
-				return
-			}
+func (t *transferQueueProcessorImpl) ReadTasks(readLevel int64) ([]queueTaskInfo, error) {
+	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
+		ReadLevel:    readLevel,
+		MaxReadLevel: t.shard.GetTransferMaxReadLevel(),
+		BatchSize:    t.options.BatchSize,
+	})
 
-			t.processTransferTask(task)
-		}
+	if err != nil {
+		return nil, err
 	}
+
+	tasks := make([]queueTaskInfo, len(response.Tasks))
+	for i := range response.Tasks {
+		tasks[i] = response.Tasks[i]
+	}
+
+	return tasks, nil
 }
 
-func (t *transferQueueProcessorImpl) processTransferTask(task *persistence.TransferTaskInfo) {
-	t.logger.Debugf("Processing transfer task: %v, type: %v", task.TaskID, task.TaskType)
-ProcessRetryLoop:
-	for retryCount := 1; retryCount <= 100; retryCount++ {
-		select {
-		case <-t.shutdownCh:
-			return
-		default:
-			var err error
-			scope := metrics.TransferQueueProcessorScope
-			switch task.TaskType {
-			case persistence.TransferTaskTypeActivityTask:
-				scope = metrics.TransferTaskActivityScope
-				err = t.processActivityTask(task)
-			case persistence.TransferTaskTypeDecisionTask:
-				scope = metrics.TransferTaskDecisionScope
-				err = t.processDecisionTask(task)
-			case persistence.TransferTaskTypeCloseExecution:
-				scope = metrics.TransferTaskCloseExecutionScope
-				err = t.processCloseExecution(task)
-			case persistence.TransferTaskTypeCancelExecution:
-				scope = metrics.TransferTaskCancelExecutionScope
-				err = t.processCancelExecution(task)
-			case persistence.TransferTaskTypeSignalExecution:
-				scope = metrics.TransferTaskSignalExecutionScope
-				err = t.processSignalExecution(task)
-			case persistence.TransferTaskTypeStartChildExecution:
-				scope = metrics.TransferTaskStartChildExecutionScope
-				err = t.processStartChildExecution(task)
-			}
-
-			if err != nil {
-				logging.LogTransferTaskProcessingFailedEvent(t.logger, task.TaskID, task.TaskType, err)
-				t.metricsClient.IncCounter(scope, metrics.TaskFailures)
-				backoff := time.Duration(retryCount * 100)
-				time.Sleep(backoff * time.Millisecond)
-				continue ProcessRetryLoop
-			}
-
-			t.ackMgr.completeTask(task.TaskID)
-			return
-		}
-	}
-
-	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	logging.LogOperationPanicEvent(t.logger,
-		fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.TaskID), nil)
+func (t *transferQueueProcessorImpl) CompleteTask(taskID int64) error {
+	return t.executionManager.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
+		TaskID: taskID,
+	})
 }
 
 func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) error {
@@ -1137,103 +984,6 @@ func (t *transferQueueProcessorImpl) SignalExecutionWithRetry(signalRequest *his
 	}
 
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (a *ackManager) readTransferTasks() ([]*persistence.TransferTaskInfo, error) {
-	a.RLock()
-	rLevel := a.readLevel
-	a.RUnlock()
-
-	var response *persistence.GetTransferTasksResponse
-	op := func() error {
-		var err error
-		response, err = a.executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-			ReadLevel:    rLevel,
-			MaxReadLevel: a.shard.GetTransferMaxReadLevel(),
-			BatchSize:    a.processor.config.TransferTaskBatchSize,
-		})
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	tasks := response.Tasks
-	if len(tasks) == 0 {
-		return tasks, nil
-	}
-
-	a.Lock()
-	for _, task := range tasks {
-		if a.readLevel >= task.TaskID {
-			a.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", task.TaskID,
-				a.readLevel)
-		}
-		a.logger.Debugf("Moving read level: %v", task.TaskID)
-		a.readLevel = task.TaskID
-		a.outstandingTasks[a.readLevel] = false
-	}
-	a.Unlock()
-
-	return tasks, nil
-}
-
-func (a *ackManager) completeTask(taskID int64) {
-	a.Lock()
-	if _, ok := a.outstandingTasks[taskID]; ok {
-		a.outstandingTasks[taskID] = true
-	}
-	a.Unlock()
-}
-
-func (a *ackManager) updateAckLevel() {
-	a.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AckLevelUpdateCounter)
-	initialAckLevel := a.ackLevel
-	updatedAckLevel := a.ackLevel
-	a.Lock()
-MoveAckLevelLoop:
-	for current := a.ackLevel + 1; current <= a.readLevel; current++ {
-		if acked, ok := a.outstandingTasks[current]; ok {
-			if acked {
-				err := a.executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: current})
-
-				if err != nil {
-					a.logger.Warnf("Processor unable to complete transfer task '%v': %v", current, err)
-					break MoveAckLevelLoop
-				}
-				a.logger.Debugf("Updating ack level: %v", current)
-				a.ackLevel = current
-				updatedAckLevel = current
-				delete(a.outstandingTasks, current)
-			} else {
-				break MoveAckLevelLoop
-			}
-		}
-	}
-	a.Unlock()
-
-	// Do not update Acklevel if nothing changed upto force update interval
-	if initialAckLevel == updatedAckLevel && time.Since(a.lastUpdated) < a.config.TransferProcessorForceUpdateInterval {
-		return
-	}
-
-	// Always update ackLevel to detect if the shared is stolen
-	if err := a.shard.UpdateTransferAckLevel(updatedAckLevel); err != nil {
-		a.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
-		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
-	} else {
-		a.lastUpdated = time.Now()
-	}
-}
-
-func minDuration(x, y time.Duration) time.Duration {
-	if x < y {
-		return x
-	}
-
-	return y
 }
 
 func getWorkflowExecutionCloseStatus(status int) workflow.WorkflowExecutionCloseStatus {

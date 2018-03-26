@@ -151,41 +151,6 @@ func LogDuplicateTransferTaskEvent(lg bark.Logger, taskType int, taskID int64, s
 		taskID, taskType, scheduleID)
 }
 
-// LogTransferQueueProcesorStartingEvent is used to log transfer queue processor starting
-func LogTransferQueueProcesorStartingEvent(logger bark.Logger) {
-	logger.WithFields(bark.Fields{
-		TagWorkflowEventID: TransferQueueProcessorStarting,
-	}).Info("Transfer queue processor starting.")
-}
-
-// LogTransferQueueProcesorStartedEvent is used to log transfer queue processor started
-func LogTransferQueueProcesorStartedEvent(logger bark.Logger) {
-	logger.WithFields(bark.Fields{
-		TagWorkflowEventID: TransferQueueProcessorStarted,
-	}).Info("Transfer queue processor started.")
-}
-
-// LogTransferQueueProcesorShuttingDownEvent is used to log transfer queue processing shutting down
-func LogTransferQueueProcesorShuttingDownEvent(logger bark.Logger) {
-	logger.WithFields(bark.Fields{
-		TagWorkflowEventID: TransferQueueProcessorShuttingDown,
-	}).Info("Transfer queue processor shutting down.")
-}
-
-// LogTransferQueueProcesorShutdownEvent is used to log transfer queue processor shutdown complete
-func LogTransferQueueProcesorShutdownEvent(logger bark.Logger) {
-	logger.WithFields(bark.Fields{
-		TagWorkflowEventID: TransferQueueProcessorShutdown,
-	}).Info("Transfer queue processor shutdown.")
-}
-
-// LogTransferQueueProcesorShutdownTimedoutEvent is used to log timeout during transfer queue processor shutdown
-func LogTransferQueueProcesorShutdownTimedoutEvent(logger bark.Logger) {
-	logger.WithFields(bark.Fields{
-		TagWorkflowEventID: TransferQueueProcessorShutdownTimedout,
-	}).Warn("Transfer queue processor timedout on shutdown.")
-}
-
 // LogShardRangeUpdatedEvent is used to log rangeID update for a shard
 func LogShardRangeUpdatedEvent(logger bark.Logger, shardID int, rangeID, startSequence, endSequence int64) {
 	logger.WithFields(bark.Fields{
@@ -415,4 +380,49 @@ func LogReplicationTaskProcessorShutdownTimedoutEvent(logger bark.Logger) {
 	logger.WithFields(bark.Fields{
 		TagWorkflowEventID: ReplicationTaskProcessorShutdownTimedout,
 	}).Warn("Replication task processor timedout on shutdown.")
+}
+
+// LogQueueProcesorStartingEvent is used to log queue processor starting
+func LogQueueProcesorStartingEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferQueueProcessorStarting,
+	}).Info("Queue processor starting.")
+}
+
+// LogQueueProcesorStartedEvent is used to log queue processor started
+func LogQueueProcesorStartedEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferQueueProcessorStarted,
+	}).Info("Queue processor started.")
+}
+
+// LogQueueProcesorShuttingDownEvent is used to log queue processor shutting down
+func LogQueueProcesorShuttingDownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferQueueProcessorShuttingDown,
+	}).Info("Queue processor shutting down.")
+}
+
+// LogQueueProcesorShutdownEvent is used to log transfer queue processor shutdown complete
+func LogQueueProcesorShutdownEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferQueueProcessorShutdown,
+	}).Info("Queue processor shutdown.")
+}
+
+// LogQueueProcesorShutdownTimedoutEvent is used to log timeout during transfer queue processor shutdown
+func LogQueueProcesorShutdownTimedoutEvent(logger bark.Logger) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferQueueProcessorShutdownTimedout,
+	}).Warn("Queue processor timedout on shutdown.")
+}
+
+// LogTaskProcessingFailedEvent is used to log failures from task processing.
+func LogTaskProcessingFailedEvent(logger bark.Logger, taskID int64, taskType int, err error) {
+	logger.WithFields(bark.Fields{
+		TagWorkflowEventID: TransferTaskProcessingFailed,
+		TagTaskID:          taskID,
+		TagTaskType:        taskType,
+		TagWorkflowErr:     err,
+	}).Errorf("Processor failed to process task: %v, type: %v.  Error: %v", taskID, taskType, err)
 }

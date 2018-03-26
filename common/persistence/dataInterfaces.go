@@ -1090,6 +1090,26 @@ func (a *HistoryReplicationTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
 
+// GetTaskID returns the task ID for transfer task
+func (t *TransferTaskInfo) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// GetTaskType returns the task type for transfer task
+func (t *TransferTaskInfo) GetTaskType() int {
+	return t.TaskType
+}
+
+// GetTaskID returns the task ID for replication task
+func (t *ReplicationTaskInfo) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// GetTaskType returns the task type for replication task
+func (t *ReplicationTaskInfo) GetTaskType() int {
+	return t.TaskType
+}
+
 // NewHistoryEventBatch returns a new instance of HistoryEventBatch
 func NewHistoryEventBatch(version int, events []*workflow.HistoryEvent) *HistoryEventBatch {
 	return &HistoryEventBatch{
@@ -1124,4 +1144,15 @@ func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
 
 func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
 	config.ClusterName = input["cluster_name"].(string)
+}
+
+// SetSerializedHistoryDefaults  sets the version and encoding types to defaults if they
+// are missing from persistence. This is purely for backwards compatibility
+func SetSerializedHistoryDefaults(history *SerializedHistoryEventBatch) {
+	if history.Version == 0 {
+		history.Version = GetDefaultHistoryVersion()
+	}
+	if len(history.EncodingType) == 0 {
+		history.EncodingType = DefaultEncodingType
+	}
 }

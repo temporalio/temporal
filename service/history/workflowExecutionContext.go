@@ -126,6 +126,14 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	}()
 
 	createReplicationTask := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	if createReplicationTask {
+		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
+		if err != nil {
+			return err
+		}
+
+		c.msBuilder.ApplyReplicationStateUpdates(domainEntry.GetFailoverVersion())
+	}
 	// Take a snapshot of all updates we have accumulated for this execution
 	updates, err := c.msBuilder.CloseUpdateSession(createReplicationTask)
 	if err != nil {

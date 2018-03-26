@@ -35,6 +35,7 @@ import (
 	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -72,6 +73,7 @@ type (
 		numberOfHistoryHosts  int
 		logger                bark.Logger
 		clusterMetadata       cluster.Metadata
+		messagingClient       messaging.Client
 		metadataMgr           persistence.MetadataManager
 		shardMgr              persistence.ShardManager
 		historyMgr            persistence.HistoryManager
@@ -90,15 +92,18 @@ type (
 )
 
 // NewCadence returns an instance that hosts full cadence in one process
-func NewCadence(clusterMetadata cluster.Metadata, metadataMgr persistence.MetadataManager, shardMgr persistence.ShardManager,
-	historyMgr persistence.HistoryManager, executionMgrFactory persistence.ExecutionManagerFactory,
-	taskMgr persistence.TaskManager, visibilityMgr persistence.VisibilityManager,
-	numberOfHistoryShards, numberOfHistoryHosts int, logger bark.Logger) Cadence {
+func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Client,
+	metadataMgr persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
+	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
+	logger bark.Logger) Cadence {
+
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
 		numberOfHistoryHosts:  numberOfHistoryHosts,
 		logger:                logger,
 		clusterMetadata:       clusterMetadata,
+		messagingClient:       messagingClient,
 		metadataMgr:           metadataMgr,
 		visibilityMgr:         visibilityMgr,
 		shardMgr:              shardMgr,
@@ -196,6 +201,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
+	params.MessagingClient = c.messagingClient
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	params.CassandraConfig.Hosts = "127.0.0.1"
 	params.DynamicConfig = dynamicconfig.NewNopClient()
@@ -230,6 +236,7 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 		params.ClusterMetadata = c.clusterMetadata
+		params.MessagingClient = c.messagingClient
 		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 		service := service.New(params)
 		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards)

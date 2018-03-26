@@ -80,6 +80,23 @@ type (
 		Deserialize(data []byte) (*workflow.HistoryEvent, error)
 	}
 
+	queueProcessor interface {
+		common.Daemon
+		NotifyNewTask()
+	}
+
+	queueTaskInfo interface {
+		GetTaskID() int64
+		GetTaskType() int
+	}
+
+	processor interface {
+		GetName() string
+		Process(task queueTaskInfo) error
+		ReadTasks(readLevel int64) ([]queueTaskInfo, error)
+		CompleteTask(taskID int64) error
+	}
+
 	transferQueueProcessor interface {
 		common.Daemon
 		NotifyNewTask()
