@@ -234,7 +234,7 @@ func (e *mutableStateBuilder) ApplyReplicationStateUpdates(failoverVersion int64
 	e.replicationState.CurrentVersion = failoverVersion
 	e.replicationState.LastWriteVersion = failoverVersion
 	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
-	e.replicationState.LastWriteEventID = e.hBuilder.nextEventID - 1
+	e.replicationState.LastWriteEventID = e.GetNextEventID() - 1
 }
 
 func (e *mutableStateBuilder) CloseUpdateSession(createReplicationTask bool) (*mutableStateSessionUpdates, error) {
@@ -291,8 +291,8 @@ func (e *mutableStateBuilder) CloseUpdateSession(createReplicationTask bool) (*m
 
 func (e *mutableStateBuilder) createReplicationTask() *persistence.HistoryReplicationTask {
 	return &persistence.HistoryReplicationTask{
-		FirstEventID:        e.hBuilder.firstEventID,
-		NextEventID:         e.hBuilder.nextEventID,
+		FirstEventID:        e.GetLastFirstEventID(),
+		NextEventID:         e.GetNextEventID(),
 		Version:             e.replicationState.CurrentVersion,
 		LastReplicationInfo: e.replicationState.LastReplicationInfo,
 	}
@@ -1644,8 +1644,8 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		}
 
 		replicationTask := &persistence.HistoryReplicationTask{
-			FirstEventID:        newStateBuilder.hBuilder.firstEventID,
-			NextEventID:         newStateBuilder.hBuilder.nextEventID,
+			FirstEventID:        firstEventID,
+			NextEventID:         newStateBuilder.GetNextEventID(),
 			Version:             failoverVersion,
 			LastReplicationInfo: nil,
 		}

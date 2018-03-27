@@ -544,6 +544,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerTaskWorkflowTimeoutScope:              {operation: "TimerTaskWorkflowTimeout"},
 		TimerTaskDeleteHistoryEvent:                {operation: "TimerTaskDeleteHistoryEvent"},
 		HistoryEventNotificationScope:              {operation: "HistoryEventNotification"},
+		ReplicatorQueueProcessorScope:              {operation: "ReplicatorQueueProcessor"},
+		ReplicatorTaskHistoryScope:                 {operation: "ReplicatorTaskHistory"},
 	},
 	// Matching Scope Names
 	Matching: {
