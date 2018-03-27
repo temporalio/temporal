@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -102,6 +103,13 @@ func (s *shardControllerSuite) TearDownTest() {
 func (s *shardControllerSuite) TestAcquireShardSuccess() {
 	numShards := 10
 	s.config.NumberOfShards = numShards
+
+	replicationAck := int64(201)
+	currentClusterTransferAck := int64(210)
+	alternativeClusterTransferAck := int64(320)
+	currentClusterTimerAck := time.Now().Add(-100 * time.Second)
+	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
+
 	myShards := []int{}
 	for shardID := 0; shardID < numShards; shardID++ {
 		hostID := shardID % 4
@@ -116,18 +124,39 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 			s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 				&persistence.GetShardResponse{
 					ShardInfo: &persistence.ShardInfo{
-						ShardID: shardID,
-						Owner:   s.hostInfo.Identity(),
-						RangeID: 5,
+						ShardID:             shardID,
+						Owner:               s.hostInfo.Identity(),
+						RangeID:             5,
+						ReplicationAckLevel: replicationAck,
+						TransferAckLevel:    currentClusterTransferAck,
+						TimerAckLevel:       currentClusterTimerAck,
+						ClusterTransferAckLevel: map[string]int64{
+							cluster.TestCurrentClusterName:     currentClusterTransferAck,
+							cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+						},
+						ClusterTimerAckLevel: map[string]time.Time{
+							cluster.TestCurrentClusterName:     currentClusterTimerAck,
+							cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+						},
 					},
 				}, nil).Once()
 			s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
 				ShardInfo: &persistence.ShardInfo{
-					ShardID:          shardID,
-					Owner:            s.hostInfo.Identity(),
-					RangeID:          6,
-					StolenSinceRenew: 1,
-					TransferAckLevel: 0,
+					ShardID:             shardID,
+					Owner:               s.hostInfo.Identity(),
+					RangeID:             6,
+					StolenSinceRenew:    1,
+					ReplicationAckLevel: replicationAck,
+					TransferAckLevel:    currentClusterTransferAck,
+					TimerAckLevel:       currentClusterTimerAck,
+					ClusterTransferAckLevel: map[string]int64{
+						cluster.TestCurrentClusterName:     currentClusterTransferAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+					},
+					ClusterTimerAckLevel: map[string]time.Time{
+						cluster.TestCurrentClusterName:     currentClusterTimerAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+					},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil).Once()
@@ -163,6 +192,13 @@ func (s *shardControllerSuite) TestAcquireShardLookupFailure() {
 func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := 2
 	s.config.NumberOfShards = numShards
+
+	replicationAck := int64(201)
+	currentClusterTransferAck := int64(210)
+	alternativeClusterTransferAck := int64(320)
+	currentClusterTimerAck := time.Now().Add(-100 * time.Second)
+	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
+
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
 		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
@@ -173,18 +209,39 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
 				ShardInfo: &persistence.ShardInfo{
-					ShardID: shardID,
-					Owner:   s.hostInfo.Identity(),
-					RangeID: 5,
+					ShardID:             shardID,
+					Owner:               s.hostInfo.Identity(),
+					RangeID:             5,
+					ReplicationAckLevel: replicationAck,
+					TransferAckLevel:    currentClusterTransferAck,
+					TimerAckLevel:       currentClusterTimerAck,
+					ClusterTransferAckLevel: map[string]int64{
+						cluster.TestCurrentClusterName:     currentClusterTransferAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+					},
+					ClusterTimerAckLevel: map[string]time.Time{
+						cluster.TestCurrentClusterName:     currentClusterTimerAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+					},
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
 			ShardInfo: &persistence.ShardInfo{
-				ShardID:          shardID,
-				Owner:            s.hostInfo.Identity(),
-				RangeID:          6,
-				StolenSinceRenew: 1,
-				TransferAckLevel: 0,
+				ShardID:             shardID,
+				Owner:               s.hostInfo.Identity(),
+				RangeID:             6,
+				StolenSinceRenew:    1,
+				ReplicationAckLevel: replicationAck,
+				TransferAckLevel:    currentClusterTransferAck,
+				TimerAckLevel:       currentClusterTimerAck,
+				ClusterTransferAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+				},
+				ClusterTimerAckLevel: map[string]time.Time{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+				},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -205,6 +262,13 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := 2
 	s.config.NumberOfShards = numShards
+
+	replicationAck := int64(201)
+	currentClusterTransferAck := int64(210)
+	alternativeClusterTransferAck := int64(320)
+	currentClusterTimerAck := time.Now().Add(-100 * time.Second)
+	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
+
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
 		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
@@ -215,18 +279,39 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 		s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 			&persistence.GetShardResponse{
 				ShardInfo: &persistence.ShardInfo{
-					ShardID: shardID,
-					Owner:   s.hostInfo.Identity(),
-					RangeID: 5,
+					ShardID:             shardID,
+					Owner:               s.hostInfo.Identity(),
+					RangeID:             5,
+					ReplicationAckLevel: replicationAck,
+					TransferAckLevel:    currentClusterTransferAck,
+					TimerAckLevel:       currentClusterTimerAck,
+					ClusterTransferAckLevel: map[string]int64{
+						cluster.TestCurrentClusterName:     currentClusterTransferAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+					},
+					ClusterTimerAckLevel: map[string]time.Time{
+						cluster.TestCurrentClusterName:     currentClusterTimerAck,
+						cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+					},
 				},
 			}, nil).Once()
 		s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
 			ShardInfo: &persistence.ShardInfo{
-				ShardID:          shardID,
-				Owner:            s.hostInfo.Identity(),
-				RangeID:          6,
-				StolenSinceRenew: 1,
-				TransferAckLevel: 0,
+				ShardID:             shardID,
+				Owner:               s.hostInfo.Identity(),
+				RangeID:             6,
+				StolenSinceRenew:    1,
+				ReplicationAckLevel: replicationAck,
+				TransferAckLevel:    currentClusterTransferAck,
+				TimerAckLevel:       currentClusterTimerAck,
+				ClusterTransferAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+				},
+				ClusterTimerAckLevel: map[string]time.Time{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+				},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil).Once()
@@ -460,6 +545,13 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 
 func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine *MockHistoryEngine, currentRangeID,
 	newRangeID int64) {
+
+	replicationAck := int64(201)
+	currentClusterTransferAck := int64(210)
+	alternativeClusterTransferAck := int64(320)
+	currentClusterTimerAck := time.Now().Add(-100 * time.Second)
+	alternativeClusterTimerAck := time.Now().Add(-200 * time.Second)
+
 	mockExecutionMgr := &mmocks.ExecutionManager{}
 	mockExecutionMgr.On("Close").Return()
 	s.mockExecutionMgrFactory.On("CreateExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
@@ -469,18 +561,39 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 	s.mockShardManager.On("GetShard", &persistence.GetShardRequest{ShardID: shardID}).Return(
 		&persistence.GetShardResponse{
 			ShardInfo: &persistence.ShardInfo{
-				ShardID: shardID,
-				Owner:   s.hostInfo.Identity(),
-				RangeID: currentRangeID,
+				ShardID:             shardID,
+				Owner:               s.hostInfo.Identity(),
+				RangeID:             currentRangeID,
+				ReplicationAckLevel: replicationAck,
+				TransferAckLevel:    currentClusterTransferAck,
+				TimerAckLevel:       currentClusterTimerAck,
+				ClusterTransferAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+				},
+				ClusterTimerAckLevel: map[string]time.Time{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+				},
 			},
 		}, nil).Once()
 	s.mockShardManager.On("UpdateShard", &persistence.UpdateShardRequest{
 		ShardInfo: &persistence.ShardInfo{
-			ShardID:          shardID,
-			Owner:            s.hostInfo.Identity(),
-			RangeID:          newRangeID,
-			StolenSinceRenew: 1,
-			TransferAckLevel: 0,
+			ShardID:             shardID,
+			Owner:               s.hostInfo.Identity(),
+			RangeID:             newRangeID,
+			StolenSinceRenew:    1,
+			ReplicationAckLevel: replicationAck,
+			TransferAckLevel:    currentClusterTransferAck,
+			TimerAckLevel:       currentClusterTimerAck,
+			ClusterTransferAckLevel: map[string]int64{
+				cluster.TestCurrentClusterName:     currentClusterTransferAck,
+				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+			},
+			ClusterTimerAckLevel: map[string]time.Time{
+				cluster.TestCurrentClusterName:     currentClusterTimerAck,
+				cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
+			},
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil).Once()

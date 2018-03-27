@@ -35,7 +35,6 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -61,7 +60,6 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		hSerializerFactory   persistence.HistorySerializerFactory
 		historyCache         *historyCache
-		domainCache          cache.DomainCache
 		metricsClient        metrics.Client
 		logger               bark.Logger
 	}
@@ -108,9 +106,8 @@ var (
 )
 
 // NewEngineWithShardContext creates an instance of history engine
-func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache,
-	visibilityMgr persistence.VisibilityManager, matching matching.Client, historyClient hc.Client,
-	historyEventNotifier historyEventNotifier, publisher messaging.Producer) Engine {
+func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.VisibilityManager,
+	matching matching.Client, historyClient hc.Client, historyEventNotifier historyEventNotifier, publisher messaging.Producer) Engine {
 	shardWrapper := &shardContextWrapper{
 		ShardContext:         shard,
 		historyEventNotifier: historyEventNotifier,
@@ -128,7 +125,6 @@ func NewEngineWithShardContext(shard ShardContext, domainCache cache.DomainCache
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: historySerializerFactory,
 		historyCache:       historyCache,
-		domainCache:        domainCache,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
 		}),
@@ -883,7 +879,7 @@ Update_History_Loop:
 				// First check if we need to use a different target domain to schedule activity
 				if attributes.Domain != nil {
 					// TODO: Error handling for ActivitySchedule failed when domain lookup fails
-					domainEntry, err := e.domainCache.GetDomain(*attributes.Domain)
+					domainEntry, err := e.shard.GetDomainCache().GetDomain(*attributes.Domain)
 					if err != nil {
 						return &workflow.InternalServiceError{Message: "Unable to schedule activity across domain."}
 					}
@@ -1062,7 +1058,7 @@ Update_History_Loop:
 				if attributes.GetDomain() == "" {
 					foreignDomainID = msBuilder.executionInfo.DomainID
 				} else {
-					foreignDomainEntry, err := e.domainCache.GetDomain(attributes.GetDomain())
+					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
 						return &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.", attributes.GetDomain())}
@@ -1100,7 +1096,7 @@ Update_History_Loop:
 				if attributes.GetDomain() == "" {
 					foreignDomainID = msBuilder.executionInfo.DomainID
 				} else {
-					foreignDomainEntry, err := e.domainCache.GetDomain(attributes.GetDomain())
+					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
 						return &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to signal workflow across domain: %v.", attributes.GetDomain())}
@@ -1175,7 +1171,7 @@ Update_History_Loop:
 				// First check if we need to use a different target domain to schedule child execution
 				if attributes.Domain != nil {
 					// TODO: Error handling for DecisionType_StartChildWorkflowExecution failed when domain lookup fails
-					domainEntry, err := e.domainCache.GetDomain(*attributes.Domain)
+					domainEntry, err := e.shard.GetDomainCache().GetDomain(*attributes.Domain)
 					if err != nil {
 						return &workflow.InternalServiceError{Message: "Unable to schedule child execution across domain."}
 					}
@@ -1852,7 +1848,7 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 
 	// Generate a timer task to cleanup history events for this workflow execution
 	var retentionInDays int32
-	domainEntry, err := e.domainCache.GetDomainByID(domainID)
+	domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return nil, nil, err

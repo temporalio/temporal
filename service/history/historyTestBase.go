@@ -44,6 +44,22 @@ const (
 	testSchemaDir            = "../.."
 )
 
+var (
+	testDomainActiveID           = "7b3fe0f6-e98f-4960-bdb7-220d0fb3f521"
+	testDomainStandbyID          = "ede1e8a6-bdb7-e98f-4960-448b0cdef134"
+	testDomainActiveName         = "test active domain name"
+	testDomainStandbyName        = "test standby domain name"
+	testDomainRetention          = int32(10)
+	testDomainEmitMetric         = true
+	testDomainActiveClusterName  = cluster.TestCurrentClusterName
+	testDomainStandbyClusterName = cluster.TestAlternativeClusterName
+	testDomainIsGlobalDomain     = true
+	testDomainAllClusters        = []*persistence.ClusterReplicationConfig{
+		&persistence.ClusterReplicationConfig{ClusterName: testDomainActiveClusterName},
+		&persistence.ClusterReplicationConfig{ClusterName: testDomainStandbyClusterName},
+	}
+)
+
 type (
 	// TestShardContext shard context for testing.
 	TestShardContext struct {
@@ -119,12 +135,31 @@ func (s *TestShardContext) GetTransferMaxReadLevel() int64 {
 
 // GetTransferAckLevel test implementation
 func (s *TestShardContext) GetTransferAckLevel() int64 {
-	return atomic.LoadInt64(&s.shardInfo.TransferAckLevel)
+	s.RLock()
+	defer s.RUnlock()
+
+	// TODO cluster should be an input parameter
+	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
+	// if we can find corresponding ack level
+	if ackLevel, ok := s.shardInfo.ClusterTransferAckLevel[cluster]; ok {
+		return ackLevel
+	}
+	// otherwise, default to existing ack level, which belongs to local cluster
+	// this can happen if you add more cluster
+	return s.shardInfo.TransferAckLevel
 }
 
 // UpdateTransferAckLevel test implementation
 func (s *TestShardContext) UpdateTransferAckLevel(ackLevel int64) error {
-	atomic.StoreInt64(&s.shardInfo.TransferAckLevel, ackLevel)
+	s.RLock()
+	defer s.RUnlock()
+
+	// TODO cluster should be an input parameter
+	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
+	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		s.shardInfo.TransferAckLevel = ackLevel
+	}
+	s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel
 	return nil
 }
 
@@ -140,17 +175,28 @@ func (s *TestShardContext) UpdateReplicatorAckLevel(ackLevel int64) error {
 }
 
 // GetTimerAckLevel test implementation
-func (s *TestShardContext) GetTimerAckLevel() time.Time {
+func (s *TestShardContext) GetTimerAckLevel(cluster string) time.Time {
 	s.RLock()
-	defer s.RLock()
+	defer s.RUnlock()
+
+	// if we can find corresponding ack level
+	if ackLevel, ok := s.shardInfo.ClusterTimerAckLevel[cluster]; ok {
+		return ackLevel
+	}
+	// otherwise, default to existing ack level, which belongs to local cluster
+	// this can happen if you add more cluster
 	return s.shardInfo.TimerAckLevel
 }
 
 // UpdateTimerAckLevel test implementation
-func (s *TestShardContext) UpdateTimerAckLevel(ackLevel time.Time) error {
-	s.Lock()
-	defer s.Unlock()
-	s.shardInfo.TimerAckLevel = ackLevel
+func (s *TestShardContext) UpdateTimerAckLevel(cluster string, ackLevel time.Time) error {
+	s.RLock()
+	defer s.RUnlock()
+
+	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		s.shardInfo.TimerAckLevel = ackLevel
+	}
+	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
 	return nil
 }
 
@@ -236,4 +282,36 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, clusterMetadata,
 		config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
+}
+
+// SetupDomains setup the domains used for testing
+func (s *TestBase) SetupDomains() {
+	// create the domains which are active / standby
+	createDomainRequest := &persistence.CreateDomainRequest{
+		Info: &persistence.DomainInfo{
+			ID:     testDomainActiveID,
+			Name:   testDomainActiveName,
+			Status: persistence.DomainStatusRegistered,
+		},
+		Config: &persistence.DomainConfig{
+			Retention:  testDomainRetention,
+			EmitMetric: testDomainEmitMetric,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: testDomainActiveClusterName,
+			Clusters:          testDomainAllClusters,
+		},
+		IsGlobalDomain: testDomainIsGlobalDomain,
+	}
+	s.MetadataManager.CreateDomain(createDomainRequest)
+	createDomainRequest.Info.ID = testDomainStandbyID
+	createDomainRequest.Info.Name = testDomainStandbyName
+	createDomainRequest.ReplicationConfig.ActiveClusterName = testDomainStandbyClusterName
+	s.MetadataManager.CreateDomain(createDomainRequest)
+}
+
+// TeardownDomains delete the domains used for testing
+func (s *TestBase) TeardownDomains() {
+	s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainActiveID})
+	s.MetadataManager.DeleteDomain(&persistence.DeleteDomainRequest{ID: testDomainStandbyID})
 }

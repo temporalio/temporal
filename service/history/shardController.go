@@ -88,7 +88,7 @@ type (
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
 	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, metadataMgr persistence.MetadataManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
-	config *Config, logger bark.Logger, reporter metrics.Client) *shardController {
+	config *Config, logger bark.Logger, metricsClient metrics.Client) *shardController {
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueShardController,
 	})
@@ -108,7 +108,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		shutdownCh:          make(chan struct{}),
 		logger:              logger,
 		config:              config,
-		metricsClient:       reporter,
+		metricsClient:       metricsClient,
 	}
 }
 

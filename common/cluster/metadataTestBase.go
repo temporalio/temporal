@@ -34,6 +34,11 @@ const (
 var (
 	// TestAllClusterNames is the all cluster names used for test
 	TestAllClusterNames = []string{TestCurrentClusterName, TestAlternativeClusterName}
+	// TestAllClusterNamesMap is the same as above, juse convinent for test mocking
+	TestAllClusterNamesMap = map[string]bool{
+		TestCurrentClusterName:     true,
+		TestAlternativeClusterName: true,
+	}
 )
 
 // GetTestClusterMetadata return an cluster metadata instance, which is initialized

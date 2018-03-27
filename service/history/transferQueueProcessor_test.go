@@ -35,7 +35,6 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -48,7 +47,6 @@ type (
 		processor         *transferQueueProcessorImpl
 		mockMatching      *mocks.MatchingClient
 		mockHistoryClient *mocks.HistoryClient
-		mockMetadataMgr   *mocks.MetadataManager
 		mockVisibilityMgr *mocks.VisibilityManager
 		logger            bark.Logger
 	}
@@ -68,16 +66,17 @@ func (s *transferQueueProcessorSuite) SetupSuite() {
 	logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
 	s.SetupWorkflowStore()
+	s.SetupDomains()
 }
 
 func (s *transferQueueProcessorSuite) TearDownSuite() {
+	s.TeardownDomains()
 	s.TearDownWorkflowStore()
 }
 
 func (s *transferQueueProcessorSuite) TearDownTest() {
 	s.mockMatching.AssertExpectations(s.T())
 	s.mockHistoryClient.AssertExpectations(s.T())
-	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
 }
 
@@ -89,15 +88,12 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	s.mockMatching = &mocks.MatchingClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
-	domainCache := cache.NewDomainCache(s.mockMetadataMgr, cluster.GetTestClusterMetadata(false, false), s.logger)
 	h := &historyEngineImpl{
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,
-		domainCache:        domainCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
@@ -114,7 +110,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 }
 
 func (s *transferQueueProcessorSuite) TestSingleDecisionTask() {
-	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("single-decisiontask-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "single-decisiontask-queue"
@@ -141,7 +137,7 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
-	domainID := "c867e7d6-0f0f-41df-a59c-1cd3eb1436f5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("many-transfertasks-test"),
 		RunId: common.StringPtr("57d5f005-bdaa-42a5-a1c5-b9c45d8699a9")}
 	taskList := "many-transfertasks-queue"
@@ -192,7 +188,7 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasks() {
-	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
+	domainID := testDomainActiveID
 	workflowID := "delete-execution-transfertasks-test"
 	runID := "79fc8984-f78f-41cf-8fa1-4d383edb2cfd"
 	workflowExecution := workflow.WorkflowExecution{
@@ -239,11 +235,6 @@ workerPump:
 					)).Once().Return(nil)
 				}
 			} else if task.TaskType == persistence.TransferTaskTypeCloseExecution {
-				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(&persistence.GetDomainResponse{
-					Config: &persistence.DomainConfig{
-						Retention: 1,
-					},
-				}, nil)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
 			}
 			s.processor.processWithRetry(task)
@@ -253,12 +244,12 @@ workerPump:
 	}
 
 	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
-	s.NotNil(err3, "Error expected.")
-	s.logger.Infof("Execution created successfully: %v", err3)
+	_, ok := err3.(*persistence.WorkflowExecutionAlreadyStartedError)
+	s.True(ok)
 }
 
 func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotExist() {
-	domainID := "1399c0d5-f119-42d3-bd03-bedb6cf96e46"
+	domainID := testDomainActiveID
 	workflowID := "delete-execution-transfertasks-domain-test"
 	runID := "623525ab-da2b-4715-8756-2d6263d81524"
 	workflowExecution := workflow.WorkflowExecution{
@@ -283,7 +274,7 @@ func (s *transferQueueProcessorSuite) TestDeleteExecutionTransferTasksDomainNotE
 	err1 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3))
 	s.Nil(err1, "No error expected.")
 
-	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("delete-execution-transfertasks-test"),
+	newExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(workflowID),
 		RunId: common.StringPtr("d3ac892e-9fc1-4def-84fa-bfc44b9128cc")}
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -299,7 +290,13 @@ workerPump:
 					s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", mock.Anything).Once().Return(nil)
 				}
 			} else if task.TaskType == persistence.TransferTaskTypeCloseExecution {
-				s.mockMetadataMgr.On("GetDomain", mock.Anything).Once().Return(nil, &workflow.EntityNotExistsError{})
+				// get rid of the current domain && domain cache
+				s.TeardownDomains()
+				s.ShardContext.domainCache = cache.NewDomainCache(
+					s.MetadataManager,
+					s.ShardContext.GetService().GetClusterMetadata(),
+					s.logger,
+				)
 				s.mockVisibilityMgr.On("RecordWorkflowExecutionClosed", mock.Anything).Once().Return(nil)
 			}
 			s.processor.processWithRetry(task)
@@ -308,19 +305,20 @@ workerPump:
 		}
 	}
 
+	s.SetupDomains()
 	_, err3 := s.CreateWorkflowExecution(domainID, newExecution, taskList, "wType", 20, 10, nil, 3, 0, 2, nil)
-	s.Nil(err3, "No error expected.")
-	s.logger.Infof("Execution created successfully: %v", err3)
+	_, ok := err3.(*persistence.WorkflowExecutionAlreadyStartedError)
+	s.True(ok)
 }
 
 func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
-	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("cancel-transfer-test"),
 		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "cancel-transfer-queue"
 	identity := "cancel-remote-execution-test"
-	targetDomain := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetDomain := testDomainActiveID
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	wtimeout := int32(20)
@@ -374,13 +372,13 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_RequestFail() {
-	domainID := "f5f1ece7-000d-495d-81c3-918ac29006ed"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("cancel-transfer-fail-test"),
 		RunId:      common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "cancel-transfer-fail-queue"
 	identity := "cancel-transfer-fail-test"
-	targetDomain := "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
+	targetDomain := testDomainActiveID
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
@@ -437,14 +435,14 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask() {
-	domainID := uuid.New()
+	domainID := testDomainActiveID
 	runID := uuid.New()
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("signal-transfer-test"),
 		RunId:      common.StringPtr(runID)}
 	taskList := "signal-transfer-queue"
 	identity := "signal-execution-test"
-	targetDomain := uuid.New()
+	targetDomain := testDomainActiveID
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := uuid.New()
 	signalRequestID := uuid.New()
@@ -503,14 +501,14 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask_Failed() {
-	domainID := uuid.New()
+	domainID := testDomainActiveID
 	runID := uuid.New()
 	workflowExecution := workflow.WorkflowExecution{
-		WorkflowId: common.StringPtr("signal-transfer-test"),
+		WorkflowId: common.StringPtr("signal-transfer-test-failed"),
 		RunId:      common.StringPtr(runID)}
 	taskList := "signal-transfer-queue"
 	identity := "signal-execution-test"
-	targetDomain := uuid.New()
+	targetDomain := testDomainActiveID
 	targetWorkflowID := "target-workflow_id"
 	targetRunID := uuid.New()
 	signalRequestID := uuid.New()
@@ -568,7 +566,7 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestCompleteTaskAfterExecutionDeleted() {
-	domainID := "b677a307-8261-40ea-b239-ab2ec78e443b"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("complete-task-execution-deleted-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 	taskList := "complete-task-execution-deleted-queue"
@@ -595,8 +593,8 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasks() {
-	domain := "start-child-execution-transfer-tasks-test-domain"
-	domainID := "b7f71853-0a8c-4eb1-af6b-c4e71dae50a1"
+	domain := testDomainActiveName
+	domainID := testDomainActiveID
 	workflowID := "start-child-execution-transfertasks-test"
 	runID := "67ad6d62-79c6-4c8a-a27a-1fb7a10ae789"
 	workflowExecution := workflow.WorkflowExecution{
@@ -628,8 +626,8 @@ workerPump:
 }
 
 func (s *transferQueueProcessorSuite) TestStartChildExecutionTransferTasksChildCompleted() {
-	domain := "start-child-execution-transfer-tasks-child-completed-test-domain"
-	domainID := "8bf7aaf8-810a-4778-a549-d7913d2a5b82"
+	domain := testDomainActiveName
+	domainID := testDomainActiveID
 	workflowID := "start-child-execution-transfertasks-child-completed-test"
 	runID := "a627ea38-7e5e-41cc-9a32-4c7979b93ae2"
 	workflowExecution := workflow.WorkflowExecution{

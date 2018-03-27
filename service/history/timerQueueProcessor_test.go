@@ -32,8 +32,6 @@ import (
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
@@ -43,12 +41,9 @@ type (
 	timerQueueProcessorSuite struct {
 		suite.Suite
 		TestBase
-		engineImpl       *historyEngineImpl
-		domainCache      cache.DomainCache
-		mockShardManager *mocks.ShardManager
-		clusterMetadata  cluster.Metadata
-		shardClosedCh    chan int
-		logger           bark.Logger
+		engineImpl    *historyEngineImpl
+		shardClosedCh chan int
+		logger        bark.Logger
 
 		mockMetadataMgr   *mocks.MetadataManager
 		mockVisibilityMgr *mocks.VisibilityManager
@@ -66,22 +61,18 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	}
 
 	s.SetupWorkflowStore()
+	s.SetupDomains()
 
 	log2 := log.New()
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
-	s.mockShardManager = &mocks.ShardManager{}
-	s.mockMetadataMgr = &mocks.MetadataManager{}
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	historyCache.disabled = true
-	s.clusterMetadata = cluster.GetTestClusterMetadata(false, false)
-	s.domainCache = cache.NewDomainCache(s.mockMetadataMgr, s.clusterMetadata, s.logger)
 	s.engineImpl = &historyEngineImpl{
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,
-		domainCache:        s.domainCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
@@ -90,15 +81,15 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	s.engineImpl.txProcessor = newTransferQueueProcessor(
 		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{},
 	)
-
 }
 
 func (s *timerQueueProcessorSuite) TearDownSuite() {
+	s.TeardownDomains()
 	s.TearDownWorkflowStore()
 }
 
 func (s *timerQueueProcessorSuite) TearDownTest() {
-	s.mockShardManager.AssertExpectations(s.T())
+
 }
 
 func (s *timerQueueProcessorSuite) updateTimerSeqNumbers(timerTasks []persistence.Task) {
@@ -109,7 +100,7 @@ func (s *timerQueueProcessorSuite) updateTimerSeqNumbers(timerTasks []persistenc
 		}
 		task.SetTaskID(taskID)
 		s.logger.Infof("%v: TestTimerQueueProcessorSuite: Assigning timer: %s",
-			time.Now().UTC(), SequenceID{VisibilityTimestamp: persistence.GetVisibilityTSFrom(task), TaskID: task.GetTaskID()})
+			time.Now().UTC(), TimerSequenceID{VisibilityTimestamp: persistence.GetVisibilityTSFrom(task), TaskID: task.GetTaskID()})
 	}
 }
 
@@ -240,7 +231,7 @@ func (s *timerQueueProcessorSuite) closeWorkflow(domainID string, we workflow.Wo
 }
 
 func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
-	domainID := "7b3fe0f6-e98f-4960-bdb7-220d0fb3f521"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("single-timer-test"),
 		RunId:      common.StringPtr("6cc028d3-b4be-4038-80c9-bbcf99f7f109"),
@@ -276,7 +267,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 }
 
 func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("multiple-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -315,7 +306,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 }
 
 func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("After-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -399,7 +390,7 @@ func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms *mutableStateBuilde
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutStart() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -440,7 +431,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStart() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -483,7 +474,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThanStartToClose() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-more-than-start2close"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -525,7 +516,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e123"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -567,7 +558,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedActivity() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Completed-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -613,7 +604,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustScheduled() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Scheduled-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -654,7 +645,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -697,7 +688,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Completed() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Completed-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -744,7 +735,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 }
 
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-hb-started-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -767,7 +758,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 }
 
 func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -789,7 +780,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 }
 
 func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-same-expiry-test"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 
@@ -833,7 +824,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 }
 
 func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
-	domainID := "5bb49df8-71bc-4c63-b57f-05f2a508e7b5"
+	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("closed-workflow-test-desicion-timer"),
 		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
 

@@ -107,6 +107,14 @@ type (
 		NotifyNewTimers(timerTask []persistence.Task)
 	}
 
+	timerQueueAckMgr interface {
+		readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error)
+		retryTimerTask(timerTask *persistence.TimerTaskInfo)
+		completeTimerTask(taskID TimerSequenceID)
+		updateAckLevel()
+		isProcessNow(time.Time) bool
+	}
+
 	historyEventNotifier interface {
 		common.Daemon
 		NotifyNewHistoryEvent(event *historyEventNotification)

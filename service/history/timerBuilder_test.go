@@ -220,6 +220,6 @@ func (s *timerBuilderProcessorSuite) TestDecodeHistory() {
 }
 
 func (s *timerBuilderProcessorSuite) TestDecodeKey() {
-	taskID := SequenceID{VisibilityTimestamp: time.Unix(0, 0), TaskID: 1}
-	s.logger.Infof("Timer: %s, expiry: %v", SequenceID(taskID), taskID.VisibilityTimestamp)
+	taskID := TimerSequenceID{VisibilityTimestamp: time.Unix(0, 0), TaskID: 1}
+	s.logger.Infof("Timer: %s, expiry: %v", TimerSequenceID(taskID), taskID.VisibilityTimestamp)
 }
