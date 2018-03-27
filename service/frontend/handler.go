@@ -1897,7 +1897,7 @@ func (wh *WorkflowHandler) validateExecution(w *gen.WorkflowExecution, scope int
 	if w.WorkflowId == nil || w.GetWorkflowId() == "" {
 		return wh.error(errWorkflowIDNotSet, scope)
 	}
-	if w.RunId != nil && uuid.Parse(*w.RunId) == nil {
+	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
 		return wh.error(errInvalidRunID, scope)
 	}
 	return nil

@@ -324,7 +324,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), strconv.FormatInt(e.GetTimestamp(), 10), ColorEvent(e), HistoryEventToString(e)})
 		} else if printDateTime {
 			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), convertTime(e.GetTimestamp(), false), ColorEvent(e), HistoryEventToString(e)})
-		} else {
+		} else { // default not show time
 			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), ColorEvent(e), HistoryEventToString(e)})
 		}
 	}
@@ -660,6 +660,115 @@ func ListAllWorkflow(c *cli.Context) {
 		}
 	}
 	table.Render()
+}
+
+// DescribeWorkflow show information about the specified workflow execution
+func DescribeWorkflow(c *cli.Context) {
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	describeWorkflowHelper(c, wid, rid)
+}
+
+// DescribeWorkflowWithID show information about the specified workflow execution
+func DescribeWorkflowWithID(c *cli.Context) {
+	if !c.Args().Present() {
+		ExitIfError(errors.New("workflow_id is required"))
+	}
+	wid := c.Args().First()
+	rid := ""
+	if c.NArg() >= 2 {
+		rid = c.Args().Get(1)
+	}
+
+	describeWorkflowHelper(c, wid, rid)
+}
+
+func describeWorkflowHelper(c *cli.Context, wid, rid string) {
+	wfClient := getWorkflowClient(c)
+
+	printRawTime := c.Bool(FlagPrintRawTime) // default show datetime instead of raw time
+
+	ctx, cancel := newContext()
+	defer cancel()
+
+	resp, err := wfClient.DescribeWorkflowExecution(ctx, wid, rid)
+	if err != nil {
+		ErrorAndExit("Describe workflow execution failed", err)
+	}
+	var o interface{}
+	if printRawTime {
+		o = resp
+	} else {
+		o = convertDescribeWorkflowExecutionResponse(resp)
+	}
+	prettyPrintJSONObject(o)
+}
+
+func prettyPrintJSONObject(o interface{}) {
+	b, err := json.MarshalIndent(o, "", "  ")
+	if err != nil {
+		fmt.Printf("Error when try to print pretty: %v\n", err)
+		fmt.Println(o)
+	}
+	os.Stdout.Write(b)
+	fmt.Println()
+}
+
+// describeWorkflowExecutionResponse is used to print datetime instead of print raw time
+type describeWorkflowExecutionResponse struct {
+	ExecutionConfiguration *s.WorkflowExecutionConfiguration
+	WorkflowExecutionInfo  workflowExecutionInfo
+	PendingActivities      []*pendingActivityInfo
+}
+
+// workflowExecutionInfo has same fields as shared.WorkflowExecutionInfo, but has datetime instead of raw time
+type workflowExecutionInfo struct {
+	Execution     *s.WorkflowExecution
+	Type          *s.WorkflowType
+	StartTime     *string // change from *int64
+	CloseTime     *string // change from *int64
+	CloseStatus   *s.WorkflowExecutionCloseStatus
+	HistoryLength *int64
+}
+
+// pendingActivityInfo has same fields as shared.PendingActivityInfo, but different field type for better display
+type pendingActivityInfo struct {
+	ActivityID             *string
+	ActivityType           *s.ActivityType
+	State                  *s.PendingActivityState
+	HeartbeatDetails       *string // change from byte[]
+	LastHeartbeatTimestamp *string // change from *int64
+}
+
+func convertDescribeWorkflowExecutionResponse(resp *s.DescribeWorkflowExecutionResponse) *describeWorkflowExecutionResponse {
+	info := resp.WorkflowExecutionInfo
+	executionInfo := workflowExecutionInfo{
+		Execution:     info.Execution,
+		Type:          info.Type,
+		StartTime:     common.StringPtr(convertTime(info.GetStartTime(), false)),
+		CloseTime:     common.StringPtr(convertTime(info.GetCloseTime(), false)),
+		CloseStatus:   info.CloseStatus,
+		HistoryLength: info.HistoryLength,
+	}
+	var pendingActs []*pendingActivityInfo
+	var tmpAct *pendingActivityInfo
+	for _, pa := range resp.PendingActivities {
+		tmpAct = &pendingActivityInfo{
+			ActivityID:             pa.ActivityID,
+			ActivityType:           pa.ActivityType,
+			State:                  pa.State,
+			HeartbeatDetails:       common.StringPtr(string(pa.HeartbeatDetails)),
+			LastHeartbeatTimestamp: common.StringPtr(convertTime(pa.GetLastHeartbeatTimestamp(), false)),
+		}
+		pendingActs = append(pendingActs, tmpAct)
+	}
+
+	return &describeWorkflowExecutionResponse{
+		ExecutionConfiguration: resp.ExecutionConfiguration,
+		WorkflowExecutionInfo:  executionInfo,
+		PendingActivities:      pendingActs,
+	}
 }
 
 func createTableForListWorkflow(listAll bool) *tablewriter.Table {
