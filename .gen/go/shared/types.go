@@ -21712,6 +21712,510 @@ func (v *SignalExternalWorkflowExecutionInitiatedEventAttributes) GetChildWorkfl
 	return
 }
 
+type SignalWithStartWorkflowExecutionRequest struct {
+	Domain                              *string                `json:"domain,omitempty"`
+	WorkflowId                          *string                `json:"workflowId,omitempty"`
+	WorkflowType                        *WorkflowType          `json:"workflowType,omitempty"`
+	TaskList                            *TaskList              `json:"taskList,omitempty"`
+	Input                               []byte                 `json:"input,omitempty"`
+	ExecutionStartToCloseTimeoutSeconds *int32                 `json:"executionStartToCloseTimeoutSeconds,omitempty"`
+	TaskStartToCloseTimeoutSeconds      *int32                 `json:"taskStartToCloseTimeoutSeconds,omitempty"`
+	Identity                            *string                `json:"identity,omitempty"`
+	RequestId                           *string                `json:"requestId,omitempty"`
+	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
+	SignalName                          *string                `json:"signalName,omitempty"`
+	SignalInput                         []byte                 `json:"signalInput,omitempty"`
+	Control                             []byte                 `json:"control,omitempty"`
+}
+
+// ToWire translates a SignalWithStartWorkflowExecutionRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *SignalWithStartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [13]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.WorkflowId != nil {
+		w, err = wire.NewValueString(*(v.WorkflowId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.WorkflowType != nil {
+		w, err = v.WorkflowType.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.TaskList != nil {
+		w, err = v.TaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Input != nil {
+		w, err = wire.NewValueBinary(v.Input), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.ExecutionStartToCloseTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		w, err = wire.NewValueI32(*(v.TaskStartToCloseTimeoutSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.Identity != nil {
+		w, err = wire.NewValueString(*(v.Identity)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.RequestId != nil {
+		w, err = wire.NewValueString(*(v.RequestId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.WorkflowIdReusePolicy != nil {
+		w, err = v.WorkflowIdReusePolicy.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.SignalName != nil {
+		w, err = wire.NewValueString(*(v.SignalName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.SignalInput != nil {
+		w, err = wire.NewValueBinary(v.SignalInput), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.Control != nil {
+		w, err = wire.NewValueBinary(v.Control), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _WorkflowIdReusePolicy_Read(w wire.Value) (WorkflowIdReusePolicy, error) {
+	var v WorkflowIdReusePolicy
+	err := v.FromWire(w)
+	return v, err
+}
+
+// FromWire deserializes a SignalWithStartWorkflowExecutionRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a SignalWithStartWorkflowExecutionRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v SignalWithStartWorkflowExecutionRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *SignalWithStartWorkflowExecutionRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowType, err = _WorkflowType_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.TaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				v.Input, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ExecutionStartToCloseTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.TaskStartToCloseTimeoutSeconds = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Identity = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 90:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.RequestId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 100:
+			if field.Value.Type() == wire.TI32 {
+				var x WorkflowIdReusePolicy
+				x, err = _WorkflowIdReusePolicy_Read(field.Value)
+				v.WorkflowIdReusePolicy = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SignalName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				v.SignalInput, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 130:
+			if field.Value.Type() == wire.TBinary {
+				v.Control, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a SignalWithStartWorkflowExecutionRequest
+// struct.
+func (v *SignalWithStartWorkflowExecutionRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [13]string
+	i := 0
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
+		i++
+	}
+	if v.WorkflowId != nil {
+		fields[i] = fmt.Sprintf("WorkflowId: %v", *(v.WorkflowId))
+		i++
+	}
+	if v.WorkflowType != nil {
+		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
+		i++
+	}
+	if v.TaskList != nil {
+		fields[i] = fmt.Sprintf("TaskList: %v", v.TaskList)
+		i++
+	}
+	if v.Input != nil {
+		fields[i] = fmt.Sprintf("Input: %v", v.Input)
+		i++
+	}
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("ExecutionStartToCloseTimeoutSeconds: %v", *(v.ExecutionStartToCloseTimeoutSeconds))
+		i++
+	}
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		fields[i] = fmt.Sprintf("TaskStartToCloseTimeoutSeconds: %v", *(v.TaskStartToCloseTimeoutSeconds))
+		i++
+	}
+	if v.Identity != nil {
+		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+	if v.RequestId != nil {
+		fields[i] = fmt.Sprintf("RequestId: %v", *(v.RequestId))
+		i++
+	}
+	if v.WorkflowIdReusePolicy != nil {
+		fields[i] = fmt.Sprintf("WorkflowIdReusePolicy: %v", *(v.WorkflowIdReusePolicy))
+		i++
+	}
+	if v.SignalName != nil {
+		fields[i] = fmt.Sprintf("SignalName: %v", *(v.SignalName))
+		i++
+	}
+	if v.SignalInput != nil {
+		fields[i] = fmt.Sprintf("SignalInput: %v", v.SignalInput)
+		i++
+	}
+	if v.Control != nil {
+		fields[i] = fmt.Sprintf("Control: %v", v.Control)
+		i++
+	}
+
+	return fmt.Sprintf("SignalWithStartWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _WorkflowIdReusePolicy_EqualsPtr(lhs, rhs *WorkflowIdReusePolicy) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+// Equals returns true if all the fields of this SignalWithStartWorkflowExecutionRequest match the
+// provided SignalWithStartWorkflowExecutionRequest.
+//
+// This function performs a deep comparison.
+func (v *SignalWithStartWorkflowExecutionRequest) Equals(rhs *SignalWithStartWorkflowExecutionRequest) bool {
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowId, rhs.WorkflowId) {
+		return false
+	}
+	if !((v.WorkflowType == nil && rhs.WorkflowType == nil) || (v.WorkflowType != nil && rhs.WorkflowType != nil && v.WorkflowType.Equals(rhs.WorkflowType))) {
+		return false
+	}
+	if !((v.TaskList == nil && rhs.TaskList == nil) || (v.TaskList != nil && rhs.TaskList != nil && v.TaskList.Equals(rhs.TaskList))) {
+		return false
+	}
+	if !((v.Input == nil && rhs.Input == nil) || (v.Input != nil && rhs.Input != nil && bytes.Equal(v.Input, rhs.Input))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ExecutionStartToCloseTimeoutSeconds, rhs.ExecutionStartToCloseTimeoutSeconds) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.TaskStartToCloseTimeoutSeconds, rhs.TaskStartToCloseTimeoutSeconds) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+	if !_String_EqualsPtr(v.RequestId, rhs.RequestId) {
+		return false
+	}
+	if !_WorkflowIdReusePolicy_EqualsPtr(v.WorkflowIdReusePolicy, rhs.WorkflowIdReusePolicy) {
+		return false
+	}
+	if !_String_EqualsPtr(v.SignalName, rhs.SignalName) {
+		return false
+	}
+	if !((v.SignalInput == nil && rhs.SignalInput == nil) || (v.SignalInput != nil && rhs.SignalInput != nil && bytes.Equal(v.SignalInput, rhs.SignalInput))) {
+		return false
+	}
+	if !((v.Control == nil && rhs.Control == nil) || (v.Control != nil && rhs.Control != nil && bytes.Equal(v.Control, rhs.Control))) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
+	}
+
+	return
+}
+
+// GetWorkflowId returns the value of WorkflowId if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetWorkflowId() (o string) {
+	if v.WorkflowId != nil {
+		return *v.WorkflowId
+	}
+
+	return
+}
+
+// GetExecutionStartToCloseTimeoutSeconds returns the value of ExecutionStartToCloseTimeoutSeconds if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetExecutionStartToCloseTimeoutSeconds() (o int32) {
+	if v.ExecutionStartToCloseTimeoutSeconds != nil {
+		return *v.ExecutionStartToCloseTimeoutSeconds
+	}
+
+	return
+}
+
+// GetTaskStartToCloseTimeoutSeconds returns the value of TaskStartToCloseTimeoutSeconds if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetTaskStartToCloseTimeoutSeconds() (o int32) {
+	if v.TaskStartToCloseTimeoutSeconds != nil {
+		return *v.TaskStartToCloseTimeoutSeconds
+	}
+
+	return
+}
+
+// GetIdentity returns the value of Identity if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetIdentity() (o string) {
+	if v.Identity != nil {
+		return *v.Identity
+	}
+
+	return
+}
+
+// GetRequestId returns the value of RequestId if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetRequestId() (o string) {
+	if v.RequestId != nil {
+		return *v.RequestId
+	}
+
+	return
+}
+
+// GetWorkflowIdReusePolicy returns the value of WorkflowIdReusePolicy if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetWorkflowIdReusePolicy() (o WorkflowIdReusePolicy) {
+	if v.WorkflowIdReusePolicy != nil {
+		return *v.WorkflowIdReusePolicy
+	}
+
+	return
+}
+
+// GetSignalName returns the value of SignalName if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetSignalName() (o string) {
+	if v.SignalName != nil {
+		return *v.SignalName
+	}
+
+	return
+}
+
 type SignalWorkflowExecutionRequest struct {
 	Domain            *string            `json:"domain,omitempty"`
 	WorkflowExecution *WorkflowExecution `json:"workflowExecution,omitempty"`
@@ -22134,12 +22638,6 @@ func _ChildPolicy_Read(w wire.Value) (ChildPolicy, error) {
 	return v, err
 }
 
-func _WorkflowIdReusePolicy_Read(w wire.Value) (WorkflowIdReusePolicy, error) {
-	var v WorkflowIdReusePolicy
-	err := v.FromWire(w)
-	return v, err
-}
-
 // FromWire deserializes a StartChildWorkflowExecutionDecisionAttributes struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
@@ -22314,16 +22812,6 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 }
 
 func _ChildPolicy_EqualsPtr(lhs, rhs *ChildPolicy) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return x.Equals(y)
-	}
-	return lhs == nil && rhs == nil
-}
-
-func _WorkflowIdReusePolicy_EqualsPtr(lhs, rhs *WorkflowIdReusePolicy) bool {
 	if lhs != nil && rhs != nil {
 
 		x := *lhs

@@ -797,6 +797,39 @@ func (mr *_MockClientRecorder) RespondQueryTaskCompleted(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RespondQueryTaskCompleted", args...)
 }
 
+// SignalWithStartWorkflowExecution responds to a SignalWithStartWorkflowExecution call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), ...).Return(...)
+// 	... := client.SignalWithStartWorkflowExecution(...)
+func (m *MockClient) SignalWithStartWorkflowExecution(
+	ctx context.Context,
+	_SignalWithStartRequest *shared.SignalWithStartWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.StartWorkflowExecutionResponse, err error) {
+
+	args := []interface{}{ctx, _SignalWithStartRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "SignalWithStartWorkflowExecution", args...)
+	success, _ = ret[i].(*shared.StartWorkflowExecutionResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) SignalWithStartWorkflowExecution(
+	ctx interface{},
+	_SignalWithStartRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _SignalWithStartRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "SignalWithStartWorkflowExecution", args...)
+}
+
 // SignalWorkflowExecution responds to a SignalWorkflowExecution call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

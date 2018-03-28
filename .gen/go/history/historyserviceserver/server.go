@@ -109,6 +109,11 @@ type Interface interface {
 		ScheduleRequest *history.ScheduleDecisionTaskRequest,
 	) error
 
+	SignalWithStartWorkflowExecution(
+		ctx context.Context,
+		SignalWithStartRequest *history.SignalWithStartWorkflowExecutionRequest,
+	) (*shared.StartWorkflowExecutionResponse, error)
+
 	SignalWorkflowExecution(
 		ctx context.Context,
 		SignalRequest *history.SignalWorkflowExecutionRequest,
@@ -302,6 +307,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "SignalWithStartWorkflowExecution",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.SignalWithStartWorkflowExecution),
+				},
+				Signature:    "SignalWithStartWorkflowExecution(SignalWithStartRequest *history.SignalWithStartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "SignalWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -336,7 +352,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 18)
+	procedures := make([]transport.Procedure, 0, 19)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -619,6 +635,25 @@ func (h handler) ScheduleDecisionTask(ctx context.Context, body wire.Value) (thr
 
 	hadError := err != nil
 	result, err := history.HistoryService_ScheduleDecisionTask_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) SignalWithStartWorkflowExecution(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_SignalWithStartWorkflowExecution_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.SignalWithStartWorkflowExecution(ctx, args.SignalWithStartRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_SignalWithStartWorkflowExecution_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

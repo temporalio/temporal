@@ -144,6 +144,11 @@ struct SignalWorkflowExecutionRequest {
   40: optional bool childWorkflowOnly
 }
 
+struct SignalWithStartWorkflowExecutionRequest {
+  10: optional string domainUUID
+  20: optional shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest
+}
+
 struct RemoveSignalMutableStateRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution workflowExecution
@@ -362,6 +367,20 @@ service HistoryService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
+    )
+
+  /**
+  * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
+  * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
+  * and a decision task being created for the execution.
+  * If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
+  * event recorded in history, and a decision task being created for the execution
+  **/
+  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: ShardOwnershipLostError shardOwnershipLostError,
     )
 
   /**

@@ -974,6 +974,22 @@ struct SignalWorkflowExecutionRequest {
   70: optional binary control
 }
 
+struct SignalWithStartWorkflowExecutionRequest {
+  10: optional string domain
+  20: optional string workflowId
+  30: optional WorkflowType workflowType
+  40: optional TaskList taskList
+  50: optional binary input
+  60: optional i32 executionStartToCloseTimeoutSeconds
+  70: optional i32 taskStartToCloseTimeoutSeconds
+  80: optional string identity
+  90: optional string requestId
+  100: optional WorkflowIdReusePolicy workflowIdReusePolicy
+  110: optional string signalName
+  120: optional binary signalInput
+  130: optional binary control
+}
+
 struct TerminateWorkflowExecutionRequest {
   10: optional string domain
   20: optional WorkflowExecution workflowExecution

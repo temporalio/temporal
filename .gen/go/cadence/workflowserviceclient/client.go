@@ -174,6 +174,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	SignalWithStartWorkflowExecution(
+		ctx context.Context,
+		SignalWithStartRequest *shared.SignalWithStartWorkflowExecutionRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.StartWorkflowExecutionResponse, error)
+
 	SignalWorkflowExecution(
 		ctx context.Context,
 		SignalRequest *shared.SignalWorkflowExecutionRequest,
@@ -749,6 +755,29 @@ func (c client) RespondQueryTaskCompleted(
 	}
 
 	err = cadence.WorkflowService_RespondQueryTaskCompleted_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) SignalWithStartWorkflowExecution(
+	ctx context.Context,
+	_SignalWithStartRequest *shared.SignalWithStartWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.StartWorkflowExecutionResponse, err error) {
+
+	args := cadence.WorkflowService_SignalWithStartWorkflowExecution_Helper.Args(_SignalWithStartRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_SignalWithStartWorkflowExecution_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_SignalWithStartWorkflowExecution_Helper.UnwrapResponse(&result)
 	return
 }
 

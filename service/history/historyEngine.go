@@ -182,12 +182,9 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	request := startRequest.StartRequest
-
-	if request.ExecutionStartToCloseTimeoutSeconds == nil || *request.ExecutionStartToCloseTimeoutSeconds <= 0 {
-		return nil, &workflow.BadRequestError{Message: "Missing or invalid ExecutionStartToCloseTimeoutSeconds."}
-	}
-	if request.TaskStartToCloseTimeoutSeconds == nil || *request.TaskStartToCloseTimeoutSeconds <= 0 {
-		return nil, &workflow.BadRequestError{Message: "Missing or invalid TaskStartToCloseTimeoutSeconds."}
+	err = validateStartWorkflowExecutionRequest(request)
+	if err != nil {
+		return nil, err
 	}
 
 	execution := workflow.WorkflowExecution{
@@ -206,7 +203,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	// Generate first decision task event.
-	taskList := *request.TaskList.Name
+	taskList := request.TaskList.GetName()
 	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, execution, request)
 	if startedEvent == nil {
@@ -258,17 +255,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, err
 	}
 	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
-
-	deleteEvents := func() {
-		// We created the history events but failed to create workflow execution, so cleanup the history which could cause
-		// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
-		// are always created for a unique run_id which is not visible beyond this call yet.
-		// TODO: Handle error on deletion of execution history
-		e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
-			DomainID:  domainID,
-			Execution: execution,
-		})
-	}
 
 	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
 	var replicationState *persistence.ReplicationState
@@ -326,11 +312,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			switch t := err.(type) {
 			case *persistence.WorkflowExecutionAlreadyStartedError:
 				if t.StartRequestID == common.StringDefault(request.RequestId) {
-					deleteEvents()
+					e.deleteEvents(domainID, execution)
 					return t.RunID, nil
 				}
 			case *persistence.ShardOwnershipLostError:
-				deleteEvents()
+				e.deleteEvents(domainID, execution)
 			}
 			return "", err
 		}
@@ -356,25 +342,25 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		// here we know there is some information about the prev workflow, i.e. either running right now
 		// or has history check if the this workflow is finished
 		if prevState != persistence.WorkflowStateCompleted {
-			deleteEvents()
+			e.deleteEvents(domainID, execution)
 			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
 			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		}
 		switch startRequest.StartRequest.GetWorkflowIdReusePolicy() {
 		case workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
 			if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {
-				deleteEvents()
+				e.deleteEvents(domainID, execution)
 				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
 				return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 			}
 		case workflow.WorkflowIdReusePolicyAllowDuplicate:
 			// as long as workflow not running, so this case has no check
 		case workflow.WorkflowIdReusePolicyRejectDuplicate:
-			deleteEvents()
+			e.deleteEvents(domainID, execution)
 			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
 			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 		default:
-			deleteEvents()
+			e.deleteEvents(domainID, execution)
 			return &workflow.InternalServiceError{Message: "Failed to process start workflow reuse policy."}
 		}
 
@@ -1636,6 +1622,206 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 		})
 }
 
+func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequest *h.SignalWithStartWorkflowExecutionRequest) (
+	*workflow.StartWorkflowExecutionResponse, error) {
+
+	domainID, err := getDomainUUID(signalWithStartRequest.DomainUUID)
+	if err != nil {
+		return nil, err
+	}
+	sRequest := signalWithStartRequest.SignalWithStartRequest
+	execution := workflow.WorkflowExecution{
+		WorkflowId: sRequest.WorkflowId,
+	}
+
+	isBrandNew := false
+	prevRunID := ""
+	attempt := 0
+
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+
+	if err0 == nil {
+		defer release()
+	Just_Signal_Loop:
+		for ; attempt < conditionalRetryCount; attempt++ {
+			msBuilder, err1 := context.loadWorkflowExecution()
+			if err1 != nil {
+				if _, ok := err1.(*workflow.EntityNotExistsError); ok {
+					isBrandNew = true
+					break
+				}
+				return nil, err1
+			}
+			if !msBuilder.isWorkflowExecutionRunning() {
+				prevRunID = context.workflowExecution.GetRunId()
+				break
+			}
+
+			if msBuilder.AddWorkflowExecutionSignaled(getSignalRequest(sRequest)) == nil {
+				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
+			}
+
+			var transferTasks []persistence.Task
+			var timerTasks []persistence.Task
+			// Create a transfer task to schedule a decision task
+			if !msBuilder.HasPendingDecisionTask() {
+				di := msBuilder.AddDecisionTaskScheduledEvent()
+				transferTasks = append(transferTasks, &persistence.DecisionTask{
+					DomainID:   domainID,
+					TaskList:   di.Tasklist,
+					ScheduleID: di.ScheduleID,
+				})
+				if msBuilder.isStickyTaskListEnabled() {
+					tBuilder := e.getTimerBuilder(&context.workflowExecution)
+					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
+						msBuilder.executionInfo.StickyScheduleToStartTimeout)
+					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+				}
+			}
+			// Generate a transaction ID for appending events to history
+			transactionID, err2 := e.shard.GetNextTransferTaskID()
+			if err2 != nil {
+				return nil, err2
+			}
+
+			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
+			// the history and try the operation again.
+			if err := context.updateWorkflowExecution(transferTasks, timerTasks, transactionID); err != nil {
+				if err == ErrConflict {
+					continue Just_Signal_Loop
+				}
+				return nil, err
+			}
+			e.timerProcessor.NotifyNewTimers(timerTasks)
+			return &workflow.StartWorkflowExecutionResponse{RunId: context.workflowExecution.RunId}, nil
+		} // end for Just_Signal_Loop
+		if attempt == conditionalRetryCount {
+			return nil, ErrMaxAttemptsExceeded
+		}
+	} else {
+		if _, ok := err0.(*workflow.EntityNotExistsError); ok {
+			isBrandNew = true
+		} else {
+			return nil, err0
+		}
+	}
+
+	// Start workflow and signal
+	request := getStartRequest(sRequest)
+	err = validateStartWorkflowExecutionRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	execution = workflow.WorkflowExecution{
+		WorkflowId: request.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+
+	// Generate first decision task event.
+	taskList := request.TaskList.GetName()
+	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, execution, request)
+	if startedEvent == nil {
+		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
+	}
+
+	if msBuilder.AddWorkflowExecutionSignaled(getSignalRequest(sRequest)) == nil {
+		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution signaled event."}
+	}
+
+	var transferTasks []persistence.Task
+	decisionScheduleID := emptyEventID
+	decisionStartID := emptyEventID
+	decisionTimeout := int32(0)
+	di := msBuilder.AddDecisionTaskScheduledEvent()
+	if di == nil {
+		return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+	}
+
+	transferTasks = []persistence.Task{&persistence.DecisionTask{
+		DomainID: domainID, TaskList: taskList, ScheduleID: di.ScheduleID,
+	}}
+	decisionScheduleID = di.ScheduleID
+	decisionStartID = di.StartedID
+	decisionTimeout = di.DecisionTimeout
+
+	duration := time.Duration(*request.ExecutionStartToCloseTimeoutSeconds) * time.Second
+	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
+		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
+	}}
+	// Serialize the history
+	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
+	if serializedError != nil {
+		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
+			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
+			execution.GetWorkflowId(), execution.GetRunId()))
+		return nil, serializedError
+	}
+
+	err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+		DomainID:  domainID,
+		Execution: execution,
+		// It is ok to use 0 for TransactionID because RunID is unique so there are
+		// no potential duplicates to override.
+		TransactionID: 0,
+		FirstEventID:  startedEvent.GetEventId(),
+		Events:        serializedHistory,
+	})
+	if err != nil {
+		return nil, err
+	}
+	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+
+	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
+		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+			RequestID:                   common.StringDefault(request.RequestId),
+			DomainID:                    domainID,
+			Execution:                   execution,
+			InitiatedID:                 emptyEventID,
+			TaskList:                    *request.TaskList.Name,
+			WorkflowTypeName:            *request.WorkflowType.Name,
+			WorkflowTimeout:             *request.ExecutionStartToCloseTimeoutSeconds,
+			DecisionTimeoutValue:        *request.TaskStartToCloseTimeoutSeconds,
+			ExecutionContext:            nil,
+			NextEventID:                 msBuilder.GetNextEventID(),
+			LastProcessedEvent:          emptyEventID,
+			TransferTasks:               transferTasks,
+			DecisionScheduleID:          decisionScheduleID,
+			DecisionStartedID:           decisionStartID,
+			DecisionStartToCloseTimeout: decisionTimeout,
+			TimerTasks:                  timerTasks,
+			ContinueAsNew:               !isBrandNew,
+			PreviousRunID:               prevRunID,
+		})
+
+		if err != nil {
+			switch t := err.(type) {
+			case *persistence.WorkflowExecutionAlreadyStartedError:
+				if t.StartRequestID == common.StringDefault(request.RequestId) {
+					e.deleteEvents(domainID, execution)
+					return t.RunID, nil
+				}
+			case *persistence.ShardOwnershipLostError:
+				e.deleteEvents(domainID, execution)
+			}
+			return "", err
+		}
+		return execution.GetRunId(), nil
+	}
+
+	// try to create the workflow execution
+	resultRunID, err := createWorkflow(isBrandNew, prevRunID) // (true, "") or (false, "prevRunID")
+	if err == nil {
+		e.timerProcessor.NotifyNewTimers(timerTasks)
+
+		return &workflow.StartWorkflowExecutionResponse{
+			RunId: common.StringPtr(resultRunID),
+		}, nil
+	}
+	return nil, err
+}
+
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(request *h.RemoveSignalMutableStateRequest) error {
 	domainID, err := getDomainUUID(request.DomainUUID)
@@ -1886,6 +2072,17 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 	}
 
 	return response
+}
+
+func (e *historyEngineImpl) deleteEvents(domainID string, execution workflow.WorkflowExecution) {
+	// We created the history events but failed to create workflow execution, so cleanup the history which could cause
+	// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
+	// are always created for a unique run_id which is not visible beyond this call yet.
+	// TODO: Handle error on deletion of execution history
+	e.historyMgr.DeleteWorkflowExecutionHistory(&persistence.DeleteWorkflowExecutionHistoryRequest{
+		DomainID:  domainID,
+		Execution: execution,
+	})
 }
 
 func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, scheduleID, startedID int64,
@@ -2151,6 +2348,19 @@ func validateStartChildExecutionAttributes(parentInfo *persistence.WorkflowExecu
 	return nil
 }
 
+func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecutionRequest) error {
+	if request.ExecutionStartToCloseTimeoutSeconds == nil || request.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		return &workflow.BadRequestError{Message: "Missing or invalid ExecutionStartToCloseTimeoutSeconds."}
+	}
+	if request.TaskStartToCloseTimeoutSeconds == nil || request.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+		return &workflow.BadRequestError{Message: "Missing or invalid TaskStartToCloseTimeoutSeconds."}
+	}
+	if request.TaskList == nil || request.TaskList.Name == nil || request.TaskList.GetName() == "" {
+		return &workflow.BadRequestError{Message: "Missing Tasklist."}
+	}
+	return nil
+}
+
 func getDomainUUID(domainUUID *string) (string, error) {
 	if domainUUID == nil {
 		return "", &workflow.BadRequestError{Message: "Missing domain UUID."}
@@ -2167,4 +2377,36 @@ func getScheduleID(activityID string, msBuilder *mutableStateBuilder) (int64, er
 		return 0, &workflow.BadRequestError{Message: fmt.Sprintf("No such activityID: %s\n", activityID)}
 	}
 	return scheduleID, nil
+}
+
+func getSignalRequest(request *workflow.SignalWithStartWorkflowExecutionRequest) *workflow.SignalWorkflowExecutionRequest {
+	req := &workflow.SignalWorkflowExecutionRequest{
+		Domain: request.Domain,
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: request.WorkflowId,
+		},
+		SignalName: request.SignalName,
+		Input:      request.SignalInput,
+		RequestId:  request.RequestId,
+		Identity:   request.Identity,
+		Control:    request.Control,
+	}
+	return req
+}
+
+func getStartRequest(request *workflow.SignalWithStartWorkflowExecutionRequest) *workflow.StartWorkflowExecutionRequest {
+	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
+	req := &workflow.StartWorkflowExecutionRequest{
+		Domain:       request.Domain,
+		WorkflowId:   request.WorkflowId,
+		WorkflowType: request.WorkflowType,
+		TaskList:     request.TaskList,
+		Input:        request.Input,
+		ExecutionStartToCloseTimeoutSeconds: request.ExecutionStartToCloseTimeoutSeconds,
+		TaskStartToCloseTimeoutSeconds:      request.TaskStartToCloseTimeoutSeconds,
+		Identity:                            request.Identity,
+		RequestId:                           request.RequestId,
+		WorkflowIdReusePolicy:               &policy,
+	}
+	return req
 }

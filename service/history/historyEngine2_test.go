@@ -970,6 +970,127 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	}
 }
 
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
+	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	workflowID := "wId"
+	runID := uuid.New()
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
+			Domain:     common.StringPtr(domainID),
+			WorkflowId: common.StringPtr(workflowID),
+			Identity:   common.StringPtr(identity),
+			SignalName: common.StringPtr(signalName),
+			Input:      input,
+		},
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.Nil(err)
+	s.Equal(runID, resp.GetRunId())
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
+	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	workflowID := "wId"
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
+			Domain:       common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			SignalName:                          common.StringPtr(signalName),
+			Input:                               input,
+		},
+	}
+
+	notExistErr := &workflow.EntityNotExistsError{Message: "Workflow not exist"}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.Nil(err)
+	s.NotNil(resp.GetRunId())
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
+	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
+
+	domainID := "domainId"
+	workflowID := "wId"
+	runID := uuid.New()
+	workflowType := "workflowType"
+	taskList := "testTaskList"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := []byte("test input")
+	sRequest = &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID: common.StringPtr(domainID),
+		SignalWithStartRequest: &workflow.SignalWithStartWorkflowExecutionRequest{
+			Domain:       common.StringPtr(domainID),
+			WorkflowId:   common.StringPtr(workflowID),
+			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
+			Identity:                            common.StringPtr(identity),
+			SignalName:                          common.StringPtr(signalName),
+			Input:                               input,
+		},
+	}
+
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	ms := createMutableState(msBuilder)
+	ms.ExecutionInfo.State = persistence.WorkflowStateCompleted
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
+
+	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	s.Nil(err)
+	s.NotNil(resp.GetRunId())
+	s.NotEqual(runID, resp.GetRunId())
+}
+
 func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
 	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {

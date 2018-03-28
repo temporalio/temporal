@@ -481,8 +481,9 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 
 	response, err2 := engine.StartWorkflowExecution(wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryStartWorkflowExecutionScope, h.convertError(err2))
-		return nil, h.convertError(err2)
+		tmpErr := h.convertError(err2)
+		h.updateErrorMetric(metrics.HistoryStartWorkflowExecutionScope, tmpErr)
+		return nil, tmpErr
 	}
 
 	return response, nil
@@ -607,6 +608,40 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 	}
 
 	return nil
+}
+
+// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
+// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
+// and a decision task being created for the execution.
+// If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
+// event recorded in history, and a decision task being created for the execution
+func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context,
+	wrappedRequest *hist.SignalWithStartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistorySignalWithStartWorkflowExecutionScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistorySignalWithStartWorkflowExecutionScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if wrappedRequest.DomainUUID == nil {
+		return nil, errDomainNotSet
+	}
+
+	signalWithStartRequest := wrappedRequest.SignalWithStartRequest
+	engine, err1 := h.controller.GetEngine(signalWithStartRequest.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistorySignalWithStartWorkflowExecutionScope, err1)
+		return nil, err1
+	}
+
+	resp, err2 := engine.SignalWithStartWorkflowExecution(wrappedRequest)
+	if err2 != nil {
+		tmpErr := h.convertError(err2)
+		h.updateErrorMetric(metrics.HistorySignalWithStartWorkflowExecutionScope, tmpErr)
+		return nil, tmpErr
+	}
+
+	return resp, nil
 }
 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently

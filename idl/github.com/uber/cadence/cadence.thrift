@@ -278,19 +278,34 @@ service WorkflowService {
   * anymore due to completion or doesn't exist.
   **/
   void RequestCancelWorkflowExecution(1: shared.RequestCancelWorkflowExecutionRequest cancelRequest)
-      throws (
-        1: shared.BadRequestError badRequestError,
-        2: shared.InternalServiceError internalServiceError,
-        3: shared.EntityNotExistsError entityNotExistError,
-        4: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,
-        5: shared.ServiceBusyError serviceBusyError,
-      )
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,
+      5: shared.ServiceBusyError serviceBusyError,
+    )
 
   /**
   * SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
   * WorkflowExecutionSignaled event recorded in the history and a decision task being created for the execution.
   **/
   void SignalWorkflowExecution(1: shared.SignalWorkflowExecutionRequest signalRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.ServiceBusyError serviceBusyError,
+    )
+
+  /**
+  * SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
+  * If the workflow is running, this results in WorkflowExecutionSignaled event being recorded in the history
+  * and a decision task being created for the execution.
+  * If the workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
+  * events being recorded in history, and a decision task being created for the execution
+  **/
+  shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: shared.SignalWithStartWorkflowExecutionRequest signalWithStartRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
@@ -371,9 +386,9 @@ service WorkflowService {
   **/
   shared.DescribeTaskListResponse DescribeTaskList(1: shared.DescribeTaskListRequest request)
     throws (
-        1: shared.BadRequestError badRequestError,
-        2: shared.InternalServiceError internalServiceError,
-        3: shared.EntityNotExistsError entityNotExistError,
-      )
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+    )
 
 }

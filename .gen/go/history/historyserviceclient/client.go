@@ -126,6 +126,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	SignalWithStartWorkflowExecution(
+		ctx context.Context,
+		SignalWithStartRequest *history.SignalWithStartWorkflowExecutionRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.StartWorkflowExecutionResponse, error)
+
 	SignalWorkflowExecution(
 		ctx context.Context,
 		SignalRequest *history.SignalWorkflowExecutionRequest,
@@ -511,6 +517,29 @@ func (c client) ScheduleDecisionTask(
 	}
 
 	err = history.HistoryService_ScheduleDecisionTask_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) SignalWithStartWorkflowExecution(
+	ctx context.Context,
+	_SignalWithStartRequest *history.SignalWithStartWorkflowExecutionRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.StartWorkflowExecutionResponse, err error) {
+
+	args := history.HistoryService_SignalWithStartWorkflowExecution_Helper.Args(_SignalWithStartRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_SignalWithStartWorkflowExecution_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_SignalWithStartWorkflowExecution_Helper.UnwrapResponse(&result)
 	return
 }
 

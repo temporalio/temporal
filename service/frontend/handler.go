@@ -1132,11 +1132,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(createServiceBusyError(), scope)
 	}
 
-	if startRequest.Domain == nil {
+	if startRequest.Domain == nil || startRequest.GetDomain() == "" {
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	if startRequest.WorkflowId == nil || *startRequest.WorkflowId == "" {
+	if startRequest.WorkflowId == nil || startRequest.GetWorkflowId() == "" {
 		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowId is not set on request."}, scope)
 	}
 
@@ -1351,7 +1351,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 		return wh.error(createServiceBusyError(), scope)
 	}
 
-	if signalRequest.Domain == nil {
+	if signalRequest.Domain == nil || signalRequest.GetDomain() == "" {
 		return wh.error(errDomainNotSet, scope)
 	}
 
@@ -1359,7 +1359,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 		return err
 	}
 
-	if signalRequest.SignalName == nil {
+	if signalRequest.SignalName == nil || signalRequest.GetSignalName() == "" {
 		return wh.error(&gen.BadRequestError{Message: "SignalName is not set on request."}, scope)
 	}
 
@@ -1377,6 +1377,70 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 	}
 
 	return nil
+}
+
+// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
+// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
+// and a decision task being created for the execution.
+// If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
+// event recorded in history, and a decision task being created for the execution
+func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
+	signalWithStartRequest *gen.SignalWithStartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
+	scope := metrics.FrontendSignalWithStartWorkflowExecutionScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if ok, _ := wh.rateLimiter.TryConsume(1); !ok {
+		return nil, wh.error(createServiceBusyError(), scope)
+	}
+
+	if signalWithStartRequest.Domain == nil || signalWithStartRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if signalWithStartRequest.WorkflowId == nil || signalWithStartRequest.GetWorkflowId() == "" {
+		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowId is not set on request."}, scope)
+	}
+
+	if signalWithStartRequest.SignalName == nil || signalWithStartRequest.GetSignalName() == "" {
+		return nil, wh.error(&gen.BadRequestError{Message: "SignalName is not set on request."}, scope)
+	}
+
+	if signalWithStartRequest.WorkflowType == nil ||
+		signalWithStartRequest.WorkflowType.Name == nil || signalWithStartRequest.WorkflowType.GetName() == "" {
+		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowType is not set on request."}, scope)
+	}
+
+	if err := wh.validateTaskList(signalWithStartRequest.TaskList, scope); err != nil {
+		return nil, err
+	}
+
+	if signalWithStartRequest.ExecutionStartToCloseTimeoutSeconds == nil ||
+		signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}, scope)
+	}
+
+	if signalWithStartRequest.TaskStartToCloseTimeoutSeconds == nil ||
+		signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() <= 0 {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
+	}
+
+	domainID, err := wh.domainCache.GetDomainID(signalWithStartRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	resp, err := wh.history.SignalWithStartWorkflowExecution(ctx, &h.SignalWithStartWorkflowExecutionRequest{
+		DomainUUID:             common.StringPtr(domainID),
+		SignalWithStartRequest: signalWithStartRequest,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	return resp, nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event

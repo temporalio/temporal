@@ -302,6 +302,30 @@ func (_m *MockHistoryEngine) SignalWorkflowExecution(request *gohistory.SignalWo
 	return r0
 }
 
+// SignalWithStartWorkflowExecution is mock implementation for SignalWithStartWorkflowExecution of HistoryEngine
+func (_m *MockHistoryEngine) SignalWithStartWorkflowExecution(request *gohistory.SignalWithStartWorkflowExecutionRequest) (
+	*shared.StartWorkflowExecutionResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *shared.StartWorkflowExecutionResponse
+	if rf, ok := ret.Get(0).(func(*gohistory.SignalWithStartWorkflowExecutionRequest) *shared.StartWorkflowExecutionResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*shared.StartWorkflowExecutionResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*gohistory.SignalWithStartWorkflowExecutionRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RemoveSignalMutableState is mock implementation for RemoveSignalMutableState of HistoryEngine
 func (_m *MockHistoryEngine) RemoveSignalMutableState(request *gohistory.RemoveSignalMutableStateRequest) error {
 	ret := _m.Called(request)
