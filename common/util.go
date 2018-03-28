@@ -42,6 +42,10 @@ const (
 	historyServiceOperationInitialInterval    = 50 * time.Millisecond
 	historyServiceOperationMaxInterval        = 10 * time.Second
 	historyServiceOperationExpirationInterval = 30 * time.Second
+
+	frontendServiceOperationInitialInterval    = 200 * time.Millisecond
+	frontendServiceOperationMaxInterval        = 5 * time.Second
+	frontendServiceOperationExpirationInterval = 15 * time.Second
 )
 
 // MergeDictoRight copies the contents of src to dest
@@ -103,6 +107,15 @@ func CreateHistoryServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateFrontendServiceRetryPolicy creates a retry policy for calls to frontend service
+func CreateFrontendServiceRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(frontendServiceOperationInitialInterval)
+	policy.SetMaximumInterval(frontendServiceOperationMaxInterval)
+	policy.SetExpirationInterval(frontendServiceOperationExpirationInterval)
+
+	return policy
+}
+
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
@@ -111,6 +124,11 @@ func IsPersistenceTransientError(err error) bool {
 	}
 
 	return false
+}
+
+// IsServiceTransientError checks if the error is a retryable error.
+func IsServiceTransientError(err error) bool {
+	return !IsServiceNonRetryableError(err)
 }
 
 // IsServiceNonRetryableError checks if the error is a non retryable error.

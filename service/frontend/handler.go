@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/logging"
@@ -105,6 +106,8 @@ var (
 	errCannotRemoveClustersFromDomain  = &gen.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
 	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
 	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other paramaters are set."}
+
+	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
@@ -534,11 +537,18 @@ func (wh *WorkflowHandler) PollForActivityTask(
 	}
 
 	pollerID := uuid.New()
-	resp, err := wh.matching.PollForActivityTask(ctx, &m.PollForActivityTaskRequest{
-		DomainUUID:  common.StringPtr(domainID),
-		PollerID:    common.StringPtr(pollerID),
-		PollRequest: pollRequest,
-	})
+	var resp *gen.PollForActivityTaskResponse
+	op := func() error {
+		var err error
+		resp, err = wh.matching.PollForActivityTask(ctx, &m.PollForActivityTaskRequest{
+			DomainUUID:  common.StringPtr(domainID),
+			PollerID:    common.StringPtr(pollerID),
+			PollRequest: pollRequest,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeActivity, pollRequest.TaskList, pollerID)
 		if err != nil {
@@ -582,11 +592,18 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 	wh.Service.GetLogger().Debugf("Poll for decision. DomainName: %v, DomainID: %v", domainName, domainID)
 
 	pollerID := uuid.New()
-	matchingResp, err := wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
-		DomainUUID:  common.StringPtr(domainID),
-		PollerID:    common.StringPtr(pollerID),
-		PollRequest: pollRequest,
-	})
+	var matchingResp *m.PollForDecisionTaskResponse
+	op := func() error {
+		var err error
+		matchingResp, err = wh.matching.PollForDecisionTask(ctx, &m.PollForDecisionTaskRequest{
+			DomainUUID:  common.StringPtr(domainID),
+			PollerID:    common.StringPtr(pollerID),
+			PollRequest: pollRequest,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		err = wh.cancelOutstandingPoll(ctx, err, domainID, persistence.TaskListTypeDecision, pollRequest.TaskList, pollerID)
 		if err != nil {
@@ -619,7 +636,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 			TaskList:     taskList,
 			PollerID:     common.StringPtr(pollerID),
 		})
-		// We can do much if this call fails.  Just log the error and move on
+		// We can not do much if this call fails.  Just log the error and move on
 		if err != nil {
 			wh.Service.GetLogger().Warnf("Failed to cancel outstanding poller.  Tasklist: %v, Error: %v,",
 				taskList.GetName(), err)
@@ -1769,11 +1786,17 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 		return nil, err
 	}
 
-	response, err := wh.matching.DescribeTaskList(ctx, &m.DescribeTaskListRequest{
-		DomainUUID:  common.StringPtr(domainID),
-		DescRequest: request,
-	})
+	var response *gen.DescribeTaskListResponse
+	op := func() error {
+		var err error
+		response, err = wh.matching.DescribeTaskList(ctx, &m.DescribeTaskListRequest{
+			DomainUUID:  common.StringPtr(domainID),
+			DescRequest: request,
+		})
+		return err
+	}
 
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}

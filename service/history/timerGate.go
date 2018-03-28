@@ -40,7 +40,7 @@ type (
 	}
 
 	// TimerGateImpl is an timer implementation,
-	// which basically is an wrrapper of golang's timer and
+	// which basically is an wrapper of golang's timer and
 	// additional feature
 	TimerGateImpl struct {
 		// the channel which will be used to proxy the fired timer
