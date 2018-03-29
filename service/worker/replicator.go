@@ -63,7 +63,7 @@ func NewReplicator(clusterMetadata cluster.Metadata, metadataManager persistence
 // Start is called to start replicator
 func (r *Replicator) Start() error {
 	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
-	for cluster := range r.clusterMetadata.GetAllClusterNames() {
+	for cluster := range r.clusterMetadata.GetAllClusterFailoverVersions() {
 		if cluster != currentClusterName {
 			topicName := getTopicName(cluster)
 			consumerName := getConsumerName(currentClusterName, cluster)

@@ -58,13 +58,12 @@ services:
 
 clustersInfo:
   enableGlobalDomain: true
-  initialFailoverVersion: 0
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
-  clusterNames:
-    - "active"
-    - "standby"
+  clusterInitialFailoverVersion:
+    active: 0
+    standby: 1
 
 kafka:
   clusters:

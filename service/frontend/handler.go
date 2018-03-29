@@ -240,7 +240,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 			Clusters:          clusters,
 		},
 		IsGlobalDomain:  clusterMetadata.IsGlobalDomainEnabled(),
-		FailoverVersion: 0, // TODO do something?
+		FailoverVersion: clusterMetadata.GetNextFailoverVersion(0),
 	}
 
 	domainResponse, err := wh.metadataMgr.CreateDomain(domainRequest)
@@ -2143,7 +2143,7 @@ func createServiceBusyError() *gen.ServiceBusyError {
 
 func (wh *WorkflowHandler) validateClusterName(clusterName string) error {
 	clusterMetadata := wh.GetClusterMetadata()
-	if _, ok := clusterMetadata.GetAllClusterNames()[clusterName]; !ok {
+	if _, ok := clusterMetadata.GetAllClusterFailoverVersions()[clusterName]; !ok {
 		errMsg := "Invalid cluster name: %s"
 		return &gen.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
 	}

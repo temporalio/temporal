@@ -131,8 +131,6 @@ type (
 		// EnableGlobalDomain whether the global domain is enabled, this attr should be discarded when
 		// cross DC is made public
 		EnableGlobalDomain bool `yaml:"enableGlobalDomain"`
-		// InitialFailoverVersion is the initial failover version
-		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// FailoverVersionIncrement is the increment of each cluster failover version
 		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
 		// MasterClusterName is the master cluster name, only the master cluster can register / update domain
@@ -140,8 +138,8 @@ type (
 		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster
 		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterNames contains all cluster names
-		ClusterNames []string `yaml:"clusterNames"`
+		// ClusterInitialFailoverVersions contains all cluster names to corresponding initial failover version
+		ClusterInitialFailoverVersions map[string]int64 `yaml:"clusterInitialFailoverVersion"`
 	}
 
 	// Metrics contains the config items for metrics subsystem

@@ -111,11 +111,10 @@ func (s *server) startService() common.Daemon {
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
 	params.ClusterMetadata = cluster.NewMetadata(
 		s.cfg.ClustersInfo.EnableGlobalDomain,
-		s.cfg.ClustersInfo.InitialFailoverVersion,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,
 		s.cfg.ClustersInfo.MasterClusterName,
 		s.cfg.ClustersInfo.CurrentClusterName,
-		s.cfg.ClustersInfo.ClusterNames,
+		s.cfg.ClustersInfo.ClusterInitialFailoverVersions,
 	)
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
 	params.MessagingClient = s.cfg.Kafka.NewKafkaClient(zap.NewNop(), params.Logger, params.MetricScope)

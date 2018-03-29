@@ -285,7 +285,7 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_GlobalDomainDisabled
 		activeClusterName := ""
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
 		clusters := []*workflow.ClusterReplicationConfiguration{}
-		for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})
@@ -336,7 +336,7 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_GlobalDomainEnabled_
 	emitMetric := true
 	activeClusterName := ""
 	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -369,7 +369,7 @@ func (s *integrationSuite) TestIntegrationRegisterGetDomain_GlobalDomainEnabled_
 	emitMetric := true
 	activeClusterName := ""
 	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -423,7 +423,7 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_GlobalDomainDisabled_A
 		emitMetric := true
 		currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
 		clusters := []*workflow.ClusterReplicationConfiguration{}
-		for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})
@@ -508,7 +508,7 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_No
 	retention := int32(7)
 	emitMetric := true
 	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -547,7 +547,7 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_Is
 	retention := int32(7)
 	emitMetric := true
 	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -708,7 +708,7 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_Is
 	retention := int32(7)
 	emitMetric := true
 	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterName),
 		})
@@ -767,7 +767,7 @@ func (s *integrationSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_Fa
 		activeClusterName := ""
 		failoverVersion := int64(59)
 		persistenceClusters := []*persistence.ClusterReplicationConfig{}
-		for clusterName := range s.ClusterMetadata.GetAllClusterNames() {
+		for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
 			clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
 				ClusterName: common.StringPtr(clusterName),
 			})

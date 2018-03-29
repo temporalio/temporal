@@ -21,8 +21,10 @@
 package cluster
 
 const (
-	// TestInitialFailoverVersion is initial failover version used for test
-	TestInitialFailoverVersion = int64(0)
+	// TestCurrentClusterInitialFailoverVersion is initial failover version for current cluster
+	TestCurrentClusterInitialFailoverVersion = int64(0)
+	// TestAlternativeClusterInitialFailoverVersion is initial failover version for alternative cluster
+	TestAlternativeClusterInitialFailoverVersion = int64(1)
 	// TestFailoverVersionIncrement is failover version increment used for test
 	TestFailoverVersionIncrement = int64(10)
 	// TestCurrentClusterName is current cluster used for test
@@ -34,10 +36,10 @@ const (
 var (
 	// TestAllClusterNames is the all cluster names used for test
 	TestAllClusterNames = []string{TestCurrentClusterName, TestAlternativeClusterName}
-	// TestAllClusterNamesMap is the same as above, juse convinent for test mocking
-	TestAllClusterNamesMap = map[string]bool{
-		TestCurrentClusterName:     true,
-		TestAlternativeClusterName: true,
+	// TestAllClusterFailoverVersions is the same as above, juse convinent for test mocking
+	TestAllClusterFailoverVersions = map[string]int64{
+		TestCurrentClusterName:     TestCurrentClusterInitialFailoverVersion,
+		TestAlternativeClusterName: TestAlternativeClusterInitialFailoverVersion,
 	}
 )
 
@@ -49,10 +51,9 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 	}
 	return NewMetadata(
 		enableGlobalDomain,
-		TestInitialFailoverVersion,
 		TestFailoverVersionIncrement,
 		masterClusterName,
 		TestCurrentClusterName,
-		TestAllClusterNames,
+		TestAllClusterFailoverVersions,
 	)
 }
