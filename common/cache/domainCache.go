@@ -98,12 +98,18 @@ func newDomainCacheEntry() *domainCacheEntry {
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
 func (c *domainCache) GetDomain(name string) (*domainCacheEntry, error) {
+	if name == "" {
+		return nil, &workflow.BadRequestError{Message: "Domain is empty."}
+	}
 	return c.getDomain(name, "", name, c.cacheByName)
 }
 
 // GetDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
 func (c *domainCache) GetDomainByID(id string) (*domainCacheEntry, error) {
+	if id == "" {
+		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
+	}
 	return c.getDomain(id, id, "", c.cacheByID)
 }
 

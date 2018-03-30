@@ -230,8 +230,8 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 	recordRequest *hist.RecordDecisionTaskStartedRequest) (*hist.RecordDecisionTaskStartedResponse, error) {
 	h.startWG.Wait()
 	h.Service.GetLogger().Debugf("RecordDecisionTaskStarted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
-		*recordRequest.DomainUUID, *recordRequest.WorkflowExecution.WorkflowId,
-		common.StringDefault(recordRequest.WorkflowExecution.RunId), *recordRequest.ScheduleId)
+		recordRequest.GetDomainUUID(), recordRequest.WorkflowExecution.GetWorkflowId(),
+		common.StringDefault(recordRequest.WorkflowExecution.RunId), recordRequest.GetScheduleId())
 
 	h.metricsClient.IncCounter(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceRequests)
 	sw := h.metricsClient.StartTimer(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceLatency)
@@ -721,7 +721,7 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.Schedu
 	}
 
 	workflowExecution := request.WorkflowExecution
-	engine, err1 := h.controller.GetEngine(*workflowExecution.WorkflowId)
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
 		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, err1)
 		return err1
