@@ -21,6 +21,7 @@
 package host
 
 import (
+	"flag"
 	"fmt"
 	"reflect"
 	"sync"
@@ -54,6 +55,15 @@ import (
 
 const rpAppNamePrefix string = "cadence"
 const maxRpJoinTimeout = 30 * time.Second
+
+var (
+	integration = flag.Bool("integration", true, "run integration tests")
+)
+
+const (
+	testNumberOfHistoryShards = 4
+	testNumberOfHistoryHosts  = 1
+)
 
 // Cadence hosts all of cadence services in one process
 type Cadence interface {
