@@ -900,7 +900,11 @@ func DescribeTaskList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
-	table.SetHeader([]string{"Poller Identity", "Last Access Time"})
+	if taskListType == s.TaskListTypeActivity {
+		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
+	} else {
+		table.SetHeader([]string{"Decision Poller Identity", "Last Access Time"})
+	}
 	table.SetHeaderLine(false)
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
 	for _, poller := range pollers {

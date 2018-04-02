@@ -25,7 +25,7 @@ import "github.com/urfave/cli"
 const (
 	// Version is the controlled version string. It should be updated every time
 	// before we release a new version.
-	Version = "0.5.1"
+	Version = "0.5.2"
 )
 
 // NewCliApp instantiates a new instance of the CLI application.
