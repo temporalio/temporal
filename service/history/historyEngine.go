@@ -210,7 +210,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
-	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, execution, request)
+	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -1132,8 +1132,15 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCauseBadContinueAsNewAttributes
 					break Process_Decision_Loop
 				}
+
+				domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+				if err != nil {
+					return err
+				}
+				domainName := domainEntry.GetInfo().Name
+
 				runID := uuid.New()
-				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainID, runID, attributes)
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainID, domainName, runID, attributes)
 				if err != nil {
 					return nil
 				}
@@ -1712,7 +1719,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 	}
 
 	// Start workflow and signal
-	request := getStartRequest(sRequest)
+	startRequest := getStartRequest(domainID, sRequest)
+	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request)
 	if err != nil {
 		return nil, err
@@ -1726,7 +1734,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
-	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(domainID, execution, request)
+	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -2403,7 +2411,8 @@ func getSignalRequest(request *workflow.SignalWithStartWorkflowExecutionRequest)
 	return req
 }
 
-func getStartRequest(request *workflow.SignalWithStartWorkflowExecutionRequest) *workflow.StartWorkflowExecutionRequest {
+func getStartRequest(domainID string,
+	request *workflow.SignalWithStartWorkflowExecutionRequest) *h.StartWorkflowExecutionRequest {
 	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	req := &workflow.StartWorkflowExecutionRequest{
 		Domain:       request.Domain,
@@ -2417,5 +2426,10 @@ func getStartRequest(request *workflow.SignalWithStartWorkflowExecutionRequest) 
 		RequestId:                           request.RequestId,
 		WorkflowIdReusePolicy:               &policy,
 	}
-	return req
+
+	startRequest := &h.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		StartRequest: req,
+	}
+	return startRequest
 }

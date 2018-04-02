@@ -654,6 +654,30 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 		return err
 	}
 
+	// Get parent domain name
+	var domain string
+	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID); err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
+		domain = domainID
+	} else {
+		domain = domainEntry.GetInfo().Name
+	}
+
+	// Get target domain name
+	var targetDomain string
+	if domainEntry, err := t.shard.GetDomainCache().GetDomainByID(targetDomainID); err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+		// it is possible that the domain got deleted. Use domainID instead as this is only needed for the history event
+		targetDomain = targetDomainID
+	} else {
+		targetDomain = domainEntry.GetInfo().Name
+	}
+
 	initiatedEventID := task.ScheduleID
 	ci, isRunning := msBuilder.GetChildExecutionInfo(initiatedEventID)
 	if isRunning {
@@ -665,19 +689,21 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 			startRequest := &history.StartWorkflowExecutionRequest{
 				DomainUUID: common.StringPtr(targetDomainID),
 				StartRequest: &workflow.StartWorkflowExecutionRequest{
-					Domain:       common.StringPtr(targetDomainID),
-					WorkflowId:   common.StringPtr(*attributes.WorkflowId),
+					Domain:       common.StringPtr(targetDomain),
+					WorkflowId:   attributes.WorkflowId,
 					WorkflowType: attributes.WorkflowType,
 					TaskList:     attributes.TaskList,
 					Input:        attributes.Input,
-					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(*attributes.ExecutionStartToCloseTimeoutSeconds),
-					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(*attributes.TaskStartToCloseTimeoutSeconds),
+					ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
+					TaskStartToCloseTimeoutSeconds:      attributes.TaskStartToCloseTimeoutSeconds,
 					// Use the same request ID to dedupe StartWorkflowExecution calls
 					RequestId:             common.StringPtr(ci.CreateRequestID),
 					WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
+					ChildPolicy:           attributes.ChildPolicy,
 				},
 				ParentExecutionInfo: &history.ParentExecutionInfo{
 					DomainUUID: common.StringPtr(domainID),
+					Domain:     common.StringPtr(domain),
 					Execution: &workflow.WorkflowExecution{
 						WorkflowId: common.StringPtr(task.WorkflowID),
 						RunId:      common.StringPtr(task.RunID),

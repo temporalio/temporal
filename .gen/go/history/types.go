@@ -951,6 +951,7 @@ func (v *GetMutableStateResponse) GetStickyTaskListScheduleToStartTimeout() (o i
 
 type ParentExecutionInfo struct {
 	DomainUUID  *string                   `json:"domainUUID,omitempty"`
+	Domain      *string                   `json:"domain,omitempty"`
 	Execution   *shared.WorkflowExecution `json:"execution,omitempty"`
 	InitiatedId *int64                    `json:"initiatedId,omitempty"`
 }
@@ -972,7 +973,7 @@ type ParentExecutionInfo struct {
 //   }
 func (v *ParentExecutionInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -984,6 +985,14 @@ func (v *ParentExecutionInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Domain != nil {
+		w, err = wire.NewValueString(*(v.Domain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 15, Value: w}
 		i++
 	}
 	if v.Execution != nil {
@@ -1038,6 +1047,16 @@ func (v *ParentExecutionInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 15:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Domain = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 20:
 			if field.Value.Type() == wire.TStruct {
 				v.Execution, err = _WorkflowExecution_Read(field.Value)
@@ -1069,10 +1088,14 @@ func (v *ParentExecutionInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Domain != nil {
+		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
 		i++
 	}
 	if v.Execution != nil {
@@ -1095,6 +1118,9 @@ func (v *ParentExecutionInfo) Equals(rhs *ParentExecutionInfo) bool {
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
+	if !_String_EqualsPtr(v.Domain, rhs.Domain) {
+		return false
+	}
 	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
 		return false
 	}
@@ -1110,6 +1136,16 @@ func (v *ParentExecutionInfo) Equals(rhs *ParentExecutionInfo) bool {
 func (v *ParentExecutionInfo) GetDomainUUID() (o string) {
 	if v.DomainUUID != nil {
 		return *v.DomainUUID
+	}
+
+	return
+}
+
+// GetDomain returns the value of Domain if it is set or its
+// zero value if it is unset.
+func (v *ParentExecutionInfo) GetDomain() (o string) {
+	if v.Domain != nil {
+		return *v.Domain
 	}
 
 	return

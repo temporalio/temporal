@@ -131,7 +131,15 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) error
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes
 			requestID = uuid.New()
-			msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, execution, requestID, attributes)
+			var parentDomainID *string
+			if attributes.ParentWorkflowDomain != nil {
+				parentDomainEntry, err := r.shard.GetDomainCache().GetDomain(attributes.GetParentWorkflowDomain())
+				if err != nil {
+					return err
+				}
+				parentDomainID = &parentDomainEntry.GetInfo().ID
+			}
+			msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, attributes)
 
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes

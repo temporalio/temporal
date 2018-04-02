@@ -33,6 +33,7 @@ exception ShardOwnershipLostError {
 
 struct ParentExecutionInfo {
   10: optional string domainUUID
+  15: optional string domain
   20: optional shared.WorkflowExecution execution
   30: optional i64 (js.type = "Long") initiatedId
 }

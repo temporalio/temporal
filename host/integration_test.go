@@ -2642,9 +2642,12 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	workflowComplete := false
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
+	var previousRunID string
+	var lastRunStartedEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if continueAsNewCounter < continueAsNewCount {
+			previousRunID = execution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
@@ -2661,6 +2664,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 			}}, nil
 		}
 
+		lastRunStartedEvent = history.Events[0]
 		workflowComplete = true
 		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
@@ -2690,6 +2694,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	_, err := poller.pollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
+	s.Equal(previousRunID, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId())
 }
 
 func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
@@ -3600,6 +3605,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		Input:        nil,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 		Identity:                            common.StringPtr(identity),
 	}
 
@@ -3610,6 +3616,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	// decider logic
 	childComplete := false
 	childExecutionStarted := false
+	var parentStartedEvent *workflow.HistoryEvent
 	var startedEvent *workflow.HistoryEvent
 	var completedEvent *workflow.HistoryEvent
 
@@ -3622,6 +3629,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			if !childExecutionStarted {
 				s.logger.Info("Starting child execution.")
 				childExecutionStarted = true
+				parentStartedEvent = history.Events[0]
 
 				return nil, []*workflow.Decision{{
 					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeStartChildWorkflowExecution),
@@ -3632,7 +3640,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						Input:        []byte("child-workflow-input"),
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(200),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
-						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
+						ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyRequestCancel),
 						Control:                             nil,
 					},
 				}}, nil
@@ -3659,9 +3667,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		return nil, nil, nil
 	}
 
+	var childStartedEvent *workflow.HistoryEvent
 	// Child Decider Logic
 	dtHandlerChild := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if previousStartedEventID <= 0 {
+			childStartedEvent = history.Events[0]
+		}
 
 		s.logger.Infof("Processing decision task for Child WorkflowID: %v", *execution.WorkflowId)
 		childComplete = true
@@ -3698,16 +3710,27 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childExecutionStarted)
+	s.Equal(workflow.ChildPolicyRequestCancel,
+		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
 	_, err = pollerParent.pollAndProcessDecisionTask(false, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
+
 	_, err = pollerChild.pollAndProcessDecisionTask(false, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(startedEvent)
 	s.True(childComplete)
+	s.NotNil(childStartedEvent)
+	s.Equal(workflow.EventTypeWorkflowExecutionStarted, childStartedEvent.GetEventType())
+	s.Equal(s.domainName, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetParentWorkflowDomain())
+	s.Equal(parentID, childStartedEvent.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution.GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEvent.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution.GetRunId())
+	s.Equal(startedEvent.ChildWorkflowExecutionStartedEventAttributes.GetInitiatedEventId(),
+		childStartedEvent.WorkflowExecutionStartedEventAttributes.GetParentInitiatedEventId())
+	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.pollAndProcessDecisionTask(false, false)

@@ -41,6 +41,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/service"
 )
@@ -162,11 +163,15 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	taskList := "user-timer-update-times-out"
 
 	builder := newMutableStateBuilder(s.config, s.logger)
-	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
+	startRequest := &workflow.StartWorkflowExecutionRequest{
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+	}
+	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		StartRequest: startRequest,
 	})
 
 	di := addDecisionTaskScheduledEvent(builder)
@@ -231,11 +236,15 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	taskList := "task-workflow-times-out"
 
 	builder := newMutableStateBuilder(s.config, s.logger)
-	builder.AddWorkflowExecutionStartedEvent(domainID, we, &workflow.StartWorkflowExecutionRequest{
+	startRequest := &workflow.StartWorkflowExecutionRequest{
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr("wType")},
 		TaskList:     common.TaskListPtr(workflow.TaskList{Name: common.StringPtr(taskList)}),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+	}
+	builder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		StartRequest: startRequest,
 	})
 
 	di := addDecisionTaskScheduledEvent(builder)

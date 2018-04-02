@@ -3431,10 +3431,11 @@ func (s *engineSuite) printHistory(builder *mutableStateBuilder) string {
 	return history.String()
 }
 
-func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExecution workflow.WorkflowExecution,
+func addWorkflowExecutionStartedEventWithParent(builder *mutableStateBuilder, workflowExecution workflow.WorkflowExecution,
 	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
-	identity string) *workflow.HistoryEvent {
-	e := builder.AddWorkflowExecutionStartedEvent("domainId", workflowExecution, &workflow.StartWorkflowExecutionRequest{
+	parentInfo *history.ParentExecutionInfo, identity string) *workflow.HistoryEvent {
+	domainID := "domainId"
+	startRequest := &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:   common.StringPtr(*workflowExecution.WorkflowId),
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
@@ -3442,9 +3443,22 @@ func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExec
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
+	}
+
+	e := builder.AddWorkflowExecutionStartedEvent(workflowExecution, &history.StartWorkflowExecutionRequest{
+		DomainUUID:          common.StringPtr(domainID),
+		StartRequest:        startRequest,
+		ParentExecutionInfo: parentInfo,
 	})
 
 	return e
+}
+
+func addWorkflowExecutionStartedEvent(builder *mutableStateBuilder, workflowExecution workflow.WorkflowExecution,
+	workflowType, taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
+	identity string) *workflow.HistoryEvent {
+	return addWorkflowExecutionStartedEventWithParent(builder, workflowExecution, workflowType, taskList, input,
+		executionStartToCloseTimeout, taskStartToCloseTimeout, nil, identity)
 }
 
 func addDecisionTaskScheduledEvent(builder *mutableStateBuilder) *decisionInfo {

@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
@@ -639,7 +640,8 @@ func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.WorkflowExecution, workflowType,
 	taskList string, input []byte, executionStartToCloseTimeout, taskStartToCloseTimeout int32,
 	identity string) *workflow.HistoryEvent {
-	e := s.msBuilder.AddWorkflowExecutionStartedEvent(s.domainID, we, &workflow.StartWorkflowExecutionRequest{
+
+	request := &workflow.StartWorkflowExecutionRequest{
 		WorkflowId:   common.StringPtr(*we.WorkflowId),
 		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
 		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
@@ -647,6 +649,11 @@ func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.Workf
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
+	}
+
+	e := s.msBuilder.AddWorkflowExecutionStartedEvent(we, &history.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(s.domainID),
+		StartRequest: request,
 	})
 
 	return e
