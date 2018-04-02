@@ -62,6 +62,8 @@ type (
 		GetTimerAckLevel(cluster string) time.Time
 		UpdateTimerAckLevel(cluster string, ackLevel time.Time) error
 		GetTimeSource() common.TimeSource
+		SetCurrentTime(cluster string, currentTime time.Time)
+		GetCurrentTime(cluster string) time.Time
 	}
 
 	shardContextImpl struct {
@@ -83,6 +85,7 @@ type (
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
+		standbyClusterCurrentTime map[string]time.Time
 	}
 )
 
@@ -522,6 +525,28 @@ func (s *shardContextImpl) GetTimeSource() common.TimeSource {
 	return common.NewRealTimeSource()
 }
 
+func (s *shardContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
+	s.Lock()
+	defer s.Unlock()
+	if cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		prevTime := s.standbyClusterCurrentTime[cluster]
+		if prevTime.Before(currentTime) {
+			s.standbyClusterCurrentTime[cluster] = currentTime
+		}
+	} else {
+		panic("Cannot set current time for current cluster")
+	}
+}
+
+func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
+	s.RLock()
+	defer s.RUnlock()
+	if cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		return s.standbyClusterCurrentTime[cluster]
+	}
+	return time.Now()
+}
+
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, svc service.Service, shardManager persistence.ShardManager,
 	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager, domainCache cache.DomainCache,
@@ -536,6 +561,18 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.Owner = owner
 
+	// initialize the cluster current time to be the same as ack level
+	standbyClusterCurrentTime := make(map[string]time.Time)
+	for clusterName := range svc.GetClusterMetadata().GetAllClusterFailoverVersions() {
+		if clusterName != svc.GetClusterMetadata().GetCurrentClusterName() {
+			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
+				standbyClusterCurrentTime[clusterName] = currentTime
+			} else {
+				standbyClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
+			}
+		}
+	}
+
 	context := &shardContextImpl{
 		shardID:          shardID,
 		service:          svc,
@@ -547,6 +584,7 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 		closeCh:          closeCh,
 		metricsClient:    metricsClient,
 		config:           config,
+		standbyClusterCurrentTime: standbyClusterCurrentTime,
 	}
 	context.logger = logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardID,

@@ -222,6 +222,7 @@ type (
 		TimeoutType         int
 		EventID             int64
 		ScheduleAttempt     int64
+		Version             int64
 	}
 
 	// TaskListInfo describes a state of a task list implementation.

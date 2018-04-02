@@ -971,7 +971,7 @@ Update_History_Loop:
 			return err
 		}
 
-		t.historyService.timerProcessor.NotifyNewTimers(timerTasks)
+		t.historyService.timerProcessor.NotifyNewTimers(t.shard.GetService().GetClusterMetadata().GetCurrentClusterName(), timerTasks)
 
 		return nil
 	}

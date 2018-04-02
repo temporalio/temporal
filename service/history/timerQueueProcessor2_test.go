@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
@@ -34,13 +36,11 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 
-	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
-	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/service"
 )
@@ -125,7 +125,11 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	}
 
 	historyCache := newHistoryCache(s.mockShard, s.logger)
+	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 	h := &historyEngineImpl{
+		currentclusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		historyMgr:         s.mockHistoryMgr,
 		executionManager:   s.mockExecutionMgr,
@@ -135,8 +139,6 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 	}
-	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{})
 	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.mockExecutionMgr, s.logger)
 	s.mockHistoryEngine = h
@@ -211,16 +213,15 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 
 	// Start timer Processor.
-	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
-	processor.Start()
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
 
-	processor.NotifyNewTimers([]persistence.Task{&persistence.DecisionTimeoutTask{
+	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(cluster.TestCurrentClusterName, []persistence.Task{&persistence.DecisionTimeoutTask{
 		VisibilityTimestamp: timerTask.VisibilityTimestamp,
 		EventID:             timerTask.EventID,
 	}})
 
 	<-waitCh
-	processor.Stop()
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
 }
 
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
@@ -273,15 +274,14 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
-	processor := newTimerQueueProcessor(s.mockShard, s.mockHistoryEngine, s.mockExecutionMgr, s.logger).(*timerQueueProcessorImpl)
-	processor.Start()
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
 	<-waitCh
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil)
-	processor.NotifyNewTimers([]persistence.Task{&persistence.WorkflowTimeoutTask{
+	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(cluster.TestCurrentClusterName, []persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: timerTask.VisibilityTimestamp,
 	}})
 
 	<-waitCh
-	processor.Stop()
+	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
 }

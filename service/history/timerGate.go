@@ -35,30 +35,57 @@ type (
 		// Update update the timer gate, return true if update is a success
 		// success means timer is idle or timer is set with a sooner time to fire
 		Update(nextTime time.Time) bool
+	}
+
+	// LocalTimerGate interface
+	LocalTimerGate interface {
+		TimerGate
 		// Close shutdown the timer
 		Close()
 	}
 
-	// TimerGateImpl is an timer implementation,
+	// LocalTimerGateImpl is an timer implementation,
 	// which basically is an wrapper of golang's timer and
 	// additional feature
-	TimerGateImpl struct {
+	LocalTimerGateImpl struct {
 		// the channel which will be used to proxy the fired timer
 		fireChan  chan struct{}
 		closeChan chan struct{}
 
-		// lock for timer and next wake up time
-		sync.Mutex
 		// the actual timer which will fire
 		timer *time.Timer
 		// variable indicating when the above timer will fire
 		nextWakeupTime time.Time
 	}
+
+	// RemoteTimerGate interface
+	RemoteTimerGate interface {
+		TimerGate
+		// SetCurrentTime set the current time, and additionally fire the fire chan
+		// if new "current" time is after the next wake up time, return true if
+		// "current" is antually updated
+		SetCurrentTime(nextTime time.Time) bool
+	}
+
+	// RemoteTimerGateImpl is an timer implementation,
+	// which basically is an wrapper of golang's timer and
+	// additional feature
+	RemoteTimerGateImpl struct {
+		// the channel which will be used to proxy the fired timer
+		fireChan chan struct{}
+
+		// lock for timer and next wake up time
+		sync.Mutex
+		// time which timer will fire
+		nextWakeupTime time.Time
+		// nextWakeupTime already fired or not
+		nextWakeupTimeFired bool
+	}
 )
 
-// NewTimerGate create a new timer gate instance
-func NewTimerGate() TimerGate {
-	timer := &TimerGateImpl{
+// NewLocalTimerGate create a new timer gate instance
+func NewLocalTimerGate() LocalTimerGate {
+	timer := &LocalTimerGateImpl{
 		timer:          time.NewTimer(0),
 		nextWakeupTime: time.Time{},
 		fireChan:       make(chan struct{}),
@@ -86,23 +113,21 @@ func NewTimerGate() TimerGate {
 }
 
 // FireChan return the channel which will be fired when time is up
-func (timerGate *TimerGateImpl) FireChan() <-chan struct{} {
+func (timerGate *LocalTimerGateImpl) FireChan() <-chan struct{} {
 	return timerGate.fireChan
 }
 
 // FireAfter check will the timer get fired after a certain time
-func (timerGate *TimerGateImpl) FireAfter(now time.Time) bool {
+func (timerGate *LocalTimerGateImpl) FireAfter(now time.Time) bool {
 	return timerGate.nextWakeupTime.After(now)
 }
 
 // Update update the timer gate, return true if update is a success
 // success means timer is idle or timer is set with a sooner time to fire
-func (timerGate *TimerGateImpl) Update(nextTime time.Time) bool {
+func (timerGate *LocalTimerGateImpl) Update(nextTime time.Time) bool {
 	now := time.Now()
 
-	timerGate.Lock()
-	defer timerGate.Unlock()
-	if !timerGate.FireAfter(now) || timerGate.nextWakeupTime.After(nextTime) {
+	if !timerGate.nextWakeupTime.After(now) || timerGate.nextWakeupTime.After(nextTime) {
 		// if timer will not fire or next wake time is after the "next"
 		// then we need to update the timer to fire
 		timerGate.nextWakeupTime = nextTime
@@ -117,6 +142,65 @@ func (timerGate *TimerGateImpl) Update(nextTime time.Time) bool {
 }
 
 // Close shutdown the timer
-func (timerGate *TimerGateImpl) Close() {
+func (timerGate *LocalTimerGateImpl) Close() {
 	close(timerGate.closeChan)
+}
+
+// NewRemoteTimerGate create a new timer gate instance
+func NewRemoteTimerGate() RemoteTimerGate {
+	timer := &RemoteTimerGateImpl{
+		nextWakeupTime:      time.Time{},
+		nextWakeupTimeFired: true, // this should be true so update API can set the next timer
+		fireChan:            make(chan struct{}, 1),
+	}
+	return timer
+}
+
+// FireChan return the channel which will be fired when time is up
+func (timerGate *RemoteTimerGateImpl) FireChan() <-chan struct{} {
+	return timerGate.fireChan
+}
+
+// FireAfter check will the timer get fired after a certain time
+func (timerGate *RemoteTimerGateImpl) FireAfter(now time.Time) bool {
+	timerGate.Lock()
+	defer timerGate.Unlock()
+	return timerGate.nextWakeupTime.After(now)
+}
+
+// Update update the timer gate, return true if update is a success
+// success means timer is idle or timer is set with a sooner time to fire
+func (timerGate *RemoteTimerGateImpl) Update(nextTime time.Time) bool {
+	timerGate.Lock()
+	defer timerGate.Unlock()
+
+	if timerGate.nextWakeupTimeFired || timerGate.nextWakeupTime.After(nextTime) {
+		// if timer will not fire or next wake time is after the "next"
+		// then we need to update the timer to fire
+		timerGate.nextWakeupTime = nextTime
+		timerGate.nextWakeupTimeFired = false
+		// Notifies caller that next notification is reset to fire at passed in 'next' visibility time
+		return true
+	}
+
+	return false
+}
+
+// SetCurrentTime set the current time, and additionally fire the fire chan
+// if new "current" time is after the next wake up time, return true if
+// "current" is antually updated
+func (timerGate *RemoteTimerGateImpl) SetCurrentTime(currentTime time.Time) bool {
+	timerGate.Lock()
+	defer timerGate.Unlock()
+	if !timerGate.nextWakeupTimeFired && !currentTime.Before(timerGate.nextWakeupTime) {
+		timerGate.nextWakeupTimeFired = true
+		select {
+		case timerGate.fireChan <- struct{}{}:
+			// timer successfully triggered
+		default:
+			// timer already triggered, pass
+		}
+		return true
+	}
+	return false
 }

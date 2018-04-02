@@ -64,15 +64,16 @@ type (
 	// TestShardContext shard context for testing.
 	TestShardContext struct {
 		sync.RWMutex
-		service                service.Service
-		shardInfo              *persistence.ShardInfo
-		transferSequenceNumber int64
-		historyMgr             persistence.HistoryManager
-		executionMgr           persistence.ExecutionManager
-		domainCache            cache.DomainCache
-		config                 *Config
-		logger                 bark.Logger
-		metricsClient          metrics.Client
+		service                   service.Service
+		shardInfo                 *persistence.ShardInfo
+		transferSequenceNumber    int64
+		historyMgr                persistence.HistoryManager
+		executionMgr              persistence.ExecutionManager
+		domainCache               cache.DomainCache
+		config                    *Config
+		logger                    bark.Logger
+		metricsClient             metrics.Client
+		standbyClusterCurrentTime map[string]time.Time
 	}
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
@@ -90,16 +91,30 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	logger bark.Logger) *TestShardContext {
 	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, logger)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+
+	// initialize the cluster current time to be the same as ack level
+	standbyClusterCurrentTime := make(map[string]time.Time)
+	for clusterName := range clusterMetadata.GetAllClusterFailoverVersions() {
+		if clusterName != clusterMetadata.GetCurrentClusterName() {
+			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
+				standbyClusterCurrentTime[clusterName] = currentTime
+			} else {
+				standbyClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
+			}
+		}
+	}
+
 	return &TestShardContext{
-		service:                service.NewTestService(clusterMetadata, nil, metricsClient, logger),
-		shardInfo:              shardInfo,
-		transferSequenceNumber: transferSequenceNumber,
-		historyMgr:             historyMgr,
-		executionMgr:           executionMgr,
-		domainCache:            domainCache,
-		config:                 config,
-		logger:                 logger,
-		metricsClient:          metricsClient,
+		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, logger),
+		shardInfo:                 shardInfo,
+		transferSequenceNumber:    transferSequenceNumber,
+		historyMgr:                historyMgr,
+		executionMgr:              executionMgr,
+		domainCache:               domainCache,
+		config:                    config,
+		logger:                    logger,
+		metricsClient:             metricsClient,
+		standbyClusterCurrentTime: standbyClusterCurrentTime,
 	}
 }
 
@@ -190,8 +205,8 @@ func (s *TestShardContext) GetTimerAckLevel(cluster string) time.Time {
 
 // UpdateTimerAckLevel test implementation
 func (s *TestShardContext) UpdateTimerAckLevel(cluster string, ackLevel time.Time) error {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 
 	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
 		s.shardInfo.TimerAckLevel = ackLevel
@@ -260,6 +275,30 @@ func (s *TestShardContext) GetRangeID() int64 {
 // GetTimeSource test implementation
 func (s *TestShardContext) GetTimeSource() common.TimeSource {
 	return common.NewRealTimeSource()
+}
+
+// SetCurrentTime test implementation
+func (s *TestShardContext) SetCurrentTime(cluster string, currentTime time.Time) {
+	s.Lock()
+	defer s.Unlock()
+	if cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		prevTime := s.standbyClusterCurrentTime[cluster]
+		if prevTime.Before(currentTime) {
+			s.standbyClusterCurrentTime[cluster] = currentTime
+		}
+	} else {
+		panic("Cannot set current time for current cluster")
+	}
+}
+
+// GetCurrentTime test implementation
+func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
+	s.RLock()
+	defer s.RUnlock()
+	if cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		return s.standbyClusterCurrentTime[cluster]
+	}
+	return time.Now()
 }
 
 // SetupWorkflowStoreWithOptions to setup workflow test base

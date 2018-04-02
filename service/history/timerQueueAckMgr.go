@@ -89,7 +89,7 @@ func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, execu
 		executionMgr:     executionMgr,
 		metricsClient:    metricsClient,
 		logger:           logger,
-		lastUpdated:      time.Now(),
+		lastUpdated:      time.Now(), // this has nothing to do with remote cluster, so use the local time
 		config:           config,
 		outstandingTasks: make(map[TimerSequenceID]bool),
 		retryTasks:       []*persistence.TimerTaskInfo{},
@@ -149,13 +149,22 @@ TaskFilterLoop:
 		if err != nil {
 			return nil, nil, false, err
 		}
-		if domainEntry.GetReplicationConfig().ActiveClusterName != t.clusterName {
-			// timer task does not belong to cluster name
-			continue TaskFilterLoop
+		if !domainEntry.GetIsGlobalDomain() {
+			if t.clusterName != t.shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
+				// timer task does not belong to cluster name
+				continue TaskFilterLoop
+			}
+		} else {
+			// global domain we need to check the cluster name
+			clusterName := domainEntry.GetReplicationConfig().ActiveClusterName
+			if clusterName != t.clusterName {
+				// timer task does not belong here
+				continue TaskFilterLoop
+			}
 		}
 
 		// TODO potential bug here
-		// there can be several case when this readTimerTasks is called multiple times
+		// there can be severe case when this readTimerTasks is called multiple times
 		// and one of the call is really slow, causing the read level updated by other threads,
 		// leading the if below to be true
 		if task.VisibilityTimestamp.Before(readLevel.VisibilityTimestamp) {
@@ -190,11 +199,26 @@ func (t *timerQueueAckMgrImpl) retryTimerTask(timerTask *persistence.TimerTaskIn
 	t.retryTasks = append(t.retryTasks, timerTask)
 }
 
-func (t *timerQueueAckMgrImpl) completeTimerTask(timerSequenceID TimerSequenceID) {
+func (t *timerQueueAckMgrImpl) readRetryTimerTasks() []*persistence.TimerTaskInfo {
+	t.Lock()
+	defer t.Unlock()
+
+	retryTasks := t.retryTasks
+	t.retryTasks = []*persistence.TimerTaskInfo{}
+	return retryTasks
+}
+
+func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
+	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
 	t.Lock()
 	defer t.Unlock()
 
 	t.outstandingTasks[timerSequenceID] = true
+	if err := t.executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+		VisibilityTimestamp: timerTask.VisibilityTimestamp,
+		TaskID:              timerTask.TaskID}); err != nil {
+		t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timerSequenceID, err)
+	}
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() {
@@ -238,7 +262,7 @@ MoveAckLevelLoop:
 		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
 		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
 	} else {
-		t.lastUpdated = time.Now()
+		t.lastUpdated = time.Now() // this has nothing to do with remote cluster, so use the local time
 	}
 }
 
@@ -264,5 +288,5 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 }
 
 func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
-	return !expiryTime.IsZero() && expiryTime.UnixNano() <= time.Now().UnixNano()
+	return !expiryTime.IsZero() && expiryTime.UnixNano() <= t.shard.GetCurrentTime(t.clusterName).UnixNano()
 }

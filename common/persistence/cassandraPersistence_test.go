@@ -45,6 +45,10 @@ type (
 	}
 )
 
+// Cassandra only provides miliseconds timestamp precision, so
+// we need to use tolerance when doing comparision
+var timePrecision = 2 * time.Millisecond
+
 func TestCassandraPersistenceSuite(t *testing.T) {
 	s := new(cassandraPersistenceSuite)
 	suite.Run(t, s)
@@ -1621,6 +1625,11 @@ func (s *cassandraPersistenceSuite) TestCreateGetShard_Backfill() {
 	}
 	resp, err := s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
 	s.Nil(err)
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
@@ -1659,6 +1668,11 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 
 	resp, err := s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
 	s.Nil(err)
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 
 	// test update && get
@@ -1693,6 +1707,11 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 
 	resp, err = s.ShardMgr.GetShard(&GetShardRequest{ShardID: shardID})
 	s.Nil(err)
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
@@ -1704,6 +1723,14 @@ func timestampConvertor(t time.Time) time.Time {
 		0,
 		common.CQLTimestampToUnixNano(common.UnixNanoToCQLTimestamp(t.UnixNano())),
 	).UTC()
+}
+
+func timeComparator(t1 time.Time, t2 time.Time, timeTolerance time.Duration) bool {
+	tolerance := timeTolerance.Nanoseconds()
+	if t1.UnixNano()-t2.UnixNano() < tolerance && t2.UnixNano()-t1.UnixNano() < tolerance {
+		return true
+	}
+	return false
 }
 
 func copyReplicationState(sourceState *ReplicationState) *ReplicationState {

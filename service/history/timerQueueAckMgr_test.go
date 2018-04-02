@@ -167,7 +167,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Equal(s.mockShard.GetTimerAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		// only thing used is the replication config and is global domain
+		IsGlobalDomain: false,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.
@@ -216,12 +217,15 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Equal(s.mockShard.GetTimerAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.
 		},
 	}, nil).Once()
+
+	failoverVersion := int64(79)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", failoverVersion).Return(s.clusterName)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -233,6 +237,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		TimeoutType:         2,
 		EventID:             int64(28),
 		ScheduleAttempt:     0,
+		Version:             failoverVersion,
 	}
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp: readLevel.VisibilityTimestamp,
@@ -265,7 +270,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(s.mockShard.GetTimerAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		// only thing used is the replication config and is global domain
+		IsGlobalDomain: false,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.
@@ -315,12 +321,15 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(s.mockShard.GetTimerAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.
 		},
 	}, nil).Once()
+
+	failoverVersion := int64(79)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", failoverVersion).Return(s.clusterName)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -332,6 +341,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		TimeoutType:         2,
 		EventID:             int64(28),
 		ScheduleAttempt:     0,
+		Version:             failoverVersion,
 	}
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp: readLevel.VisibilityTimestamp,
@@ -359,7 +369,8 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	readLevel := s.timerQueueAckMgr.readLevel
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		// only thing used is the replication config and is global domain
+		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.
@@ -418,15 +429,21 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CompleteTimerTask", &persistence.CompleteTimerTaskRequest{
+		VisibilityTimestamp: timer1.VisibilityTimestamp,
+		TaskID:              timer1.TaskID}).Return(nil).Once()
 	timerSequenceID1 := TimerSequenceID{VisibilityTimestamp: timer1.VisibilityTimestamp, TaskID: timer1.TaskID}
-	s.timerQueueAckMgr.completeTimerTask(timerSequenceID1)
+	s.timerQueueAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID1])
 	s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTimestamp, s.mockShard.GetTimerAckLevel(s.clusterName))
 
 	// there will be no call to update shard
+	s.mockExecutionMgr.On("CompleteTimerTask", &persistence.CompleteTimerTaskRequest{
+		VisibilityTimestamp: timer3.VisibilityTimestamp,
+		TaskID:              timer3.TaskID}).Return(nil).Once()
 	timerSequenceID3 := TimerSequenceID{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
-	s.timerQueueAckMgr.completeTimerTask(timerSequenceID3)
+	s.timerQueueAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])
 	s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
@@ -434,8 +451,11 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// we are not testing shard context
 	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("CompleteTimerTask", &persistence.CompleteTimerTaskRequest{
+		VisibilityTimestamp: timer2.VisibilityTimestamp,
+		TaskID:              timer2.TaskID}).Return(nil).Once()
 	timerSequenceID2 := TimerSequenceID{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
-	s.timerQueueAckMgr.completeTimerTask(timerSequenceID2)
+	s.timerQueueAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID2])
 	s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer3.VisibilityTimestamp, s.mockShard.GetTimerAckLevel(s.clusterName))
@@ -447,7 +467,8 @@ func (s *timerQueueAckMgrSuite) TestReadRetryCompleteUpdateTimerTasks() {
 	readLevel := s.timerQueueAckMgr.readLevel
 
 	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		// only thing used is the replication config and is global domain
+		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: s.clusterName,
 			// Clusters attr is not used.

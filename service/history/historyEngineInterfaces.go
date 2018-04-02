@@ -107,13 +107,21 @@ type (
 
 	timerQueueProcessor interface {
 		common.Daemon
-		NotifyNewTimers(timerTask []persistence.Task)
+		NotifyNewTimers(clusterName string, timerTask []persistence.Task)
+		SetCurrentTime(clusterName string, currentTime time.Time)
+	}
+
+	timerProcessor interface {
+		notifyNewTimers(timerTask []persistence.Task)
+		process(task *persistence.TimerTaskInfo) error
+		getTimerGate() TimerGate
 	}
 
 	timerQueueAckMgr interface {
+		readRetryTimerTasks() []*persistence.TimerTaskInfo
 		readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error)
 		retryTimerTask(timerTask *persistence.TimerTaskInfo)
-		completeTimerTask(taskID TimerSequenceID)
+		completeTimerTask(timerTask *persistence.TimerTaskInfo)
 		updateAckLevel()
 		isProcessNow(time.Time) bool
 	}

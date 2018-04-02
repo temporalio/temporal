@@ -75,8 +75,8 @@ func (_m *MockTimerQueueAckMgr) retryTimerTask(timerTask *persistence.TimerTaskI
 	_m.Called(timerTask)
 }
 
-func (_m *MockTimerQueueAckMgr) completeTimerTask(taskID TimerSequenceID) {
-	_m.Called(taskID)
+func (_m *MockTimerQueueAckMgr) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
+	_m.Called(timerTask)
 }
 
 func (_m *MockTimerQueueAckMgr) updateAckLevel() {

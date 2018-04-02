@@ -91,6 +91,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	h := &historyEngineImpl{
+		currentclusterName: s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,

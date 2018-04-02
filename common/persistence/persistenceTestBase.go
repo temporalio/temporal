@@ -168,10 +168,13 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	s.readLevel = 0
 	s.replicationReadLevel = 0
 	s.ShardInfo = &ShardInfo{
-		ShardID:             shardID,
-		RangeID:             0,
-		TransferAckLevel:    0,
-		ReplicationAckLevel: 0,
+		ShardID:                 shardID,
+		RangeID:                 0,
+		TransferAckLevel:        0,
+		ReplicationAckLevel:     0,
+		TimerAckLevel:           time.Time{},
+		ClusterTimerAckLevel:    map[string]time.Time{cluster.TestCurrentClusterName: time.Time{}},
+		ClusterTransferAckLevel: map[string]int64{cluster.TestCurrentClusterName: 0},
 	}
 
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
