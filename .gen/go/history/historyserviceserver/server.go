@@ -69,6 +69,11 @@ type Interface interface {
 		RemoveRequest *history.RemoveSignalMutableStateRequest,
 	) error
 
+	ReplicateEvents(
+		ctx context.Context,
+		ReplicateRequest *history.ReplicateEventsRequest,
+	) error
+
 	RequestCancelWorkflowExecution(
 		ctx context.Context,
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
@@ -219,6 +224,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ReplicateEvents",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReplicateEvents),
+				},
+				Signature:    "ReplicateEvents(ReplicateRequest *history.ReplicateEventsRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RequestCancelWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -352,7 +368,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 19)
+	procedures := make([]transport.Procedure, 0, 20)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -483,6 +499,25 @@ func (h handler) RemoveSignalMutableState(ctx context.Context, body wire.Value) 
 
 	hadError := err != nil
 	result, err := history.HistoryService_RemoveSignalMutableState_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReplicateEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_ReplicateEvents_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ReplicateEvents(ctx, args.ReplicateRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_ReplicateEvents_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

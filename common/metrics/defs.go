@@ -224,6 +224,8 @@ const (
 	HistoryClientScheduleDecisionTaskScope
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope
+	// HistoryClientReplicateEventsScope tracks RPC calls to history service
+	HistoryClientReplicateEventsScope
 	// MatchingClientPollForDecisionTaskScope tracks RPC calls to matching service
 	MatchingClientPollForDecisionTaskScope
 	// MatchingClientPollForActivityTaskScope tracks RPC calls to matching service
@@ -346,6 +348,8 @@ const (
 	HistoryRecordChildExecutionCompletedScope
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
 	HistoryRequestCancelWorkflowExecutionScope
+	// HistoryReplicateEventsScope tracks ReplicateEvents API calls received by service
+	HistoryReplicateEventsScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -477,6 +481,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientTerminateWorkflowExecutionScope:       {operation: "HistoryClientTerminateWorkflowExecution"},
 		HistoryClientScheduleDecisionTaskScope:             {operation: "HistoryClientScheduleDecisionTask"},
 		HistoryClientRecordChildExecutionCompletedScope:    {operation: "HistoryClientRecordChildExecutionCompleted"},
+		HistoryClientReplicateEventsScope:                  {operation: "HistoryClientReplicateEvents"},
 		MatchingClientPollForDecisionTaskScope:             {operation: "MatchingClientPollForDecisionTask"},
 		MatchingClientPollForActivityTaskScope:             {operation: "MatchingClientPollForActivityTask"},
 		MatchingClientAddActivityTaskScope:                 {operation: "MatchingClientAddActivityTask"},
@@ -538,6 +543,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryScheduleDecisionTaskScope:             {operation: "ScheduleDecisionTask"},
 		HistoryRecordChildExecutionCompletedScope:    {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
+		HistoryReplicateEventsScope:                  {operation: "ReplicateEvents"},
 		HistoryShardControllerScope:                  {operation: "ShardController"},
 		TransferQueueProcessorScope:                  {operation: "TransferQueueProcessor"},
 		TransferTaskActivityScope:                    {operation: "TransferTaskActivity"},

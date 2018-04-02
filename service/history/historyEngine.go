@@ -55,6 +55,7 @@ type (
 		executionManager     persistence.ExecutionManager
 		txProcessor          transferQueueProcessor
 		timerProcessor       timerQueueProcessor
+		replicator           *historyReplicator
 		replicatorProcessor  queueProcessor
 		historyEventNotifier historyEventNotifier
 		tokenSerializer      common.TaskTokenSerializer
@@ -142,6 +143,8 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 			historySerializerFactory)
 		historyEngImpl.replicatorProcessor = replicatorProcessor
 		shardWrapper.replcatorProcessor = replicatorProcessor
+		historyEngImpl.replicator = newHistoryReplicator(shard, historyCache, shard.GetDomainCache(), historyManager,
+			logger)
 	}
 
 	return historyEngImpl
@@ -1940,6 +1943,10 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(completionRequest *h.R
 
 			return nil, nil
 		})
+}
+
+func (e *historyEngineImpl) ReplicateEvents(replicateRequest *h.ReplicateEventsRequest) error {
+	return e.replicator.ApplyEvents(replicateRequest)
 }
 
 func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution workflow.WorkflowExecution,

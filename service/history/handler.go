@@ -802,6 +802,34 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.Re
 	return resp, nil
 }
 
+// ReplicateEvents is called by processor to replicate history events for passive domains
+func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.ReplicateEventsRequest) error {
+	h.startWG.Wait()
+
+	h.metricsClient.IncCounter(metrics.HistoryReplicateEventsScope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(metrics.HistoryReplicateEventsScope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if replicateRequest.DomainUUID == nil {
+		return errDomainNotSet
+	}
+
+	workflowExecution := replicateRequest.WorkflowExecution
+	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
+	if err1 != nil {
+		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, err1)
+		return err1
+	}
+
+	err2 := engine.ReplicateEvents(replicateRequest)
+	if err2 != nil {
+		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, h.convertError(err2))
+		return h.convertError(err2)
+	}
+
+	return nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

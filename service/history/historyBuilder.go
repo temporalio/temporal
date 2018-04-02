@@ -53,6 +53,14 @@ func newHistoryBuilder(msBuilder *mutableStateBuilder, logger bark.Logger) *hist
 	}
 }
 
+func newHistoryBuilderFromEvents(history []*workflow.HistoryEvent, logger bark.Logger) *historyBuilder {
+	return &historyBuilder{
+		serializer: persistence.NewJSONHistorySerializer(),
+		history:    history,
+		logger:     logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
+	}
+}
+
 func (b *historyBuilder) Serialize() (*persistence.SerializedHistoryEventBatch, error) {
 	eventBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), b.history)
 	history, err := b.serializer.Serialize(eventBatch)

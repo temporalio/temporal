@@ -29,9 +29,13 @@ import (
 
 	"encoding/json"
 
+	"context"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client/kafka"
+	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
@@ -39,7 +43,6 @@ import (
 )
 
 type (
-
 	// DomainReplicator is the interface which can replicate the domain
 	DomainReplicator interface {
 		HandleReceivingTask(task *replicator.DomainTaskAttributes) error
@@ -58,6 +61,7 @@ type (
 		logger           bark.Logger
 		metricsClient    metrics.Client
 		domainReplicator DomainReplicator
+		historyClient    history.Client
 	}
 )
 
@@ -69,7 +73,8 @@ var (
 )
 
 func newReplicationTaskProcessor(topic, consumer string, client messaging.Client, config *Config,
-	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator) *replicationTaskProcessor {
+	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
+	historyClient history.Client) *replicationTaskProcessor {
 	return &replicationTaskProcessor{
 		topicName:    topic,
 		consumerName: consumer,
@@ -83,6 +88,7 @@ func newReplicationTaskProcessor(topic, consumer string, client messaging.Client
 		}),
 		metricsClient:    metricsClient,
 		domainReplicator: domainReplicator,
+		historyClient:    historyClient,
 	}
 }
 
@@ -178,7 +184,18 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 						p.logger.Debugf("Recieved domain replication task %v.", task.DomainTaskAttributes)
 						err = p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 					case replicator.ReplicationTaskTypeHistory:
-						p.logger.Debugf("Recieved history replication task %v.", task.HistoryTaskAttributes)
+						err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
+							DomainUUID: task.HistoryTaskAttributes.DomainId,
+							WorkflowExecution: &shared.WorkflowExecution{
+								WorkflowId: task.HistoryTaskAttributes.WorkflowId,
+								RunId:      task.HistoryTaskAttributes.RunId,
+							},
+							FirstEventId: task.HistoryTaskAttributes.FirstEventId,
+							NextEventId:  task.HistoryTaskAttributes.NextEventId,
+							Version:      task.HistoryTaskAttributes.Version,
+							History:      task.HistoryTaskAttributes.History,
+						})
+
 					default:
 						err = ErrUnknownReplicationTask
 					}
@@ -188,9 +205,11 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 			if err != nil {
 				p.logger.WithField(logging.TagErr, err).Error("Error processing replication task.")
 				p.metricsClient.IncCounter(metrics.ReplicatorScope, metrics.ReplicatorFailures)
+				msg.Nack()
+			} else {
+				msg.Ack()
 			}
 			sw.Stop()
-			msg.Ack()
 		case <-p.consumer.Closed():
 			p.logger.Info("Consumer closed. Processor shutting down.")
 			return

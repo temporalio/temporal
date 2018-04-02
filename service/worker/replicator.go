@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
@@ -36,6 +37,7 @@ type (
 	Replicator struct {
 		clusterMetadata  cluster.Metadata
 		domainReplicator DomainReplicator
+		historyClient    history.Client
 		config           *Config
 		client           messaging.Client
 		processors       []*replicationTaskProcessor
@@ -46,13 +48,15 @@ type (
 
 // NewReplicator creates a new replicator for processing replication tasks
 func NewReplicator(clusterMetadata cluster.Metadata, metadataManager persistence.MetadataManager,
-	config *Config, client messaging.Client, logger bark.Logger, metricsClient metrics.Client) *Replicator {
+	historyClient history.Client, config *Config, client messaging.Client, logger bark.Logger,
+	metricsClient metrics.Client) *Replicator {
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueReplicatorComponent,
 	})
 	return &Replicator{
 		clusterMetadata:  clusterMetadata,
 		domainReplicator: NewDomainReplicator(metadataManager, logger),
+		historyClient:    historyClient,
 		config:           config,
 		client:           client,
 		logger:           logger,
@@ -68,7 +72,7 @@ func (r *Replicator) Start() error {
 			topicName := getTopicName(cluster)
 			consumerName := getConsumerName(currentClusterName, cluster)
 			r.processors = append(r.processors, newReplicationTaskProcessor(topicName, consumerName, r.client, r.config,
-				r.logger, r.metricsClient, r.domainReplicator))
+				r.logger, r.metricsClient, r.domainReplicator, r.historyClient))
 		}
 	}
 

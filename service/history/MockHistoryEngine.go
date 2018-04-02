@@ -382,4 +382,18 @@ func (_m *MockHistoryEngine) RecordChildExecutionCompleted(request *gohistory.Re
 	return r0
 }
 
+// ReplicateEvents is mock implementation for ReplicateEvents of HistoryEngine
+func (_m *MockHistoryEngine) ReplicateEvents(request *gohistory.ReplicateEventsRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.ReplicateEventsRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 var _ Engine = (*MockHistoryEngine)(nil)

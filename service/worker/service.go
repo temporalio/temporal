@@ -68,6 +68,7 @@ func (s *Service) Start() {
 
 	log.Infof("%v starting", common.WorkerServiceName)
 	base := service.New(p)
+	base.Start()
 
 	s.metricsClient = base.GetMetricsClient()
 
@@ -85,7 +86,13 @@ func (s *Service) Start() {
 	}
 	metadataManager = persistence.NewMetadataPersistenceClient(metadataManager, base.GetMetricsClient())
 
-	replicator := NewReplicator(p.ClusterMetadata, metadataManager, s.config, p.MessagingClient, log, s.metricsClient)
+	history, err := base.GetClientFactory().NewHistoryClient()
+	if err != nil {
+		log.Fatalf("failed to create history service client: %v", err)
+	}
+
+	replicator := NewReplicator(p.ClusterMetadata, metadataManager, history, s.config, p.MessagingClient, log,
+		s.metricsClient)
 	if err := replicator.Start(); err != nil {
 		replicator.Stop()
 		log.Fatalf("Fail to start replicator: %v", err)

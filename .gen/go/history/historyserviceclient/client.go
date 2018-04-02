@@ -78,6 +78,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	ReplicateEvents(
+		ctx context.Context,
+		ReplicateRequest *history.ReplicateEventsRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	RequestCancelWorkflowExecution(
 		ctx context.Context,
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
@@ -333,6 +339,29 @@ func (c client) RemoveSignalMutableState(
 	}
 
 	err = history.HistoryService_RemoveSignalMutableState_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ReplicateEvents(
+	ctx context.Context,
+	_ReplicateRequest *history.ReplicateEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_ReplicateEvents_Helper.Args(_ReplicateRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_ReplicateEvents_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_ReplicateEvents_Helper.UnwrapResponse(&result)
 	return
 }
 

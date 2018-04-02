@@ -366,3 +366,20 @@ func (c *metricClient) RecordChildExecutionCompleted(
 
 	return err
 }
+
+func (c *metricClient) ReplicateEvents(
+	context context.Context,
+	request *h.ReplicateEventsRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientReplicateEventsScope, metrics.CadenceLatency)
+	err := c.client.ReplicateEvents(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientReplicateEventsScope, metrics.HistoryClientFailures)
+	}
+
+	return err
+}

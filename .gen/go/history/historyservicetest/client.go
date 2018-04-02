@@ -290,6 +290,37 @@ func (mr *_MockClientRecorder) RemoveSignalMutableState(
 	return mr.mock.ctrl.RecordCall(mr.mock, "RemoveSignalMutableState", args...)
 }
 
+// ReplicateEvents responds to a ReplicateEvents call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ReplicateEvents(gomock.Any(), ...).Return(...)
+// 	... := client.ReplicateEvents(...)
+func (m *MockClient) ReplicateEvents(
+	ctx context.Context,
+	_ReplicateRequest *history.ReplicateEventsRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _ReplicateRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ReplicateEvents", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ReplicateEvents(
+	ctx interface{},
+	_ReplicateRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ReplicateRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ReplicateEvents", args...)
+}
+
 // RequestCancelWorkflowExecution responds to a RequestCancelWorkflowExecution call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -115,8 +116,37 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 	return c.updateWorkflowExecution(transferTasks, timerTasks, transactionID)
 }
 
+func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
+	lastEventID, transactionID int64) error {
+
+	nextEventID := lastEventID + 1
+	c.msBuilder.ApplyReplicationStateUpdates(request.GetVersion(), lastEventID)
+	c.msBuilder.executionInfo.NextEventID = nextEventID
+
+	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
+	return c.updateHelper(builder, nil, nil, false, transactionID)
+}
+
 func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64) (errRet error) {
+	timerTasks []persistence.Task, transactionID int64) error {
+
+	createReplicationTask := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	if createReplicationTask {
+		// Support for global domains is enabled and we are performing an update for global domain
+		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
+		if err != nil {
+			return err
+		}
+
+		lastEventID := c.msBuilder.GetNextEventID() - 1
+		c.msBuilder.ApplyReplicationStateUpdates(domainEntry.GetFailoverVersion(), lastEventID)
+	}
+
+	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, transactionID)
+}
+
+func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,
+	timerTasks []persistence.Task, createReplicationTask bool, transactionID int64) (errRet error) {
 
 	defer func() {
 		if errRet != nil {
@@ -125,22 +155,18 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		}
 	}()
 
-	createReplicationTask := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
-	if createReplicationTask {
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
-		if err != nil {
-			return err
-		}
-
-		c.msBuilder.ApplyReplicationStateUpdates(domainEntry.GetFailoverVersion())
-	}
 	// Take a snapshot of all updates we have accumulated for this execution
-	updates, err := c.msBuilder.CloseUpdateSession(createReplicationTask)
+	updates, err := c.msBuilder.CloseUpdateSession()
 	if err != nil {
 		return err
 	}
 
-	builder := updates.newEventsBuilder
+	// Replicator passes in a custom builder as it already has the events
+	if builder == nil {
+		// If no builder is passed in then use the one as part of the updates
+		builder = updates.newEventsBuilder
+	}
+
 	if builder.history != nil && len(builder.history) > 0 {
 		// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
 		firstEvent := builder.history[0]
@@ -186,11 +212,11 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	}
 
 	var replicationTasks []persistence.Task
-	if updates.replicationTask != nil {
-		// Support for global domains is enabled and we are performing an update for global domain
+	if createReplicationTask {
 		// Let's create a replication task as part of this update
-		replicationTasks = append(replicationTasks, updates.replicationTask)
+		replicationTasks = append(replicationTasks, c.msBuilder.createReplicationTask())
 	}
+
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:             c.msBuilder.executionInfo,
 		ReplicationState:          c.msBuilder.replicationState,

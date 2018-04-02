@@ -370,3 +370,17 @@ func (_m *HistoryClient) RecordChildExecutionCompleted(ctx context.Context, requ
 
 	return r0
 }
+
+// RecordChildExecutionCompleted provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) ReplicateEvents(ctx context.Context, request *history.ReplicateEventsRequest, opts ...yarpc.CallOption) error {
+	ret := _m.Called(ctx, request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *history.ReplicateEventsRequest) error); ok {
+		r0 = rf(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

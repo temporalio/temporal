@@ -477,6 +477,24 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	return err
 }
 
+func (c *clientImpl) ReplicateEvents(
+	ctx context.Context,
+	request *h.ReplicateEventsRequest,
+	opts ...yarpc.CallOption) error {
+	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
+	if err != nil {
+		return err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.ReplicateEvents(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) getHostForRequest(workflowID string) (historyserviceclient.Interface, error) {
 	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	host, err := c.resolver.Lookup(string(key))
