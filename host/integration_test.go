@@ -1439,10 +1439,10 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestActivityCancelation() {
-	id := "integration-activity-cancelation-test"
-	wt := "integration-activity-cancelation-test-type"
-	tl := "integration-activity-cancelation-test-tasklist"
+func (s *integrationSuite) TestActivityCancellation() {
+	id := "integration-activity-cancellation-test"
+	wt := "integration-activity-cancellation-test-type"
+	tl := "integration-activity-cancellation-test-tasklist"
 	identity := "worker1"
 	activityName := "activity_timer"
 
@@ -1467,7 +1467,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
 	s.Nil(err0)
 
-	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
 
 	activityCounter := int32(0)
 	scheduleActivity := true
@@ -1518,7 +1518,7 @@ func (s *integrationSuite) TestActivityCancelation() {
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
 		s.Equal(id, *execution.WorkflowId)
-		s.Equal(activityName, *activityType.Name)
+		s.Equal(activityName, activityType.GetName())
 		for i := 0; i < 10; i++ {
 			s.logger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
 			response, err := s.engine.RecordActivityTaskHeartbeat(createContext(),

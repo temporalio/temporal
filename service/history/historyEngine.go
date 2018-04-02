@@ -410,7 +410,7 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	// set the run id in case query the current running workflwo
+	// set the run id in case query the current running workflow
 	execution.RunId = response.Execution.RunId
 
 	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking

@@ -155,7 +155,7 @@ func (s *timerQueueProcessor2Suite) TearDownTest() {
 func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	domainID := testDomainActiveID
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("timer-update-timesout-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "user-timer-update-times-out"
 
@@ -178,7 +178,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	timerTask := &persistence.TimerTaskInfo{
 		DomainID:   domainID,
 		WorkflowID: "wid",
-		RunID:      "rid",
+		RunID:      validRunID,
 		TaskID:     taskID,
 		TaskType:   persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: mockTS.Now(),
@@ -226,7 +226,7 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	domainID := testDomainActiveID
 	we := workflow.WorkflowExecution{WorkflowId: common.StringPtr("workflow-timesout-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 	taskList := "task-workflow-times-out"
 
 	builder := newMutableStateBuilder(s.config, s.logger)
@@ -248,7 +248,7 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	timerTask := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
 		WorkflowID:          "wid",
-		RunID:               "rid",
+		RunID:               validRunID,
 		TaskID:              taskID,
 		TaskType:            persistence.TaskTypeWorkflowTimeout,
 		VisibilityTimestamp: mockTS.Now(),

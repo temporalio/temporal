@@ -234,7 +234,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("single-timer-test"),
-		RunId:      common.StringPtr("6cc028d3-b4be-4038-80c9-bbcf99f7f109"),
+		RunId:      common.StringPtr(validRunID),
 	}
 	taskList := "single-timer-queue"
 	identity := "testIdentity"
@@ -269,7 +269,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("multiple-timer-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "multiple-timer-queue"
 	identity := "testIdentity"
@@ -308,7 +308,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("After-timer-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "After-timer-queue"
 	identity := "testIdentity"
@@ -392,7 +392,7 @@ func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms *mutableStateBuilde
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutStart() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 
@@ -433,7 +433,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStart() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-Started-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 
@@ -476,7 +476,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThanStartToClose() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_START-more-than-start2close"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 
@@ -518,7 +518,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Started-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 
@@ -560,7 +560,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedActivity() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-START_TO_CLOSE-Completed-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -606,7 +606,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustScheduled() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Scheduled-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -647,7 +647,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Started-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -690,7 +690,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Completed() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-SCHEDULE_TO_CLOSE-Completed-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -737,7 +737,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("activity-timer-hb-started-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "activity-timer-queue"
 
@@ -760,7 +760,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "user-timer-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -782,7 +782,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-same-expiry-test"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "user-timer-same-expiry-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
@@ -826,7 +826,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("closed-workflow-test-desicion-timer"),
-		RunId: common.StringPtr("0d00698f-08e1-4d36-a3e2-3bf109f5d2d6")}
+		RunId: common.StringPtr(validRunID)}
 
 	taskList := "closed-workflow-queue"
 	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
