@@ -44,7 +44,7 @@ type (
 		pendingActivityInfoIDs          map[int64]*persistence.ActivityInfo // Schedule Event ID -> Activity Info.
 		pendingActivityInfoByActivityID map[string]int64                    // Activity ID -> Schedule Event ID of the activity.
 		updateActivityInfos             []*persistence.ActivityInfo         // Modified activities from last update.
-		deleteActivityInfo              *int64                              // Deleted activities from last update.
+		deleteActivityInfos             []int64                             // Deleted activities from last update.
 
 		pendingTimerInfoIDs map[string]*persistence.TimerInfo // User Timer ID -> Timer Info.
 		updateTimerInfos    []*persistence.TimerInfo          // Modified timers from last update.
@@ -82,7 +82,7 @@ type (
 	mutableStateSessionUpdates struct {
 		newEventsBuilder           *historyBuilder
 		updateActivityInfos        []*persistence.ActivityInfo
-		deleteActivityInfo         *int64
+		deleteActivityInfos        []int64
 		updateTimerInfos           []*persistence.TimerInfo
 		deleteTimerInfos           []string
 		updateChildExecutionInfos  []*persistence.ChildExecutionInfo
@@ -115,6 +115,7 @@ func newMutableStateBuilder(config *Config, logger bark.Logger) *mutableStateBui
 		updateActivityInfos:             []*persistence.ActivityInfo{},
 		pendingActivityInfoIDs:          make(map[int64]*persistence.ActivityInfo),
 		pendingActivityInfoByActivityID: make(map[string]int64),
+		deleteActivityInfos:             []int64{},
 		pendingTimerInfoIDs:             make(map[string]*persistence.TimerInfo),
 		updateTimerInfos:                []*persistence.TimerInfo{},
 		deleteTimerInfos:                []string{},
@@ -244,7 +245,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	updates := &mutableStateSessionUpdates{
 		newEventsBuilder:           e.hBuilder,
 		updateActivityInfos:        e.updateActivityInfos,
-		deleteActivityInfo:         e.deleteActivityInfo,
+		deleteActivityInfos:        e.deleteActivityInfos,
 		updateTimerInfos:           e.updateTimerInfos,
 		deleteTimerInfos:           e.deleteTimerInfos,
 		updateChildExecutionInfos:  e.updateChildExecutionInfos,
@@ -263,7 +264,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	// Clear all updates to prepare for the next session
 	e.hBuilder = newHistoryBuilder(e, e.logger)
 	e.updateActivityInfos = []*persistence.ActivityInfo{}
-	e.deleteActivityInfo = nil
+	e.deleteActivityInfos = []int64{}
 	e.updateTimerInfos = []*persistence.TimerInfo{}
 	e.deleteTimerInfos = []string{}
 	e.updateChildExecutionInfos = []*persistence.ChildExecutionInfo{}
@@ -675,7 +676,7 @@ func (e *mutableStateBuilder) DeleteActivity(scheduleEventID int64) error {
 	}
 	delete(e.pendingActivityInfoByActivityID, a.ActivityID)
 
-	e.deleteActivityInfo = common.Int64Ptr(scheduleEventID)
+	e.deleteActivityInfos = append(e.deleteActivityInfos, scheduleEventID)
 	return nil
 }
 

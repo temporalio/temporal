@@ -512,7 +512,7 @@ type (
 
 		// Mutable state
 		UpsertActivityInfos       []*ActivityInfo
-		DeleteActivityInfo        *int64
+		DeleteActivityInfos       []int64
 		UpserTimerInfos           []*TimerInfo
 		DeleteTimerInfos          []string
 		UpsertChildExecutionInfos []*ChildExecutionInfo

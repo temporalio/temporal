@@ -1335,7 +1335,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	d.createTimerTasks(batch, request.TimerTasks, request.DeleteTimerTask, request.ExecutionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, cqlNowTimestamp)
 
-	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfo, executionInfo.DomainID,
+	d.updateActivityInfos(batch, request.UpsertActivityInfos, request.DeleteActivityInfos, executionInfo.DomainID,
 		executionInfo.WorkflowID, executionInfo.RunID, request.Condition, request.RangeID)
 
 	d.updateTimerInfos(batch, request.UpserTimerInfos, request.DeleteTimerInfos, executionInfo.DomainID,
@@ -2229,7 +2229,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 	}
 }
 
-func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, deleteInfo *int64,
+func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, deleteInfos []int64,
 	domainID, workflowID, runID string, condition int64, rangeID int64) {
 
 	for _, a := range activityInfos {
@@ -2262,9 +2262,9 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			condition)
 	}
 
-	if deleteInfo != nil {
+	for _, deleteInfo := range deleteInfos {
 		batch.Query(templateDeleteActivityInfoQuery,
-			*deleteInfo,
+			deleteInfo,
 			d.shardID,
 			rowTypeExecution,
 			domainID,

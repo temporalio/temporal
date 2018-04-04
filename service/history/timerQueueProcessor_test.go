@@ -759,6 +759,69 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 	s.False(running)
 }
 
+func (s *timerQueueProcessorSuite) TestTimerActivityTask_SameExpiry() {
+	domainID := testDomainActiveID
+	workflowExecution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("activity-timer-same-expiry-test"),
+		RunId:      common.StringPtr(validRunID),
+	}
+
+	taskList := "activity-timer-queue"
+	s.createExecutionWithTimers(domainID, workflowExecution, taskList, "identity", []int32{})
+
+	// TimeoutTypeScheduleToClose - Scheduled, started, completed.
+	p := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.WorkflowMgr, s.logger).(*timerQueueProcessorImpl)
+	p.Start()
+
+	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder := newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	builder.Load(state)
+	condition := state.ExecutionInfo.NextEventID
+
+	ase1, ai1 := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ActivityId:                    common.StringPtr("testID-1"),
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
+		})
+	s.NotNil(ase1)
+	ase2, ai2 := builder.AddActivityTaskScheduledEvent(emptyEventID,
+		&workflow.ScheduleActivityTaskDecisionAttributes{
+			ActivityId:                    common.StringPtr("testID-2"),
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(1),
+		})
+	s.NotNil(ase2)
+
+	// create a schedule to close timeout
+	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
+	t, err := tBuilder.AddScheduleToCloseActivityTimeout(ai1)
+	s.NoError(err)
+	s.NotNil(t)
+	t, err = tBuilder.AddScheduleToCloseActivityTimeout(ai2)
+	s.NoError(err)
+	s.NotNil(t)
+	timerTasks := []persistence.Task{t}
+
+	s.updateHistoryAndTimers(builder, timerTasks, condition)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+
+	s.waitForTimerTasksToProcess(p)
+	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
+	running := s.checkTimedOutEventFor(domainID, workflowExecution, *ase1.EventId)
+	s.False(running)
+	running = s.checkTimedOutEventFor(domainID, workflowExecution, *ase2.EventId)
+	s.False(running)
+
+	// assert activity infos are deleted
+	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder = newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	builder.Load(state)
+	s.Equal(0, len(builder.pendingActivityInfoIDs))
+}
+
 func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-test"),
@@ -781,7 +844,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	s.False(running)
 }
 
-func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
+func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 	domainID := testDomainActiveID
 	workflowExecution := workflow.WorkflowExecution{WorkflowId: common.StringPtr("user-timer-same-expiry-test"),
 		RunId: common.StringPtr(validRunID)}
@@ -823,6 +886,13 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimersSameExpiry() {
 	s.False(running)
 	running = s.checkTimedOutEventForUserTimer(domainID, workflowExecution, ti2.TimerID)
 	s.False(running)
+
+	// assert user timer infos are deleted
+	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+	builder = newMutableStateBuilder(s.ShardContext.GetConfig(), s.logger)
+	builder.Load(state)
+	s.Equal(0, len(builder.pendingTimerInfoIDs))
 }
 
 func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {

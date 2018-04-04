@@ -226,7 +226,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		Condition:                 c.updateCondition,
 		DeleteTimerTask:           c.deleteTimerTask,
 		UpsertActivityInfos:       updates.updateActivityInfos,
-		DeleteActivityInfo:        updates.deleteActivityInfo,
+		DeleteActivityInfos:       updates.deleteActivityInfos,
 		UpserTimerInfos:           updates.updateTimerInfos,
 		DeleteTimerInfos:          updates.deleteTimerInfos,
 		UpsertChildExecutionInfos: updates.updateChildExecutionInfos,

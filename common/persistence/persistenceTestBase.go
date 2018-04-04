@@ -425,7 +425,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *WorkflowExecutionInfo, co
 		DeleteTimerTask:     nil,
 		RangeID:             s.ShardInfo.RangeID,
 		UpsertActivityInfos: nil,
-		DeleteActivityInfo:  nil,
+		DeleteActivityInfos: nil,
 		UpserTimerInfos:     nil,
 		DeleteTimerInfos:    nil,
 		ContinueAsNew: &CreateWorkflowExecutionRequest{
@@ -454,10 +454,10 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *WorkflowExecutionInfo, co
 // UpdateWorkflowExecution is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, condition int64, timerTasks []Task, deleteTimerTask Task,
-	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64,
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfos []int64,
 	upsertTimerInfos []*TimerInfo, deleteTimerInfos []string) error {
 	return s.UpdateWorkflowExecutionWithRangeID(updatedInfo, decisionScheduleIDs, activityScheduleIDs,
-		s.ShardInfo.RangeID, condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfo,
+		s.ShardInfo.RangeID, condition, timerTasks, deleteTimerTask, upsertActivityInfos, deleteActivityInfos,
 		upsertTimerInfos, deleteTimerInfos, nil, nil, nil, nil,
 		nil, nil, nil, "")
 }
@@ -474,7 +474,7 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *WorkflowExecuti
 		DeleteTimerTask:     nil,
 		RangeID:             s.ShardInfo.RangeID,
 		UpsertActivityInfos: nil,
-		DeleteActivityInfo:  nil,
+		DeleteActivityInfos: nil,
 		UpserTimerInfos:     nil,
 		DeleteTimerInfos:    nil,
 		FinishExecution:     true,
@@ -563,13 +563,13 @@ func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *WorkflowExecuti
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecutionInfo, decisionScheduleIDs []int64,
 	activityScheduleIDs []int64, rangeID, condition int64, timerTasks []Task, deleteTimerTask Task,
-	upsertActivityInfos []*ActivityInfo, deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo,
+	upsertActivityInfos []*ActivityInfo, deleteActivityInfos []int64, upsertTimerInfos []*TimerInfo,
 	deleteTimerInfos []string, upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64,
 	upsertCancelInfos []*RequestCancelInfo, deleteCancelInfo *int64,
 	upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64,
 	upsertSignalRequestedIDs []string, deleteSignalRequestedID string) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, decisionScheduleIDs, activityScheduleIDs, rangeID,
-		condition, timerTasks, []Task{}, deleteTimerTask, upsertActivityInfos, deleteActivityInfo, upsertTimerInfos, deleteTimerInfos,
+		condition, timerTasks, []Task{}, deleteTimerTask, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
 		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
 		upsertSignalRequestedIDs, deleteSignalRequestedID)
 }
@@ -578,7 +578,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowExecutionInfo,
 	updatedReplicationState *ReplicationState, decisionScheduleIDs []int64, activityScheduleIDs []int64, rangeID,
 	condition int64, timerTasks []Task, txTasks []Task, deleteTimerTask Task, upsertActivityInfos []*ActivityInfo,
-	deleteActivityInfo *int64, upsertTimerInfos []*TimerInfo, deleteTimerInfos []string,
+	deleteActivityInfos []int64, upsertTimerInfos []*TimerInfo, deleteTimerInfos []string,
 	upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*RequestCancelInfo,
 	deleteCancelInfo *int64, upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
 	deleteSignalRequestedID string) error {
@@ -620,7 +620,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowE
 		DeleteTimerTask:           deleteTimerTask,
 		RangeID:                   rangeID,
 		UpsertActivityInfos:       upsertActivityInfos,
-		DeleteActivityInfo:        deleteActivityInfo,
+		DeleteActivityInfos:       deleteActivityInfos,
 		UpserTimerInfos:           upsertTimerInfos,
 		DeleteTimerInfos:          deleteTimerInfos,
 		UpsertChildExecutionInfos: upsertChildInfos,
