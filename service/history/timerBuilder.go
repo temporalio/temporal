@@ -284,12 +284,12 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 			if v.StartedID != emptyEventID {
 				startToCloseExpiry := v.StartedTime.Add(time.Duration(v.StartToCloseTimeout) * time.Second)
 				td := &timerDetails{
-					SequenceID:  SequenceID{VisibilityTimestamp: startToCloseExpiry},
-					ActivityID:  v.ScheduleID,
-					EventID:     v.StartedID,
-					TimeoutType: w.TimeoutTypeStartToClose,
-					TimeoutSec:  v.StartToCloseTimeout,
-					TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) != 0}
+					SequenceID: SequenceID{VisibilityTimestamp: startToCloseExpiry},
+					ActivityID:      v.ScheduleID,
+					EventID:         v.ScheduleID,
+					TimeoutType:     w.TimeoutTypeStartToClose,
+					TimeoutSec:      v.StartToCloseTimeout,
+					TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) != 0}
 				tb.activityTimers = append(tb.activityTimers, td)
 				if v.HeartbeatTimeout > 0 {
 					lastHeartBeatTS := v.LastHeartBeatUpdatedTime
@@ -298,12 +298,12 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					}
 					heartBeatExpiry := lastHeartBeatTS.Add(time.Duration(v.HeartbeatTimeout) * time.Second)
 					td := &timerDetails{
-						SequenceID:  SequenceID{VisibilityTimestamp: heartBeatExpiry},
-						ActivityID:  v.ScheduleID,
-						EventID:     v.StartedID,
-						TimeoutType: w.TimeoutTypeHeartbeat,
-						TimeoutSec:  v.HeartbeatTimeout,
-						TaskCreated: (v.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) != 0}
+						SequenceID: SequenceID{VisibilityTimestamp: heartBeatExpiry},
+						ActivityID:      v.ScheduleID,
+						EventID:         v.ScheduleID,
+						TimeoutType:     w.TimeoutTypeHeartbeat,
+						TimeoutSec:      v.HeartbeatTimeout,
+						TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) != 0}
 					tb.activityTimers = append(tb.activityTimers, td)
 				}
 			} else {
