@@ -391,3 +391,21 @@ func (s *cliAppSuite) TestDescribeTaskList_Activity() {
 	err := s.app.Run([]string{"", "--do", domainName, "tasklist", "describe", "-tl", "test-taskList", "-tlt", "activity"})
 	s.Nil(err)
 }
+
+func (s *cliAppSuite) TestObserveWorkflow() {
+	history := getWorkflowExecutionHistoryResponse
+	s.service.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), callOptions...).Return(history, nil).Times(2)
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid"})
+	s.Nil(err)
+	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observe", "-w", "wid", "-sd"})
+	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestObserveWorkflowWithID() {
+	history := getWorkflowExecutionHistoryResponse
+	s.service.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), callOptions...).Return(history, nil).Times(2)
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid"})
+	s.Nil(err)
+	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid", "-sd"})
+	s.Nil(err)
+}

@@ -103,6 +103,8 @@ const (
 	FlagOutputFilenameWithAlias   = FlagOutputFilename + ", of"
 	FlagQueryType                 = "query_type"
 	FlagQueryTypeWithAlias        = FlagQueryType + ", qt"
+	FlagShowDetail                = "show_detail"
+	FlagShowDetailWithAlias       = FlagShowDetail + ", sd"
 )
 
 const (
@@ -451,8 +453,13 @@ func RunWorkflow(c *cli.Context) {
 	table.AppendBulk(executionData) // Add Bulk Data
 	table.Render()
 
-	// print workflow progress
+	printWorkflowProgress(c, wid, resp.GetRunId())
+}
+
+// helper function to print workflow progress with time refresh every second
+func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	fmt.Println(colorMagenta("Progress:"))
+
 	wfClient := getWorkflowClient(c)
 	timeElapse := 1
 	isTimeElapseExist := false
@@ -460,8 +467,17 @@ func RunWorkflow(c *cli.Context) {
 	var lastEvent *s.HistoryEvent // used for print result of this run
 	ticker := time.NewTicker(time.Second).C
 
+	contextTimeout := defaultContextTimeoutForLongPoll
+	if c.IsSet(FlagContextTimeout) {
+		contextTimeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
+	}
+	tcCtx, cancel := newContextForLongPoll(contextTimeout)
+	defer cancel()
+
+	showDetails := c.Bool(FlagShowDetail)
+
 	go func() {
-		iter := wfClient.GetWorkflowHistory(tcCtx, wid, resp.GetRunId(), true, s.HistoryEventFilterTypeAllEvent)
+		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, s.HistoryEventFilterTypeAllEvent)
 		for iter.HasNext() {
 			event, err := iter.Next()
 			if err != nil {
@@ -471,7 +487,11 @@ func RunWorkflow(c *cli.Context) {
 				removePrevious2LinesFromTerminal()
 				isTimeElapseExist = false
 			}
-			fmt.Printf("  %d, %s, %v\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), event.GetEventType())
+			if showDetails {
+				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event))
+			} else {
+				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event))
+			}
 			lastEvent = event
 		}
 		doneChan <- true
@@ -911,6 +931,28 @@ func DescribeTaskList(c *cli.Context) {
 		table.Append([]string{poller.GetIdentity(), convertTime(poller.GetLastAccessTime(), false)})
 	}
 	table.Render()
+}
+
+// ObserveHistory show the process of running workflow
+func ObserveHistory(c *cli.Context) {
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	printWorkflowProgress(c, wid, rid)
+}
+
+// ObserveHistoryWithID show the process of running workflow
+func ObserveHistoryWithID(c *cli.Context) {
+	if !c.Args().Present() {
+		ExitIfError(errors.New("workflow_id is required"))
+	}
+	wid := c.Args().First()
+	rid := ""
+	if c.NArg() >= 2 {
+		rid = c.Args().Get(1)
+	}
+
+	printWorkflowProgress(c, wid, rid)
 }
 
 func getDomainClient(c *cli.Context) client.DomainClient {

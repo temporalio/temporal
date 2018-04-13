@@ -152,6 +152,10 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 						"Input from file will be overwrite by input from command line",
 				},
+				cli.BoolFlag{
+					Name:  FlagShowDetailWithAlias,
+					Usage: "Show event details",
+				},
 			},
 			Action: func(c *cli.Context) {
 				RunWorkflow(c)
@@ -404,6 +408,50 @@ func newWorkflowCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				DescribeWorkflowWithID(c)
+			},
+		},
+		{
+			Name:    "observe",
+			Aliases: []string{"ob"},
+			Usage:   "show the progress of workflow history",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.IntFlag{
+					Name:  FlagContextTimeoutWithAlias,
+					Usage: "Optional timeout for start command context in seconds, default value is 120",
+				},
+				cli.BoolFlag{
+					Name:  FlagShowDetailWithAlias,
+					Usage: "Show event details",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ObserveHistory(c)
+			},
+		},
+		{
+			Name:    "observeid",
+			Aliases: []string{"obid"},
+			Usage:   "show the progress of workflow history with given workflow_id and optional run_id (a shortcut of `observe -w <wid> -r <rid>`)",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagContextTimeoutWithAlias,
+					Usage: "Optional timeout for start command context in seconds, default value is 120",
+				},
+				cli.BoolFlag{
+					Name:  FlagShowDetailWithAlias,
+					Usage: "Show event details",
+				},
+			},
+			Action: func(c *cli.Context) {
+				ObserveHistoryWithID(c)
 			},
 		},
 	}
