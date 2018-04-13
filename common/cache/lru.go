@@ -167,16 +167,15 @@ func (c *lru) Get(key interface{}) interface{} {
 
 	entry := element.Value.(*entryImpl)
 
-	if c.pin {
-		entry.refCount++
-	}
-
 	if c.isEntryExpired(entry, time.Now()) {
 		// Entry has expired
 		c.deleteInternal(element)
 		return nil
 	}
 
+	if c.pin {
+		entry.refCount++
+	}
 	c.byAccess.MoveToFront(element)
 	return entry.value
 }
