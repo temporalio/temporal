@@ -106,7 +106,7 @@ var (
 	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
 	errCannotRemoveClustersFromDomain  = &gen.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
 	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
-	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other paramaters are set."}
+	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
 
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
@@ -1374,7 +1374,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			token = nil
 		} else if isLongPoll {
-			// set the persistance token to be nil so next time we will query history for updates
+			// set the persistence token to be nil so next time we will query history for updates
 			token.PersistenceToken = nil
 		} else {
 			token = nil

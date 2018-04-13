@@ -137,7 +137,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 		return done
 	}
 
-	// Stop retrying after expiration interval is elasped
+	// Stop retrying after expiration interval is elapsed
 	if p.expirationInterval != NoInterval && elapsedTime > p.expirationInterval {
 		return done
 	}

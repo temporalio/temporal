@@ -45,8 +45,8 @@ type (
 	}
 )
 
-// Cassandra only provides miliseconds timestamp precision, so
-// we need to use tolerance when doing comparision
+// Cassandra only provides milliseconds timestamp precision, so
+// we need to use tolerance when doing comparison
 var timePrecision = 2 * time.Millisecond
 
 func TestCassandraPersistenceSuite(t *testing.T) {
@@ -1715,9 +1715,9 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
-// Note: cassandra only provide milisecond precision timestamp
+// Note: cassandra only provide millisecond precision timestamp
 // ref: https://docs.datastax.com/en/cql/3.3/cql/cql_reference/timestamp_type_r.html
-// so to use equal function, we need to do conversion, getting rid of sub miliseconds
+// so to use equal function, we need to do conversion, getting rid of sub milliseconds
 func timestampConvertor(t time.Time) time.Time {
 	return time.Unix(
 		0,

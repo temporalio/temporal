@@ -181,7 +181,7 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 				} else {
 					switch task.GetTaskType() {
 					case replicator.ReplicationTaskTypeDomain:
-						p.logger.Debugf("Recieved domain replication task %v.", task.DomainTaskAttributes)
+						p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
 						err = p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 					case replicator.ReplicationTaskTypeHistory:
 						err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
