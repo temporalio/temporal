@@ -30,6 +30,7 @@ import (
 
 type (
 	timerQueueProcessorImpl struct {
+		isGlobalDomainEnabled  bool
 		currentClusterName     string
 		shard                  ShardContext
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
@@ -46,6 +47,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		}
 	}
 	return &timerQueueProcessorImpl{
+		isGlobalDomainEnabled:  shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
 		currentClusterName:     currentClusterName,
 		shard:                  shard,
 		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, executionManager, logger),
@@ -55,15 +57,19 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 
 func (t *timerQueueProcessorImpl) Start() {
 	t.activeTimerProcessor.Start()
-	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-		standbyTimerProcessor.Start()
+	if t.isGlobalDomainEnabled {
+		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
+			standbyTimerProcessor.Start()
+		}
 	}
 }
 
 func (t *timerQueueProcessorImpl) Stop() {
 	t.activeTimerProcessor.Stop()
-	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-		standbyTimerProcessor.Stop()
+	if t.isGlobalDomainEnabled {
+		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
+			standbyTimerProcessor.Stop()
+		}
 	}
 }
 

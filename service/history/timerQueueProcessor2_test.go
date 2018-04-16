@@ -129,6 +129,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	h := &historyEngineImpl{
 		currentclusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
@@ -207,7 +208,6 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(errors.New("FAILED")).Once()
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil)
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
@@ -215,7 +215,6 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 
 	// Start timer Processor.
 	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
@@ -275,7 +274,6 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 		// Done.
 		waitCh <- struct{}{}
 	}).Once()
-	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false).Once()
 
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}
