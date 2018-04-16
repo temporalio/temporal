@@ -310,7 +310,11 @@ Update_History_Loop:
 				// if current one is HB task and we need to create next HB task for the same.
 				// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
 				// where we create next timer task based on that new updated timestamp.
-				if !td.TaskCreated || (isHeartBeatTask && td.EventID == scheduleID) {
+				// REMOVE IN NEXT RELEASE: PR #658 fixes an issue with heartbeat timers which require us to use scheduleID
+				// for activity in the timertask.  But we still need to check if the ID matches Started eventID or
+				// bufferedEventID due to the heartbeat timers created before the bugfix.
+				if !td.TaskCreated || (isHeartBeatTask && (scheduleID == td.EventID || scheduleID == ai.StartedID ||
+					scheduleID == bufferedEventID)) {
 					nextTask := tBuilder.createNewTask(td)
 					timerTasks = []persistence.Task{nextTask}
 					at := nextTask.(*persistence.ActivityTimeoutTask)
