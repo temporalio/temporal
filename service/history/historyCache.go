@@ -35,7 +35,7 @@ import (
 )
 
 type (
-	releaseWorkflowExecutionFunc func()
+	releaseWorkflowExecutionFunc func(err error)
 
 	historyCache struct {
 		cache.Cache
@@ -100,7 +100,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 
 	// Test hook for disabling the cache
 	if c.disabled {
-		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func() {}, nil
+		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func(error) {}, nil
 	}
 
 	key := execution.GetRunId()
@@ -118,8 +118,12 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	// This will create a closure on every request.
 	// Consider revisiting this if it causes too much GC activity
 	status := cacheNotReleased
-	releaseFunc := func() {
+	releaseFunc := func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
+			if err != nil {
+				// TODO see issue #668, there are certain type or errors which can bypass the clear
+				context.clear()
+			}
 			context.Unlock()
 			c.Release(key)
 		}

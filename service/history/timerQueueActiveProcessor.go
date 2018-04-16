@@ -134,7 +134,7 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 	return err
 }
 
-func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) error {
+func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TimerTaskUserTimerScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskUserTimerScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -143,7 +143,7 @@ func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistenc
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -206,7 +206,7 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) error {
+func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskActivityTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -215,7 +215,7 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persis
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -352,7 +352,7 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence.TimerTaskInfo) error {
+func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence.TimerTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -361,7 +361,7 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -426,7 +426,7 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence.TimerTaskInfo) error {
+func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence.TimerTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TimerTaskWorkflowTimeoutScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskWorkflowTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -435,7 +435,7 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {

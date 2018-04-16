@@ -157,7 +157,7 @@ func (t *transferQueueProcessorImpl) CompleteTask(taskID int64) error {
 	})
 }
 
-func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskActivityScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskActivityScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -176,7 +176,7 @@ func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.Trans
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
@@ -197,7 +197,7 @@ func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.Trans
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
-	release()
+	release(nil)
 	if timeout != 0 {
 		err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
 			DomainUUID:                    common.StringPtr(targetDomainID),
@@ -212,7 +212,7 @@ func (t *transferQueueProcessorImpl) processActivityTask(task *persistence.Trans
 	return err
 }
 
-func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskDecisionScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskDecisionScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -232,7 +232,7 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
@@ -255,7 +255,7 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
-	release()
+	release(nil)
 	err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
 		DomainUUID:                    common.StringPtr(domainID),
 		Execution:                     &execution,
@@ -281,7 +281,7 @@ func (t *transferQueueProcessorImpl) processDecisionTask(task *persistence.Trans
 	return err
 }
 
-func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskCloseExecutionScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskCloseExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -295,7 +295,7 @@ func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.Tra
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
@@ -326,7 +326,7 @@ func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.Tra
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
-	release()
+	release(nil)
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
 		err = t.historyClient.RecordChildExecutionCompleted(nil, &history.RecordChildExecutionCompletedRequest{
@@ -378,7 +378,7 @@ func (t *transferQueueProcessorImpl) processCloseExecution(task *persistence.Tra
 	})
 }
 
-func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskCancelExecutionScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskCancelExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -397,7 +397,7 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	// First load the execution to validate if there is pending request cancellation for this transfer task
 	var msBuilder *mutableStateBuilder
@@ -497,7 +497,7 @@ func (t *transferQueueProcessorImpl) processCancelExecution(task *persistence.Tr
 	return err
 }
 
-func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskSignalExecutionScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskSignalExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -514,7 +514,7 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	var msBuilder *mutableStateBuilder
 	msBuilder, err = context.loadWorkflowExecution()
@@ -608,7 +608,7 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
-	release()
+	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
 	removeRequest := &history.RemoveSignalMutableStateRequest{
 		DomainUUID: common.StringPtr(targetDomainID),
@@ -624,7 +624,7 @@ func (t *transferQueueProcessorImpl) processSignalExecution(task *persistence.Tr
 	return err
 }
 
-func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) error {
+func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) (retError error) {
 	t.metricsClient.IncCounter(metrics.TransferTaskStartChildExecutionScope, metrics.TaskRequests)
 	sw := t.metricsClient.StartTimer(metrics.TransferTaskStartChildExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
@@ -641,7 +641,7 @@ func (t *transferQueueProcessorImpl) processStartChildExecution(task *persistenc
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	// First step is to load workflow execution so we can retrieve the initiated event
 	var msBuilder *mutableStateBuilder

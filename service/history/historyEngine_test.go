@@ -3340,7 +3340,7 @@ func (s *engineSuite) getBuilder(domainID string, we workflow.WorkflowExecution)
 	if err != nil {
 		return nil
 	}
-	defer release()
+	defer release(nil)
 
 	return context.msBuilder
 }

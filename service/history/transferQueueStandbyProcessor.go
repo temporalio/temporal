@@ -213,12 +213,12 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 	})
 }
 
-func (t *transferQueueStandbyProcessorImpl) processTransfer(transferTask *persistence.TransferTaskInfo, fn func(*mutableStateBuilder) error) error {
+func (t *transferQueueStandbyProcessorImpl) processTransfer(transferTask *persistence.TransferTaskInfo, fn func(*mutableStateBuilder) error) (retError error) {
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(transferTask))
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Process_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {

@@ -22,6 +22,7 @@ package history
 
 import (
 	"fmt"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
@@ -56,7 +57,7 @@ func newHistoryReplicator(shard ShardContext, historyCache *historyCache, domain
 	return replicator
 }
 
-func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) error {
+func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retError error) {
 	if request == nil || request.History == nil || len(request.History.Events) == 0 {
 		return nil
 	}
@@ -80,7 +81,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) error
 		if err != nil {
 			return err
 		}
-		defer release()
+		defer func() { release(retError) }()
 
 		msBuilder, err = context.loadWorkflowExecution()
 		if err != nil {

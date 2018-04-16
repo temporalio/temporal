@@ -250,12 +250,12 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persi
 	})
 }
 
-func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo, fn func(*mutableStateBuilder) error) error {
+func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo, fn func(*mutableStateBuilder) error) (retError error) {
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Process_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {

@@ -463,13 +463,13 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 }
 
 func (e *historyEngineImpl) getMutableState(
-	domainID string, execution workflow.WorkflowExecution) (*h.GetMutableStateResponse, error) {
+	domainID string, execution workflow.WorkflowExecution) (retResp *h.GetMutableStateResponse, retError error) {
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
 		return nil, err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	msBuilder, err1 := context.loadWorkflowExecution()
 	if err1 != nil {
@@ -525,7 +525,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(resetRequest *h.ResetStickyTaskL
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (e *historyEngineImpl) DescribeWorkflowExecution(
-	request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error) {
+	request *h.DescribeWorkflowExecutionRequest) (retResp *workflow.DescribeWorkflowExecutionResponse, retError error) {
 	domainID, err := getDomainUUID(request.DomainUUID)
 	if err != nil {
 		return nil, err
@@ -537,7 +537,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if err0 != nil {
 		return nil, err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	msBuilder, err1 := context.loadWorkflowExecution()
 	if err1 != nil {
@@ -593,7 +593,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 }
 
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
-	request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error) {
+	request *h.RecordDecisionTaskStartedRequest) (retResp *h.RecordDecisionTaskStartedResponse, retError error) {
 	domainID, err := getDomainUUID(request.DomainUUID)
 	if err != nil {
 		return nil, err
@@ -603,7 +603,7 @@ func (e *historyEngineImpl) RecordDecisionTaskStarted(
 	if err0 != nil {
 		return nil, err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 	scheduleID := request.GetScheduleId()
 	requestID := request.GetRequestId()
@@ -776,7 +776,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 }
 
 // RespondDecisionTaskCompleted completes a decision task
-func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) error {
+func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (retError error) {
 	domainID, err := getDomainUUID(req.DomainUUID)
 	if err != nil {
 		return err
@@ -801,7 +801,7 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, re
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -1142,7 +1142,7 @@ Update_History_Loop:
 				runID := uuid.New()
 				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainID, domainName, runID, attributes)
 				if err != nil {
-					return nil
+					return err
 				}
 
 				// add timer task to new workflow
@@ -1635,7 +1635,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 }
 
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequest *h.SignalWithStartWorkflowExecutionRequest) (
-	*workflow.StartWorkflowExecutionResponse, error) {
+	retResp *workflow.StartWorkflowExecutionResponse, retError error) {
 
 	domainID, err := getDomainUUID(signalWithStartRequest.DomainUUID)
 	if err != nil {
@@ -1653,7 +1653,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 
 	if err0 == nil {
-		defer release()
+		defer func() { release(retError) }()
 	Just_Signal_Loop:
 		for ; attempt < conditionalRetryCount; attempt++ {
 			msBuilder, err1 := context.loadWorkflowExecution()
@@ -1961,13 +1961,13 @@ func (e *historyEngineImpl) ReplicateEvents(replicateRequest *h.ReplicateEventsR
 
 func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution workflow.WorkflowExecution,
 	createDeletionTask, createDecisionTask bool,
-	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error)) error {
+	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error)) (retError error) {
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
 		return err0
 	}
-	defer release()
+	defer func() { release(retError) }()
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
