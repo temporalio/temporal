@@ -201,6 +201,7 @@ struct ReplicateEventsRequest {
   40: optional i64 (js.type = "Long") nextEventId
   50: optional i64 (js.type = "Long") version
   60: optional shared.History history
+  70: optional shared.History newRunHistory
 }
 
 /**

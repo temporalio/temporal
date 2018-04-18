@@ -2759,6 +2759,7 @@ type ReplicateEventsRequest struct {
 	NextEventId       *int64                    `json:"nextEventId,omitempty"`
 	Version           *int64                    `json:"version,omitempty"`
 	History           *shared.History           `json:"history,omitempty"`
+	NewRunHistory     *shared.History           `json:"newRunHistory,omitempty"`
 }
 
 // ToWire translates a ReplicateEventsRequest struct into a Thrift-level intermediate
@@ -2778,7 +2779,7 @@ type ReplicateEventsRequest struct {
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2830,6 +2831,14 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.NewRunHistory != nil {
+		w, err = v.NewRunHistory.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -2920,6 +2929,14 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 70:
+			if field.Value.Type() == wire.TStruct {
+				v.NewRunHistory, err = _History_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2933,7 +2950,7 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -2957,6 +2974,10 @@ func (v *ReplicateEventsRequest) String() string {
 	}
 	if v.History != nil {
 		fields[i] = fmt.Sprintf("History: %v", v.History)
+		i++
+	}
+	if v.NewRunHistory != nil {
+		fields[i] = fmt.Sprintf("NewRunHistory: %v", v.NewRunHistory)
 		i++
 	}
 
@@ -2984,6 +3005,9 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 		return false
 	}
 	if !((v.History == nil && rhs.History == nil) || (v.History != nil && rhs.History != nil && v.History.Equals(rhs.History))) {
+		return false
+	}
+	if !((v.NewRunHistory == nil && rhs.NewRunHistory == nil) || (v.NewRunHistory != nil && rhs.NewRunHistory != nil && v.NewRunHistory.Equals(rhs.NewRunHistory))) {
 		return false
 	}
 

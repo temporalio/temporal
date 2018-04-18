@@ -190,10 +190,11 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 								WorkflowId: task.HistoryTaskAttributes.WorkflowId,
 								RunId:      task.HistoryTaskAttributes.RunId,
 							},
-							FirstEventId: task.HistoryTaskAttributes.FirstEventId,
-							NextEventId:  task.HistoryTaskAttributes.NextEventId,
-							Version:      task.HistoryTaskAttributes.Version,
-							History:      task.HistoryTaskAttributes.History,
+							FirstEventId:  task.HistoryTaskAttributes.FirstEventId,
+							NextEventId:   task.HistoryTaskAttributes.NextEventId,
+							Version:       task.HistoryTaskAttributes.Version,
+							History:       task.HistoryTaskAttributes.History,
+							NewRunHistory: task.HistoryTaskAttributes.NewRunHistory,
 						})
 
 					default:

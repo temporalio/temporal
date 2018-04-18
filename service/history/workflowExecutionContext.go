@@ -196,6 +196,15 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 
 	continueAsNew := updates.continueAsNew
+	if continueAsNew != nil && createReplicationTask {
+		currentVersion := c.msBuilder.replicationState.CurrentVersion
+		continueAsNew.ReplicationState = &persistence.ReplicationState{
+			CurrentVersion:   currentVersion,
+			StartVersion:     currentVersion,
+			LastWriteVersion: currentVersion,
+			LastWriteEventID: firstEventID + 1,
+		}
+	}
 	finishExecution := false
 	var finishExecutionTTL int32
 	if c.msBuilder.executionInfo.State == persistence.WorkflowStateCompleted {
@@ -269,7 +278,29 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	return nil
 }
 
+func (c *workflowExecutionContext) replicateContinueAsNewWorkflowExecution(newStateBuilder *mutableStateBuilder,
+	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
+	return c.continueAsNewWorkflowExecutionHelper(nil, newStateBuilder, transferTasks, timerTasks, transactionID)
+}
+
 func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte, newStateBuilder *mutableStateBuilder,
+	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
+
+	err1 := c.continueAsNewWorkflowExecutionHelper(context, newStateBuilder, transferTasks, timerTasks, transactionID)
+	if err1 != nil {
+		return err1
+	}
+
+	err2 := c.updateWorkflowExecutionWithContext(context, transferTasks, timerTasks, transactionID)
+
+	if err2 != nil {
+		// TODO: Delete new execution if update fails due to conflict or shard being lost
+	}
+
+	return err2
+}
+
+func (c *workflowExecutionContext) continueAsNewWorkflowExecutionHelper(context []byte, newStateBuilder *mutableStateBuilder,
 	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
 
 	domainID := newStateBuilder.executionInfo.DomainID
@@ -288,27 +319,13 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 		return serializedError
 	}
 
-	err1 := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-		DomainID:  domainID,
-		Execution: newExecution,
-		// It is ok to use 0 for TransactionID because RunID is unique so there are
-		// no potential duplicates to override.
-		TransactionID: 0,
+	return c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+		DomainID:      domainID,
+		Execution:     newExecution,
+		TransactionID: transactionID,
 		FirstEventID:  *firstEvent.EventId,
 		Events:        serializedHistory,
 	})
-	if err1 != nil {
-		return err1
-	}
-	c.msBuilder.executionInfo.LastFirstEventID = *firstEvent.EventId
-
-	err2 := c.updateWorkflowExecutionWithContext(context, transferTasks, timerTasks, transactionID)
-
-	if err2 != nil {
-		// TODO: Delete new execution if update fails due to conflict or shard being lost
-	}
-
-	return err2
 }
 
 func (c *workflowExecutionContext) getWorkflowExecutionWithRetry(

@@ -27,6 +27,7 @@ import (
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
@@ -94,38 +95,6 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	decisionStartID := emptyEventID
 	decisionTimeout := int32(0)
 	var requestID string
-	// TODO: Add handling for following events:
-	// WorkflowExecutionFailed,
-	// WorkflowExecutionTimedOut,
-	// ActivityTaskFailed,
-	// ActivityTaskTimedOut,
-	// ActivityTaskCancelRequested,
-	// RequestCancelActivityTaskFailed,
-	// ActivityTaskCanceled,
-	// TimerStarted,
-	// TimerFired,
-	// CancelTimerFailed,
-	// TimerCanceled,
-	// WorkflowExecutionCancelRequested,
-	// WorkflowExecutionCanceled,
-	// RequestCancelExternalWorkflowExecutionInitiated,
-	// RequestCancelExternalWorkflowExecutionFailed,
-	// ExternalWorkflowExecutionCancelRequested,
-	// MarkerRecorded,
-	// WorkflowExecutionSignaled,
-	// WorkflowExecutionTerminated,
-	// WorkflowExecutionContinuedAsNew,
-	// StartChildWorkflowExecutionInitiated,
-	// StartChildWorkflowExecutionFailed,
-	// ChildWorkflowExecutionStarted,
-	// ChildWorkflowExecutionCompleted,
-	// ChildWorkflowExecutionFailed,
-	// ChildWorkflowExecutionCanceled,
-	// ChildWorkflowExecutionTimedOut,
-	// ChildWorkflowExecutionTerminated,
-	// SignalExternalWorkflowExecutionInitiated,
-	// SignalExternalWorkflowExecutionFailed,
-	// ExternalWorkflowExecutionSignaled,
 	for _, event := range request.History.Events {
 		lastEvent = event
 		switch event.GetEventType() {
@@ -186,8 +155,160 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 				return err
 			}
 
+		case shared.EventTypeActivityTaskFailed:
+			msBuilder.ReplicateActivityTaskFailedEvent(event)
+
+		case shared.EventTypeActivityTaskTimedOut:
+			msBuilder.ReplicateActivityTaskTimedOutEvent(event)
+
+		case shared.EventTypeActivityTaskCancelRequested:
+			msBuilder.ReplicateActivityTaskCancelRequestedEvent(event)
+
+		case shared.EventTypeActivityTaskCanceled:
+			msBuilder.ReplicateActivityTaskCanceledEvent(event)
+
+		case shared.EventTypeRequestCancelActivityTaskFailed:
+			// No mutable state action is needed
+
+		case shared.EventTypeTimerStarted:
+			msBuilder.ReplicateTimerStartedEvent(event)
+
+		case shared.EventTypeTimerFired:
+			msBuilder.ReplicateTimerFiredEvent(event)
+
+		case shared.EventTypeTimerCanceled:
+			msBuilder.ReplicateTimerCanceledEvent(event)
+
+		case shared.EventTypeCancelTimerFailed:
+			// No mutable state action is needed
+
+		case shared.EventTypeStartChildWorkflowExecutionInitiated:
+			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
+			createRequestID := uuid.New()
+			msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(event, createRequestID)
+
+		case shared.EventTypeStartChildWorkflowExecutionFailed:
+			msBuilder.ReplicateStartChildWorkflowExecutionFailedEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionStarted:
+			msBuilder.ReplicateChildWorkflowExecutionStartedEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionCompleted:
+			msBuilder.ReplicateChildWorkflowExecutionCompletedEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionFailed:
+			msBuilder.ReplicateChildWorkflowExecutionFailedEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionCanceled:
+			msBuilder.ReplicateChildWorkflowExecutionCanceledEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionTimedOut:
+			msBuilder.ReplicateChildWorkflowExecutionTimedOutEvent(event)
+
+		case shared.EventTypeChildWorkflowExecutionTerminated:
+			msBuilder.ReplicateChildWorkflowExecutionTerminatedEvent(event)
+
+		case shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
+			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
+			cancelRequestID := uuid.New()
+			msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+
+		case shared.EventTypeRequestCancelExternalWorkflowExecutionFailed:
+			msBuilder.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(event)
+
+		case shared.EventTypeExternalWorkflowExecutionCancelRequested:
+			msBuilder.ReplicateExternalWorkflowExecutionCancelRequested(event)
+
+		case shared.EventTypeSignalExternalWorkflowExecutionInitiated:
+			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
+			signalRequestID := uuid.New()
+			msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+
+		case shared.EventTypeSignalExternalWorkflowExecutionFailed:
+			msBuilder.ReplicateSignalExternalWorkflowExecutionFailedEvent(event)
+
+		case shared.EventTypeExternalWorkflowExecutionSignaled:
+			msBuilder.ReplicateExternalWorkflowExecutionSignaled(event)
+
+		case shared.EventTypeMarkerRecorded:
+			// No mutable state action is needed
+
+		case shared.EventTypeWorkflowExecutionSignaled:
+			// No mutable state action is needed
+
+		case shared.EventTypeWorkflowExecutionCancelRequested:
+			msBuilder.ReplicateWorkflowExecutionCancelRequestedEvent(event)
+
 		case shared.EventTypeWorkflowExecutionCompleted:
 			msBuilder.ReplicateWorkflowExecutionCompletedEvent(event)
+
+		case shared.EventTypeWorkflowExecutionFailed:
+			msBuilder.ReplicateWorkflowExecutionFailedEvent(event)
+
+		case shared.EventTypeWorkflowExecutionTimedOut:
+			msBuilder.ReplicateWorkflowExecutionTimedoutEvent(event)
+
+		case shared.EventTypeWorkflowExecutionCanceled:
+			msBuilder.ReplicateWorkflowExecutionCanceledEvent(event)
+
+		case shared.EventTypeWorkflowExecutionTerminated:
+			msBuilder.ReplicateWorkflowExecutionTerminatedEvent(event)
+
+		case shared.EventTypeWorkflowExecutionContinuedAsNew:
+			// ContinuedAsNew event also has history for first 2 events for next run as they are created transactionally
+			newRunHistory := request.NewRunHistory
+			startedEvent := newRunHistory.Events[0]
+			startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
+			dtScheduledEvent := newRunHistory.Events[1]
+			domainEntry, err := r.shard.GetDomainCache().GetDomainByID(domainID)
+			if err != nil {
+				return err
+			}
+			domainName := domainEntry.GetInfo().Name
+
+			// History event only have the parentDomainName.  Lookup the domain ID from cache
+			var parentDomainID *string
+			if startedAttributes.ParentWorkflowDomain != nil {
+				parentDomainEntry, err := r.shard.GetDomainCache().GetDomain(startedAttributes.GetParentWorkflowDomain())
+				if err != nil {
+					return err
+				}
+				parentDomainID = &parentDomainEntry.GetInfo().ID
+			}
+
+			newRunID := event.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+
+			newExecution := shared.WorkflowExecution{
+				WorkflowId: request.WorkflowExecution.WorkflowId,
+				RunId:      common.StringPtr(newRunID),
+			}
+
+			// Create mutable state updates for the new run
+			newStateBuilder := newMutableStateBuilder(r.shard.GetConfig(), r.logger)
+			newStateBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, newExecution, uuid.New(),
+				startedAttributes)
+			di := newStateBuilder.ReplicateDecisionTaskScheduledEvent(dtScheduledEvent.GetEventId(),
+				dtScheduledEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
+				dtScheduledEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds())
+			nextEventID := di.ScheduleID + 1
+			newStateBuilder.executionInfo.NextEventID = nextEventID
+			newStateBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+			newStateBuilder.ApplyReplicationStateUpdates(request.GetVersion(), di.ScheduleID)
+			// Set the history from replication task on the newStateBuilder
+			newStateBuilder.hBuilder = newHistoryBuilderFromEvents(newRunHistory.Events, r.logger)
+
+			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(domainID, domainName, event, startedEvent, di,
+				newStateBuilder)
+
+			// Generate a transaction ID for appending events to history
+			transactionID, err := r.shard.GetNextTransferTaskID()
+			if err != nil {
+				return err
+			}
+			err = context.replicateContinueAsNewWorkflowExecution(newStateBuilder, nil, nil, transactionID)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

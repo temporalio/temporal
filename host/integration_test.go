@@ -4059,6 +4059,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
+		s.logger.Warnf("decision: %v", i)
 		_, err = poller.pollAndProcessDecisionTask(false, false)
 		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
@@ -4068,7 +4069,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(startedEvent)
 
 	// Process Child Execution final decision to complete it
-	_, err = poller.pollAndProcessDecisionTask(false, false)
+	_, err = poller.pollAndProcessDecisionTask(true, false)
 	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childComplete)
