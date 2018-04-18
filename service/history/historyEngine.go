@@ -79,6 +79,8 @@ type (
 var _ Engine = (*historyEngineImpl)(nil)
 
 var (
+	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
+	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("Duplicate task, completing it")
 	// ErrConflict is exported temporarily for integration test
@@ -135,7 +137,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 		historyEventNotifier: historyEventNotifier,
 	}
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, executionManager, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
 

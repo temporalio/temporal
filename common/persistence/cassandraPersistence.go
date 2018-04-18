@@ -2037,9 +2037,6 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *GetTimerIndexTasksReq
 
 		response.Timers = append(response.Timers, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
 		if isThrottlingError(err) {

@@ -49,12 +49,15 @@ type Config struct {
 	DefaultStartToCloseActivityTimeoutInSecs    int32
 
 	// TimerQueueProcessor settings
-	TimerTaskBatchSize                    int
-	ProcessTimerTaskWorkerCount           int
-	TimerProcessorUpdateFailureRetryCount int
-	TimerProcessorGetFailureRetryCount    int
-	TimerProcessorUpdateAckInterval       time.Duration
-	TimerProcessorForceUpdateInterval     time.Duration
+	TimerTaskBatchSize                           int
+	ProcessTimerTaskWorkerCount                  int
+	TimerProcessorUpdateFailureRetryCount        int
+	TimerProcessorGetFailureRetryCount           int
+	TimerProcessorCompleteTimerFailureRetryCount int
+	TimerProcessorUpdateAckInterval              time.Duration
+	TimerProcessorForceUpdateInterval            time.Duration
+	TimerProcessorCompleteTimerInterval          time.Duration
+	TimerProcessorMaxPollInterval                time.Duration
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                int
@@ -86,37 +89,40 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
-		NumberOfShards:                              numberOfShards,
-		HistoryCacheInitialSize:                     128,
-		HistoryCacheMaxSize:                         512,
-		HistoryCacheTTL:                             time.Hour,
-		RangeSizeBits:                               20, // 20 bits for sequencer, 2^20 sequence number for any range
-		AcquireShardInterval:                        time.Minute,
-		DefaultScheduleToStartActivityTimeoutInSecs: 10,
-		DefaultScheduleToCloseActivityTimeoutInSecs: 10,
-		DefaultStartToCloseActivityTimeoutInSecs:    10,
-		TimerTaskBatchSize:                          100,
-		ProcessTimerTaskWorkerCount:                 30,
-		TimerProcessorUpdateFailureRetryCount:       5,
-		TimerProcessorGetFailureRetryCount:          5,
-		TimerProcessorUpdateAckInterval:             10 * time.Second,
-		TimerProcessorForceUpdateInterval:           10 * time.Minute,
-		TransferTaskBatchSize:                       10,
-		TransferProcessorMaxPollRPS:                 100,
-		TransferProcessorMaxPollInterval:            60 * time.Second,
-		TransferProcessorUpdateAckInterval:          10 * time.Second,
-		TransferProcessorForceUpdateInterval:        10 * time.Minute,
-		TransferTaskWorkerCount:                     10,
-		TransferTaskMaxRetryCount:                   100,
-		ReplicatorTaskBatchSize:                     10,
-		ReplicatorProcessorMaxPollRPS:               100,
-		ReplicatorProcessorMaxPollInterval:          60 * time.Second,
-		ReplicatorProcessorUpdateAckInterval:        10 * time.Second,
-		ReplicatorProcessorForceUpdateInterval:      10 * time.Minute,
-		ReplicatorTaskWorkerCount:                   10,
-		ReplicatorTaskMaxRetryCount:                 100,
-		ExecutionMgrNumConns:                        100,
-		HistoryMgrNumConns:                          100,
+		NumberOfShards:                               numberOfShards,
+		HistoryCacheInitialSize:                      128,
+		HistoryCacheMaxSize:                          512,
+		HistoryCacheTTL:                              time.Hour,
+		RangeSizeBits:                                20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:                         time.Minute,
+		DefaultScheduleToStartActivityTimeoutInSecs:  10,
+		DefaultScheduleToCloseActivityTimeoutInSecs:  10,
+		DefaultStartToCloseActivityTimeoutInSecs:     10,
+		TimerTaskBatchSize:                           100,
+		ProcessTimerTaskWorkerCount:                  30,
+		TimerProcessorUpdateFailureRetryCount:        5,
+		TimerProcessorGetFailureRetryCount:           5,
+		TimerProcessorCompleteTimerFailureRetryCount: 10,
+		TimerProcessorUpdateAckInterval:              10 * time.Second,
+		TimerProcessorForceUpdateInterval:            10 * time.Minute,
+		TimerProcessorCompleteTimerInterval:          1 * time.Second,
+		TimerProcessorMaxPollInterval:                60 * time.Second,
+		TransferTaskBatchSize:                        10,
+		TransferProcessorMaxPollRPS:                  100,
+		TransferProcessorMaxPollInterval:             60 * time.Second,
+		TransferProcessorUpdateAckInterval:           10 * time.Second,
+		TransferProcessorForceUpdateInterval:         10 * time.Minute,
+		TransferTaskWorkerCount:                      10,
+		TransferTaskMaxRetryCount:                    100,
+		ReplicatorTaskBatchSize:                      10,
+		ReplicatorProcessorMaxPollRPS:                100,
+		ReplicatorProcessorMaxPollInterval:           60 * time.Second,
+		ReplicatorProcessorUpdateAckInterval:         10 * time.Second,
+		ReplicatorProcessorForceUpdateInterval:       10 * time.Minute,
+		ReplicatorTaskWorkerCount:                    10,
+		ReplicatorTaskMaxRetryCount:                  100,
+		ExecutionMgrNumConns:                         100,
+		HistoryMgrNumConns:                           100,
 		// history client: client/history/client.go set the client timeout 30s
 		LongPollExpirationInterval: dc.GetDurationProperty(
 			dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20,

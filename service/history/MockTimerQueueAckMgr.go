@@ -32,6 +32,23 @@ type MockTimerQueueAckMgr struct {
 	mock.Mock
 }
 
+var _ timerQueueAckMgr = (*MockTimerQueueAckMgr)(nil)
+
+// getFinishedChan is mock implementation for readTimerTasks of TimerQueueAckMgr
+func (_m *MockTimerQueueAckMgr) getFinishedChan() <-chan struct{} {
+	ret := _m.Called()
+
+	var r0 <-chan struct{}
+	if rf, ok := ret.Get(0).(func() <-chan struct{}); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan struct{})
+		}
+	}
+	return r0
+}
+
 // readTimerTasks is mock implementation for readTimerTasks of TimerQueueAckMgr
 func (_m *MockTimerQueueAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
 	ret := _m.Called()
@@ -71,12 +88,22 @@ func (_m *MockTimerQueueAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, 
 	return r0, r1, r2, r3
 }
 
-func (_m *MockTimerQueueAckMgr) retryTimerTask(timerTask *persistence.TimerTaskInfo) {
+func (_m *MockTimerQueueAckMgr) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
 	_m.Called(timerTask)
 }
 
-func (_m *MockTimerQueueAckMgr) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
-	_m.Called(timerTask)
+func (_m *MockTimerQueueAckMgr) getAckLevel() TimerSequenceID {
+	ret := _m.Called()
+
+	var r0 TimerSequenceID
+	if rf, ok := ret.Get(0).(func() TimerSequenceID); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(TimerSequenceID)
+		}
+	}
+	return r0
 }
 
 func (_m *MockTimerQueueAckMgr) updateAckLevel() {

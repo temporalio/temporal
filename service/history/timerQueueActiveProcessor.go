@@ -36,28 +36,85 @@ type (
 		shard                   ShardContext
 		historyService          *historyEngineImpl
 		cache                   *historyCache
+		timerTaskFilter         timerTaskFilter
 		logger                  bark.Logger
 		metricsClient           metrics.Client
+		currentClusterName      string
 		timerGate               LocalTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		timerQueueAckMgr        timerQueueAckMgr
 	}
 )
 
-func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, executionManager persistence.ExecutionManager, logger bark.Logger) *timerQueueActiveProcessorImpl {
-	log := logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
-	})
+func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, executionManager, clusterName, log)
+	timeNow := func() time.Time {
+		return shard.GetCurrentTime(clusterName)
+	}
+	logger = logger.WithFields(bark.Fields{
+		logging.TagWorkflowCluster: clusterName,
+	})
+	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+		domainEntry, err := shard.GetDomainCache().GetDomainByID(timer.DomainID)
+		if err != nil {
+			// it is possible that domain is deleted,
+			// we should treat that domain being active
+			if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+				return false, err
+			}
+			return true, nil
+		}
+		if domainEntry.GetIsGlobalDomain() &&
+			clusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
+			// timer task does not belong to cluster name
+			return false, nil
+		}
+		return true, nil
+	}
+
+	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, clusterName, logger)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
 		cache:                   historyService.historyCache,
-		logger:                  log,
+		timerTaskFilter:         timerTaskFilter,
+		logger:                  logger,
+		metricsClient:           historyService.metricsClient,
+		currentClusterName:      clusterName,
+		timerGate:               NewLocalTimerGate(),
+		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
+		timerQueueAckMgr:        timerQueueAckMgr,
+	}
+	processor.timerQueueProcessorBase.timerProcessor = processor
+	return processor
+}
+
+func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string, logger bark.Logger) *timerQueueActiveProcessorImpl {
+	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	timeNow := func() time.Time {
+		// should use current cluster's time when doing domain failover
+		return shard.GetCurrentTime(clusterName)
+	}
+	logger = logger.WithFields(bark.Fields{
+		logging.TagWorkflowCluster: clusterName,
+	})
+	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
+		if timer.DomainID == domainID {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, logger)
+	processor := &timerQueueActiveProcessorImpl{
+		shard:                   shard,
+		historyService:          historyService,
+		cache:                   historyService.historyCache,
+		timerTaskFilter:         timerTaskFilter,
+		logger:                  logger,
 		metricsClient:           historyService.metricsClient,
 		timerGate:               NewLocalTimerGate(),
-		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, executionManager, timerQueueAckMgr, clusterName, logger),
+		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
@@ -88,12 +145,19 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(timerTasks []persistence
 }
 
 func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo) error {
+	ok, err := t.timerTaskFilter(timerTask)
+	if err != nil {
+		return err
+	} else if !ok {
+		t.timerQueueAckMgr.completeTimerTask(timerTask)
+		return nil
+	}
+
 	taskID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
 	t.logger.Debugf("Processing timer: (%s), for WorkflowID: %v, RunID: %v, Type: %v, TimeoutType: %v, EventID: %v",
 		taskID, timerTask.WorkflowID, timerTask.RunID, t.timerQueueProcessorBase.getTimerTaskType(timerTask.TaskType),
 		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
 
-	var err error
 	scope := metrics.TimerQueueProcessorScope
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:

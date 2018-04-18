@@ -645,8 +645,7 @@ type (
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers        []*TimerTaskInfo
-		NextPageToken []byte
+		Timers []*TimerTaskInfo
 	}
 
 	// SerializedHistoryEventBatch represents a serialized batch of history events

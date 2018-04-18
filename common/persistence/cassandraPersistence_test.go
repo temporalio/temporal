@@ -877,10 +877,9 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks, nextToken, err1 := s.GetTimerIndexTasks()
+	timerTasks, err1 := s.GetTimerIndexTasks()
 	s.Nil(err1, "No error expected.")
 	s.NotNil(timerTasks, "expected valid list of tasks.")
-	s.Equal(0, len(nextToken))
 	s.Equal(3, len(timerTasks))
 	s.Equal(TaskTypeWorkflowTimeout, timerTasks[1].TaskType)
 	s.Equal(TaskTypeDeleteHistoryEvent, timerTasks[2].TaskType)
@@ -895,10 +894,9 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 = s.CompleteTimerTask(timerTasks[2].VisibilityTimestamp, timerTasks[2].TaskID)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks2, nextToken, err2 := s.GetTimerIndexTasks()
+	timerTasks2, err2 := s.GetTimerIndexTasks()
 	s.Nil(err2, "No error expected.")
 	s.Empty(timerTasks2, "expected empty task list.")
-	s.Equal(0, len(nextToken))
 }
 
 func (s *cassandraPersistenceSuite) TestWorkflowMutableState_Activities() {

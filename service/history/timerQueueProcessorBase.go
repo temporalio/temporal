@@ -57,35 +57,46 @@ type (
 		config           *Config
 		logger           bark.Logger
 		metricsClient    metrics.Client
-		clusterName      string
+		now              timeNow
 		timerFiredCount  uint64
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
 
+		// worker coroutines notification
+		workerNotificationChans []chan struct{}
+
+		// timer notification
 		newTimerCh  chan struct{}
 		newTimeLock sync.Mutex
 		newTime     time.Time
 	}
 )
 
-func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngineImpl, executionManager persistence.ExecutionManager,
-	timerQueueAckMgr timerQueueAckMgr, clusterName string, logger bark.Logger) *timerQueueProcessorBase {
+func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngineImpl, timerQueueAckMgr timerQueueAckMgr, timeNow timeNow, logger bark.Logger) *timerQueueProcessorBase {
 	log := logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
 	})
-	base := &timerQueueProcessorBase{
-		shard:            shard,
-		historyService:   historyService,
-		executionManager: executionManager,
-		shutdownCh:       make(chan struct{}),
-		tasksCh:          make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize),
-		config:           shard.GetConfig(),
-		logger:           log,
-		metricsClient:    historyService.metricsClient,
-		clusterName:      clusterName,
-		timerQueueAckMgr: timerQueueAckMgr,
-		newTimerCh:       make(chan struct{}, 1),
+
+	workerNotificationChans := []chan struct{}{}
+	for index := 0; index < shard.GetConfig().ProcessTimerTaskWorkerCount; index++ {
+		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
+
+	base := &timerQueueProcessorBase{
+		shard:                   shard,
+		historyService:          historyService,
+		executionManager:        shard.GetExecutionManager(),
+		shutdownCh:              make(chan struct{}),
+		tasksCh:                 make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize),
+		config:                  shard.GetConfig(),
+		logger:                  log,
+		metricsClient:           historyService.metricsClient,
+		now:                     timeNow,
+		timerQueueAckMgr:        timerQueueAckMgr,
+		workerNotificationChans: workerNotificationChans,
+		newTimerCh:              make(chan struct{}, 1),
+	}
+
 	return base
 }
 
@@ -95,7 +106,7 @@ func (t *timerQueueProcessorBase) Start() {
 	}
 
 	t.shutdownWG.Add(1)
-	go t.processorPump(t.config.ProcessTimerTaskWorkerCount)
+	go t.processorPump()
 
 	t.logger.Info("Timer queue processor started.")
 }
@@ -116,15 +127,16 @@ func (t *timerQueueProcessorBase) Stop() {
 	t.logger.Info("Timer queue processor stopped.")
 }
 
-func (t *timerQueueProcessorBase) processorPump(taskWorkerCount int) {
+func (t *timerQueueProcessorBase) processorPump() {
 	defer t.shutdownWG.Done()
 
 	// Workers to process timer tasks that are expired.
 
 	var workerWG sync.WaitGroup
-	for i := 0; i < taskWorkerCount; i++ {
+	for i := 0; i < t.config.ProcessTimerTaskWorkerCount; i++ {
 		workerWG.Add(1)
-		go t.processTaskWorker(&workerWG)
+		notificationChan := t.workerNotificationChans[i]
+		go t.processTaskWorker(&workerWG, notificationChan)
 	}
 
 RetryProcessor:
@@ -147,7 +159,7 @@ RetryProcessor:
 	t.logger.Info("Timer processor exiting.")
 }
 
-func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup) {
+func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup, notificationChan chan struct{}) {
 	defer workerWG.Done()
 	for {
 		select {
@@ -157,13 +169,25 @@ func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup) {
 			}
 
 		UpdateFailureLoop:
-			for attempt := 1; attempt <= t.config.TimerProcessorUpdateFailureRetryCount; attempt++ {
+			for attempt := 1; attempt <= t.config.TimerProcessorUpdateFailureRetryCount; {
+
+				// clear the existing notification
+				select {
+				case <-notificationChan:
+				default:
+				}
+
 				err := t.timerProcessor.process(task)
 				if err != nil {
-					// We will retry until we don't find the timer task any more.
-					t.logger.Infof("Failed to process timer: %v; %v.", task, err)
-					backoff := time.Duration(attempt * 100)
-					time.Sleep(backoff * time.Millisecond)
+					if err == ErrTaskRetry {
+						<-notificationChan
+					} else {
+						// We will retry until we don't find the timer task any more.
+						t.logger.Infof("Failed to process timer: %v; %v.", task, err)
+						backoff := time.Duration(attempt * 100)
+						time.Sleep(backoff * time.Millisecond)
+						attempt++
+					}
 				} else {
 					atomic.AddUint64(&t.timerFiredCount, 1)
 					break UpdateFailureLoop
@@ -218,13 +242,15 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task,
 
 func (t *timerQueueProcessorBase) internalProcessor() error {
 	timerGate := t.timerProcessor.getTimerGate()
+	pollTimer := time.NewTimer(t.config.TimerProcessorMaxPollInterval)
+	defer pollTimer.Stop()
 
 	updateAckChan := time.NewTicker(t.shard.GetConfig().TimerProcessorUpdateAckInterval).C
 	var nextKeyTask *persistence.TimerTaskInfo
 
 continueProcessor:
 	for {
-		now := t.shard.GetCurrentTime(t.clusterName)
+		now := t.now()
 		if nextKeyTask == nil || timerGate.FireAfter(now) {
 			// Wait until one of four things occurs:
 			// 1. we get notified of a new message
@@ -238,8 +264,18 @@ continueProcessor:
 				t.logger.Debug("Timer queue processor pump shutting down.")
 				return nil
 
+			case <-t.timerQueueAckMgr.getFinishedChan():
+				// timer queue ack manager indicate that all task scanned
+				// are finished and no more tasks
+				t.Stop()
+				return nil
+
 			case <-timerGate.FireChan():
 				// Timer Fired.
+
+			case <-pollTimer.C:
+				// forced timer scan
+				pollTimer.Reset(t.config.TimerProcessorMaxPollInterval)
 
 			case <-updateAckChan:
 				t.timerQueueAckMgr.updateAckLevel()
@@ -260,7 +296,7 @@ continueProcessor:
 					nextKeyTask = nil
 				}
 
-				now = t.shard.GetCurrentTime(t.clusterName)
+				now = t.now()
 				t.logger.Debugf("%v: Next key after woke up by timer: %v", now.UTC(), newTime.UTC())
 				if timerGate.FireAfter(now) {
 					continue continueProcessor
@@ -268,25 +304,10 @@ continueProcessor:
 			}
 		}
 
-		// Either we have new timer (or) we are gated on timer to query for it.
-	ProcessPendingTimers:
-		for {
-			// Get next set of timer tasks.
-			timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
-			if err != nil {
-				return err
-			}
-
-			for _, task := range timerTasks {
-				// We have a timer to fire.
-				t.tasksCh <- task
-			}
-
-			if !moreTasks {
-				// We have processed all the tasks.
-				nextKeyTask = lookAheadTask
-				break ProcessPendingTimers
-			}
+		var err error
+		nextKeyTask, err = t.readAndFanoutTimerTasks()
+		if err != nil {
+			return err
 		}
 
 		if nextKeyTask != nil {
@@ -298,10 +319,31 @@ continueProcessor:
 	}
 }
 
-func (t *timerQueueProcessorBase) retryTimerTasks() {
-	timerTasks := t.timerQueueAckMgr.readRetryTimerTasks()
-	for _, task := range timerTasks {
-		t.tasksCh <- task
+func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
+	for {
+		// Get next set of timer tasks.
+		timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, task := range timerTasks {
+			// We have a timer to fire.
+			t.tasksCh <- task
+		}
+
+		if !moreTasks {
+			return lookAheadTask, nil
+		}
+	}
+}
+
+func (t *timerQueueProcessorBase) retryTasks() {
+	for _, workerNotificationChan := range t.workerNotificationChans {
+		select {
+		case workerNotificationChan <- struct{}{}:
+		default:
+		}
 	}
 }
 

@@ -51,6 +51,10 @@ type (
 		UpdateTransferAckLevel(ackLevel int64) error
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
+		GetTimerAckLevel() time.Time
+		UpdateTimerAckLevel(ackLevel time.Time) error
+		GetTimerClusterAckLevel(cluster string) time.Time
+		UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
@@ -59,8 +63,6 @@ type (
 		GetConfig() *Config
 		GetLogger() bark.Logger
 		GetMetricsClient() metrics.Client
-		GetTimerAckLevel(cluster string) time.Time
-		UpdateTimerAckLevel(cluster string, ackLevel time.Time) error
 		GetTimeSource() common.TimeSource
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
@@ -164,7 +166,23 @@ func (s *shardContextImpl) UpdateReplicatorAckLevel(ackLevel int64) error {
 	return s.updateShardInfoLocked()
 }
 
-func (s *shardContextImpl) GetTimerAckLevel(cluster string) time.Time {
+func (s *shardContextImpl) GetTimerAckLevel() time.Time {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.TimerAckLevel
+}
+
+func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.shardInfo.TimerAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetTimerClusterAckLevel(cluster string) time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -177,13 +195,10 @@ func (s *shardContextImpl) GetTimerAckLevel(cluster string) time.Time {
 	return s.shardInfo.TimerAckLevel
 }
 
-func (s *shardContextImpl) UpdateTimerAckLevel(cluster string, ackLevel time.Time) error {
+func (s *shardContextImpl) UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
-		s.shardInfo.TimerAckLevel = ackLevel
-	}
 	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()

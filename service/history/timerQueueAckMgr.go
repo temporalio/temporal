@@ -39,6 +39,7 @@ type (
 	timerSequenceIDs []TimerSequenceID
 
 	timerQueueAckMgrImpl struct {
+		isFailover    bool
 		clusterName   string
 		shard         ShardContext
 		executionMgr  persistence.ExecutionManager
@@ -46,16 +47,23 @@ type (
 		metricsClient metrics.Client
 		lastUpdated   time.Time
 		config        *Config
+		// immutable max possible timer level
+		maxAckLevel time.Time
+		// isReadFinished indicate timer queue ack manager
+		// have no more task to send out
+		isReadFinished bool
+		// finishedChan will send out signal when timer
+		// queue ack manager have no more task to send out and all
+		// tasks sent are finished
+		finishedChan chan struct{}
 
 		sync.Mutex
 		// outstanding timer task -> finished (true)
 		outstandingTasks map[TimerSequenceID]bool
-		// outstanding timer tasks, which cannot be processed right now
-		retryTasks []*persistence.TimerTaskInfo
 		// timer task read level
 		readLevel TimerSequenceID
 		// timer task ack level
-		ackLevel time.Time
+		ackLevel TimerSequenceID
 	}
 	// for each cluster, the ack level is the point in time when
 	// all timers before the ack level are processed.
@@ -64,6 +72,8 @@ type (
 
 	// TODO this processing logic potentially has bug, refer to #605, #608
 )
+
+var _ timerQueueAckMgr = (*timerQueueAckMgrImpl)(nil)
 
 // Len implements sort.Interace
 func (t timerSequenceIDs) Len() int {
@@ -80,43 +90,73 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
 }
 
-func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, executionMgr persistence.ExecutionManager, clusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
-	config := shard.GetConfig()
-	ackLevel := shard.GetTimerAckLevel(clusterName)
+func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, clusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
+	ackLevel := TimerSequenceID{VisibilityTimestamp: shard.GetTimerClusterAckLevel(clusterName)}
+	maxAckLevel := timerQueueAckMgrMaxTimestamp
+
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
+		isFailover:       false,
 		clusterName:      clusterName,
 		shard:            shard,
-		executionMgr:     executionMgr,
+		executionMgr:     shard.GetExecutionManager(),
 		metricsClient:    metricsClient,
 		logger:           logger,
 		lastUpdated:      time.Now(), // this has nothing to do with remote cluster, so use the local time
-		config:           config,
+		config:           shard.GetConfig(),
 		outstandingTasks: make(map[TimerSequenceID]bool),
-		retryTasks:       []*persistence.TimerTaskInfo{},
-		readLevel:        TimerSequenceID{VisibilityTimestamp: ackLevel},
+		readLevel:        ackLevel,
 		ackLevel:         ackLevel,
+		maxAckLevel:      maxAckLevel,
+		isReadFinished:   false,
+		finishedChan:     nil,
 	}
 
 	return timerQueueAckMgrImpl
 }
 
+func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client, standbyClusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
+	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
+	ackLevel := TimerSequenceID{VisibilityTimestamp: shard.GetTimerClusterAckLevel(standbyClusterName)}
+	maxAckLevel := shard.GetTimerClusterAckLevel(shard.GetService().GetClusterMetadata().GetCurrentClusterName())
+
+	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
+		isFailover:       true,
+		clusterName:      standbyClusterName,
+		shard:            shard,
+		executionMgr:     shard.GetExecutionManager(),
+		metricsClient:    metricsClient,
+		logger:           logger,
+		lastUpdated:      time.Now(), // this has nothing to do with remote cluster, so use the local time
+		config:           shard.GetConfig(),
+		outstandingTasks: make(map[TimerSequenceID]bool),
+		readLevel:        ackLevel,
+		ackLevel:         ackLevel,
+		maxAckLevel:      maxAckLevel,
+		isReadFinished:   false,
+		finishedChan:     make(chan struct{}, 1),
+	}
+
+	return timerQueueAckMgrImpl
+}
+
+func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
+	return t.finishedChan
+}
+
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
 	t.Lock()
 	readLevel := t.readLevel
-	timerTaskRetrySize := len(t.retryTasks)
 	t.Unlock()
 
 	var tasks []*persistence.TimerTaskInfo
-	morePage := timerTaskRetrySize > 0
+	morePage := false
 	var err error
-	if timerTaskRetrySize < t.config.TimerTaskBatchSize {
-		var token []byte
-		tasks, token, err = t.getTimerTasks(readLevel.VisibilityTimestamp, timerQueueAckMgrMaxTimestamp, t.config.TimerTaskBatchSize)
+	if readLevel.VisibilityTimestamp.Before(t.maxAckLevel) {
+		tasks, morePage, err = t.getTimerTasks(readLevel.VisibilityTimestamp, t.maxAckLevel, t.config.TimerTaskBatchSize)
 		if err != nil {
 			return nil, nil, false, err
 		}
-		t.logger.Debugf("readTimerTasks: ReadLevel: (%s) count: %v, next token: %v", readLevel, len(tasks), token)
-		morePage = len(token) > 0
+		t.logger.Debugf("readTimerTasks: ReadLevel: (%s) count: %v, more timer: %v", readLevel, len(tasks), morePage)
 	}
 
 	// We filter tasks so read only moves to desired timer tasks.
@@ -126,9 +166,11 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 	var lookAheadTask *persistence.TimerTaskInfo
 	t.Lock()
 	defer t.Unlock()
-	// fillin the retry task
-	filteredTasks := t.retryTasks
-	t.retryTasks = []*persistence.TimerTaskInfo{}
+	if t.isFailover && !morePage {
+		t.isReadFinished = true
+	}
+
+	filteredTasks := []*persistence.TimerTaskInfo{}
 
 	// since we have already checked that the clusterName is a valid key of clusterReadLevel
 	// there shall be no validation
@@ -140,27 +182,9 @@ TaskFilterLoop:
 		_, isLoaded := outstandingTasks[timerSequenceID]
 		if isLoaded {
 			// timer already loaded
-			t.logger.Infof("Skipping task: %v. WorkflowID: %v, RunID: %v, Type: %v",
+			t.logger.Debugf("Skipping timer task: %v. WorkflowID: %v, RunID: %v, Type: %v",
 				timerSequenceID.String(), task.WorkflowID, task.RunID, task.TaskType)
 			continue TaskFilterLoop
-		}
-
-		domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.DomainID)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		if !domainEntry.GetIsGlobalDomain() {
-			if t.clusterName != t.shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
-				// timer task does not belong to cluster name
-				continue TaskFilterLoop
-			}
-		} else {
-			// global domain we need to check the cluster name
-			clusterName := domainEntry.GetReplicationConfig().ActiveClusterName
-			if clusterName != t.clusterName {
-				// timer task does not belong here
-				continue TaskFilterLoop
-			}
 		}
 
 		// TODO potential bug here
@@ -192,33 +216,18 @@ TaskFilterLoop:
 	return filteredTasks, lookAheadTask, moreTasks, nil
 }
 
-func (t *timerQueueAckMgrImpl) retryTimerTask(timerTask *persistence.TimerTaskInfo) {
-	t.Lock()
-	defer t.Unlock()
-
-	t.retryTasks = append(t.retryTasks, timerTask)
-}
-
-func (t *timerQueueAckMgrImpl) readRetryTimerTasks() []*persistence.TimerTaskInfo {
-	t.Lock()
-	defer t.Unlock()
-
-	retryTasks := t.retryTasks
-	t.retryTasks = []*persistence.TimerTaskInfo{}
-	return retryTasks
-}
-
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
 	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
 	t.Lock()
 	defer t.Unlock()
 
 	t.outstandingTasks[timerSequenceID] = true
-	if err := t.executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-		VisibilityTimestamp: timerTask.VisibilityTimestamp,
-		TaskID:              timerTask.TaskID}); err != nil {
-		t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timerSequenceID, err)
-	}
+}
+
+func (t *timerQueueAckMgrImpl) getAckLevel() TimerSequenceID {
+	t.Lock()
+	defer t.Unlock()
+	return t.ackLevel
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() {
@@ -241,13 +250,19 @@ MoveAckLevelLoop:
 	for _, current := range sequenceIDs {
 		acked := outstandingTasks[current]
 		if acked {
-			updatedAckLevel = current.VisibilityTimestamp
+			updatedAckLevel = current
 			delete(outstandingTasks, current)
 		} else {
 			break MoveAckLevelLoop
 		}
 	}
 	t.ackLevel = updatedAckLevel
+
+	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
+		// this means in failover mode, all possible failover timer tasks
+		// are processed and we are free to shundown
+		t.finishedChan <- struct{}{}
+	}
 	t.Unlock()
 
 	// Do not update Acklevel if nothing changed upto force update interval
@@ -255,20 +270,12 @@ MoveAckLevelLoop:
 		return
 	}
 
-	t.logger.Debugf("Updating timer ack level: %v", updatedAckLevel)
-
-	// Always update ackLevel to detect if the shared is stolen
-	if err := t.shard.UpdateTimerAckLevel(t.clusterName, updatedAckLevel); err != nil {
-		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
-		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
-	} else {
-		t.lastUpdated = time.Now() // this has nothing to do with remote cluster, so use the local time
-	}
+	t.updateTimerAckLevel(updatedAckLevel)
 }
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
 // all timer tasks are in this queue and filter will be applied.
-func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int) ([]*persistence.TimerTaskInfo, []byte, error) {
+func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int) ([]*persistence.TimerTaskInfo, bool, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp: minTimestamp,
 		MaxTimestamp: maxTimestamp,
@@ -279,14 +286,40 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 	for attempt := 0; attempt < retryCount; attempt++ {
 		response, err := t.executionMgr.GetTimerIndexTasks(request)
 		if err == nil {
-			return response.Timers, response.NextPageToken, nil
+			return response.Timers, len(response.Timers) >= batchSize, nil
 		}
 		backoff := time.Duration(attempt * 100)
 		time.Sleep(backoff * time.Millisecond)
 	}
-	return nil, nil, ErrMaxAttemptsExceeded
+	return nil, false, ErrMaxAttemptsExceeded
+}
+
+func (t *timerQueueAckMgrImpl) updateTimerAckLevel(ackLevel TimerSequenceID) {
+	t.logger.Debugf("Updating timer ack level: %v", ackLevel)
+
+	// not failover ack level updating
+	if !t.isFailover {
+		// Always update ackLevel to detect if the shared is stolen
+		if err := t.shard.UpdateTimerClusterAckLevel(t.clusterName, ackLevel.VisibilityTimestamp); err != nil {
+			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
+			t.logger.Errorf("Error updating timer ack level for shard: %v", err)
+		} else {
+			t.lastUpdated = time.Now() // this has nothing to do with remote cluster, so use the local time
+		}
+	} else {
+		// TODO failover ack manager should persist failover ack level to Cassandra: issue #646
+	}
 }
 
 func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
-	return !expiryTime.IsZero() && expiryTime.UnixNano() <= t.shard.GetCurrentTime(t.clusterName).UnixNano()
+	var now time.Time
+	if !t.isFailover {
+		// not failover, use the cluster's local time
+		now = t.shard.GetCurrentTime(t.clusterName)
+	} else {
+		// if ack manager is a failover manager, we need to use the current local time
+		now = t.shard.GetCurrentTime(t.shard.GetService().GetClusterMetadata().GetCurrentClusterName())
+	}
+
+	return !expiryTime.IsZero() && expiryTime.UnixNano() <= now.UnixNano()
 }

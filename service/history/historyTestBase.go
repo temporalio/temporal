@@ -190,7 +190,24 @@ func (s *TestShardContext) UpdateReplicatorAckLevel(ackLevel int64) error {
 }
 
 // GetTimerAckLevel test implementation
-func (s *TestShardContext) GetTimerAckLevel(cluster string) time.Time {
+func (s *TestShardContext) GetTimerAckLevel() time.Time {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.TimerAckLevel
+}
+
+// UpdateTimerAckLevel test implementation
+func (s *TestShardContext) UpdateTimerAckLevel(ackLevel time.Time) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TimerAckLevel = ackLevel
+	return nil
+}
+
+// GetTimerClusterAckLevel test implementation
+func (s *TestShardContext) GetTimerClusterAckLevel(cluster string) time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -203,14 +220,11 @@ func (s *TestShardContext) GetTimerAckLevel(cluster string) time.Time {
 	return s.shardInfo.TimerAckLevel
 }
 
-// UpdateTimerAckLevel test implementation
-func (s *TestShardContext) UpdateTimerAckLevel(cluster string, ackLevel time.Time) error {
+// UpdateTimerClusterAckLevel test implementation
+func (s *TestShardContext) UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error {
 	s.Lock()
 	defer s.Unlock()
 
-	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
-		s.shardInfo.TimerAckLevel = ackLevel
-	}
 	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
 	return nil
 }

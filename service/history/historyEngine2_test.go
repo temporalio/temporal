@@ -146,7 +146,7 @@ func (s *engine2Suite) SetupTest() {
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
-	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockExecutionMgr, s.logger)
+	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.logger)
 	s.historyEngine = h
 }
 

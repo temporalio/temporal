@@ -748,17 +748,17 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks() ([]*TimerTaskInfo, []byte, error) {
+func (s *TestBase) GetTimerIndexTasks() ([]*TimerTaskInfo, error) {
 	response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
 		MinTimestamp: time.Time{},
 		MaxTimestamp: time.Unix(0, math.MaxInt64),
 		BatchSize:    10})
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return response.Timers, response.NextPageToken, nil
+	return response.Timers, nil
 }
 
 // CompleteTimerTask is a utility method to complete a timer task

@@ -31,6 +31,7 @@ const (
 	// workflow logging tags
 	TagWorkflowEventID      = "wf-event-id"
 	TagWorkflowComponent    = "wf-component"
+	TagWorkflowCluster      = "wf-cluster"
 	TagWorkflowErr          = "wf-error"
 	TagHistoryBuilderAction = "history-builder-action"
 	TagStoreOperation       = "store-operation"

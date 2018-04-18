@@ -48,6 +48,7 @@ type (
 		mockMatching      *mocks.MatchingClient
 		mockHistoryClient *mocks.HistoryClient
 		mockVisibilityMgr *mocks.VisibilityManager
+		mockExecutionMgr  *mocks.ExecutionManager
 		logger            bark.Logger
 	}
 )
@@ -88,22 +89,22 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	s.mockMatching = &mocks.MatchingClient{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
-
+	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	h := &historyEngineImpl{
 		currentclusterName: s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,
+		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
-	mockExecutionMgr := &mocks.ExecutionManager{}
 	txProcesser := newTransferQueueProcessor(s.ShardContext, h, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient).(*transferQueueProcessorImpl)
-	timerProcessor := newTimerQueueProcessor(s.ShardContext, h, mockExecutionMgr, s.logger)
+	timerProcessor := newTimerQueueProcessor(s.ShardContext, h, s.logger)
 	s.processor = txProcesser
 	h.txProcessor = txProcesser
 	h.timerProcessor = timerProcessor
