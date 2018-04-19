@@ -124,14 +124,14 @@ func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.Replica
 	c.msBuilder.executionInfo.NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateHelper(builder, nil, nil, false, transactionID)
+	return c.updateHelper(builder, nil, nil, false, true, transactionID)
 }
 
 func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
 	timerTasks []persistence.Task, transactionID int64) error {
 
-	createReplicationTask := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
-	if createReplicationTask {
+	crossDCEnabled := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	if crossDCEnabled {
 		// Support for global domains is enabled and we are performing an update for global domain
 		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
 		if err != nil {
@@ -142,11 +142,12 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		c.msBuilder.ApplyReplicationStateUpdates(domainEntry.GetFailoverVersion(), lastEventID)
 	}
 
-	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, transactionID)
+	return c.updateHelper(nil, transferTasks, timerTasks, crossDCEnabled, crossDCEnabled, transactionID)
 }
 
 func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,
-	timerTasks []persistence.Task, createReplicationTask bool, transactionID int64) (errRet error) {
+	timerTasks []persistence.Task, createReplicationTask, updateReplicationState bool,
+	transactionID int64) (errRet error) {
 
 	defer func() {
 		if errRet != nil {
@@ -196,7 +197,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 
 	continueAsNew := updates.continueAsNew
-	if continueAsNew != nil && createReplicationTask {
+	if continueAsNew != nil && updateReplicationState {
 		currentVersion := c.msBuilder.replicationState.CurrentVersion
 		continueAsNew.ReplicationState = &persistence.ReplicationState{
 			CurrentVersion:   currentVersion,

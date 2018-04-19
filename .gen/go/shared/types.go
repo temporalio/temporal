@@ -10887,10 +10887,10 @@ func (v *History) Equals(rhs *History) bool {
 }
 
 type HistoryEvent struct {
-	Version                                                        *int64                                                          `json:"version,omitempty"`
 	EventId                                                        *int64                                                          `json:"eventId,omitempty"`
 	Timestamp                                                      *int64                                                          `json:"timestamp,omitempty"`
 	EventType                                                      *EventType                                                      `json:"eventType,omitempty"`
+	Version                                                        *int64                                                          `json:"version,omitempty"`
 	WorkflowExecutionStartedEventAttributes                        *WorkflowExecutionStartedEventAttributes                        `json:"workflowExecutionStartedEventAttributes,omitempty"`
 	WorkflowExecutionCompletedEventAttributes                      *WorkflowExecutionCompletedEventAttributes                      `json:"workflowExecutionCompletedEventAttributes,omitempty"`
 	WorkflowExecutionFailedEventAttributes                         *WorkflowExecutionFailedEventAttributes                         `json:"workflowExecutionFailedEventAttributes,omitempty"`
@@ -10957,14 +10957,6 @@ func (v *HistoryEvent) ToWire() (wire.Value, error) {
 		err    error
 	)
 
-	if v.Version != nil {
-		w, err = wire.NewValueI64(*(v.Version)), error(nil)
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 1, Value: w}
-		i++
-	}
 	if v.EventId != nil {
 		w, err = wire.NewValueI64(*(v.EventId)), error(nil)
 		if err != nil {
@@ -10987,6 +10979,14 @@ func (v *HistoryEvent) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.Version != nil {
+		w, err = wire.NewValueI64(*(v.Version)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 35, Value: w}
 		i++
 	}
 	if v.WorkflowExecutionStartedEventAttributes != nil {
@@ -11595,16 +11595,6 @@ func (v *HistoryEvent) FromWire(w wire.Value) error {
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
-		case 1:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.Version = &x
-				if err != nil {
-					return err
-				}
-
-			}
 		case 10:
 			if field.Value.Type() == wire.TI64 {
 				var x int64
@@ -11630,6 +11620,16 @@ func (v *HistoryEvent) FromWire(w wire.Value) error {
 				var x EventType
 				x, err = _EventType_Read(field.Value)
 				v.EventType = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 35:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Version = &x
 				if err != nil {
 					return err
 				}
@@ -11978,10 +11978,6 @@ func (v *HistoryEvent) String() string {
 
 	var fields [45]string
 	i := 0
-	if v.Version != nil {
-		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
-		i++
-	}
 	if v.EventId != nil {
 		fields[i] = fmt.Sprintf("EventId: %v", *(v.EventId))
 		i++
@@ -11992,6 +11988,10 @@ func (v *HistoryEvent) String() string {
 	}
 	if v.EventType != nil {
 		fields[i] = fmt.Sprintf("EventType: %v", *(v.EventType))
+		i++
+	}
+	if v.Version != nil {
+		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
 		i++
 	}
 	if v.WorkflowExecutionStartedEventAttributes != nil {
@@ -12177,9 +12177,6 @@ func _EventType_EqualsPtr(lhs, rhs *EventType) bool {
 //
 // This function performs a deep comparison.
 func (v *HistoryEvent) Equals(rhs *HistoryEvent) bool {
-	if !_I64_EqualsPtr(v.Version, rhs.Version) {
-		return false
-	}
 	if !_I64_EqualsPtr(v.EventId, rhs.EventId) {
 		return false
 	}
@@ -12187,6 +12184,9 @@ func (v *HistoryEvent) Equals(rhs *HistoryEvent) bool {
 		return false
 	}
 	if !_EventType_EqualsPtr(v.EventType, rhs.EventType) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Version, rhs.Version) {
 		return false
 	}
 	if !((v.WorkflowExecutionStartedEventAttributes == nil && rhs.WorkflowExecutionStartedEventAttributes == nil) || (v.WorkflowExecutionStartedEventAttributes != nil && rhs.WorkflowExecutionStartedEventAttributes != nil && v.WorkflowExecutionStartedEventAttributes.Equals(rhs.WorkflowExecutionStartedEventAttributes))) {
@@ -12316,16 +12316,6 @@ func (v *HistoryEvent) Equals(rhs *HistoryEvent) bool {
 	return true
 }
 
-// GetVersion returns the value of Version if it is set or its
-// zero value if it is unset.
-func (v *HistoryEvent) GetVersion() (o int64) {
-	if v.Version != nil {
-		return *v.Version
-	}
-
-	return
-}
-
 // GetEventId returns the value of EventId if it is set or its
 // zero value if it is unset.
 func (v *HistoryEvent) GetEventId() (o int64) {
@@ -12351,6 +12341,16 @@ func (v *HistoryEvent) GetTimestamp() (o int64) {
 func (v *HistoryEvent) GetEventType() (o EventType) {
 	if v.EventType != nil {
 		return *v.EventType
+	}
+
+	return
+}
+
+// GetVersion returns the value of Version if it is set or its
+// zero value if it is unset.
+func (v *HistoryEvent) GetVersion() (o int64) {
+	if v.Version != nil {
+		return *v.Version
 	}
 
 	return

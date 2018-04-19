@@ -293,7 +293,13 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 			nextEventID := di.ScheduleID + 1
 			newStateBuilder.executionInfo.NextEventID = nextEventID
 			newStateBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
-			newStateBuilder.ApplyReplicationStateUpdates(request.GetVersion(), di.ScheduleID)
+			failoverVersion := request.GetVersion()
+			newStateBuilder.replicationState = &persistence.ReplicationState{
+				CurrentVersion:   failoverVersion,
+				StartVersion:     failoverVersion,
+				LastWriteVersion: failoverVersion,
+				LastWriteEventID: di.ScheduleID,
+			}
 			// Set the history from replication task on the newStateBuilder
 			newStateBuilder.hBuilder = newHistoryBuilderFromEvents(newRunHistory.Events, r.logger)
 
