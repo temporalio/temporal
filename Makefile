@@ -30,7 +30,7 @@ THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
 
 $(THRIFT_GENDIR)/go/$1/$1.go:: $2
 	@mkdir -p $(THRIFT_GENDIR)/go
-	$(ECHO_V)thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
+	$(GOPATH)/bin/thriftrw --plugin=yarpc --pkg-prefix=$(PROJECT_ROOT)/$(THRIFT_GENDIR)/go/ --out=$(THRIFT_GENDIR)/go $2
 endef
 
 $(foreach tsrc,$(THRIFTRW_SRCS),$(eval $(call \

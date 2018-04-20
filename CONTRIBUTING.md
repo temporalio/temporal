@@ -13,7 +13,8 @@ This doc is intended for contributors to `cadence` server (hopefully that's you!
 Make sure the repository is cloned to the correct location:
 
 ```bash
-go get github.com/uber/cadence/...
+cd $GOPATH
+git clone https://github.com/uber/cadence.git src/github.com/uber/cadence
 cd $GOPATH/src/github.com/uber/cadence
 ```
 
@@ -70,3 +71,4 @@ go test -v <path> -run <TestSuite> -testify.m <TestSpercificTaskName>
 # example:
 go test -v github.com/uber/cadence/common/persistence -run TestCassandraPersistenceSuite -testify.m TestPersistenceStartWorkflow
 ```
+
