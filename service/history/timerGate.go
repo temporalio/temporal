@@ -91,6 +91,11 @@ func NewLocalTimerGate() LocalTimerGate {
 		fireChan:       make(chan struct{}),
 		closeChan:      make(chan struct{}),
 	}
+	// the timer should be stopped when initialized
+	if !timer.timer.Stop() {
+		// drain the existing signal if exist
+		<-timer.timer.C
+	}
 
 	go func() {
 		defer close(timer.fireChan)
@@ -125,20 +130,21 @@ func (timerGate *LocalTimerGateImpl) FireAfter(now time.Time) bool {
 // Update update the timer gate, return true if update is a success
 // success means timer is idle or timer is set with a sooner time to fire
 func (timerGate *LocalTimerGateImpl) Update(nextTime time.Time) bool {
+	// NOTE: negative duration will make the timer fire immediately
 	now := time.Now()
 
-	if !timerGate.nextWakeupTime.After(now) || timerGate.nextWakeupTime.After(nextTime) {
-		// if timer will not fire or next wake time is after the "next"
-		// then we need to update the timer to fire
-		timerGate.nextWakeupTime = nextTime
-		// reset timer to fire when the next message should be made 'visible'
-		timerGate.timer.Reset(nextTime.Sub(now))
-
-		// Notifies caller that next notification is reset to fire at passed in 'next' visibility time
-		return true
+	if timerGate.timer.Stop() && timerGate.nextWakeupTime.Before(nextTime) {
+		// this means the timer, before stopped, is active && next wake up time do not have to be upddated
+		timerGate.timer.Reset(timerGate.nextWakeupTime.Sub(now))
+		return false
 	}
 
-	return false
+	// this means the timer, before stopped, is active && next wake up time has to be upddated
+	// or this means the timer, before stopped, is already fired / never active
+	timerGate.nextWakeupTime = nextTime
+	timerGate.timer.Reset(nextTime.Sub(now))
+	// Notifies caller that next notification is reset to fire at passed in 'next' visibility time
+	return true
 }
 
 // Close shutdown the timer

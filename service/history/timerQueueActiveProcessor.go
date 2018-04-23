@@ -72,6 +72,9 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		return true, nil
 	}
 
+	timerGate := NewLocalTimerGate()
+	// this will trigger a timer gate fire event immediately
+	timerGate.Update(time.Time{})
 	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, clusterName, logger)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
@@ -81,7 +84,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		logger:                  logger,
 		metricsClient:           historyService.metricsClient,
 		currentClusterName:      clusterName,
-		timerGate:               NewLocalTimerGate(),
+		timerGate:               timerGate,
 		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
 	}

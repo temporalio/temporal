@@ -42,6 +42,14 @@ type (
 	}
 )
 
+func BenchmarkLocalTimer(b *testing.B) {
+	timer := NewLocalTimerGate()
+
+	for i := 0; i < b.N; i++ {
+		timer.Update(time.Now())
+	}
+}
+
 func TestLocalTimerGeteSuite(t *testing.T) {
 	s := new(localTimerGateSuite)
 	suite.Run(t, s)

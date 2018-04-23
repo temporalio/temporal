@@ -70,6 +70,10 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 		return true, nil
 	}
 
+	timerGate := NewRemoteTimerGate()
+	// this will trigger a timer gate fire event immediately
+	timerGate.Update(time.Time{})
+	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
 	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, clusterName, logger)
 	processor := &timerQueueStandbyProcessorImpl{
 		shard:                   shard,
