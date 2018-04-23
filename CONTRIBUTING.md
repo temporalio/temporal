@@ -22,6 +22,10 @@ cd $GOPATH/src/github.com/uber/cadence
 
 Dependencies are tracked via `glide.yaml`. If you're not familiar with `glide`,
 read the [docs](https://github.com/Masterminds/glide#usage).
+After you install gide, run below command to get all dependencies into vendor folder.
+```bash
+glide up
+```
 
 ## Licence headers
 
