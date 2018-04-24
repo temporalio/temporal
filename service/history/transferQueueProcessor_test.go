@@ -167,7 +167,7 @@ func (s *transferQueueProcessorSuite) TestManyTransferTasks() {
 		s.Equal(ai.ScheduleToCloseTimeout, timeoutSeconds)
 	}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
-	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(2), transferTasks, builder.updateActivityInfos)
+	err1 := s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo, int64(2), transferTasks, convertUpdateActivityInfos(builder.updateActivityInfos))
 	s.Nil(err1)
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -343,7 +343,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTasks() {
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,
-		builder.updateRequestCancelInfos)
+		convertUpdateRequestCancelInfos(builder.updateRequestCancelInfos))
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -406,7 +406,7 @@ func (s *transferQueueProcessorSuite) TestCancelRemoteExecutionTransferTask_Requ
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForRequestCancel(updatedInfo, int64(3), transferTasks,
-		builder.updateRequestCancelInfos)
+		convertUpdateRequestCancelInfos(builder.updateRequestCancelInfos))
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -471,7 +471,7 @@ func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask() {
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForSignal(updatedInfo, int64(3), transferTasks,
-		builder.updateSignalInfos)
+		convertUpdateSignalInfos(builder.updateSignalInfos))
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -537,7 +537,7 @@ func (s *transferQueueProcessorSuite) TestSignalExecutionTransferTask_Failed() {
 	}}
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForSignal(updatedInfo, int64(3), transferTasks,
-		builder.updateSignalInfos)
+		convertUpdateSignalInfos(builder.updateSignalInfos))
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan queueTaskInfo, 10)
@@ -687,7 +687,7 @@ func (s *transferQueueProcessorSuite) createChildExecutionState(domain, domainID
 
 	updatedInfo := copyWorkflowExecutionInfo(builder.executionInfo)
 	err1 := s.UpdateWorkflowExecutionForChildExecutionsInitiated(updatedInfo, int64(3), transferTasks,
-		builder.updateChildExecutionInfos)
+		convertUpdateChildExecutionInfos(builder.updateChildExecutionInfos))
 	s.Nil(err1, "No error expected.")
 
 	tasksCh := make(chan queueTaskInfo, 10)
