@@ -5,7 +5,7 @@ language: go
 directories:
     - $HOME/.glide/cache
 go:
-  - 1.9
+  - "1.10"
 
 addons:
   apt:
@@ -22,7 +22,8 @@ before_install:
 
 install:
   - go get -u github.com/Masterminds/glide
-  - go get -u github.com/golang/lint/golint
+  # remove the mkdir and git checkout part when https://github.com/golang/lint/issues/397 is fixed
+  - mkdir -p $GOPATH/src/golang.org/x && git clone https://github.com/golang/lint.git $GOPATH/src/golang.org/x/lint && go get -u golang.org/x/lint/golint
   - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls
   - go get golang.org/x/tools/cmd/cover
