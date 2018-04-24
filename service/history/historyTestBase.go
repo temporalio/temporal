@@ -153,8 +153,23 @@ func (s *TestShardContext) GetTransferAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
 
-	// TODO cluster should be an input parameter
-	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
+	return s.shardInfo.TransferAckLevel
+}
+
+// UpdateTransferAckLevel test implementation
+func (s *TestShardContext) UpdateTransferAckLevel(ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TransferAckLevel = ackLevel
+	return nil
+}
+
+// GetTransferClusterAckLevel test implementation
+func (s *TestShardContext) GetTransferClusterAckLevel(cluster string) int64 {
+	s.RLock()
+	defer s.RUnlock()
+
 	// if we can find corresponding ack level
 	if ackLevel, ok := s.shardInfo.ClusterTransferAckLevel[cluster]; ok {
 		return ackLevel
@@ -164,16 +179,11 @@ func (s *TestShardContext) GetTransferAckLevel() int64 {
 	return s.shardInfo.TransferAckLevel
 }
 
-// UpdateTransferAckLevel test implementation
-func (s *TestShardContext) UpdateTransferAckLevel(ackLevel int64) error {
-	s.RLock()
-	defer s.RUnlock()
+// UpdateTransferClusterAckLevel test implementation
+func (s *TestShardContext) UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
 
-	// TODO cluster should be an input parameter
-	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
-	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
-		s.shardInfo.TransferAckLevel = ackLevel
-	}
 	s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel
 	return nil
 }

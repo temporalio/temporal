@@ -110,7 +110,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks
 	} else {
 		standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
 		if !ok {
-			panic(fmt.Sprintf("Cannot find timer processot for %s.", clusterName))
+			panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 		}
 		standbyTimerProcessor.notifyNewTimers(timerTasks)
 	}
@@ -123,7 +123,7 @@ func (t *timerQueueProcessorImpl) SetCurrentTime(clusterName string, currentTime
 
 	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
 	if !ok {
-		panic(fmt.Sprintf("Cannot find timer processot for %s.", clusterName))
+		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
 	standbyTimerProcessor.setCurrentTime(currentTime)
 }
@@ -142,7 +142,7 @@ func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 
 
 	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
 	if !ok {
-		panic(fmt.Sprintf("Cannot find timer processot for %s.", clusterName))
+		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
 	return standbyTimerProcessor.getTimerFiredCount()
 }

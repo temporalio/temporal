@@ -112,6 +112,8 @@ func (s *engine2Suite) SetupTest() {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 
 	domainCache := cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger)
 	mockShard := &shardContextImpl{
@@ -135,7 +137,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	h := &historyEngineImpl{
-		currentclusterName: mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              mockShard,
 		executionManager:   s.mockExecutionMgr,
 		historyMgr:         s.mockHistoryMgr,
@@ -145,7 +147,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
-	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
+	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.logger)
 	s.historyEngine = h
 }

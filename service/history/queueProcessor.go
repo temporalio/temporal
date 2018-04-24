@@ -30,7 +30,6 @@ import (
 	"github.com/uber-common/bark"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 )
@@ -55,7 +54,10 @@ type (
 		logger        bark.Logger
 		metricsClient metrics.Client
 		rateLimiter   common.TokenBucket // Read rate limiter
-		ackMgr        *ackManager
+		ackMgr        queueAckMgr
+
+		// worker coroutines notification
+		workerNotificationChans []chan struct{}
 
 		notifyCh   chan struct{}
 		isStarted  int32
@@ -63,68 +65,32 @@ type (
 		shutdownWG sync.WaitGroup
 		shutdownCh chan struct{}
 	}
-
-	// TODO: Move AckManager to its own file
-	// ackManager is created by QueueProcessor to keep track of the queue ackLevel for the shard.
-	// It keeps track of read level when dispatching tasks to processor and maintains a map of outstanding tasks.
-	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
-	// for the shard when all preceding tasks are acknowledged.
-	ackManager struct {
-		shard         ShardContext
-		options       *QueueProcessorOptions
-		processor     processor
-		logger        bark.Logger
-		metricsClient metrics.Client
-		lastUpdated   time.Time
-
-		sync.RWMutex
-		outstandingTasks map[int64]bool
-		readLevel        int64
-		maxReadLevel     int64
-		ackLevel         int64
-	}
 )
 
 var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
 )
 
-func newQueueProcessor(shard ShardContext, options *QueueProcessorOptions, processor processor,
-	ackLevel int64) *queueProcessorBase {
-	logger := shard.GetLogger()
-	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowComponent: processor.GetName(),
-	})
+func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger bark.Logger) *queueProcessorBase {
+	workerNotificationChans := []chan struct{}{}
+	for index := 0; index < options.WorkerCount; index++ {
+		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
+	}
 
 	p := &queueProcessorBase{
-		shard:         shard,
-		options:       options,
-		processor:     processor,
-		rateLimiter:   common.NewTokenBucket(options.MaxPollRPS, common.NewRealTimeSource()),
-		notifyCh:      make(chan struct{}, 1),
-		shutdownCh:    make(chan struct{}),
-		metricsClient: shard.GetMetricsClient(),
-		logger:        logger,
+		shard:                   shard,
+		options:                 options,
+		processor:               processor,
+		rateLimiter:             common.NewTokenBucket(options.MaxPollRPS, common.NewRealTimeSource()),
+		workerNotificationChans: workerNotificationChans,
+		notifyCh:                make(chan struct{}, 1),
+		shutdownCh:              make(chan struct{}),
+		metricsClient:           shard.GetMetricsClient(),
+		logger:                  logger,
+		ackMgr:                  queueAckMgr,
 	}
-	p.ackMgr = newAckManager(shard, options, processor, ackLevel, logger)
 
 	return p
-}
-
-func newAckManager(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64,
-	logger bark.Logger) *ackManager {
-
-	return &ackManager{
-		shard:            shard,
-		options:          options,
-		processor:        processor,
-		outstandingTasks: make(map[int64]bool),
-		readLevel:        ackLevel,
-		ackLevel:         ackLevel,
-		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
-		lastUpdated:      time.Now(),
-	}
 }
 
 func (p *queueProcessorBase) Start() {
@@ -136,7 +102,7 @@ func (p *queueProcessorBase) Start() {
 	defer logging.LogQueueProcesorStartedEvent(p.logger)
 
 	p.shutdownWG.Add(1)
-	p.NotifyNewTask()
+	p.notifyNewTask()
 	go p.processorPump()
 }
 
@@ -157,7 +123,7 @@ func (p *queueProcessorBase) Stop() {
 	}
 }
 
-func (p *queueProcessorBase) NotifyNewTask() {
+func (p *queueProcessorBase) notifyNewTask() {
 	var event struct{}
 	select {
 	case p.notifyCh <- event:
@@ -172,7 +138,8 @@ func (p *queueProcessorBase) processorPump() {
 	var workerWG sync.WaitGroup
 	for i := 0; i < p.options.WorkerCount; i++ {
 		workerWG.Add(1)
-		go p.taskWorker(tasksCh, &workerWG)
+		notificationChan := p.workerNotificationChans[i]
+		go p.taskWorker(tasksCh, notificationChan, &workerWG)
 	}
 
 	pollTimer := time.NewTimer(p.options.MaxPollInterval)
@@ -183,11 +150,13 @@ processorPumpLoop:
 		select {
 		case <-p.shutdownCh:
 			break processorPumpLoop
+		case <-p.ackMgr.getFinishedChan():
+			p.Stop()
 		case <-p.notifyCh:
 			p.processBatch(tasksCh)
 		case <-pollTimer.C:
 			p.processBatch(tasksCh)
-			pollTimer = time.NewTimer(p.options.MaxPollInterval)
+			pollTimer.Reset(p.options.MaxPollInterval)
 		case <-updateAckTimer.C:
 			p.ackMgr.updateAckLevel()
 			updateAckTimer = time.NewTimer(p.options.UpdateAckInterval)
@@ -207,15 +176,15 @@ processorPumpLoop:
 func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 
 	if !p.rateLimiter.Consume(1, p.options.MaxPollInterval) {
-		p.NotifyNewTask() // re-enqueue the event
+		p.notifyNewTask() // re-enqueue the event
 		return
 	}
 
-	tasks, err := p.ackMgr.readTransferTasks()
+	tasks, more, err := p.ackMgr.readQueueTasks()
 
 	if err != nil {
 		p.logger.Warnf("Processor unable to retrieve tasks: %v", err)
-		p.NotifyNewTask() // re-enqueue the event
+		p.notifyNewTask() // re-enqueue the event
 		return
 	}
 
@@ -227,16 +196,16 @@ func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 		tasksCh <- tsk
 	}
 
-	if len(tasks) == p.options.BatchSize {
+	if more {
 		// There might be more task
 		// We return now to yield, but enqueue an event to poll later
-		p.NotifyNewTask()
+		p.notifyNewTask()
 	}
 
 	return
 }
 
-func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, workerWG *sync.WaitGroup) {
+func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, notificationChan <-chan struct{}, workerWG *sync.WaitGroup) {
 	defer workerWG.Done()
 
 	for {
@@ -246,29 +215,46 @@ func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, workerWG *
 				return
 			}
 
-			p.processWithRetry(task)
+			p.processWithRetry(notificationChan, task)
 		}
 	}
 }
 
-func (p *queueProcessorBase) processWithRetry(task queueTaskInfo) {
+func (p *queueProcessorBase) retryTasks() {
+	for _, workerNotificationChan := range p.workerNotificationChans {
+		select {
+		case workerNotificationChan <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task queueTaskInfo) {
 	p.logger.Debugf("Processing task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 ProcessRetryLoop:
-	for retryCount := 1; retryCount <= p.options.MaxRetryCount; retryCount++ {
+	for retryCount := 1; retryCount <= p.options.MaxRetryCount; {
 		select {
 		case <-p.shutdownCh:
 			return
 		default:
-			err := p.processor.Process(task)
-
-			if err != nil {
-				logging.LogTaskProcessingFailedEvent(p.logger, task.GetTaskID(), task.GetTaskType(), err)
-				backoff := time.Duration(retryCount * 100)
-				time.Sleep(backoff * time.Millisecond)
-				continue ProcessRetryLoop
+			// clear the existing notification
+			select {
+			case <-notificationChan:
+			default:
 			}
 
-			p.ackMgr.completeTask(task.GetTaskID())
+			err := p.processor.process(task)
+			if err != nil {
+				if err == ErrTaskRetry {
+					<-notificationChan
+				} else {
+					logging.LogTaskProcessingFailedEvent(p.logger, task.GetTaskID(), task.GetTaskType(), err)
+					backoff := time.Duration(retryCount * 100)
+					time.Sleep(backoff * time.Millisecond)
+					retryCount++
+					continue ProcessRetryLoop
+				}
+			}
 			return
 		}
 	}
@@ -276,89 +262,4 @@ ProcessRetryLoop:
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
 	logging.LogOperationPanicEvent(p.logger,
 		fmt.Sprintf("Retry count exceeded for taskID: %v", task.GetTaskID()), nil)
-}
-
-func (a *ackManager) readTransferTasks() ([]queueTaskInfo, error) {
-	a.RLock()
-	rLevel := a.readLevel
-	a.RUnlock()
-
-	var tasks []queueTaskInfo
-	op := func() error {
-		var err error
-		tasks, err = a.processor.ReadTasks(rLevel)
-		return err
-	}
-
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(tasks) == 0 {
-		return tasks, nil
-	}
-
-	a.Lock()
-	for _, task := range tasks {
-		if a.readLevel >= task.GetTaskID() {
-			a.logger.Fatalf("Next task ID is less than current read level.  TaskID: %v, ReadLevel: %v", task.GetTaskID(),
-				a.readLevel)
-		}
-		a.logger.Debugf("Moving read level: %v", task.GetTaskID())
-		a.readLevel = task.GetTaskID()
-		a.outstandingTasks[a.readLevel] = false
-	}
-	a.Unlock()
-
-	return tasks, nil
-}
-
-func (a *ackManager) completeTask(taskID int64) {
-	a.Lock()
-	if _, ok := a.outstandingTasks[taskID]; ok {
-		a.outstandingTasks[taskID] = true
-	}
-	a.Unlock()
-}
-
-func (a *ackManager) updateAckLevel() {
-	a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
-	initialAckLevel := a.ackLevel
-	updatedAckLevel := a.ackLevel
-	a.Lock()
-MoveAckLevelLoop:
-	for current := a.ackLevel + 1; current <= a.readLevel; current++ {
-		// TODO: What happens if !ok?
-		if acked, ok := a.outstandingTasks[current]; ok {
-			if acked {
-				err := a.processor.CompleteTask(current)
-
-				if err != nil {
-					a.logger.Warnf("Processor unable to complete task '%v': %v", current, err)
-					break MoveAckLevelLoop
-				}
-				a.logger.Debugf("Updating ack level: %v", current)
-				a.ackLevel = current
-				updatedAckLevel = current
-				delete(a.outstandingTasks, current)
-			} else {
-				break MoveAckLevelLoop
-			}
-		}
-	}
-	a.Unlock()
-
-	// Do not update Acklevel if nothing changed upto force update interval
-	if initialAckLevel == updatedAckLevel && time.Since(a.lastUpdated) < a.options.ForceUpdateInterval {
-		return
-	}
-
-	// Always update ackLevel to detect if the shared is stolen
-	if err := a.shard.UpdateTransferAckLevel(updatedAckLevel); err != nil {
-		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
-		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
-	} else {
-		a.lastUpdated = time.Now()
-	}
 }

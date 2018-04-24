@@ -49,6 +49,8 @@ type (
 		GetTransferMaxReadLevel() int64
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error
+		GetTransferClusterAckLevel(cluster string) int64
+		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
 		GetTimerAckLevel() time.Time
@@ -116,12 +118,32 @@ func (s *shardContextImpl) GetNextTransferTaskID() (int64, error) {
 	return s.getNextTransferTaskIDLocked()
 }
 
+func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {
+	s.RLock()
+	defer s.RUnlock()
+	return s.transferMaxReadLevel
+}
+
 func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	s.RLock()
 	defer s.RUnlock()
 
-	// TODO cluster should be an input parameter
-	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
+	return s.shardInfo.TransferAckLevel
+}
+
+func (s *shardContextImpl) UpdateTransferAckLevel(ackLevel int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TransferAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetTransferClusterAckLevel(cluster string) int64 {
+	s.RLock()
+	defer s.RUnlock()
+
 	// if we can find corresponding ack level
 	if ackLevel, ok := s.shardInfo.ClusterTransferAckLevel[cluster]; ok {
 		return ackLevel
@@ -131,21 +153,10 @@ func (s *shardContextImpl) GetTransferAckLevel() int64 {
 	return s.shardInfo.TransferAckLevel
 }
 
-func (s *shardContextImpl) GetTransferMaxReadLevel() int64 {
-	s.RLock()
-	defer s.RUnlock()
-	return s.transferMaxReadLevel
-}
-
-func (s *shardContextImpl) UpdateTransferAckLevel(ackLevel int64) error {
+func (s *shardContextImpl) UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error {
 	s.Lock()
 	defer s.Unlock()
 
-	// TODO cluster should be an input parameter
-	cluster := s.GetService().GetClusterMetadata().GetCurrentClusterName()
-	if cluster == s.GetService().GetClusterMetadata().GetCurrentClusterName() {
-		s.shardInfo.TransferAckLevel = ackLevel
-	}
 	s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -628,7 +639,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 		RangeID:                 shardInfo.RangeID,
 		StolenSinceRenew:        shardInfo.StolenSinceRenew,
 		ReplicationAckLevel:     shardInfo.ReplicationAckLevel,
-		TransferAckLevel:        atomic.LoadInt64(&shardInfo.TransferAckLevel), // TODO the meaning of atomic load is unclear
+		TransferAckLevel:        shardInfo.TransferAckLevel,
 		TimerAckLevel:           shardInfo.TimerAckLevel,
 		ClusterTransferAckLevel: clusterTransferAckLevel,
 		ClusterTimerAckLevel:    clusterTimerAckLevel,

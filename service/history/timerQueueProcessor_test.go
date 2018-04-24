@@ -74,7 +74,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	// but we are testing the complete timer functionality
 	s.ShardContext.UpdateTimerClusterAckLevel(cluster.TestAlternativeClusterName, timerQueueAckMgrMaxTimestamp)
 	s.engineImpl = &historyEngineImpl{
-		currentclusterName: s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.ShardContext.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.ShardContext,
 		historyMgr:         s.HistoryMgr,
 		historyCache:       historyCache,
@@ -84,7 +84,7 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.engineImpl.txProcessor = newTransferQueueProcessor(
-		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{},
+		s.ShardContext, s.engineImpl, s.mockVisibilityMgr, &mocks.MatchingClient{}, &mocks.HistoryClient{}, s.logger,
 	)
 }
 

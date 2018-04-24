@@ -86,7 +86,15 @@ type (
 
 	queueProcessor interface {
 		common.Daemon
-		NotifyNewTask()
+		notifyNewTask()
+	}
+
+	queueAckMgr interface {
+		getFinishedChan() <-chan struct{}
+		readQueueTasks() ([]queueTaskInfo, bool, error)
+		completeTask(taskID int64)
+		getAckLevel() int64
+		updateAckLevel()
 	}
 
 	queueTaskInfo interface {
@@ -95,15 +103,15 @@ type (
 	}
 
 	processor interface {
-		GetName() string
-		Process(task queueTaskInfo) error
-		ReadTasks(readLevel int64) ([]queueTaskInfo, error)
-		CompleteTask(taskID int64) error
+		process(task queueTaskInfo) error
+		readTasks(readLevel int64) ([]queueTaskInfo, bool, error)
+		completeTask(taskID int64) error
+		updateAckLevel(taskID int64) error
 	}
 
 	transferQueueProcessor interface {
 		common.Daemon
-		NotifyNewTask()
+		NotifyNewTask(clusterName string, currentTime time.Time)
 	}
 
 	// TODO the timer quque processor and the one below, timer processor

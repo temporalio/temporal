@@ -78,7 +78,7 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 	})
 
 	workerNotificationChans := []chan struct{}{}
-	for index := 0; index < shard.GetConfig().ProcessTimerTaskWorkerCount; index++ {
+	for index := 0; index < shard.GetConfig().TimerProcessorTaskWorkerCount; index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
 
@@ -133,7 +133,7 @@ func (t *timerQueueProcessorBase) processorPump() {
 	// Workers to process timer tasks that are expired.
 
 	var workerWG sync.WaitGroup
-	for i := 0; i < t.config.ProcessTimerTaskWorkerCount; i++ {
+	for i := 0; i < t.config.TimerProcessorTaskWorkerCount; i++ {
 		workerWG.Add(1)
 		notificationChan := t.workerNotificationChans[i]
 		go t.processTaskWorker(&workerWG, notificationChan)

@@ -23,6 +23,7 @@ package history
 import (
 	"errors"
 
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -39,7 +40,11 @@ type (
 		historyMgr         persistence.HistoryManager
 		hSerializerFactory persistence.HistorySerializerFactory
 		replicator         messaging.Producer
+		metricsClient      metrics.Client
+		options            *QueueProcessorOptions
+		logger             bark.Logger
 		*queueProcessorBase
+		queueAckMgr
 	}
 )
 
@@ -50,7 +55,7 @@ var (
 
 func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager,
-	hSerializerFactory persistence.HistorySerializerFactory) queueProcessor {
+	hSerializerFactory persistence.HistorySerializerFactory, logger bark.Logger) queueProcessor {
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
@@ -64,25 +69,30 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 		MetricScope:         metrics.ReplicatorQueueProcessorScope,
 	}
 
+	logger = logger.WithFields(bark.Fields{
+		logging.TagWorkflowComponent: logging.TagValueReplicatorQueueComponent,
+	})
+
 	processor := &replicatorQueueProcessorImpl{
 		shard:              shard,
 		executionMgr:       executionMgr,
 		historyMgr:         historyMgr,
 		hSerializerFactory: hSerializerFactory,
 		replicator:         replicator,
+		metricsClient:      shard.GetMetricsClient(),
+		options:            options,
+		logger:             logger,
 	}
 
-	baseProcessor := newQueueProcessor(shard, options, processor, shard.GetReplicatorAckLevel())
-	processor.queueProcessorBase = baseProcessor
+	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
+	queueProcessorBase := newQueueProcessorBase(shard, options, processor, queueAckMgr, logger)
+	processor.queueAckMgr = queueAckMgr
+	processor.queueProcessorBase = queueProcessorBase
 
 	return processor
 }
 
-func (p *replicatorQueueProcessorImpl) GetName() string {
-	return logging.TagValueReplicatorQueueComponent
-}
-
-func (p *replicatorQueueProcessorImpl) Process(qTask queueTaskInfo) error {
+func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) error {
 	task, ok := qTask.(*persistence.ReplicationTaskInfo)
 	if !ok {
 		return errUnexpectedQueueTask
@@ -98,7 +108,9 @@ func (p *replicatorQueueProcessorImpl) Process(qTask queueTaskInfo) error {
 	}
 
 	if err != nil {
-		p.metricsClient.IncCounter(scope, metrics.TaskRequests)
+		p.metricsClient.IncCounter(scope, metrics.TaskFailures)
+	} else {
+		p.queueAckMgr.completeTask(task.TaskID)
 	}
 	return err
 }
@@ -144,15 +156,16 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 	return p.replicator.Publish(replicationTask)
 }
 
-func (p *replicatorQueueProcessorImpl) ReadTasks(readLevel int64) ([]queueTaskInfo, error) {
+func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
+	batchSize := p.options.BatchSize
 	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
 		ReadLevel:    readLevel,
 		MaxReadLevel: p.shard.GetTransferMaxReadLevel(),
-		BatchSize:    p.options.BatchSize,
+		BatchSize:    batchSize,
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	tasks := make([]queueTaskInfo, len(response.Tasks))
@@ -160,13 +173,17 @@ func (p *replicatorQueueProcessorImpl) ReadTasks(readLevel int64) ([]queueTaskIn
 		tasks[i] = response.Tasks[i]
 	}
 
-	return tasks, nil
+	return tasks, len(tasks) >= batchSize, nil
 }
 
-func (p *replicatorQueueProcessorImpl) CompleteTask(taskID int64) error {
+func (p *replicatorQueueProcessorImpl) completeTask(taskID int64) error {
 	return p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
 		TaskID: taskID,
 	})
+}
+
+func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {
+	return p.shard.UpdateReplicatorAckLevel(ackLevel)
 }
 
 func (p *replicatorQueueProcessorImpl) getHistory(domainID, workflowID, runID string, firstEventID,

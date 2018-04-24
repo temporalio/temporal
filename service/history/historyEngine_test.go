@@ -114,6 +114,8 @@ func (s *engineSuite) SetupTest() {
 	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.logger)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
+	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 
 	historyEventNotifier := newHistoryEventNotifier(
 		s.mockMetricClient,
@@ -136,7 +138,9 @@ func (s *engineSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
+	currentClusterName := s.mockService.GetClusterMetadata().GetCurrentClusterName()
 	shardContextWrapper := &shardContextWrapper{
+		currentClusterName:   currentClusterName,
 		ShardContext:         mockShard,
 		historyEventNotifier: historyEventNotifier,
 	}
@@ -147,7 +151,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	h := &historyEngineImpl{
-		currentclusterName:   shardContextWrapper.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName:   currentClusterName,
 		shard:                shardContextWrapper,
 		executionManager:     s.mockExecutionMgr,
 		historyMgr:           s.mockHistoryMgr,
@@ -158,7 +162,7 @@ func (s *engineSuite) SetupTest() {
 		hSerializerFactory:   persistence.NewHistorySerializerFactory(),
 		historyEventNotifier: historyEventNotifier,
 	}
-	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient)
+	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.logger)
 	h.historyEventNotifier.Start()
 	shardContextWrapper.txProcessor = h.txProcessor
@@ -3519,6 +3523,11 @@ func addRequestCancelInitiatedEvent(builder *mutableStateBuilder, decisionComple
 	return event
 }
 
+func addCancelRequestedEvent(builder *mutableStateBuilder, initiatedID int64, domain, workflowID, runID string) *workflow.HistoryEvent {
+	event := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, domain, workflowID, runID)
+	return event
+}
+
 func addRequestSignalInitiatedEvent(builder *mutableStateBuilder, decisionCompletedEventID int64,
 	signalRequestID, domain, workflowID, runID, signalName string, input, control []byte) *workflow.HistoryEvent {
 	event := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, signalRequestID,
@@ -3533,6 +3542,11 @@ func addRequestSignalInitiatedEvent(builder *mutableStateBuilder, decisionComple
 			Control:    control,
 		})
 
+	return event
+}
+
+func addSignaledEvent(builder *mutableStateBuilder, initiatedID int64, domain, workflowID, runID string, control []byte) *workflow.HistoryEvent {
+	event := builder.AddExternalWorkflowExecutionSignaled(initiatedID, domain, workflowID, runID, control)
 	return event
 }
 
@@ -3552,6 +3566,20 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder *mutableStateBuilder, 
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 			Control:                             nil,
 		})
+}
+
+func addChildWorkflowExecutionStartedEvent(builder *mutableStateBuilder, initiatedID int64, domain, workflowID, runID string,
+	workflowType string) *workflow.HistoryEvent {
+	event := builder.AddChildWorkflowExecutionStartedEvent(
+		common.StringPtr(domain),
+		&workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		&workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+		initiatedID,
+	)
+	return event
 }
 
 func addCompleteWorkflowEvent(builder *mutableStateBuilder, decisionCompletedEventID int64,
@@ -3574,7 +3602,19 @@ func createMutableState(builder *mutableStateBuilder) *persistence.WorkflowMutab
 	for id, info := range builder.pendingTimerInfoIDs {
 		timerInfos[id] = copyTimerInfo(info)
 	}
+	cancellationInfos := make(map[int64]*persistence.RequestCancelInfo)
+	for id, info := range builder.pendingRequestCancelInfoIDs {
+		cancellationInfos[id] = copyCancellationInfo(info)
+	}
 	signalInfos := make(map[int64]*persistence.SignalInfo)
+	for id, info := range builder.pendingSignalInfoIDs {
+		signalInfos[id] = copySignalInfo(info)
+	}
+	childInfos := make(map[int64]*persistence.ChildExecutionInfo)
+	for id, info := range builder.pendingChildExecutionInfoIDs {
+		childInfos[id] = copyChildInfo(info)
+	}
+
 	builder.FlushBufferedEvents()
 	var bufferedEvents []*persistence.SerializedHistoryEventBatch
 	if len(builder.bufferedEvents) > 0 {
@@ -3585,11 +3625,13 @@ func createMutableState(builder *mutableStateBuilder) *persistence.WorkflowMutab
 	}
 
 	return &persistence.WorkflowMutableState{
-		ExecutionInfo:  info,
-		ActivitInfos:   activityInfos,
-		TimerInfos:     timerInfos,
-		BufferedEvents: bufferedEvents,
-		SignalInfos:    signalInfos,
+		ExecutionInfo:       info,
+		ActivitInfos:        activityInfos,
+		TimerInfos:          timerInfos,
+		BufferedEvents:      bufferedEvents,
+		SignalInfos:         signalInfos,
+		RequestCancelInfos:  cancellationInfos,
+		ChildExecutionInfos: childInfos,
 	}
 }
 
@@ -3647,4 +3689,35 @@ func copyTimerInfo(sourceInfo *persistence.TimerInfo) *persistence.TimerInfo {
 		ExpiryTime: sourceInfo.ExpiryTime,
 		TaskID:     sourceInfo.TaskID,
 	}
+}
+
+func copyCancellationInfo(sourceInfo *persistence.RequestCancelInfo) *persistence.RequestCancelInfo {
+	return &persistence.RequestCancelInfo{
+		InitiatedID:     sourceInfo.InitiatedID,
+		CancelRequestID: sourceInfo.CancelRequestID,
+	}
+}
+
+func copySignalInfo(sourceInfo *persistence.SignalInfo) *persistence.SignalInfo {
+	result := &persistence.SignalInfo{
+		InitiatedID:     sourceInfo.InitiatedID,
+		SignalRequestID: sourceInfo.SignalRequestID,
+		SignalName:      sourceInfo.SignalName,
+	}
+
+	copy(result.Input, sourceInfo.Input)
+	copy(result.Control, sourceInfo.Control)
+	return result
+}
+
+func copyChildInfo(sourceInfo *persistence.ChildExecutionInfo) *persistence.ChildExecutionInfo {
+	result := &persistence.ChildExecutionInfo{
+		InitiatedID:     sourceInfo.InitiatedID,
+		StartedID:       sourceInfo.StartedID,
+		CreateRequestID: sourceInfo.CreateRequestID,
+	}
+
+	copy(result.InitiatedEvent, sourceInfo.InitiatedEvent)
+	copy(result.StartedEvent, sourceInfo.StartedEvent)
+	return result
 }

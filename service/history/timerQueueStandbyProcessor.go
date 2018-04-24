@@ -289,7 +289,13 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.Tim
 	if err != nil {
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() {
+		if retError == ErrTaskRetry {
+			release(nil)
+		} else {
+			release(retError)
+		}
+	}()
 
 Process_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {

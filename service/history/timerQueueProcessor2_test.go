@@ -131,7 +131,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 	h := &historyEngineImpl{
-		currentclusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		historyMgr:         s.mockHistoryMgr,
 		executionManager:   s.mockExecutionMgr,
@@ -141,7 +141,7 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 	}
-	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{})
+	h.txProcessor = newTransferQueueProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, &mocks.HistoryClient{}, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(s.mockShard, h, s.logger)
 	s.mockHistoryEngine = h
 }
