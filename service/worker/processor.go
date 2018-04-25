@@ -184,18 +184,36 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 						p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
 						err = p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 					case replicator.ReplicationTaskTypeHistory:
-						err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
-							DomainUUID: task.HistoryTaskAttributes.DomainId,
-							WorkflowExecution: &shared.WorkflowExecution{
-								WorkflowId: task.HistoryTaskAttributes.WorkflowId,
-								RunId:      task.HistoryTaskAttributes.RunId,
-							},
-							FirstEventId:  task.HistoryTaskAttributes.FirstEventId,
-							NextEventId:   task.HistoryTaskAttributes.NextEventId,
-							Version:       task.HistoryTaskAttributes.Version,
-							History:       task.HistoryTaskAttributes.History,
-							NewRunHistory: task.HistoryTaskAttributes.NewRunHistory,
-						})
+					ApplyLoop:
+						for {
+							err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
+								DomainUUID: task.HistoryTaskAttributes.DomainId,
+								WorkflowExecution: &shared.WorkflowExecution{
+									WorkflowId: task.HistoryTaskAttributes.WorkflowId,
+									RunId:      task.HistoryTaskAttributes.RunId,
+								},
+								FirstEventId:  task.HistoryTaskAttributes.FirstEventId,
+								NextEventId:   task.HistoryTaskAttributes.NextEventId,
+								Version:       task.HistoryTaskAttributes.Version,
+								History:       task.HistoryTaskAttributes.History,
+								NewRunHistory: task.HistoryTaskAttributes.NewRunHistory,
+							})
+
+							// ReplicateEvents succeeded, break out of the loop and complete task
+							if err == nil {
+								break ApplyLoop
+							}
+
+							// ReplicateEvents failed with some error other than workflow execution not exist
+							// break out of the loop and nack the task to move to DLQ
+							if _, ok := err.(*shared.EntityNotExistsError); !ok {
+								break ApplyLoop
+							}
+
+							// TODO: If failed with EntityNotExistsError, then move the task to retry queue
+							// Let's wait for create execution task to be replicated and try again
+							time.Sleep(20 * time.Millisecond)
+						}
 
 					default:
 						err = ErrUnknownReplicationTask

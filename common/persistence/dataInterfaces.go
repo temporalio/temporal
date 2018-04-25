@@ -354,15 +354,16 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivitInfos        map[int64]*ActivityInfo
-		TimerInfos          map[string]*TimerInfo
-		ChildExecutionInfos map[int64]*ChildExecutionInfo
-		RequestCancelInfos  map[int64]*RequestCancelInfo
-		SignalInfos         map[int64]*SignalInfo
-		SignalRequestedIDs  map[string]struct{}
-		ExecutionInfo       *WorkflowExecutionInfo
-		ReplicationState    *ReplicationState
-		BufferedEvents      []*SerializedHistoryEventBatch
+		ActivitInfos             map[int64]*ActivityInfo
+		TimerInfos               map[string]*TimerInfo
+		ChildExecutionInfos      map[int64]*ChildExecutionInfo
+		RequestCancelInfos       map[int64]*RequestCancelInfo
+		SignalInfos              map[int64]*SignalInfo
+		SignalRequestedIDs       map[string]struct{}
+		ExecutionInfo            *WorkflowExecutionInfo
+		ReplicationState         *ReplicationState
+		BufferedEvents           []*SerializedHistoryEventBatch
+		BufferedReplicationTasks map[int64]*BufferedReplicationTask
 	}
 
 	// ActivityInfo details.
@@ -416,6 +417,15 @@ type (
 		SignalName      string
 		Input           []byte
 		Control         []byte
+	}
+
+	// BufferedReplicationTask has details to handle out of order receive of history events
+	BufferedReplicationTask struct {
+		FirstEventID  int64
+		NextEventID   int64
+		Version       int64
+		History       *SerializedHistoryEventBatch
+		NewRunHistory *SerializedHistoryEventBatch
 	}
 
 	// CreateShardRequest is used to create a shard in executions table
@@ -511,20 +521,22 @@ type (
 		FinishedExecutionTTL int32
 
 		// Mutable state
-		UpsertActivityInfos       []*ActivityInfo
-		DeleteActivityInfos       []int64
-		UpserTimerInfos           []*TimerInfo
-		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*ChildExecutionInfo
-		DeleteChildExecutionInfo  *int64
-		UpsertRequestCancelInfos  []*RequestCancelInfo
-		DeleteRequestCancelInfo   *int64
-		UpsertSignalInfos         []*SignalInfo
-		DeleteSignalInfo          *int64
-		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedID   string
-		NewBufferedEvents         *SerializedHistoryEventBatch
-		ClearBufferedEvents       bool
+		UpsertActivityInfos           []*ActivityInfo
+		DeleteActivityInfos           []int64
+		UpserTimerInfos               []*TimerInfo
+		DeleteTimerInfos              []string
+		UpsertChildExecutionInfos     []*ChildExecutionInfo
+		DeleteChildExecutionInfo      *int64
+		UpsertRequestCancelInfos      []*RequestCancelInfo
+		DeleteRequestCancelInfo       *int64
+		UpsertSignalInfos             []*SignalInfo
+		DeleteSignalInfo              *int64
+		UpsertSignalRequestedIDs      []string
+		DeleteSignalRequestedID       string
+		NewBufferedEvents             *SerializedHistoryEventBatch
+		ClearBufferedEvents           bool
+		NewBufferedReplicationTask    *BufferedReplicationTask
+		DeleteBufferedReplicationTask *int64
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

@@ -555,9 +555,11 @@ func (s *TestBase) DeleteSignalsRequestedState(updatedInfo *WorkflowExecutionInf
 
 // UpdateWorklowStateAndReplication is a utility method to update workflow execution
 func (s *TestBase) UpdateWorklowStateAndReplication(updatedInfo *WorkflowExecutionInfo,
-	updatedReplicationState *ReplicationState, condition int64, txTasks []Task) error {
+	updatedReplicationState *ReplicationState, newBufferedReplicationTask *BufferedReplicationTask,
+	deleteBufferedReplicationTask *int64, condition int64, txTasks []Task) error {
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, updatedReplicationState, nil, nil,
-		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+		s.ShardInfo.RangeID, condition, nil, txTasks, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "",
+		newBufferedReplicationTask, deleteBufferedReplicationTask)
 }
 
 // UpdateWorkflowExecutionWithRangeID is a utility method to update workflow execution
@@ -571,7 +573,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithRangeID(updatedInfo *WorkflowExecu
 	return s.UpdateWorkflowExecutionWithReplication(updatedInfo, nil, decisionScheduleIDs, activityScheduleIDs, rangeID,
 		condition, timerTasks, []Task{}, deleteTimerTask, upsertActivityInfos, deleteActivityInfos, upsertTimerInfos, deleteTimerInfos,
 		upsertChildInfos, deleteChildInfo, upsertCancelInfos, deleteCancelInfo, upsertSignalInfos, deleteSignalInfo,
-		upsertSignalRequestedIDs, deleteSignalRequestedID)
+		upsertSignalRequestedIDs, deleteSignalRequestedID, nil, nil)
 }
 
 // UpdateWorkflowExecutionWithReplication is a utility method to update workflow execution
@@ -581,7 +583,8 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowE
 	deleteActivityInfos []int64, upsertTimerInfos []*TimerInfo, deleteTimerInfos []string,
 	upsertChildInfos []*ChildExecutionInfo, deleteChildInfo *int64, upsertCancelInfos []*RequestCancelInfo,
 	deleteCancelInfo *int64, upsertSignalInfos []*SignalInfo, deleteSignalInfo *int64, upsertSignalRequestedIDs []string,
-	deleteSignalRequestedID string) error {
+	deleteSignalRequestedID string, newBufferedReplicationTask *BufferedReplicationTask,
+	deleteBufferedReplicationTask *int64) error {
 	var transferTasks []Task
 	var replicationTasks []Task
 	for _, task := range txTasks {
@@ -611,26 +614,28 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *WorkflowE
 	}
 
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo:             updatedInfo,
-		ReplicationState:          updatedReplicationState,
-		TransferTasks:             transferTasks,
-		ReplicationTasks:          replicationTasks,
-		TimerTasks:                timerTasks,
-		Condition:                 condition,
-		DeleteTimerTask:           deleteTimerTask,
-		RangeID:                   rangeID,
-		UpsertActivityInfos:       upsertActivityInfos,
-		DeleteActivityInfos:       deleteActivityInfos,
-		UpserTimerInfos:           upsertTimerInfos,
-		DeleteTimerInfos:          deleteTimerInfos,
-		UpsertChildExecutionInfos: upsertChildInfos,
-		DeleteChildExecutionInfo:  deleteChildInfo,
-		UpsertRequestCancelInfos:  upsertCancelInfos,
-		DeleteRequestCancelInfo:   deleteCancelInfo,
-		UpsertSignalInfos:         upsertSignalInfos,
-		DeleteSignalInfo:          deleteSignalInfo,
-		UpsertSignalRequestedIDs:  upsertSignalRequestedIDs,
-		DeleteSignalRequestedID:   deleteSignalRequestedID,
+		ExecutionInfo:                 updatedInfo,
+		ReplicationState:              updatedReplicationState,
+		TransferTasks:                 transferTasks,
+		ReplicationTasks:              replicationTasks,
+		TimerTasks:                    timerTasks,
+		Condition:                     condition,
+		DeleteTimerTask:               deleteTimerTask,
+		RangeID:                       rangeID,
+		UpsertActivityInfos:           upsertActivityInfos,
+		DeleteActivityInfos:           deleteActivityInfos,
+		UpserTimerInfos:               upsertTimerInfos,
+		DeleteTimerInfos:              deleteTimerInfos,
+		UpsertChildExecutionInfos:     upsertChildInfos,
+		DeleteChildExecutionInfo:      deleteChildInfo,
+		UpsertRequestCancelInfos:      upsertCancelInfos,
+		DeleteRequestCancelInfo:       deleteCancelInfo,
+		UpsertSignalInfos:             upsertSignalInfos,
+		DeleteSignalInfo:              deleteSignalInfo,
+		UpsertSignalRequestedIDs:      upsertSignalRequestedIDs,
+		DeleteSignalRequestedID:       deleteSignalRequestedID,
+		NewBufferedReplicationTask:    newBufferedReplicationTask,
+		DeleteBufferedReplicationTask: deleteBufferedReplicationTask,
 	})
 }
 

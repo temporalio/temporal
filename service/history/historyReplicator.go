@@ -21,6 +21,7 @@
 package history
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -88,7 +89,42 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		if err != nil {
 			return err
 		}
+
+		// Check for out of order replication task and store it in the buffer
+		if firstEvent.GetEventId() > msBuilder.GetNextEventID() {
+			if t := msBuilder.BufferReplicationTask(request); t == nil {
+				return errors.New("failed to add buffered replication task")
+			}
+
+			return nil
+		}
 	}
+
+	// First check if there are events which needs to be flushed before applying the update
+	err = r.FlushBuffer(context, msBuilder, request)
+	if err != nil {
+		return err
+	}
+
+	// Apply the replication task
+	err = r.ApplyReplicationTask(context, msBuilder, request)
+	if err != nil {
+		return err
+	}
+
+	// Flush buffered replication tasks after applying the update
+	err = r.FlushBuffer(context, msBuilder, request)
+
+	return err
+}
+
+func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionContext, msBuilder *mutableStateBuilder,
+	request *h.ReplicateEventsRequest) error {
+	domainID, err := getDomainUUID(request.DomainUUID)
+	if err != nil {
+		return err
+	}
+	execution := *request.WorkflowExecution
 
 	var lastEvent *shared.HistoryEvent
 	decisionScheduleID := emptyEventID
@@ -318,6 +354,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		}
 	}
 
+	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
 		// TODO: Support for child execution
@@ -415,6 +452,41 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	}
 
 	return err
+}
+
+func (r *historyReplicator) FlushBuffer(context *workflowExecutionContext, msBuilder *mutableStateBuilder,
+	request *h.ReplicateEventsRequest) error {
+
+	// Keep on applying on applying buffered replication tasks in a loop
+	for msBuilder.HasBufferedReplicationTasks() {
+		nextEventID := msBuilder.GetNextEventID()
+		bt, ok := msBuilder.GetBufferedReplicationTask(nextEventID)
+		if !ok {
+			// Bail out if nextEventID is not in the buffer
+			return nil
+		}
+
+		// We need to delete the task from buffer first to make sure delete update is queued up
+		// Applying replication task commits the transaction along with the delete
+		msBuilder.DeleteBufferedReplicationTask(nextEventID)
+
+		req := &h.ReplicateEventsRequest{
+			DomainUUID:        request.DomainUUID,
+			WorkflowExecution: request.WorkflowExecution,
+			FirstEventId:      common.Int64Ptr(bt.FirstEventID),
+			NextEventId:       common.Int64Ptr(bt.NextEventID),
+			Version:           common.Int64Ptr(bt.Version),
+			History:           msBuilder.GetBufferedHistory(bt.History),
+			NewRunHistory:     msBuilder.GetBufferedHistory(bt.NewRunHistory),
+		}
+
+		// Apply replication task to workflow execution
+		if err := r.ApplyReplicationTask(context, msBuilder, req); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {

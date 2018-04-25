@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.7",
+  "MinCompatibleVersion": "0.7",
+  "Description": "Support buffering for replication tasks within mutable state",
+  "SchemaUpdateCqlFiles": [
+    "buffered_replication_task.cql"
+  ]
+}
