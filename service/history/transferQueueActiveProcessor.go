@@ -96,8 +96,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 			}
 			return true, nil
 		}
-		if domainEntry.GetIsGlobalDomain() &&
-			currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
+		if domainEntry.IsGlobalDomain() && currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
 			// timer task does not belong to cluster name
 			return false, nil
 		}

@@ -48,8 +48,8 @@ type (
 	// in updating the domain entry every 10 seconds but in the case of a cassandra failure we can still keep on serving
 	// requests using the stale entry from cache upto an hour
 	DomainCache interface {
-		GetDomain(name string) (*domainCacheEntry, error)
-		GetDomainByID(id string) (*domainCacheEntry, error)
+		GetDomain(name string) (*DomainCacheEntry, error)
+		GetDomainByID(id string) (*DomainCacheEntry, error)
 		GetDomainID(name string) (string, error)
 	}
 
@@ -62,7 +62,8 @@ type (
 		logger          bark.Logger
 	}
 
-	domainCacheEntry struct {
+	// DomainCacheEntry contains the info and config for a domain
+	DomainCacheEntry struct {
 		clusterMetadata   cluster.Metadata
 		info              *persistence.DomainInfo
 		config            *persistence.DomainConfig
@@ -91,13 +92,13 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 	}
 }
 
-func newDomainCacheEntry() *domainCacheEntry {
-	return &domainCacheEntry{}
+func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
+	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
 }
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomain(name string) (*domainCacheEntry, error) {
+func (c *domainCache) GetDomain(name string) (*DomainCacheEntry, error) {
 	if name == "" {
 		return nil, &workflow.BadRequestError{Message: "Domain is empty."}
 	}
@@ -106,7 +107,7 @@ func (c *domainCache) GetDomain(name string) (*domainCacheEntry, error) {
 
 // GetDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) GetDomainByID(id string) (*domainCacheEntry, error) {
+func (c *domainCache) GetDomainByID(id string) (*DomainCacheEntry, error) {
 	if id == "" {
 		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
 	}
@@ -124,11 +125,11 @@ func (c *domainCache) GetDomainID(name string) (string, error) {
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomain(key, id, name string, cache Cache) (*domainCacheEntry, error) {
+func (c *domainCache) getDomain(key, id, name string, cache Cache) (*DomainCacheEntry, error) {
 	now := c.timeSource.Now()
-	var result *domainCacheEntry
+	var result *DomainCacheEntry
 
-	entry, cacheHit := cache.Get(key).(*domainCacheEntry)
+	entry, cacheHit := cache.Get(key).(*DomainCacheEntry)
 	if cacheHit {
 		// Found the information in the cache, lets check if it needs to be refreshed before returning back
 		entry.RLock()
@@ -143,8 +144,8 @@ func (c *domainCache) getDomain(key, id, name string, cache Cache) (*domainCache
 
 	// Cache entry not found, Let's create an entry and add it to cache
 	if !cacheHit {
-		elem, _ := cache.PutIfNotExist(key, newDomainCacheEntry())
-		entry = elem.(*domainCacheEntry)
+		elem, _ := cache.PutIfNotExist(key, newDomainCacheEntry(c.clusterMetadata))
+		entry = elem.(*DomainCacheEntry)
 	}
 
 	// Now take a lock to update the entry
@@ -179,8 +180,8 @@ func (c *domainCache) getDomain(key, id, name string, cache Cache) (*domainCache
 	return entry.duplicate(), nil
 }
 
-func (entry *domainCacheEntry) duplicate() *domainCacheEntry {
-	result := newDomainCacheEntry()
+func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
+	result := newDomainCacheEntry(entry.clusterMetadata)
 	result.info = entry.info
 	result.config = entry.config
 	result.replicationConfig = entry.replicationConfig
@@ -190,35 +191,42 @@ func (entry *domainCacheEntry) duplicate() *domainCacheEntry {
 	return result
 }
 
-func (entry *domainCacheEntry) isExpired(now time.Time) bool {
+func (entry *DomainCacheEntry) isExpired(now time.Time) bool {
 	return entry.expiry.IsZero() || now.After(entry.expiry)
 }
 
-func (entry *domainCacheEntry) GetInfo() *persistence.DomainInfo {
+// GetInfo return the domain info
+func (entry *DomainCacheEntry) GetInfo() *persistence.DomainInfo {
 	return entry.info
 }
 
-func (entry *domainCacheEntry) GetConfig() *persistence.DomainConfig {
+// GetConfig return the domain config
+func (entry *DomainCacheEntry) GetConfig() *persistence.DomainConfig {
 	return entry.config
 }
 
-func (entry *domainCacheEntry) GetReplicationConfig() *persistence.DomainReplicationConfig {
+// GetReplicationConfig return the domain replication config
+func (entry *DomainCacheEntry) GetReplicationConfig() *persistence.DomainReplicationConfig {
 	return entry.replicationConfig
 }
 
-func (entry *domainCacheEntry) GetConfigVersion() int64 {
+// GetConfigVersion return the domain config version
+func (entry *DomainCacheEntry) GetConfigVersion() int64 {
 	return entry.configVersion
 }
 
-func (entry *domainCacheEntry) GetFailoverVersion() int64 {
+// GetFailoverVersion return the domain failover version
+func (entry *DomainCacheEntry) GetFailoverVersion() int64 {
 	return entry.failoverVersion
 }
 
-func (entry *domainCacheEntry) GetIsGlobalDomain() bool {
+// IsGlobalDomain return whether the domain is a global domain
+func (entry *DomainCacheEntry) IsGlobalDomain() bool {
 	return entry.isGlobalDomain
 }
 
-func (entry *domainCacheEntry) IsDomainActive() bool {
+// IsDomainActive return whether the domain is active, i.e. non global domain or global domain which active cluster is the current cluster
+func (entry *DomainCacheEntry) IsDomainActive() bool {
 	if !entry.isGlobalDomain {
 		// domain is not a global domain, meaning domain is always "active" within each cluster
 		return true
@@ -226,14 +234,16 @@ func (entry *domainCacheEntry) IsDomainActive() bool {
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
 }
 
-func (entry *domainCacheEntry) ShouldReplicateEvent() bool {
+// ShouldReplicateEvent return whether the workflows within this domain should be replicated
+func (entry *DomainCacheEntry) ShouldReplicateEvent() bool {
 	// frontend guarantee that the clusters always contains the active domain, so if the # of clusters is 1
 	// then we do not need to send out any events for replication
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName &&
 		entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1
 }
 
-func (entry *domainCacheEntry) GetDomainNotActiveErr() *workflow.DomainNotActiveError {
+// GetDomainNotActiveErr return err if domain is not active, nil otherwise
+func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 	if entry.IsDomainActive() {
 		// domain is consider active
 		return nil

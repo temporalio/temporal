@@ -8,7 +8,7 @@ cassandra:
 ringpop:
   name: cadence_standby
   bootstrapMode: hosts
-  bootstrapHosts: ["127.0.0.1:8933", "127.0.0.1:8934", "127.0.0.1:8935"]
+  bootstrapHosts: ["127.0.0.1:8933", "127.0.0.1:8934", "127.0.0.1:8935", "127.0.0.1:8940"]
   maxJoinDuration: 30s
 
 services:

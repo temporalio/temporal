@@ -52,7 +52,10 @@ func startHandler(c *cli.Context) {
 	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	var cfg config.Config
-	config.Load(env, configDir, zone, &cfg)
+	err := config.Load(env, configDir, zone, &cfg)
+	if err != nil {
+		log.Fatal("Config file corrupted.", err)
+	}
 	log.Printf("config=\n%v\n", cfg.String())
 
 	cassCfg := cfg.Cassandra

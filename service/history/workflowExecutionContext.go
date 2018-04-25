@@ -76,6 +76,9 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 
 func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder, error) {
 	if c.msBuilder != nil {
+		if err := c.updateVersion(); err != nil {
+			return nil, err
+		}
 		return c.msBuilder, nil
 	}
 
@@ -99,6 +102,9 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 	}
 
 	c.msBuilder = msBuilder
+	if err := c.updateVersion(); err != nil {
+		return nil, err
+	}
 	return msBuilder, nil
 }
 
@@ -120,26 +126,32 @@ func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.Replica
 	lastEventID, transactionID int64) error {
 
 	nextEventID := lastEventID + 1
-	c.msBuilder.ApplyReplicationStateUpdates(request.GetVersion(), lastEventID)
+	c.msBuilder.updateReplicationStateLastEventID(lastEventID)
 	c.msBuilder.executionInfo.NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
 	return c.updateHelper(builder, nil, nil, false, true, transactionID)
 }
 
-func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
-	timerTasks []persistence.Task, transactionID int64) error {
-
-	crossDCEnabled := c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
-	if crossDCEnabled {
+func (c *workflowExecutionContext) updateVersion() error {
+	if c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && c.msBuilder.replicationState != nil {
 		// Support for global domains is enabled and we are performing an update for global domain
 		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
 		if err != nil {
 			return err
 		}
+		c.msBuilder.updateReplicationStateVersion(domainEntry.GetFailoverVersion())
+	}
+	return nil
+}
 
+func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
+	timerTasks []persistence.Task, transactionID int64) error {
+
+	crossDCEnabled := c.msBuilder.replicationState != nil
+	if crossDCEnabled {
 		lastEventID := c.msBuilder.GetNextEventID() - 1
-		c.msBuilder.ApplyReplicationStateUpdates(domainEntry.GetFailoverVersion(), lastEventID)
+		c.msBuilder.updateReplicationStateLastEventID(lastEventID)
 	}
 
 	return c.updateHelper(nil, transferTasks, timerTasks, crossDCEnabled, crossDCEnabled, transactionID)
@@ -197,7 +209,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 
 	continueAsNew := updates.continueAsNew
-	if continueAsNew != nil && updateReplicationState {
+	if continueAsNew != nil && updateReplicationState && c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
 		currentVersion := c.msBuilder.replicationState.CurrentVersion
 		continueAsNew.ReplicationState = &persistence.ReplicationState{
 			CurrentVersion:   currentVersion,

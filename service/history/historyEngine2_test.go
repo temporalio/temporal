@@ -163,6 +163,7 @@ func (s *engine2Suite) TearDownTest() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
+	domainID := "domainID"
 	workflowExecution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -172,9 +173,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	tl := "testTaskList"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -192,6 +200,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
+	domainID := "domainID"
 	workflowExecution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -201,9 +210,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 	tl := "testTaskList"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, errors.New("FAILED")).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -221,6 +237,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -233,9 +250,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 	ms := createMutableState(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -254,6 +278,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -269,9 +294,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -290,6 +322,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -313,9 +346,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -335,6 +375,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -356,9 +397,16 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -379,6 +427,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -400,9 +449,16 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 	ms2 := createMutableState(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse2, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -422,6 +478,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -442,9 +499,16 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		conditionalRetryCount)
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(
 		&persistence.ConditionFailedError{}).Times(conditionalRetryCount)
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -463,6 +527,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 }
 
 func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -477,9 +542,16 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
 		TaskId:            common.Int64Ptr(100),
@@ -500,6 +572,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
+	domainID := "domainID"
 	workflowExecution := &workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -509,9 +582,16 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	tl := "testTaskList"
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(nil, &workflow.EntityNotExistsError{}).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
 		TaskId:            common.Int64Ptr(100),
@@ -532,6 +612,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -555,9 +636,16 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
-		DomainUUID:        common.StringPtr("domainId"),
+		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
 		TaskId:            common.Int64Ptr(100),
@@ -577,7 +665,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -593,6 +681,13 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(&h.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -611,7 +706,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -626,6 +721,13 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse1, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(&h.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -664,7 +766,7 @@ func (s *engine2Suite) printHistory(builder *mutableStateBuilder) string {
 }
 
 func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
-	domainID := "domainId"
+	domainID := "domainID"
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wId"),
 		RunId:      common.StringPtr(validRunID),
@@ -698,6 +800,13 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -717,7 +826,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "workflowID"
 	workflowType := "workflowType"
 	taskList := "testTaskList"
@@ -725,6 +834,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -743,7 +859,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -761,6 +877,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -780,7 +903,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -797,6 +920,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		CloseStatus:    persistence.WorkflowCloseStatusNone,
 	}).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
@@ -818,7 +948,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -845,6 +975,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		State:          persistence.WorkflowStateCompleted,
 		CloseStatus:    persistence.WorkflowCloseStatusCompleted,
 	}).Times(len(expecedErrs))
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	for index, option := range options {
 		if !expecedErrs[index] {
@@ -884,7 +1021,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "workflowID"
 	workflowType := "workflowType"
 	taskList := "testTaskList"
@@ -920,6 +1057,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			State:          persistence.WorkflowStateCompleted,
 			CloseStatus:    closeState,
 		}).Times(len(expecedErrs))
+		s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+			&persistence.GetDomainResponse{
+				Info:   &persistence.DomainInfo{ID: domainID},
+				Config: &persistence.DomainConfig{Retention: 1},
+			},
+			nil,
+		)
 
 		for j, option := range options {
 
@@ -965,7 +1109,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "wId"
 	runID := validRunID
 	identity := "testIdentity"
@@ -991,6 +1135,13 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.Nil(err)
@@ -1002,7 +1153,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "wId"
 	workflowType := "workflowType"
 	taskList := "testTaskList"
@@ -1029,6 +1180,13 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.Nil(err)
@@ -1040,7 +1198,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
-	domainID := "domainId"
+	domainID := "domainID"
 	workflowID := "wId"
 	runID := validRunID
 	workflowType := "workflowType"
@@ -1073,6 +1231,13 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+		},
+		nil,
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
 	s.Nil(err)

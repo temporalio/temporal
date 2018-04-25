@@ -28,6 +28,7 @@ import (
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 
@@ -158,6 +159,15 @@ func newMutableStateBuilder(config *Config, logger bark.Logger) *mutableStateBui
 	return s
 }
 
+func newMutableStateBuilderWithReplicationState(config *Config, logger bark.Logger, version int64) *mutableStateBuilder {
+	s := newMutableStateBuilder(config, logger)
+	s.replicationState = &persistence.ReplicationState{
+		StartVersion:   version,
+		CurrentVersion: version,
+	}
+	return s
+}
+
 func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.pendingActivityInfoIDs = state.ActivitInfos
 	e.pendingTimerInfoIDs = state.TimerInfos
@@ -247,9 +257,12 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	return nil
 }
 
-func (e *mutableStateBuilder) ApplyReplicationStateUpdates(failoverVersion, lastEventID int64) {
-	e.replicationState.CurrentVersion = failoverVersion
-	e.replicationState.LastWriteVersion = failoverVersion
+func (e *mutableStateBuilder) updateReplicationStateVersion(version int64) {
+	e.replicationState.CurrentVersion = version
+}
+
+func (e *mutableStateBuilder) updateReplicationStateLastEventID(lastEventID int64) {
+	e.replicationState.LastWriteVersion = e.replicationState.CurrentVersion
 	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
 	e.replicationState.LastWriteEventID = lastEventID
 }
@@ -606,6 +619,9 @@ func (e *mutableStateBuilder) createNewHistoryEventWithTimestamp(eventID int64, 
 	historyEvent.EventId = common.Int64Ptr(eventID)
 	historyEvent.Timestamp = ts
 	historyEvent.EventType = common.EventTypePtr(eventType)
+	if e.replicationState != nil {
+		historyEvent.Version = common.Int64Ptr(e.replicationState.CurrentVersion)
+	}
 
 	return historyEvent
 }
@@ -1914,7 +1930,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	return e.hBuilder.AddWorkflowExecutionSignaledEvent(request)
 }
 
-func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainID, domainName, newRunID string,
+func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry, newRunID string,
 	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *mutableStateBuilder,
 	error) {
 	if e.hasPendingTasks() || e.HasPendingDecisionTask() {
@@ -1933,7 +1949,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 	if e.hasParentExecution() {
 		parentInfo = &h.ParentExecutionInfo{
 			DomainUUID: common.StringPtr(e.executionInfo.ParentDomainID),
-			Domain:     common.StringPtr(domainName),
+			Domain:     common.StringPtr(domainEntry.GetInfo().Name),
 			Execution: &workflow.WorkflowExecution{
 				WorkflowId: common.StringPtr(e.executionInfo.ParentWorkflowID),
 				RunId:      common.StringPtr(e.executionInfo.ParentRunID),
@@ -1944,7 +1960,16 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 
 	continueAsNewEvent := e.hBuilder.AddContinuedAsNewEvent(decisionCompletedEventID, newRunID, attributes)
 
-	newStateBuilder := newMutableStateBuilder(e.config, e.logger)
+	var newStateBuilder *mutableStateBuilder
+	if domainEntry.IsGlobalDomain() {
+		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
+		// target clusters or not
+		newStateBuilder = newMutableStateBuilderWithReplicationState(e.config, e.logger, domainEntry.GetFailoverVersion())
+	} else {
+		newStateBuilder = newMutableStateBuilder(e.config, e.logger)
+	}
+	domainID := domainEntry.GetInfo().ID
+	domainName := domainEntry.GetInfo().Name
 	startedEvent := newStateBuilder.AddWorkflowExecutionStartedEventForContinueAsNew(domainID, domainName,
 		parentInfo, newExecution, e, attributes)
 	if startedEvent == nil {

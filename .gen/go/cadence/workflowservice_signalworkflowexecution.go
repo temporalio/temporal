@@ -224,6 +224,8 @@ func init() {
 			return true
 		case *shared.ServiceBusyError:
 			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -255,6 +257,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_SignalWorkflowExecution_Result.ServiceBusyError")
 			}
 			return &WorkflowService_SignalWorkflowExecution_Result{ServiceBusyError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_SignalWorkflowExecution_Result.DomainNotActiveError")
+			}
+			return &WorkflowService_SignalWorkflowExecution_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -276,6 +283,10 @@ func init() {
 			err = result.ServiceBusyError
 			return
 		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
+			return
+		}
 		return
 	}
 
@@ -289,6 +300,7 @@ type WorkflowService_SignalWorkflowExecution_Result struct {
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_SignalWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -308,7 +320,7 @@ type WorkflowService_SignalWorkflowExecution_Result struct {
 //   }
 func (v *WorkflowService_SignalWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -344,6 +356,14 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) ToWire() (wire.Value, e
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
 
@@ -408,6 +428,14 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) FromWire(w wire.Value) 
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -424,6 +452,9 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) FromWire(w wire.Value) 
 	if v.ServiceBusyError != nil {
 		count++
 	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("WorkflowService_SignalWorkflowExecution_Result should have at most one field: got %v fields", count)
 	}
@@ -438,7 +469,7 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -454,6 +485,10 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) String() string {
 	}
 	if v.ServiceBusyError != nil {
 		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -475,6 +510,9 @@ func (v *WorkflowService_SignalWorkflowExecution_Result) Equals(rhs *WorkflowSer
 		return false
 	}
 	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 

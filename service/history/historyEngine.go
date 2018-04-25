@@ -35,6 +35,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -186,10 +187,12 @@ func (e *historyEngineImpl) Stop() {
 // StartWorkflowExecution starts a workflow execution
 func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflowExecutionRequest) (
 	*workflow.StartWorkflowExecutionResponse, error) {
-	domainID, err := getDomainUUID(startRequest.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(startRequest.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
+	domainID := domainEntry.GetInfo().ID
 
 	request := startRequest.StartRequest
 	err = validateStartWorkflowExecutionRequest(request)
@@ -214,7 +217,15 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
-	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+	// TODO when the workflow is going to be replicated, use the
+	var msBuilder *mutableStateBuilder
+	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
+		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
+		// target clusters or not
+		msBuilder = newMutableStateBuilderWithReplicationState(e.shard.GetConfig(), e.logger, domainEntry.GetFailoverVersion())
+	} else {
+		msBuilder = newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+	}
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
@@ -599,10 +610,12 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 
 func (e *historyEngineImpl) RecordDecisionTaskStarted(
 	request *h.RecordDecisionTaskStartedRequest) (retResp *h.RecordDecisionTaskStartedResponse, retError error) {
-	domainID, err := getDomainUUID(request.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(request.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
+	domainID := domainEntry.GetInfo().ID
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, *request.WorkflowExecution)
 	if err0 != nil {
@@ -693,10 +706,12 @@ Update_History_Loop:
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
 	request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error) {
-	domainID, err := getDomainUUID(request.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(request.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
+	domainID := domainEntry.GetInfo().ID
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -782,10 +797,13 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 
 // RespondDecisionTaskCompleted completes a decision task
 func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (retError error) {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1138,12 +1156,6 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 
-				domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
-				if err != nil {
-					return err
-				}
-				domainName := domainEntry.GetInfo().Name
-
 				// Extract parentDomainName so it can be passed down to next run of workflow execution
 				var parentDomainName string
 				if msBuilder.hasParentExecution() {
@@ -1156,8 +1168,7 @@ Update_History_Loop:
 				}
 
 				runID := uuid.New()
-				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainID, domainName, runID,
-					parentDomainName, attributes)
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, runID, parentDomainName, attributes)
 				if err != nil {
 					return err
 				}
@@ -1292,10 +1303,13 @@ Update_History_Loop:
 }
 
 func (e *historyEngineImpl) RespondDecisionTaskFailed(req *h.RespondDecisionTaskFailedRequest) error {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.FailedRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1328,10 +1342,13 @@ func (e *historyEngineImpl) RespondDecisionTaskFailed(req *h.RespondDecisionTask
 
 // RespondActivityTaskCompleted completes an activity task.
 func (e *historyEngineImpl) RespondActivityTaskCompleted(req *h.RespondActivityTaskCompletedRequest) error {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1381,10 +1398,13 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(req *h.RespondActivityT
 
 // RespondActivityTaskFailed completes an activity task failure.
 func (e *historyEngineImpl) RespondActivityTaskFailed(req *h.RespondActivityTaskFailedRequest) error {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.FailedRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1434,10 +1454,13 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(req *h.RespondActivityTask
 
 // RespondActivityTaskCanceled completes an activity task failure.
 func (e *historyEngineImpl) RespondActivityTaskCanceled(req *h.RespondActivityTaskCanceledRequest) error {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.CancelRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1492,10 +1515,13 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(req *h.RespondActivityTa
 // - For reporting progress of the activity, this can be done even if the liveness is not configured.
 func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	req *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error) {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.HeartbeatRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1558,10 +1584,13 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 // RequestCancelWorkflowExecution records request cancellation event for workflow execution
 func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	req *h.RequestCancelWorkflowExecutionRequest) error {
-	domainID, err := getDomainUUID(req.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := req.CancelRequest
 	parentExecution := req.ExternalWorkflowExecution
 	childWorkflowOnly := req.GetChildWorkflowOnly()
@@ -1608,10 +1637,13 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 }
 
 func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkflowExecutionRequest) error {
-	domainID, err := getDomainUUID(signalRequest.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(signalRequest.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := signalRequest.SignalRequest
 	parentExecution := signalRequest.ExternalWorkflowExecution
 	childWorkflowOnly := signalRequest.GetChildWorkflowOnly()
@@ -1654,10 +1686,12 @@ func (e *historyEngineImpl) SignalWorkflowExecution(signalRequest *h.SignalWorkf
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequest *h.SignalWithStartWorkflowExecutionRequest) (
 	retResp *workflow.StartWorkflowExecutionResponse, retError error) {
 
-	domainID, err := getDomainUUID(signalWithStartRequest.DomainUUID)
+	domainEntry, err := e.getActiveDomainEntry(signalWithStartRequest.DomainUUID)
 	if err != nil {
 		return nil, err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := workflow.WorkflowExecution{
 		WorkflowId: sRequest.WorkflowId,
@@ -1750,7 +1784,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
-	msBuilder := newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+	// TODO when the workflow is going to be replicated, use the
+	var msBuilder *mutableStateBuilder
+	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
+		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
+		// target clusters or not
+		msBuilder = newMutableStateBuilderWithReplicationState(e.shard.GetConfig(), e.logger, domainEntry.GetFailoverVersion())
+	} else {
+		msBuilder = newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+	}
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
@@ -1854,10 +1896,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(request *h.RemoveSignalMutableStateRequest) error {
-	domainID, err := getDomainUUID(request.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(request.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 		RunId:      request.WorkflowExecution.RunId,
@@ -1876,10 +1921,13 @@ func (e *historyEngineImpl) RemoveSignalMutableState(request *h.RemoveSignalMuta
 }
 
 func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.TerminateWorkflowExecutionRequest) error {
-	domainID, err := getDomainUUID(terminateRequest.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(terminateRequest.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	request := terminateRequest.TerminateRequest
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -1902,10 +1950,13 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(terminateRequest *h.Termi
 
 // ScheduleDecisionTask schedules a decision if no outstanding decision found
 func (e *historyEngineImpl) ScheduleDecisionTask(scheduleRequest *h.ScheduleDecisionTaskRequest) error {
-	domainID, err := getDomainUUID(scheduleRequest.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(scheduleRequest.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: scheduleRequest.WorkflowExecution.WorkflowId,
 		RunId:      scheduleRequest.WorkflowExecution.RunId,
@@ -1925,10 +1976,13 @@ func (e *historyEngineImpl) ScheduleDecisionTask(scheduleRequest *h.ScheduleDeci
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
 func (e *historyEngineImpl) RecordChildExecutionCompleted(completionRequest *h.RecordChildExecutionCompletedRequest) error {
-	domainID, err := getDomainUUID(completionRequest.DomainUUID)
+
+	domainEntry, err := e.getActiveDomainEntry(completionRequest.DomainUUID)
 	if err != nil {
 		return err
 	}
+	domainID := domainEntry.GetInfo().ID
+
 	execution := workflow.WorkflowExecution{
 		WorkflowId: completionRequest.WorkflowExecution.WorkflowId,
 		RunId:      completionRequest.WorkflowExecution.RunId,
@@ -2400,6 +2454,22 @@ func getDomainUUID(domainUUID *string) (string, error) {
 		return "", &workflow.BadRequestError{Message: "Missing domain UUID."}
 	}
 	return *domainUUID, nil
+}
+
+func (e *historyEngineImpl) getActiveDomainEntry(domainUUID *string) (*cache.DomainCacheEntry, error) {
+	domainID, err := getDomainUUID(domainUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		return nil, err
+	}
+	if err = domainEntry.GetDomainNotActiveErr(); err != nil {
+		return nil, err
+	}
+	return domainEntry, nil
 }
 
 func getScheduleID(activityID string, msBuilder *mutableStateBuilder) (int64, error) {

@@ -22,11 +22,12 @@ package config
 
 import (
 	"fmt"
-	"gopkg.in/validator.v2"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"gopkg.in/validator.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const (

@@ -221,6 +221,8 @@ func init() {
 			return true
 		case *shared.EntityNotExistsError:
 			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -247,6 +249,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RecordActivityTaskHeartbeat_Result.EntityNotExistError")
 			}
 			return &WorkflowService_RecordActivityTaskHeartbeat_Result{EntityNotExistError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RecordActivityTaskHeartbeat_Result.DomainNotActiveError")
+			}
+			return &WorkflowService_RecordActivityTaskHeartbeat_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -262,6 +269,10 @@ func init() {
 		}
 		if result.EntityNotExistError != nil {
 			err = result.EntityNotExistError
+			return
+		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
 			return
 		}
 
@@ -287,6 +298,7 @@ type WorkflowService_RecordActivityTaskHeartbeat_Result struct {
 	BadRequestError      *shared.BadRequestError                     `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError                `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError                `json:"entityNotExistError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError                `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_RecordActivityTaskHeartbeat_Result struct into a Thrift-level intermediate
@@ -306,7 +318,7 @@ type WorkflowService_RecordActivityTaskHeartbeat_Result struct {
 //   }
 func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -344,6 +356,14 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) ToWire() (wire.Valu
 		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
 
 	if i != 1 {
 		return wire.Value{}, fmt.Errorf("WorkflowService_RecordActivityTaskHeartbeat_Result should have exactly one field: got %v fields", i)
@@ -354,6 +374,12 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) ToWire() (wire.Valu
 
 func _RecordActivityTaskHeartbeatResponse_Read(w wire.Value) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	var v shared.RecordActivityTaskHeartbeatResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
+	var v shared.DomainNotActiveError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -412,6 +438,14 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) FromWire(w wire.Val
 				}
 
 			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -428,6 +462,9 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) FromWire(w wire.Val
 	if v.EntityNotExistError != nil {
 		count++
 	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_RecordActivityTaskHeartbeat_Result should have exactly one field: got %v fields", count)
 	}
@@ -442,7 +479,7 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -458,6 +495,10 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) String() string {
 	}
 	if v.EntityNotExistError != nil {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -479,6 +520,9 @@ func (v *WorkflowService_RecordActivityTaskHeartbeat_Result) Equals(rhs *Workflo
 		return false
 	}
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 

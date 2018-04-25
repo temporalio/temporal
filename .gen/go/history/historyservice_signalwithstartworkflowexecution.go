@@ -221,6 +221,8 @@ func init() {
 			return true
 		case *ShardOwnershipLostError:
 			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -247,6 +249,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SignalWithStartWorkflowExecution_Result.ShardOwnershipLostError")
 			}
 			return &HistoryService_SignalWithStartWorkflowExecution_Result{ShardOwnershipLostError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SignalWithStartWorkflowExecution_Result.DomainNotActiveError")
+			}
+			return &HistoryService_SignalWithStartWorkflowExecution_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -262,6 +269,10 @@ func init() {
 		}
 		if result.ShardOwnershipLostError != nil {
 			err = result.ShardOwnershipLostError
+			return
+		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
 			return
 		}
 
@@ -287,6 +298,7 @@ type HistoryService_SignalWithStartWorkflowExecution_Result struct {
 	BadRequestError         *shared.BadRequestError                `json:"badRequestError,omitempty"`
 	InternalServiceError    *shared.InternalServiceError           `json:"internalServiceError,omitempty"`
 	ShardOwnershipLostError *ShardOwnershipLostError               `json:"shardOwnershipLostError,omitempty"`
+	DomainNotActiveError    *shared.DomainNotActiveError           `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a HistoryService_SignalWithStartWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -306,7 +318,7 @@ type HistoryService_SignalWithStartWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_SignalWithStartWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -342,6 +354,14 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) ToWire() (wire.
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
 		i++
 	}
 
@@ -412,6 +432,14 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) FromWire(w wire
 				}
 
 			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -428,6 +456,9 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) FromWire(w wire
 	if v.ShardOwnershipLostError != nil {
 		count++
 	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_SignalWithStartWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -442,7 +473,7 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) String() string
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -458,6 +489,10 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) String() string
 	}
 	if v.ShardOwnershipLostError != nil {
 		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -479,6 +514,9 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) Equals(rhs *His
 		return false
 	}
 	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 

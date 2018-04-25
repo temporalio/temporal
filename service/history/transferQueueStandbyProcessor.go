@@ -68,11 +68,10 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		if err != nil {
 			return false, err
 		}
-		if !domainEntry.GetIsGlobalDomain() {
+		if !domainEntry.IsGlobalDomain() {
 			// non global domain, timer task does not belong here
 			return false, nil
-		} else if domainEntry.GetIsGlobalDomain() &&
-			domainEntry.GetReplicationConfig().ActiveClusterName != clusterName {
+		} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != clusterName {
 			// timer task does not belong here
 			return false, nil
 		}
