@@ -114,8 +114,10 @@ struct RecordActivityTaskStartedRequest {
 }
 
 struct RecordActivityTaskStartedResponse {
-  10: optional shared.HistoryEvent startedEvent
   20: optional shared.HistoryEvent scheduledEvent
+  30: optional i64 (js.type = "Long") startedTimestamp
+  40: optional i64 (js.type = "Long") attempt
+  50: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
 }
 
 struct RecordDecisionTaskStartedRequest {

@@ -88,6 +88,7 @@ const (
 	TaskTypeUserTimer
 	TaskTypeWorkflowTimeout
 	TaskTypeDeleteHistoryEvent
+	TaskTypeRetryTimer
 )
 
 type (
@@ -328,6 +329,7 @@ type (
 		TaskID              int64
 		TimeoutType         int
 		EventID             int64
+		Attempt             int64
 	}
 
 	// UserTimerTask identifies a timeout task.
@@ -335,6 +337,14 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+	}
+
+	// RetryTimerTask to schedule a retry task for activity
+	RetryTimerTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		EventID             int64
+		Attempt             int32
 	}
 
 	// HistoryReplicationTask is the transfer task created for shipping history replication events to other clusters
@@ -385,6 +395,18 @@ type (
 		CancelRequestID          int64
 		LastHeartBeatUpdatedTime time.Time
 		TimerTaskStatus          int32
+		// For retry
+		Attempt            int32
+		DomainID           string
+		StartedIdentity    string
+		TaskList           string
+		HasRetryPolicy     bool
+		InitialInterval    int32
+		BackoffCoefficient float64
+		MaximumInterval    int32
+		ExpirationTime     time.Time
+		MaximumAttempts    int32
+		NonRetriableErrors []string
 	}
 
 	// TimerInfo details - metadata about user timer info.
@@ -1015,6 +1037,31 @@ func (u *UserTimerTask) GetVisibilityTimestamp() time.Time {
 // SetVisibilityTimestamp gets the visibility time stamp
 func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 	u.VisibilityTimestamp = t
+}
+
+// GetType returns the type of the timer task
+func (r *RetryTimerTask) GetType() int {
+	return TaskTypeRetryTimer
+}
+
+// GetTaskID returns the sequence ID.
+func (r *RetryTimerTask) GetTaskID() int64 {
+	return r.TaskID
+}
+
+// SetTaskID sets the sequence ID.
+func (r *RetryTimerTask) SetTaskID(id int64) {
+	r.TaskID = id
+}
+
+// GetVisibilityTimestamp gets the visibility time stamp
+func (r *RetryTimerTask) GetVisibilityTimestamp() time.Time {
+	return r.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (r *RetryTimerTask) SetVisibilityTimestamp(t time.Time) {
+	r.VisibilityTimestamp = t
 }
 
 // GetType returns the type of the timeout task.

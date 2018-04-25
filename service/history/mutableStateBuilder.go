@@ -1384,7 +1384,17 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		CancelRequestID:          emptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},
 		TimerTaskStatus:          TimerTaskStatusNone,
+		TaskList:                 attributes.TaskList.GetName(),
+		HasRetryPolicy:           attributes.RetryPolicy != nil,
 	}
+	if ai.HasRetryPolicy {
+		ai.InitialInterval = attributes.RetryPolicy.GetInitialIntervalInSeconds()
+		ai.BackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
+		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
+		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
+		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetriableErrorReasons
+	}
+	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
 	e.pendingActivityInfoByActivityID[ai.ActivityID] = scheduleEventID
@@ -1393,18 +1403,35 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	return ai
 }
 
+func (e *mutableStateBuilder) addTransientActivityStartedEvent(scheduleEventID int64) {
+	if ai, ok := e.GetActivityInfo(scheduleEventID); ok && ai.StartedID == transientEventID {
+		// activity task was started (as transient event), we need to add it now.
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, ai.RequestID, ai.StartedIdentity)
+		if !ai.StartedTime.IsZero() {
+			// overwrite started event time to the one recorded in ActivityInfo
+			event.Timestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
+		}
+		e.ReplicateActivityTaskStartedEvent(event)
+	}
+}
+
 func (e *mutableStateBuilder) AddActivityTaskStartedEvent(ai *persistence.ActivityInfo, scheduleEventID int64,
-	requestID string, request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedID != emptyEventID {
-		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionActivityTaskStarted, e.GetNextEventID(), fmt.Sprintf(
-			"{ScheduleID: %v, Exist: %v}", scheduleEventID, ok))
-		return nil
+	requestID string, identity string) *workflow.HistoryEvent {
+
+	if !ai.HasRetryPolicy {
+		event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, ai.Attempt, requestID, identity)
+		e.ReplicateActivityTaskStartedEvent(event)
+		return event
 	}
 
-	event := e.hBuilder.AddActivityTaskStartedEvent(scheduleEventID, requestID, request)
-
-	e.ReplicateActivityTaskStartedEvent(event)
-	return event
+	// we might need to retry, so do not append started event just yet,
+	// instead update mutable state and will record started event when activity task is closed
+	ai.StartedID = transientEventID
+	ai.RequestID = requestID
+	ai.StartedTime = time.Now()
+	ai.StartedIdentity = identity
+	e.UpdateActivity(ai)
+	return nil
 }
 
 func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(event *workflow.HistoryEvent) {
@@ -1426,6 +1453,7 @@ func (e *mutableStateBuilder) AddActivityTaskCompletedEvent(scheduleEventID, sta
 		return nil
 	}
 
+	e.addTransientActivityStartedEvent(scheduleEventID)
 	event := e.hBuilder.AddActivityTaskCompletedEvent(scheduleEventID, startedEventID, request)
 	if err := e.ReplicateActivityTaskCompletedEvent(event); err != nil {
 		return nil
@@ -1449,6 +1477,7 @@ func (e *mutableStateBuilder) AddActivityTaskFailedEvent(scheduleEventID, starte
 		return nil
 	}
 
+	e.addTransientActivityStartedEvent(scheduleEventID)
 	event := e.hBuilder.AddActivityTaskFailedEvent(scheduleEventID, startedEventID, request)
 	if err := e.ReplicateActivityTaskFailedEvent(event); err != nil {
 		return nil
@@ -1475,6 +1504,7 @@ func (e *mutableStateBuilder) AddActivityTaskTimedOutEvent(scheduleEventID, star
 		return nil
 	}
 
+	e.addTransientActivityStartedEvent(scheduleEventID)
 	event := e.hBuilder.AddActivityTaskTimedOutEvent(scheduleEventID, startedEventID, timeoutType, lastHeartBeatDetails)
 	if err := e.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 		return nil
@@ -1542,6 +1572,7 @@ func (e *mutableStateBuilder) AddActivityTaskCanceledEvent(scheduleEventID, star
 		return nil
 	}
 
+	e.addTransientActivityStartedEvent(scheduleEventID)
 	event := e.hBuilder.AddActivityTaskCanceledEvent(scheduleEventID, startedEventID, latestCancelRequestedEventID,
 		details, identity)
 	if err := e.ReplicateActivityTaskCanceledEvent(event); err != nil {
@@ -2269,4 +2300,13 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionTimedOutEvent(event
 	initiatedID := attributes.GetInitiatedEventId()
 
 	e.DeletePendingChildExecution(initiatedID)
+}
+
+func (e *mutableStateBuilder) CreateRetryTimer(ai *persistence.ActivityInfo, failureReason string) persistence.Task {
+	retryTask := prepareNextRetry(ai, failureReason)
+	if retryTask != nil {
+		e.updateActivityInfos[ai] = struct{}{}
+	}
+
+	return retryTask
 }

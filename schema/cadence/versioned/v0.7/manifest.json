@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.7",
   "MinCompatibleVersion": "0.7",
-  "Description": "Support buffering for replication tasks within mutable state",
+  "Description": "Support buffering for replication tasks within mutable state, add retry policy",
   "SchemaUpdateCqlFiles": [
-    "buffered_replication_task.cql"
+    "buffered_replication_task.cql",
+    "retry_policy.cql"
   ]
 }

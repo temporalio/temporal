@@ -141,7 +141,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 		historyEventNotifier: historyEventNotifier,
 	}
 	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, logger)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
 
@@ -752,15 +752,13 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, &workflow.InternalServiceError{Message: "Corrupted workflow execution state."}
 			}
 			response.ScheduledEvent = scheduledEvent
+			response.ScheduledTimestampOfThisAttempt = common.Int64Ptr(ai.ScheduledTime.UnixNano())
 
 			if ai.StartedID != emptyEventID {
 				// If activity is started as part of the current request scope then return a positive response
 				if ai.RequestID == requestID {
-					startedEvent, exists := msBuilder.GetActivityStartedEvent(scheduleID)
-					if !exists {
-						return nil, &workflow.InternalServiceError{Message: "Corrupted workflow execution state."}
-					}
-					response.StartedEvent = startedEvent
+					response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
+					response.Attempt = common.Int64Ptr(int64(ai.Attempt))
 					return nil, nil
 				}
 
@@ -772,12 +770,10 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, &h.EventAlreadyStartedError{Message: "Activity task already started."}
 			}
 
-			startedEvent := msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, requestID, request.PollRequest)
-			if startedEvent == nil {
-				// Unable to add ActivityTaskStarted event to history
-				return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskStarted event to history."}
-			}
-			response.StartedEvent = startedEvent
+			msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, requestID, request.PollRequest.GetIdentity())
+
+			response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
+			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
 
 			// Start a timer for the activity task.
 			timerTasks := []persistence.Task{}
@@ -1382,12 +1378,12 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(req *h.RespondActivityT
 				return nil, ErrStaleState
 			}
 
-			if !isRunning || ai.StartedID == emptyEventID {
+			if !isRunning || ai.StartedID == emptyEventID ||
+				(token.ScheduleAttempt != 0 && int64(ai.Attempt) != token.ScheduleAttempt) {
 				return nil, ErrActivityTaskNotFound
 			}
 
-			startedID := ai.StartedID
-			if msBuilder.AddActivityTaskCompletedEvent(scheduleID, startedID, request) == nil {
+			if msBuilder.AddActivityTaskCompletedEvent(scheduleID, ai.StartedID, request) == nil {
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCompleted event to history."}
 			}
@@ -1416,8 +1412,8 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(req *h.RespondActivityTask
 		RunId:      common.StringPtr(token.RunID),
 	}
 
-	return e.updateWorkflowExecution(domainID, workflowExecution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
+	return e.updateWorkflowExecutionWithAction(domainID, workflowExecution,
+		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
 			if !msBuilder.isWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
@@ -1438,17 +1434,25 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(req *h.RespondActivityTask
 				return nil, ErrStaleState
 			}
 
-			if !isRunning || ai.StartedID == emptyEventID {
+			if !isRunning || ai.StartedID == emptyEventID ||
+				(token.ScheduleID != emptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return nil, ErrActivityTaskNotFound
 			}
 
-			startedID := ai.StartedID
-			if msBuilder.AddActivityTaskFailedEvent(scheduleID, startedID, request) == nil {
-				// Unable to add ActivityTaskFailed event to history
-				return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to history."}
+			postActions := &updateWorkflowAction{}
+			retryTask := msBuilder.CreateRetryTimer(ai, req.FailedRequest.GetReason())
+			if retryTask != nil {
+				// need retry
+				postActions.timerTasks = append(postActions.timerTasks, retryTask)
+			} else {
+				if msBuilder.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, request) == nil {
+					// Unable to add ActivityTaskFailed event to history
+					return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to history."}
+				}
+				postActions.createDecision = true
 			}
 
-			return nil, nil
+			return postActions, nil
 		})
 }
 
@@ -1494,7 +1498,8 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(req *h.RespondActivityTa
 				return nil, ErrStaleState
 			}
 
-			if !isRunning || ai.StartedID == emptyEventID {
+			if !isRunning || ai.StartedID == emptyEventID ||
+				(token.ScheduleID != emptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return nil, ErrActivityTaskNotFound
 			}
 
@@ -1557,7 +1562,8 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 				return nil, ErrStaleState
 			}
 
-			if !isRunning || ai.StartedID == emptyEventID {
+			if !isRunning || ai.StartedID == emptyEventID ||
+				(token.ScheduleID != emptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				e.logger.Debugf("Activity HeartBeat: scheduleEventID: %v, ActivityInfo: %+v, Exist: %v", scheduleID, ai,
 					isRunning)
 				return nil, ErrActivityTaskNotFound
@@ -2030,10 +2036,15 @@ func (e *historyEngineImpl) ReplicateEvents(replicateRequest *h.ReplicateEventsR
 	return e.replicator.ApplyEvents(replicateRequest)
 }
 
-func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution workflow.WorkflowExecution,
-	createDeletionTask, createDecisionTask bool,
-	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error)) (retError error) {
+type updateWorkflowAction struct {
+	deleteWorkflow bool
+	createDecision bool
+	timerTasks     []persistence.Task
+	transferTasks  []persistence.Task
+}
 
+func (e *historyEngineImpl) updateWorkflowExecutionWithAction(domainID string, execution workflow.WorkflowExecution,
+	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error)) (retError error) {
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(domainID, execution)
 	if err0 != nil {
 		return err0
@@ -2048,10 +2059,9 @@ Update_History_Loop:
 		}
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
-		var timerTasks []persistence.Task
-		var err error
 		// conduct caller action
-		if timerTasks, err = action(msBuilder, tBuilder); err != nil {
+		postActions, err := action(msBuilder, tBuilder)
+		if err != nil {
 			if err == ErrStaleState {
 				// Handler detected that cached workflow mutable could potentially be stale
 				// Reload workflow execution history
@@ -2063,9 +2073,8 @@ Update_History_Loop:
 			return err
 		}
 
-		var transferTasks []persistence.Task
-
-		if createDeletionTask {
+		transferTasks, timerTasks := postActions.transferTasks, postActions.timerTasks
+		if postActions.deleteWorkflow {
 			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, tBuilder)
 			if err != nil {
 				return err
@@ -2074,7 +2083,7 @@ Update_History_Loop:
 			timerTasks = append(timerTasks, timerT)
 		}
 
-		if createDecisionTask {
+		if postActions.createDecision {
 			// Create a transfer task to schedule a decision task
 			if !msBuilder.HasPendingDecisionTask() {
 				di := msBuilder.AddDecisionTaskScheduledEvent()
@@ -2110,6 +2119,24 @@ Update_History_Loop:
 		return nil
 	}
 	return ErrMaxAttemptsExceeded
+}
+
+func (e *historyEngineImpl) updateWorkflowExecution(domainID string, execution workflow.WorkflowExecution,
+	createDeletionTask, createDecisionTask bool,
+	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error)) error {
+	return e.updateWorkflowExecutionWithAction(domainID, execution,
+		func(builder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
+			timerTasks, err := action(builder, tBuilder)
+			if err != nil {
+				return nil, err
+			}
+			postActions := &updateWorkflowAction{
+				deleteWorkflow: createDeletionTask,
+				createDecision: createDecisionTask,
+				timerTasks:     timerTasks,
+			}
+			return postActions, nil
+		})
 }
 
 func (e *historyEngineImpl) getDeleteWorkflowTasks(
@@ -2259,7 +2286,18 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		return &workflow.BadRequestError{Message: "A valid ScheduleToCloseTimeoutSeconds is not set on decision."}
 	}
 	if attributes.HeartbeatTimeoutSeconds == nil || *attributes.HeartbeatTimeoutSeconds < 0 {
-		return &workflow.BadRequestError{Message: "Ac valid HeartbeatTimeoutSeconds is not set on decision."}
+		return &workflow.BadRequestError{Message: "A valid HeartbeatTimeoutSeconds is not set on decision."}
+	}
+	if policy := attributes.RetryPolicy; policy != nil {
+		if policy.GetInitialIntervalInSeconds() <= 0 {
+			return &workflow.BadRequestError{Message: "A valid InitialIntervalInSeconds is not set on retry policy."}
+		}
+		if policy.GetBackoffCoefficient() < 1 {
+			return &workflow.BadRequestError{Message: "BackoffCoefficient cannot be less than 1 on retry policy."}
+		}
+		if policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
+			return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy."}
+		}
 	}
 
 	return nil

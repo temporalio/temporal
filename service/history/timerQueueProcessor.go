@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -42,6 +43,7 @@ type (
 		historyService         *historyEngineImpl
 		ackLevel               TimerSequenceID
 		logger                 bark.Logger
+		matchingClient         matching.Client
 		isStarted              int32
 		isStopped              int32
 		shutdownChan           chan struct{}
@@ -50,7 +52,7 @@ type (
 	}
 )
 
-func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, logger bark.Logger) timerQueueProcessor {
+func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger bark.Logger) timerQueueProcessor {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
@@ -70,8 +72,9 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		historyService:         historyService,
 		ackLevel:               TimerSequenceID{VisibilityTimestamp: shard.GetTimerAckLevel()},
 		logger:                 logger,
+		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, logger),
+		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -130,7 +133,7 @@ func (t *timerQueueProcessorImpl) SetCurrentTime(clusterName string, currentTime
 
 func (t *timerQueueProcessorImpl) FailoverDomain(domainID string, standbyClusterName string) {
 	// we should consider make the failover idempotent
-	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID, standbyClusterName, t.logger)
+	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID, standbyClusterName, t.matchingClient, t.logger)
 	failoverTimerProcessor.Start()
 	failoverTimerProcessor.timerQueueProcessorBase.readAndFanoutTimerTasks()
 }

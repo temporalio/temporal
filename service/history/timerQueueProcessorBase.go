@@ -223,6 +223,8 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task,
 			t.metricsClient.IncCounter(metrics.TimerTaskWorkflowTimeoutScope, counterType)
 		case persistence.TaskTypeDeleteHistoryEvent:
 			t.metricsClient.IncCounter(metrics.TimerTaskDeleteHistoryEvent, counterType)
+		case persistence.TaskTypeRetryTimer:
+			t.metricsClient.IncCounter(metrics.TimerTaskRetryTimerScope, counterType)
 			// TODO add default
 		}
 	}
@@ -400,6 +402,8 @@ func (t *timerQueueProcessorBase) getTimerTaskType(taskType int) string {
 		return "WorkflowTimeout"
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return "DeleteHistoryEvent"
+	case persistence.TaskTypeRetryTimer:
+		return "RetryTimerTask"
 	}
 	return "UnKnown"
 }

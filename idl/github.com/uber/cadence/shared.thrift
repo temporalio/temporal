@@ -276,6 +276,7 @@ struct ScheduleActivityTaskDecisionAttributes {
   50: optional i32 scheduleToStartTimeoutSeconds
   55: optional i32 startToCloseTimeoutSeconds
   60: optional i32 heartbeatTimeoutSeconds
+  70: optional RetryPolicy retryPolicy
 }
 
 struct RequestCancelActivityTaskDecisionAttributes {
@@ -446,12 +447,14 @@ struct ActivityTaskScheduledEventAttributes {
   55: optional i32 startToCloseTimeoutSeconds
   60: optional i32 heartbeatTimeoutSeconds
   90: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  110: optional RetryPolicy retryPolicy
 }
 
 struct ActivityTaskStartedEventAttributes {
   10: optional i64 (js.type = "Long") scheduledEventId
   20: optional string identity
   30: optional string requestId
+  40: optional i32 attempt
 }
 
 struct ActivityTaskCompletedEventAttributes {
@@ -882,6 +885,8 @@ struct PollForActivityTaskResponse {
   90:  optional i64 (js.type = "Long") startedTimestamp
   100: optional i32 startToCloseTimeoutSeconds
   110: optional i32 heartbeatTimeoutSeconds
+  120: optional i32 attempt
+  130: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
 }
 
 struct RecordActivityTaskHeartbeatRequest {
@@ -1100,4 +1105,25 @@ struct PollerInfo {
   // Unix Nano
   10: optional i64 (js.type = "Long")  lastAccessTime
   20: optional string identity
+}
+
+struct RetryPolicy {
+  // Interval of the first retry. If coefficient is 1.0 then it is used for all retries.
+  10: optional i32 initialIntervalInSeconds
+
+  // Coefficient used to calculate the next retry interval.
+  // The next retry interval is previous interval multiplied by the coefficient.
+  // Must be 1 or larger.
+  20: optional double backoffCoefficient
+
+  // Maximum interval between retries. Exponential backoff leads to interval increase.
+  // This value is the cap of the increase. Default is 100x of initial interval.
+  30: optional i32 maximumIntervalInSeconds
+
+  // Maximum number of attempts. When exceeded the retries stop even if not expired yet.
+  // Must be 1 or bigger. Default is unlimited.
+  40: optional i32 maximumAttempts
+
+  // Non-Retriable errors. Will stop retrying if error matches this list.
+  50: optional list<string> nonRetriableErrorReasons
 }

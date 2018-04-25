@@ -102,7 +102,7 @@ func (s *transferQueueProcessorSuite) SetupTest() {
 	}
 
 	txProcesser := newTransferQueueProcessor(s.ShardContext, h, s.mockVisibilityMgr, s.mockMatching, s.mockHistoryClient, s.logger)
-	timerProcessor := newTimerQueueProcessor(s.ShardContext, h, s.logger)
+	timerProcessor := newTimerQueueProcessor(s.ShardContext, h, s.mockMatching, s.logger)
 	s.processor = txProcesser.activeTaskProcessor
 	h.txProcessor = txProcesser
 	h.timerProcessor = timerProcessor

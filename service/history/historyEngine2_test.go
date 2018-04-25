@@ -148,7 +148,7 @@ func (s *engine2Suite) SetupTest() {
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 	}
 	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
-	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.logger)
+	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockMatchingClient, s.logger)
 	s.historyEngine = h
 }
 
@@ -660,8 +660,6 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.Nil(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
-	s.Equal(*scheduledEvent.EventId+1, *response.StartedEvent.EventId)
-	s.Equal("reqId", *response.StartedEvent.ActivityTaskStartedEventAttributes.RequestId)
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {

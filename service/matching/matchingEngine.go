@@ -572,7 +572,6 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	historyResponse *h.RecordActivityTaskStartedResponse) *workflow.PollForActivityTaskResponse {
 	task := context.info
 
-	startedEvent := historyResponse.StartedEvent
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.ActivityTaskScheduledEventAttributes == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
@@ -587,19 +586,23 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 	response.ActivityType = attributes.ActivityType
 	response.Input = attributes.Input
 	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
+	response.ScheduledTimestampOfThisAttempt = historyResponse.ScheduledTimestampOfThisAttempt
 	response.ScheduledTimestamp = common.Int64Ptr(*scheduledEvent.Timestamp)
 	response.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(*attributes.ScheduleToCloseTimeoutSeconds)
-	response.StartedTimestamp = common.Int64Ptr(*startedEvent.Timestamp)
+	response.StartedTimestamp = historyResponse.StartedTimestamp
 	response.StartToCloseTimeoutSeconds = common.Int32Ptr(*attributes.StartToCloseTimeoutSeconds)
 	response.HeartbeatTimeoutSeconds = common.Int32Ptr(*attributes.HeartbeatTimeoutSeconds)
 
 	token := &common.TaskToken{
-		DomainID:   task.DomainID,
-		WorkflowID: task.WorkflowID,
-		RunID:      task.RunID,
-		ScheduleID: task.ScheduleID,
+		DomainID:        task.DomainID,
+		WorkflowID:      task.WorkflowID,
+		RunID:           task.RunID,
+		ScheduleID:      task.ScheduleID,
+		ScheduleAttempt: historyResponse.GetAttempt(),
 	}
+
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
+	response.Attempt = common.Int32Ptr(int32(token.ScheduleAttempt))
 	return response
 }
 

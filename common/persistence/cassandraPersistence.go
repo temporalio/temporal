@@ -212,7 +212,17 @@ const (
 		`cancel_requested: ?, ` +
 		`cancel_request_id: ?, ` +
 		`last_hb_updated_time: ?, ` +
-		`timer_task_status: ?` +
+		`timer_task_status: ?, ` +
+		`attempt: ?, ` +
+		`task_list: ?, ` +
+		`started_identity: ?, ` +
+		`has_retry_policy: ?, ` +
+		`init_interval: ?, ` +
+		`backoff_coefficient: ?, ` +
+		`max_interval: ?, ` +
+		`expiration_time: ?, ` +
+		`max_attempts: ?, ` +
+		`non_retriable_errors: ?` +
 		`}`
 
 	templateTimerInfoType = `{` +
@@ -2253,8 +2263,12 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		case *ActivityTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
+			attempt = t.Attempt
 		case *UserTimerTask:
 			eventID = t.EventID
+		case *RetryTimerTask:
+			eventID = t.EventID
+			attempt = int64(t.Attempt)
 		}
 
 		ts := common.UnixNanoToCQLTimestamp(GetVisibilityTSFrom(task).UnixNano())
@@ -2314,6 +2328,16 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.CancelRequestID,
 			a.LastHeartBeatUpdatedTime,
 			a.TimerTaskStatus,
+			a.Attempt,
+			a.TaskList,
+			a.StartedIdentity,
+			a.HasRetryPolicy,
+			a.InitialInterval,
+			a.BackoffCoefficient,
+			a.MaximumInterval,
+			a.ExpirationTime,
+			a.MaximumAttempts,
+			a.NonRetriableErrors,
 			d.shardID,
 			rowTypeExecution,
 			domainID,
@@ -2851,6 +2875,26 @@ func createActivityInfo(result map[string]interface{}) *ActivityInfo {
 			info.LastHeartBeatUpdatedTime = v.(time.Time)
 		case "timer_task_status":
 			info.TimerTaskStatus = int32(v.(int))
+		case "attempt":
+			info.Attempt = int32(v.(int))
+		case "task_list":
+			info.TaskList = v.(string)
+		case "started_identity":
+			info.StartedIdentity = v.(string)
+		case "has_retry_policy":
+			info.HasRetryPolicy = v.(bool)
+		case "init_interval":
+			info.InitialInterval = (int32)(v.(int))
+		case "backoff_coefficient":
+			info.BackoffCoefficient = v.(float64)
+		case "max_interval":
+			info.MaximumInterval = (int32)(v.(int))
+		case "max_attempts":
+			info.MaximumAttempts = (int32)(v.(int))
+		case "expiration_time":
+			info.ExpirationTime = v.(time.Time)
+		case "non_retriable_errors":
+			info.NonRetriableErrors = v.([]string)
 		}
 	}
 
@@ -3069,6 +3113,9 @@ func GetVisibilityTSFrom(task Task) time.Time {
 
 	case TaskTypeDeleteHistoryEvent:
 		return task.(*DeleteHistoryEventTask).VisibilityTimestamp
+
+	case TaskTypeRetryTimer:
+		return task.(*RetryTimerTask).VisibilityTimestamp
 	}
 	return time.Time{}
 }
@@ -3090,5 +3137,8 @@ func SetVisibilityTSFrom(task Task, t time.Time) {
 
 	case TaskTypeDeleteHistoryEvent:
 		task.(*DeleteHistoryEventTask).VisibilityTimestamp = t
+
+	case TaskTypeRetryTimer:
+		task.(*RetryTimerTask).VisibilityTimestamp = t
 	}
 }

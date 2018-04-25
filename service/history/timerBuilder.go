@@ -56,6 +56,7 @@ type (
 		TimeoutType     w.TimeoutType
 		EventID         int64
 		TimeoutSec      int32
+		Attempt         int32
 	}
 
 	timers []*timerDetails
@@ -110,8 +111,8 @@ func (t timers) Less(i, j int) bool {
 }
 
 func (td *timerDetails) String() string {
-	return fmt.Sprintf("TimerDetails: SeqID: %s, TimerID: %v, ActivityID: %v, TaskCreated: %v, EventID: %v, TimeoutType: %v, TimeoutSec: %v",
-		td.TimerSequenceID, td.TimerID, td.ActivityID, td.TaskCreated, td.EventID, td.TimeoutType.String(), td.TimeoutSec)
+	return fmt.Sprintf("TimerDetails: SeqID: %s, TimerID: %v, ActivityID: %v, Attempt: %v, TaskCreated: %v, EventID: %v, TimeoutType: %v, TimeoutSec: %v",
+		td.TimerSequenceID, td.TimerID, td.ActivityID, td.Attempt, td.TaskCreated, td.EventID, td.TimeoutType.String(), td.TimeoutSec)
 }
 
 func (l *localSeqNumGenerator) NextSeq() int64 {
@@ -274,11 +275,16 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 	tb.activityTimers = make(timers, 0, len(msBuilder.pendingActivityInfoIDs))
 	for _, v := range msBuilder.pendingActivityInfoIDs {
 		if v.ScheduleID != emptyEventID {
-			scheduleToCloseExpiry := v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
+			scheduleToCloseExpiry := v.ExpirationTime
+			if scheduleToCloseExpiry.IsZero() {
+				// v.ExpirationTime could be zero for old activity_infos before this code change (for retry)
+				scheduleToCloseExpiry = v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
+			}
 			td := &timerDetails{
 				TimerSequenceID: TimerSequenceID{VisibilityTimestamp: scheduleToCloseExpiry},
 				ActivityID:      v.ScheduleID,
 				EventID:         v.ScheduleID,
+				Attempt:         v.Attempt,
 				TimeoutSec:      v.ScheduleToCloseTimeout,
 				TimeoutType:     w.TimeoutTypeScheduleToClose,
 				TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) != 0}
@@ -290,6 +296,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					TimerSequenceID: TimerSequenceID{VisibilityTimestamp: startToCloseExpiry},
 					ActivityID:      v.ScheduleID,
 					EventID:         v.ScheduleID,
+					Attempt:         v.Attempt,
 					TimeoutType:     w.TimeoutTypeStartToClose,
 					TimeoutSec:      v.StartToCloseTimeout,
 					TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) != 0}
@@ -304,6 +311,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 						TimerSequenceID: TimerSequenceID{VisibilityTimestamp: heartBeatExpiry},
 						ActivityID:      v.ScheduleID,
 						EventID:         v.ScheduleID,
+						Attempt:         v.Attempt,
 						TimeoutType:     w.TimeoutTypeHeartbeat,
 						TimeoutSec:      v.HeartbeatTimeout,
 						TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) != 0}
@@ -315,6 +323,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 					TimerSequenceID: TimerSequenceID{VisibilityTimestamp: scheduleToStartExpiry},
 					ActivityID:      v.ScheduleID,
 					EventID:         v.ScheduleID,
+					Attempt:         v.Attempt,
 					TimeoutSec:      v.ScheduleToStartTimeout,
 					TimeoutType:     w.TimeoutTypeScheduleToStart,
 					TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToStart) != 0}
@@ -412,6 +421,7 @@ func (tb *timerBuilder) createNewTask(td *timerDetails) persistence.Task {
 			VisibilityTimestamp: td.TimerSequenceID.VisibilityTimestamp,
 			EventID:             td.EventID,
 			TimeoutType:         int(td.TimeoutType),
+			Attempt:             int64(td.Attempt),
 		}
 	}
 	return nil

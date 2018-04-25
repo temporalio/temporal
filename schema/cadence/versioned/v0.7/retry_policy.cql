@@ -1,0 +1,10 @@
+ALTER TYPE activity_info ADD attempt              int;
+ALTER TYPE activity_info ADD task_list            text;
+ALTER TYPE activity_info ADD started_identity     text;
+ALTER TYPE activity_info ADD has_retry_policy     boolean;
+ALTER TYPE activity_info ADD init_interval        int;
+ALTER TYPE activity_info ADD backoff_coefficient  double;
+ALTER TYPE activity_info ADD max_interval         int;
+ALTER TYPE activity_info ADD expiration_time      timestamp;
+ALTER TYPE activity_info ADD max_attempts         int;
+ALTER TYPE activity_info ADD non_retriable_errors list<text>;

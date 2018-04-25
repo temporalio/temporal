@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	firstEventID    int64 = 1
-	emptyEventID    int64 = -23
-	bufferedEventID int64 = -123
+	firstEventID     int64 = 1
+	emptyEventID     int64 = -23
+	bufferedEventID  int64 = -123
+	transientEventID int64 = -124
 )
 
 type (
@@ -119,9 +120,9 @@ func (b *historyBuilder) AddActivityTaskScheduledEvent(decisionCompletedEventID 
 	return b.addEventToHistory(event)
 }
 
-func (b *historyBuilder) AddActivityTaskStartedEvent(scheduleEventID int64, requestID string,
-	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
-	event := b.newActivityTaskStartedEvent(scheduleEventID, requestID, request)
+func (b *historyBuilder) AddActivityTaskStartedEvent(scheduleEventID int64, attempt int32, requestID string,
+	identity string) *workflow.HistoryEvent {
+	event := b.newActivityTaskStartedEvent(scheduleEventID, attempt, requestID, identity)
 
 	return b.addEventToHistory(event)
 }
@@ -516,17 +517,19 @@ func (b *historyBuilder) newActivityTaskScheduledEvent(decisionTaskCompletedEven
 	attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.StartToCloseTimeoutSeconds))
 	attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(common.Int32Default(scheduleAttributes.HeartbeatTimeoutSeconds))
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	attributes.RetryPolicy = scheduleAttributes.RetryPolicy
 	historyEvent.ActivityTaskScheduledEventAttributes = attributes
 
 	return historyEvent
 }
 
-func (b *historyBuilder) newActivityTaskStartedEvent(scheduledEventID int64, requestID string,
-	request *workflow.PollForActivityTaskRequest) *workflow.HistoryEvent {
+func (b *historyBuilder) newActivityTaskStartedEvent(scheduledEventID int64, attempt int32, requestID string,
+	identity string) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeActivityTaskStarted)
 	attributes := &workflow.ActivityTaskStartedEventAttributes{}
 	attributes.ScheduledEventId = common.Int64Ptr(scheduledEventID)
-	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
+	attributes.Attempt = common.Int32Ptr(attempt)
+	attributes.Identity = common.StringPtr(identity)
 	attributes.RequestId = common.StringPtr(requestID)
 	historyEvent.ActivityTaskStartedEventAttributes = attributes
 

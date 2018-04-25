@@ -163,7 +163,7 @@ func (s *engineSuite) SetupTest() {
 		historyEventNotifier: historyEventNotifier,
 	}
 	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
-	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.logger)
+	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockMatchingClient, s.logger)
 	h.historyEventNotifier.Start()
 	shardContextWrapper.txProcessor = h.txProcessor
 	s.mockHistoryEngine = h
@@ -3917,10 +3917,7 @@ func addActivityTaskScheduledEvent(builder *mutableStateBuilder, decisionComplet
 func addActivityTaskStartedEvent(builder *mutableStateBuilder, scheduleID int64,
 	taskList, identity string) *workflow.HistoryEvent {
 	ai, _ := builder.GetActivityInfo(scheduleID)
-	return builder.AddActivityTaskStartedEvent(ai, scheduleID, validRunID, &workflow.PollForActivityTaskRequest{
-		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Identity: common.StringPtr(identity),
-	})
+	return builder.AddActivityTaskStartedEvent(ai, scheduleID, validRunID, identity)
 }
 
 func addActivityTaskCompletedEvent(builder *mutableStateBuilder, scheduleID, startedID int64, result []byte,
@@ -4123,6 +4120,7 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		ActivityID:             sourceInfo.ActivityID,
 		RequestID:              sourceInfo.RequestID,
 		Details:                sourceInfo.Details,
+		ScheduledTime:          sourceInfo.ScheduledTime,
 		ScheduleToStartTimeout: sourceInfo.ScheduleToStartTimeout,
 		ScheduleToCloseTimeout: sourceInfo.ScheduleToCloseTimeout,
 		StartToCloseTimeout:    sourceInfo.StartToCloseTimeout,
@@ -4130,6 +4128,15 @@ func copyActivityInfo(sourceInfo *persistence.ActivityInfo) *persistence.Activit
 		CancelRequested:        sourceInfo.CancelRequested,
 		CancelRequestID:        sourceInfo.CancelRequestID,
 		TimerTaskStatus:        sourceInfo.TimerTaskStatus,
+		Attempt:                sourceInfo.Attempt,
+		StartedIdentity:        sourceInfo.StartedIdentity,
+		TaskList:               sourceInfo.TaskList,
+		HasRetryPolicy:         sourceInfo.HasRetryPolicy,
+		InitialInterval:        sourceInfo.InitialInterval,
+		BackoffCoefficient:     sourceInfo.BackoffCoefficient,
+		MaximumInterval:        sourceInfo.MaximumInterval,
+		ExpirationTime:         sourceInfo.ExpirationTime,
+		MaximumAttempts:        sourceInfo.MaximumAttempts,
 	}
 }
 

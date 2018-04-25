@@ -126,7 +126,17 @@ CREATE TYPE activity_info (
   cancel_requested          boolean, -- If a cancel request is made to cancel the activity in progress.
   cancel_request_id         bigint,  -- Event ID that identifies the cancel request.
   last_hb_updated_time      timestamp, -- Last time the heartbeat is received.
-  timer_task_status         int,    -- Indicates wheter timers are created for this activity.
+  timer_task_status         int,    -- Indicates whether timers are created for this activity.
+  attempt                   int,    -- starting from 0 (for initial non-retry)
+  task_list                 text,
+  started_identity          text,   -- last started poller's identity
+  has_retry_policy          boolean,-- If there is a retry policy
+  init_interval             int,    -- initial retry interval, in seconds
+  backoff_coefficient       double,
+  max_interval              int,    -- max retry interval in seconds
+  expiration_time           timestamp, -- retry expiration time
+  max_attempts              int,    -- max number of attempts including initial non-retry attempt
+  non_retriable_errors      list<text>,
 );
 
 -- User timer details

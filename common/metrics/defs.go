@@ -376,6 +376,8 @@ const (
 	TimerTaskUserTimerScope
 	// TimerTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
 	TimerTaskWorkflowTimeoutScope
+	// TimerTaskRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
+	TimerTaskRetryTimerScope
 	// TimerTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
 	TimerTaskDeleteHistoryEvent
 	// HistoryEventNotificationScope is the scope used by shard history event nitification
@@ -557,6 +559,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerTaskDecisionTimeoutScope:                {operation: "TimerTaskDecisionTimeout"},
 		TimerTaskUserTimerScope:                      {operation: "TimerTaskUserTimer"},
 		TimerTaskWorkflowTimeoutScope:                {operation: "TimerTaskWorkflowTimeout"},
+		TimerTaskRetryTimerScope:                     {operation: "TimerTaskRetryTimer"},
 		TimerTaskDeleteHistoryEvent:                  {operation: "TimerTaskDeleteHistoryEvent"},
 		HistoryEventNotificationScope:                {operation: "HistoryEventNotification"},
 		ReplicatorQueueProcessorScope:                {operation: "ReplicatorQueueProcessor"},

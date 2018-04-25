@@ -25,7 +25,10 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
+	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/matching"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -40,13 +43,14 @@ type (
 		logger                  bark.Logger
 		metricsClient           metrics.Client
 		currentClusterName      string
+		matchingClient          matching.Client
 		timerGate               LocalTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		timerQueueAckMgr        timerQueueAckMgr
 	}
 )
 
-func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, logger bark.Logger) *timerQueueActiveProcessorImpl {
+func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
@@ -81,6 +85,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		cache:                   historyService.historyCache,
 		timerTaskFilter:         timerTaskFilter,
 		logger:                  logger,
+		matchingClient:          matchingClient,
 		metricsClient:           historyService.metricsClient,
 		currentClusterName:      clusterName,
 		timerGate:               timerGate,
@@ -91,7 +96,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	return processor
 }
 
-func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string, logger bark.Logger) *timerQueueActiveProcessorImpl {
+func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing domain failover
@@ -115,6 +120,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		timerTaskFilter:         timerTaskFilter,
 		logger:                  logger,
 		metricsClient:           historyService.metricsClient,
+		matchingClient:          matchingClient,
 		timerGate:               NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
@@ -156,9 +162,9 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 	}
 
 	taskID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
-	t.logger.Debugf("Processing timer: (%s), for WorkflowID: %v, RunID: %v, Type: %v, TimeoutType: %v, EventID: %v",
+	t.logger.Debugf("Processing timer: (%s), for WorkflowID: %v, RunID: %v, Type: %v, TimeoutType: %v, EventID: %v, Attempt: %v",
 		taskID, timerTask.WorkflowID, timerTask.RunID, t.timerQueueProcessorBase.getTimerTaskType(timerTask.TaskType),
-		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
+		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID, timerTask.ScheduleAttempt)
 
 	scope := metrics.TimerQueueProcessorScope
 	switch timerTask.TaskType {
@@ -177,6 +183,10 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 	case persistence.TaskTypeWorkflowTimeout:
 		scope = metrics.TimerTaskWorkflowTimeoutScope
 		err = t.processWorkflowTimeout(timerTask)
+
+	case persistence.TaskTypeRetryTimer:
+		scope = metrics.TimerTaskRetryTimerScope
+		err = t.processRetryTimer(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
 		scope = metrics.TimerTaskDeleteHistoryEvent
@@ -308,6 +318,16 @@ Update_History_Loop:
 			return nil
 		}
 
+		ai, running := msBuilder.GetActivityInfo(scheduleID)
+		if !running {
+			// activity already closed
+			return nil
+		}
+		if int64(ai.Attempt) != timerTask.ScheduleAttempt && timerTask.TimeoutType != int(workflow.TimeoutTypeScheduleToClose) {
+			// timer was created for older attempts
+			return nil
+		}
+
 		var timerTasks []persistence.Task
 		updateHistory := false
 		createNewTimer := false
@@ -324,6 +344,26 @@ Update_History_Loop:
 				timeoutType := td.TimeoutType
 				t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
 					timeoutType, ai.ScheduleID, ai.StartedID)
+
+				if td.Attempt < ai.Attempt && timeoutType != workflow.TimeoutTypeScheduleToClose {
+					// retry could update ai.Attempt, and we should ignore further timeouts for previous attempt
+					continue
+				}
+
+				if timeoutType != workflow.TimeoutTypeScheduleToStart {
+					// ScheduleToStart (queue timeout) is not retriable. Instead of retry, customer should set larger
+					// ScheduleToStart timeout.
+					retryTask := msBuilder.CreateRetryTimer(ai, getTimeoutErrorReason(timeoutType))
+					if retryTask != nil {
+						timerTasks = append(timerTasks, retryTask)
+						createNewTimer = true
+
+						t.logger.Debugf("Ignore ActivityTimeout (%v) as retry is needed. New attempt: %v, retry backoff duration: %v.",
+							timeoutType, ai.Attempt, retryTask.(*persistence.RetryTimerTask).VisibilityTimestamp.Sub(time.Now()))
+
+						continue
+					}
+				}
 
 				switch timeoutType {
 				case workflow.TimeoutTypeScheduleToClose:
@@ -380,9 +420,9 @@ Update_History_Loop:
 				// for activity in the timertask.  But we still need to check if the ID matches Started eventID or
 				// bufferedEventID due to the heartbeat timers created before the bugfix.
 				if !td.TaskCreated || (isHeartBeatTask && (scheduleID == td.EventID || scheduleID == ai.StartedID ||
-					scheduleID == bufferedEventID)) {
+					scheduleID == bufferedEventID) && int64(td.Attempt) == timerTask.ScheduleAttempt) {
 					nextTask := tBuilder.createNewTask(td)
-					timerTasks = []persistence.Task{nextTask}
+					timerTasks = append(timerTasks, nextTask)
 					at := nextTask.(*persistence.ActivityTimeoutTask)
 
 					ai.TimerTaskStatus = ai.TimerTaskStatus | getActivityTimerStatus(workflow.TimeoutType(at.TimeoutType))
@@ -489,6 +529,82 @@ Update_History_Loop:
 		return nil
 
 	}
+	return ErrMaxAttemptsExceeded
+}
+
+func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerTaskRetryTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerTaskRetryTimerScope, metrics.TaskLatency)
+	defer sw.Stop()
+
+	processFn := func() error {
+		context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+		defer release(nil)
+		if err0 != nil {
+			return err0
+		}
+		msBuilder, err1 := context.loadWorkflowExecution()
+		if err1 != nil {
+			if _, ok := err1.(*workflow.EntityNotExistsError); ok {
+				// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+				return nil
+			}
+			return err1
+		}
+
+		if !msBuilder.isWorkflowExecutionRunning() {
+			return nil
+		}
+
+		// generate activity task
+		scheduledID := task.EventID
+		ai, running := msBuilder.GetActivityInfo(scheduledID)
+		if !running || task.ScheduleAttempt < int64(ai.Attempt) {
+			return nil
+		}
+
+		var err error
+		domainID := task.DomainID
+		targetDomainID := domainID
+		scheduledEvent, _ := msBuilder.GetActivityScheduledEvent(scheduledID)
+		if scheduledEvent.ActivityTaskScheduledEventAttributes.Domain != nil {
+			domainEntry, err := t.shard.GetDomainCache().GetDomain(scheduledEvent.ActivityTaskScheduledEventAttributes.GetDomain())
+			if err != nil {
+				return &workflow.InternalServiceError{Message: "Unable to re-schedule activity across domain."}
+			}
+			targetDomainID = domainEntry.GetInfo().ID
+		}
+
+		execution := workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(task.WorkflowID),
+			RunId:      common.StringPtr(task.RunID)}
+		taskList := &workflow.TaskList{
+			Name: &ai.TaskList,
+		}
+		scheduleToStartTimeout := ai.ScheduleToStartTimeout
+
+		release(nil) // release earlier as we don't need the lock anymore
+		err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
+			DomainUUID:                    common.StringPtr(targetDomainID),
+			SourceDomainUUID:              common.StringPtr(domainID),
+			Execution:                     &execution,
+			TaskList:                      taskList,
+			ScheduleId:                    &scheduledID,
+			ScheduleToStartTimeoutSeconds: common.Int32Ptr(scheduleToStartTimeout),
+		})
+
+		t.logger.Debugf("Adding ActivityTask for retry, WorkflowID: %v, RunID: %v, ScheduledID: %v, TaskList: %v, Attempt: %v, Err: %v",
+			task.WorkflowID, task.RunID, scheduledID, taskList.GetName(), task.ScheduleAttempt, err)
+
+		return err
+	}
+
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		if err := processFn(); err == nil {
+			return nil
+		}
+	}
+
 	return ErrMaxAttemptsExceeded
 }
 

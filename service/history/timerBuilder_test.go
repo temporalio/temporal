@@ -187,6 +187,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(2),
 			HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(3),
+			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
 	// create a schedule to start timeout
 	tb := newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})
@@ -194,7 +195,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	s.NotNil(tt)
 	s.Equal(workflow.TimeoutTypeScheduleToStart, workflow.TimeoutType(tt.(*persistence.ActivityTimeoutTask).TimeoutType))
 
-	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), &workflow.PollForActivityTaskRequest{})
+	builder.AddActivityTaskStartedEvent(ai, *ase.EventId, uuid.New(), "")
 
 	// create a heart beat timeout
 	tb = newTimerBuilder(s.config, s.logger, &mockTimeSource{currTime: time.Now()})

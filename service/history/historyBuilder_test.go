@@ -702,10 +702,7 @@ func (s *historyBuilderSuite) addActivityTaskScheduledEvent(decisionCompletedID 
 func (s *historyBuilderSuite) addActivityTaskStartedEvent(scheduleID int64, taskList,
 	identity string) *workflow.HistoryEvent {
 	ai, _ := s.msBuilder.GetActivityInfo(scheduleID)
-	e := s.msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, uuid.New(), &workflow.PollForActivityTaskRequest{
-		TaskList: &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Identity: common.StringPtr(identity),
-	})
+	e := s.msBuilder.AddActivityTaskStartedEvent(ai, scheduleID, uuid.New(), identity)
 
 	return e
 }

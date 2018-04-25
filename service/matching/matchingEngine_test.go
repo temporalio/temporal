@@ -396,7 +396,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	activityType := &workflow.ActivityType{Name: &activityTypeName}
 	activityInput := []byte("Activity1 Input")
 
-	var startedID int64 = 123456
 	identity := "nobody"
 
 	// History service is using mock
@@ -404,7 +403,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &gohistory.RecordActivityTaskStartedResponse{
+			resp := &gohistory.RecordActivityTaskStartedResponse{
 				ScheduledEvent: newActivityTaskScheduledEvent(*taskRequest.ScheduleId, 0,
 					&workflow.ScheduleActivityTaskDecisionAttributes{
 						ActivityId:   &activityID,
@@ -416,10 +415,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(10),
 					}),
-				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
-					TaskList: &workflow.TaskList{Name: taskList.Name},
-					Identity: &identity,
-				})}
+			}
+			resp.StartedTimestamp = common.Int64Ptr(time.Now().UnixNano())
+			return resp
 		}, nil)
 
 	for i := int64(0); i < taskCount; {
@@ -506,7 +504,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	activityType := &workflow.ActivityType{Name: &activityTypeName}
 	activityInput := []byte("Activity1 Input")
 
-	var startedID int64 = 123456
 	identity := "nobody"
 
 	// History service is using mock
@@ -526,10 +523,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 					}),
-				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
-					TaskList: &workflow.TaskList{Name: taskList.Name},
-					Identity: &identity,
-				})}
+			}
 		}, nil)
 
 	for i := int64(0); i < taskCount; i++ {
@@ -690,7 +684,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	activityType := &workflow.ActivityType{Name: &activityTypeName}
 	activityInput := []byte("Activity1 Input")
 
-	var startedID int64 = 123456
 	identity := "nobody"
 
 	// History service is using mock
@@ -710,10 +703,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 					}),
-				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
-					TaskList: &workflow.TaskList{Name: taskList.Name},
-					Identity: &identity,
-				})}
+			}
 		}, nil)
 
 	for p := 0; p < workerCount; p++ {
@@ -977,7 +967,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	activityType := &workflow.ActivityType{Name: &activityTypeName}
 	activityInput := []byte("Activity1 Input")
 
-	var startedID int64 = 123456
 	identity := "nobody"
 
 	startedTasks := make(map[int64]bool)
@@ -1003,10 +992,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
 					}),
-				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
-					TaskList: &workflow.TaskList{Name: taskList.Name},
-					Identity: &identity,
-				})}
+			}
 		},
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) error {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
@@ -1323,7 +1309,6 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	activityID := "activityId1"
 	activityType := &workflow.ActivityType{Name: &activityTypeName}
 	activityInput := []byte("Activity1 Input")
-	var startedID int64
 	identity := "nobody"
 
 	// History service is using mock
@@ -1343,10 +1328,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 						StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
 						HeartbeatTimeoutSeconds:       common.Int32Ptr(10),
 					}),
-				StartedEvent: newActivityTaskStartedEvent(startedID, 0, &workflow.PollForActivityTaskRequest{
-					TaskList: &workflow.TaskList{Name: taskList.Name},
-					Identity: &identity,
-				})}
+			}
 		}, nil)
 
 	time.Sleep(time.Second)

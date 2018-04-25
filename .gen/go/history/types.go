@@ -1586,8 +1586,10 @@ func (v *RecordActivityTaskStartedRequest) GetRequestId() (o string) {
 }
 
 type RecordActivityTaskStartedResponse struct {
-	StartedEvent   *shared.HistoryEvent `json:"startedEvent,omitempty"`
-	ScheduledEvent *shared.HistoryEvent `json:"scheduledEvent,omitempty"`
+	ScheduledEvent                  *shared.HistoryEvent `json:"scheduledEvent,omitempty"`
+	StartedTimestamp                *int64               `json:"startedTimestamp,omitempty"`
+	Attempt                         *int64               `json:"attempt,omitempty"`
+	ScheduledTimestampOfThisAttempt *int64               `json:"scheduledTimestampOfThisAttempt,omitempty"`
 }
 
 // ToWire translates a RecordActivityTaskStartedResponse struct into a Thrift-level intermediate
@@ -1607,26 +1609,42 @@ type RecordActivityTaskStartedResponse struct {
 //   }
 func (v *RecordActivityTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
-	if v.StartedEvent != nil {
-		w, err = v.StartedEvent.ToWire()
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 10, Value: w}
-		i++
-	}
 	if v.ScheduledEvent != nil {
 		w, err = v.ScheduledEvent.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.StartedTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.StartedTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.Attempt != nil {
+		w, err = wire.NewValueI64(*(v.Attempt)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.ScheduledTimestampOfThisAttempt != nil {
+		w, err = wire.NewValueI64(*(v.ScheduledTimestampOfThisAttempt)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -1661,17 +1679,39 @@ func (v *RecordActivityTaskStartedResponse) FromWire(w wire.Value) error {
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
-		case 10:
+		case 20:
 			if field.Value.Type() == wire.TStruct {
-				v.StartedEvent, err = _HistoryEvent_Read(field.Value)
+				v.ScheduledEvent, err = _HistoryEvent_Read(field.Value)
 				if err != nil {
 					return err
 				}
 
 			}
-		case 20:
-			if field.Value.Type() == wire.TStruct {
-				v.ScheduledEvent, err = _HistoryEvent_Read(field.Value)
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.StartedTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Attempt = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ScheduledTimestampOfThisAttempt = &x
 				if err != nil {
 					return err
 				}
@@ -1690,14 +1730,22 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [4]string
 	i := 0
-	if v.StartedEvent != nil {
-		fields[i] = fmt.Sprintf("StartedEvent: %v", v.StartedEvent)
-		i++
-	}
 	if v.ScheduledEvent != nil {
 		fields[i] = fmt.Sprintf("ScheduledEvent: %v", v.ScheduledEvent)
+		i++
+	}
+	if v.StartedTimestamp != nil {
+		fields[i] = fmt.Sprintf("StartedTimestamp: %v", *(v.StartedTimestamp))
+		i++
+	}
+	if v.Attempt != nil {
+		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
+		i++
+	}
+	if v.ScheduledTimestampOfThisAttempt != nil {
+		fields[i] = fmt.Sprintf("ScheduledTimestampOfThisAttempt: %v", *(v.ScheduledTimestampOfThisAttempt))
 		i++
 	}
 
@@ -1709,14 +1757,50 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 //
 // This function performs a deep comparison.
 func (v *RecordActivityTaskStartedResponse) Equals(rhs *RecordActivityTaskStartedResponse) bool {
-	if !((v.StartedEvent == nil && rhs.StartedEvent == nil) || (v.StartedEvent != nil && rhs.StartedEvent != nil && v.StartedEvent.Equals(rhs.StartedEvent))) {
+	if !((v.ScheduledEvent == nil && rhs.ScheduledEvent == nil) || (v.ScheduledEvent != nil && rhs.ScheduledEvent != nil && v.ScheduledEvent.Equals(rhs.ScheduledEvent))) {
 		return false
 	}
-	if !((v.ScheduledEvent == nil && rhs.ScheduledEvent == nil) || (v.ScheduledEvent != nil && rhs.ScheduledEvent != nil && v.ScheduledEvent.Equals(rhs.ScheduledEvent))) {
+	if !_I64_EqualsPtr(v.StartedTimestamp, rhs.StartedTimestamp) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Attempt, rhs.Attempt) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ScheduledTimestampOfThisAttempt, rhs.ScheduledTimestampOfThisAttempt) {
 		return false
 	}
 
 	return true
+}
+
+// GetStartedTimestamp returns the value of StartedTimestamp if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetStartedTimestamp() (o int64) {
+	if v.StartedTimestamp != nil {
+		return *v.StartedTimestamp
+	}
+
+	return
+}
+
+// GetAttempt returns the value of Attempt if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetAttempt() (o int64) {
+	if v.Attempt != nil {
+		return *v.Attempt
+	}
+
+	return
+}
+
+// GetScheduledTimestampOfThisAttempt returns the value of ScheduledTimestampOfThisAttempt if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetScheduledTimestampOfThisAttempt() (o int64) {
+	if v.ScheduledTimestampOfThisAttempt != nil {
+		return *v.ScheduledTimestampOfThisAttempt
+	}
+
+	return
 }
 
 // RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
