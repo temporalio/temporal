@@ -49,6 +49,7 @@ type (
 	}
 
 	replicationTaskProcessor struct {
+		sourceCluster    string
 		topicName        string
 		consumerName     string
 		client           messaging.Client
@@ -72,17 +73,19 @@ var (
 	ErrUnknownReplicationTask = errors.New("unknown replication task")
 )
 
-func newReplicationTaskProcessor(topic, consumer string, client messaging.Client, config *Config,
+func newReplicationTaskProcessor(sourceCluster, topic, consumer string, client messaging.Client, config *Config,
 	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
 	historyClient history.Client) *replicationTaskProcessor {
 	return &replicationTaskProcessor{
-		topicName:    topic,
-		consumerName: consumer,
-		client:       client,
-		shutdownCh:   make(chan struct{}),
-		config:       config,
+		sourceCluster: sourceCluster,
+		topicName:     topic,
+		consumerName:  consumer,
+		client:        client,
+		shutdownCh:    make(chan struct{}),
+		config:        config,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueReplicationTaskProcessorComponent,
+			logging.TagSourceCluster:     sourceCluster,
 			logging.TagTopicName:         topic,
 			logging.TagConsumerName:      consumer,
 		}),
@@ -187,7 +190,8 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 					ApplyLoop:
 						for {
 							err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
-								DomainUUID: task.HistoryTaskAttributes.DomainId,
+								SourceCluster: common.StringPtr(p.sourceCluster),
+								DomainUUID:    task.HistoryTaskAttributes.DomainId,
 								WorkflowExecution: &shared.WorkflowExecution{
 									WorkflowId: task.HistoryTaskAttributes.WorkflowId,
 									RunId:      task.HistoryTaskAttributes.RunId,

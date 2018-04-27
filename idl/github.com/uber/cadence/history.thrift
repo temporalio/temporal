@@ -197,6 +197,7 @@ struct RecordChildExecutionCompletedRequest {
 }
 
 struct ReplicateEventsRequest {
+  5:  optional string sourceCluster
   10: optional string domainUUID
   20: optional shared.WorkflowExecution workflowExecution
   30: optional i64 (js.type = "Long") firstEventId

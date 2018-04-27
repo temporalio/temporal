@@ -335,12 +335,11 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			nextEventID := di.ScheduleID + 1
 			newStateBuilder.executionInfo.NextEventID = nextEventID
 			newStateBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
-			newStateBuilder.updateReplicationStateLastEventID(di.ScheduleID)
 			// Set the history from replication task on the newStateBuilder
 			newStateBuilder.hBuilder = newHistoryBuilderFromEvents(newRunHistory.Events, r.logger)
 
-			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(domainID, domainName, event, startedEvent, di,
-				newStateBuilder)
+			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(request.GetSourceCluster(), domainID, domainName, event,
+				startedEvent, di, newStateBuilder)
 
 			// Generate a transaction ID for appending events to history
 			transactionID, err := r.shard.GetNextTransferTaskID()

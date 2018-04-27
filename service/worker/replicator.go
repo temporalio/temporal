@@ -71,8 +71,8 @@ func (r *Replicator) Start() error {
 		if cluster != currentClusterName {
 			topicName := getTopicName(cluster)
 			consumerName := getConsumerName(currentClusterName, cluster)
-			r.processors = append(r.processors, newReplicationTaskProcessor(topicName, consumerName, r.client, r.config,
-				r.logger, r.metricsClient, r.domainReplicator, r.historyClient))
+			r.processors = append(r.processors, newReplicationTaskProcessor(cluster, topicName, consumerName, r.client,
+				r.config, r.logger, r.metricsClient, r.domainReplicator, r.historyClient))
 		}
 	}
 

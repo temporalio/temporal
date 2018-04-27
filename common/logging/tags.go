@@ -43,6 +43,7 @@ const (
 	TagDecisionFailCause    = "decision-fail-cause"
 	TagTaskID               = "task-id"
 	TagTaskType             = "task-type"
+	TagSourceCluster        = "source-cluster"
 	TagTopicName            = "topic-name"
 	TagConsumerName         = "consumer-name"
 	TagPartition            = "partition"

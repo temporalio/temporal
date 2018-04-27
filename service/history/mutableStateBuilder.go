@@ -269,10 +269,29 @@ func (e *mutableStateBuilder) updateReplicationStateVersion(version int64) {
 	e.replicationState.CurrentVersion = version
 }
 
-func (e *mutableStateBuilder) updateReplicationStateLastEventID(lastEventID int64) {
-	e.replicationState.LastWriteVersion = e.replicationState.CurrentVersion
-	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
-	e.replicationState.LastWriteEventID = lastEventID
+// Assumption: It is expected CurrentVersion on replication state is updated at the start of transaction when
+// mutableState is loaded for this workflow execution.
+func (e *mutableStateBuilder) updateReplicationStateLastEventID(clusterName string, lastEventID int64) {
+	if clusterName == "" {
+		// ReplicationState update for active cluster
+		e.replicationState.LastWriteVersion = e.replicationState.CurrentVersion
+		// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
+		e.replicationState.LastWriteEventID = lastEventID
+	} else {
+		// ReplicationState update for passive cluster
+		if e.replicationState.LastReplicationInfo == nil {
+			e.replicationState.LastReplicationInfo = make(map[string]*persistence.ReplicationInfo)
+		}
+		info, ok := e.replicationState.LastReplicationInfo[clusterName]
+		if !ok {
+			// ReplicationInfo doesn't exist for this cluster, create one
+			info = &persistence.ReplicationInfo{}
+			e.replicationState.LastReplicationInfo[clusterName] = info
+		}
+
+		info.Version = e.replicationState.CurrentVersion
+		info.LastEventID = lastEventID
+	}
 }
 
 func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates, error) {
@@ -2028,14 +2047,14 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
 	}
 
-	e.ReplicateWorkflowExecutionContinuedAsNewEvent(domainID, domainName, continueAsNewEvent, startedEvent, di,
+	e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, domainName, continueAsNewEvent, startedEvent, di,
 		newStateBuilder)
 
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
-func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(domainID, domainName string,
-	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
+func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID,
+	domainName string, continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
 	newStateBuilder *mutableStateBuilder) {
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
@@ -2060,6 +2079,10 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(doma
 			RunId:      common.StringPtr(newStateBuilder.executionInfo.ParentRunID),
 		}
 		initiatedID = newStateBuilder.executionInfo.InitiatedID
+	}
+
+	if newStateBuilder.replicationState != nil {
+		newStateBuilder.updateReplicationStateLastEventID(sourceClusterName, di.ScheduleID)
 	}
 
 	e.continueAsNew = &persistence.CreateWorkflowExecutionRequest{
@@ -2087,6 +2110,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(doma
 		DecisionStartToCloseTimeout: di.DecisionTimeout,
 		ContinueAsNew:               true,
 		PreviousRunID:               prevRunID,
+		ReplicationState:            newStateBuilder.replicationState,
 	}
 }
 

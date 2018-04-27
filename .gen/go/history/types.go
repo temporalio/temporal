@@ -2837,6 +2837,7 @@ func (v *RemoveSignalMutableStateRequest) GetRequestId() (o string) {
 }
 
 type ReplicateEventsRequest struct {
+	SourceCluster     *string                   `json:"sourceCluster,omitempty"`
 	DomainUUID        *string                   `json:"domainUUID,omitempty"`
 	WorkflowExecution *shared.WorkflowExecution `json:"workflowExecution,omitempty"`
 	FirstEventId      *int64                    `json:"firstEventId,omitempty"`
@@ -2863,12 +2864,20 @@ type ReplicateEventsRequest struct {
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
 	if v.DomainUUID != nil {
 		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
 		if err != nil {
@@ -2957,6 +2966,16 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
+		case 5:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 10:
 			if field.Value.Type() == wire.TBinary {
 				var x string
@@ -3034,8 +3053,12 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
 		i++
@@ -3073,6 +3096,9 @@ func (v *ReplicateEventsRequest) String() string {
 //
 // This function performs a deep comparison.
 func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
 	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
@@ -3096,6 +3122,16 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	}
 
 	return true
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetSourceCluster() (o string) {
+	if v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
 }
 
 // GetDomainUUID returns the value of DomainUUID if it is set or its

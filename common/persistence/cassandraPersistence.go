@@ -276,11 +276,6 @@ const (
 		`history: ` + templateSerializedEventBatch + ` ` +
 		`}`
 
-	templateReplicationInfoType = `{` +
-		`version: ?, ` +
-		`last_event_id: ?` +
-		`}`
-
 	templateSerializedEventBatch = `{` +
 		`encoding_type: ?, ` +
 		`version: ?, ` +
