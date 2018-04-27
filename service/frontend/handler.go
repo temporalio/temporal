@@ -244,7 +244,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 			Clusters:          clusters,
 		},
 		IsGlobalDomain:  clusterMetadata.IsGlobalDomainEnabled(),
-		FailoverVersion: clusterMetadata.GetNextFailoverVersion(0),
+		FailoverVersion: clusterMetadata.GetNextFailoverVersion(activeClusterName, 0),
 	}
 
 	domainResponse, err := wh.metadataMgr.CreateDomain(domainRequest)
@@ -336,7 +336,6 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	replicationConfig := getResponse.ReplicationConfig
 	configVersion := getResponse.ConfigVersion
 	failoverVersion := getResponse.FailoverVersion
-	currentCluster := clusterMetadata.GetCurrentClusterName()
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -374,12 +373,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 
 		if updatedActiveClusterName != nil {
 			activeClusterChanged = true
-			if *updatedActiveClusterName != currentCluster {
-				errMsg := fmt.Sprintf("Can only set active cluster to current cluster: %s", currentCluster)
-				err := &gen.BadRequestError{Message: errMsg}
-				return err
-			}
-			replicationConfig.ActiveClusterName = currentCluster
+			replicationConfig.ActiveClusterName = *updatedActiveClusterName
 		}
 
 		// validate active cluster is also specified in all clusters
@@ -441,7 +435,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 			configVersion = configVersion + 1
 		}
 		if activeClusterChanged {
-			failoverVersion = clusterMetadata.GetNextFailoverVersion(failoverVersion)
+			failoverVersion = clusterMetadata.GetNextFailoverVersion(replicationConfig.ActiveClusterName, failoverVersion)
 		}
 
 		err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{

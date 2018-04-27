@@ -31,7 +31,7 @@ type (
 		// IsMasterCluster whether current cluster is master cluster
 		IsMasterCluster() bool
 		// GetNextFailoverVersion return the next failover version for domain failover
-		GetNextFailoverVersion(int64) int64
+		GetNextFailoverVersion(string, int64) int64
 		// GetMasterClusterName return the master cluster name
 		GetMasterClusterName() string
 		// GetCurrentClusterName return the current cluster name
@@ -113,10 +113,17 @@ func (metadata *metadataImpl) IsGlobalDomainEnabled() bool {
 }
 
 // GetNextFailoverVersion return the next failover version based on input
-func (metadata *metadataImpl) GetNextFailoverVersion(currentFailoverVersion int64) int64 {
-	initialFailoverVersion := metadata.clusterInitialFailoverVersions[metadata.currentClusterName]
+func (metadata *metadataImpl) GetNextFailoverVersion(cluster string, currentFailoverVersion int64) int64 {
+	initialFailoverVersion, ok := metadata.clusterInitialFailoverVersions[cluster]
+	if !ok {
+		panic(fmt.Sprintf(
+			"Unknown cluster name: %v with given cluster initial failover version map: %v.",
+			cluster,
+			metadata.clusterInitialFailoverVersions,
+		))
+	}
 	failoverVersion := currentFailoverVersion/metadata.failoverVersionIncrement*metadata.failoverVersionIncrement + initialFailoverVersion
-	if failoverVersion <= currentFailoverVersion {
+	if failoverVersion < currentFailoverVersion {
 		return failoverVersion + metadata.failoverVersionIncrement
 	}
 	return failoverVersion
