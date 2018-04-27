@@ -86,6 +86,7 @@ func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, 
 	a.TimerTaskStatus = TimerTaskStatusNone | (a.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose)
 
 	return &persistence.RetryTimerTask{
+		Version:             a.Version,
 		VisibilityTimestamp: a.ScheduledTime,
 		EventID:             a.ScheduleID,
 		Attempt:             a.Attempt,

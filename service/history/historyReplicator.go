@@ -127,6 +127,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 	execution := *request.WorkflowExecution
 
 	var lastEvent *shared.HistoryEvent
+	decisionVersionID := emptyVersion
 	decisionScheduleID := emptyEventID
 	decisionStartID := emptyEventID
 	decisionTimeout := int32(0)
@@ -149,18 +150,20 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
-			di := msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetEventId(), attributes.TaskList.GetName(),
+			di := msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(), attributes.TaskList.GetName(),
 				attributes.GetStartToCloseTimeoutSeconds())
 
+			decisionVersionID = di.Version
 			decisionScheduleID = di.ScheduleID
 			decisionStartID = di.StartedID
 			decisionTimeout = di.DecisionTimeout
 
 		case shared.EventTypeDecisionTaskStarted:
 			attributes := event.DecisionTaskStartedEventAttributes
-			di := msBuilder.ReplicateDecisionTaskStartedEvent(nil, attributes.GetScheduledEventId(), event.GetEventId(),
+			di := msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(), event.GetEventId(),
 				attributes.GetRequestId(), event.GetTimestamp())
 
+			decisionVersionID = di.Version
 			decisionScheduleID = di.ScheduleID
 			decisionStartID = di.StartedID
 			decisionTimeout = di.DecisionTimeout
@@ -323,9 +326,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			newStateBuilder := newMutableStateBuilderWithReplicationState(r.shard.GetConfig(), r.logger, request.GetVersion())
 			newStateBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, newExecution, uuid.New(),
 				startedAttributes)
-			di := newStateBuilder.ReplicateDecisionTaskScheduledEvent(dtScheduledEvent.GetEventId(),
+			di := newStateBuilder.ReplicateDecisionTaskScheduledEvent(
+				dtScheduledEvent.GetVersion(),
+				dtScheduledEvent.GetEventId(),
 				dtScheduledEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
-				dtScheduledEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds())
+				dtScheduledEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
+			)
 			nextEventID := di.ScheduleID + 1
 			newStateBuilder.executionInfo.NextEventID = nextEventID
 			newStateBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
@@ -410,6 +416,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 				NextEventID:                 msBuilder.GetNextEventID(),
 				LastProcessedEvent:          emptyEventID,
 				TransferTasks:               nil, // TODO: Generate transfer task
+				DecisionVersion:             decisionVersionID,
 				DecisionScheduleID:          decisionScheduleID,
 				DecisionStartedID:           decisionStartID,
 				DecisionStartToCloseTimeout: decisionTimeout,

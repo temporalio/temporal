@@ -34,7 +34,9 @@ func Test_NextRetry(t *testing.T) {
 	reason := "good-reason"
 
 	// no retry without retry policy
+	var version int64 = 59
 	ai := &persistence.ActivityInfo{
+		Version:                version,
 		ScheduleToStartTimeout: 5,
 		ScheduleToCloseTimeout: 30,
 		StartToCloseTimeout:    25,
@@ -62,6 +64,7 @@ func Test_NextRetry(t *testing.T) {
 	ai.BackoffCoefficient = 2
 	retryTask := prepareNextRetryWithNowTime(ai, reason, now)
 	a.NotNil(retryTask)
+	a.Equal(version, retryTask.GetVersion())
 	a.Equal(now.Add(time.Second), retryTask.(*persistence.RetryTimerTask).VisibilityTimestamp)
 
 	retryTask = prepareNextRetryWithNowTime(ai, reason, now)

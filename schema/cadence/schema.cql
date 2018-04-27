@@ -39,6 +39,7 @@ CREATE TYPE workflow_execution (
   start_time                       timestamp,
   last_updated_time                timestamp,
   create_request_id                uuid,
+  decision_version                 bigint,
   decision_schedule_id             bigint,
   decision_started_id              bigint,
   decision_request_id              text,    -- Identifier used by matching engine for retrying history service calls for recording task is started
@@ -82,6 +83,7 @@ CREATE TYPE transfer_task (
   task_list                  text,
   type                       int,    -- enum TaskType {ActivityTask, DecisionTask, DeleteExecution, CancelExecution, StartChildExecution, ReplicationTask}
   schedule_id                bigint,
+  version                    bigint, -- the failover version when this task is created, used to compare against the mutable state, in case the events got overwritten
 );
 
 CREATE TYPE replication_task (
@@ -106,10 +108,12 @@ CREATE TYPE timer_task (
   timeout_type     int, -- enum TimeoutType in IDL {START_TO_CLOSE, SCHEDULE_TO_START, SCHEDULE_TO_CLOSE, HEARTBEAT}
   event_id         bigint, -- Corresponds to event ID in history that is responsible for this timer.
   schedule_attempt bigint, -- Used to retry failed decision tasks using mutable state
+  version          bigint, -- the failover version when this task is created, used to compare against the mutable state, in case the events got overwritten
 );
 
 -- Workflow activity in progress mutable state
 CREATE TYPE activity_info (
+  version                   bigint,
   schedule_id               bigint,
   scheduled_event           blob,
   scheduled_time            timestamp,
@@ -141,6 +145,7 @@ CREATE TYPE activity_info (
 
 -- User timer details
 CREATE TYPE timer_info (
+  version       bigint,
   timer_id      text,      -- User defined timer ID
   started_id    bigint,    -- The event ID corresponding to timer started.
   expiry_time   timestamp, -- Timestamp at which this timer expires or fires
@@ -149,6 +154,7 @@ CREATE TYPE timer_info (
 
 -- Child execution in progress mutable state
 CREATE TYPE child_execution_info (
+  version           bigint,
   initiated_id      bigint,
   initiated_event   blob,
   started_id        bigint,
@@ -158,12 +164,14 @@ CREATE TYPE child_execution_info (
 
 -- External workflow cancellation in progress mutable state
 CREATE TYPE request_cancel_info (
+  version           bigint,
   initiated_id      bigint,
   cancel_request_id text,
 );
 
 -- External workflow signal in progress mutable state
 CREATE TYPE signal_info (
+  version           bigint,
   initiated_id      bigint,
   signal_request_id uuid,
   signal_name       text,

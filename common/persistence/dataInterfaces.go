@@ -159,6 +159,7 @@ type (
 		StartTimestamp               time.Time
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
+		DecisionVersion              int64
 		DecisionScheduleID           int64
 		DecisionStartedID            int64
 		DecisionRequestID            string
@@ -197,6 +198,7 @@ type (
 		TaskList                string
 		TaskType                int
 		ScheduleID              int64
+		Version                 int64
 	}
 
 	// ReplicationTaskInfo describes the replication task created for replication of history events
@@ -249,6 +251,8 @@ type (
 	// Task is the generic interface for workflow tasks
 	Task interface {
 		GetType() int
+		GetVersion() int64
+		SetVersion(version int64)
 		GetTaskID() int64
 		SetTaskID(id int64)
 	}
@@ -259,6 +263,7 @@ type (
 		DomainID   string
 		TaskList   string
 		ScheduleID int64
+		Version    int64
 	}
 
 	// DecisionTask identifies a transfer task for decision
@@ -267,17 +272,20 @@ type (
 		DomainID   string
 		TaskList   string
 		ScheduleID int64
+		Version    int64
 	}
 
 	// CloseExecutionTask identifies a transfer task for deletion of execution
 	CloseExecutionTask struct {
-		TaskID int64
+		TaskID  int64
+		Version int64
 	}
 
 	// DeleteHistoryEventTask identifies a timer task for deletion of history events of completed execution.
 	DeleteHistoryEventTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		Version             int64
 	}
 
 	// DecisionTimeoutTask identifies a timeout task.
@@ -287,12 +295,14 @@ type (
 		EventID             int64
 		ScheduleAttempt     int64
 		TimeoutType         int
+		Version             int64
 	}
 
 	// WorkflowTimeoutTask identifies a timeout task.
 	WorkflowTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		Version             int64
 	}
 
 	// CancelExecutionTask identifies a transfer task for cancel of execution
@@ -303,6 +313,7 @@ type (
 		TargetRunID             string
 		TargetChildWorkflowOnly bool
 		InitiatedID             int64
+		Version                 int64
 	}
 
 	// SignalExecutionTask identifies a transfer task for signal execution
@@ -313,6 +324,7 @@ type (
 		TargetRunID             string
 		TargetChildWorkflowOnly bool
 		InitiatedID             int64
+		Version                 int64
 	}
 
 	// StartChildExecutionTask identifies a transfer task for starting child execution
@@ -321,6 +333,7 @@ type (
 		TargetDomainID   string
 		TargetWorkflowID string
 		InitiatedID      int64
+		Version          int64
 	}
 
 	// ActivityTimeoutTask identifies a timeout task.
@@ -330,6 +343,7 @@ type (
 		TimeoutType         int
 		EventID             int64
 		Attempt             int64
+		Version             int64
 	}
 
 	// UserTimerTask identifies a timeout task.
@@ -337,6 +351,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+		Version             int64
 	}
 
 	// RetryTimerTask to schedule a retry task for activity
@@ -344,6 +359,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
+		Version             int64
 		Attempt             int32
 	}
 
@@ -378,6 +394,7 @@ type (
 
 	// ActivityInfo details.
 	ActivityInfo struct {
+		Version                  int64
 		ScheduleID               int64
 		ScheduledEvent           []byte
 		ScheduledTime            time.Time
@@ -411,6 +428,7 @@ type (
 
 	// TimerInfo details - metadata about user timer info.
 	TimerInfo struct {
+		Version    int64
 		TimerID    string
 		StartedID  int64
 		ExpiryTime time.Time
@@ -419,6 +437,7 @@ type (
 
 	// ChildExecutionInfo has details for pending child executions.
 	ChildExecutionInfo struct {
+		Version         int64
 		InitiatedID     int64
 		InitiatedEvent  []byte
 		StartedID       int64
@@ -428,12 +447,14 @@ type (
 
 	// RequestCancelInfo has details for pending external workflow cancellations
 	RequestCancelInfo struct {
+		Version         int64
 		InitiatedID     int64
 		CancelRequestID string
 	}
 
 	// SignalInfo has details for pending external workflow signal
 	SignalInfo struct {
+		Version         int64
 		InitiatedID     int64
 		SignalRequestID string
 		SignalName      string
@@ -490,6 +511,7 @@ type (
 		ReplicationTasks            []Task
 		TimerTasks                  []Task
 		RangeID                     int64
+		DecisionVersion             int64
 		DecisionScheduleID          int64
 		DecisionStartedID           int64
 		DecisionStartToCloseTimeout int32
@@ -909,6 +931,16 @@ func (a *ActivityTask) GetType() int {
 	return TransferTaskTypeActivityTask
 }
 
+// GetVersion returns the version of the activity task
+func (a *ActivityTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the activity task
+func (a *ActivityTask) SetVersion(version int64) {
+	a.Version = version
+}
+
 // GetTaskID returns the sequence ID of the activity task
 func (a *ActivityTask) GetTaskID() int64 {
 	return a.TaskID
@@ -922,6 +954,16 @@ func (a *ActivityTask) SetTaskID(id int64) {
 // GetType returns the type of the decision task
 func (d *DecisionTask) GetType() int {
 	return TransferTaskTypeDecisionTask
+}
+
+// GetVersion returns the version of the decision task
+func (d *DecisionTask) GetVersion() int64 {
+	return d.Version
+}
+
+// SetVersion returns the version of the decision task
+func (d *DecisionTask) SetVersion(version int64) {
+	d.Version = version
 }
 
 // GetTaskID returns the sequence ID of the decision task.
@@ -939,6 +981,16 @@ func (a *CloseExecutionTask) GetType() int {
 	return TransferTaskTypeCloseExecution
 }
 
+// GetVersion returns the version of the close execution task
+func (a *CloseExecutionTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the close execution task
+func (a *CloseExecutionTask) SetVersion(version int64) {
+	a.Version = version
+}
+
 // GetTaskID returns the sequence ID of the close execution task
 func (a *CloseExecutionTask) GetTaskID() int64 {
 	return a.TaskID
@@ -954,6 +1006,16 @@ func (a *DeleteHistoryEventTask) GetType() int {
 	return TaskTypeDeleteHistoryEvent
 }
 
+// GetVersion returns the version of the delete execution task
+func (a *DeleteHistoryEventTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the delete execution task
+func (a *DeleteHistoryEventTask) SetVersion(version int64) {
+	a.Version = version
+}
+
 // GetTaskID returns the sequence ID of the delete execution task
 func (a *DeleteHistoryEventTask) GetTaskID() int64 {
 	return a.TaskID
@@ -967,6 +1029,16 @@ func (a *DeleteHistoryEventTask) SetTaskID(id int64) {
 // GetType returns the type of the timer task
 func (d *DecisionTimeoutTask) GetType() int {
 	return TaskTypeDecisionTimeout
+}
+
+// GetVersion returns the version of the timer task
+func (d *DecisionTimeoutTask) GetVersion() int64 {
+	return d.Version
+}
+
+// SetVersion returns the version of the timer task
+func (d *DecisionTimeoutTask) SetVersion(version int64) {
+	d.Version = version
 }
 
 // GetTaskID returns the sequence ID.
@@ -994,6 +1066,16 @@ func (a *ActivityTimeoutTask) GetType() int {
 	return TaskTypeActivityTimeout
 }
 
+// GetVersion returns the version of the timer task
+func (a *ActivityTimeoutTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the timer task
+func (a *ActivityTimeoutTask) SetVersion(version int64) {
+	a.Version = version
+}
+
 // GetTaskID returns the sequence ID.
 func (a *ActivityTimeoutTask) GetTaskID() int64 {
 	return a.TaskID
@@ -1019,6 +1101,16 @@ func (u *UserTimerTask) GetType() int {
 	return TaskTypeUserTimer
 }
 
+// GetVersion returns the version of the timer task
+func (u *UserTimerTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the timer task
+func (u *UserTimerTask) SetVersion(version int64) {
+	u.Version = version
+}
+
 // GetTaskID returns the sequence ID of the timer task.
 func (u *UserTimerTask) GetTaskID() int64 {
 	return u.TaskID
@@ -1039,9 +1131,19 @@ func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 	u.VisibilityTimestamp = t
 }
 
-// GetType returns the type of the timer task
+// GetType returns the type of the retry timer task
 func (r *RetryTimerTask) GetType() int {
 	return TaskTypeRetryTimer
+}
+
+// GetVersion returns the version of the retry timer task
+func (r *RetryTimerTask) GetVersion() int64 {
+	return r.Version
+}
+
+// SetVersion returns the version of the retry timer task
+func (r *RetryTimerTask) SetVersion(version int64) {
+	r.Version = version
 }
 
 // GetTaskID returns the sequence ID.
@@ -1069,6 +1171,16 @@ func (u *WorkflowTimeoutTask) GetType() int {
 	return TaskTypeWorkflowTimeout
 }
 
+// GetVersion returns the version of the timeout task
+func (u *WorkflowTimeoutTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the timeout task
+func (u *WorkflowTimeoutTask) SetVersion(version int64) {
+	u.Version = version
+}
+
 // GetTaskID returns the sequence ID of the cancel transfer task.
 func (u *WorkflowTimeoutTask) GetTaskID() int64 {
 	return u.TaskID
@@ -1094,6 +1206,16 @@ func (u *CancelExecutionTask) GetType() int {
 	return TransferTaskTypeCancelExecution
 }
 
+// GetVersion returns the version of the cancel transfer task
+func (u *CancelExecutionTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the cancel transfer task
+func (u *CancelExecutionTask) SetVersion(version int64) {
+	u.Version = version
+}
+
 // GetTaskID returns the sequence ID of the cancel transfer task.
 func (u *CancelExecutionTask) GetTaskID() int64 {
 	return u.TaskID
@@ -1109,6 +1231,16 @@ func (u *SignalExecutionTask) GetType() int {
 	return TransferTaskTypeSignalExecution
 }
 
+// GetVersion returns the version of the signal transfer task
+func (u *SignalExecutionTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the signal transfer task
+func (u *SignalExecutionTask) SetVersion(version int64) {
+	u.Version = version
+}
+
 // GetTaskID returns the sequence ID of the signal transfer task.
 func (u *SignalExecutionTask) GetTaskID() int64 {
 	return u.TaskID
@@ -1119,32 +1251,52 @@ func (u *SignalExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetType returns the type of the cancel transfer task
+// GetType returns the type of the start child transfer task
 func (u *StartChildExecutionTask) GetType() int {
 	return TransferTaskTypeStartChildExecution
 }
 
-// GetTaskID returns the sequence ID of the cancel transfer task.
+// GetVersion returns the version of the start child transfer task
+func (u *StartChildExecutionTask) GetVersion() int64 {
+	return u.Version
+}
+
+// SetVersion returns the version of the start child transfer task
+func (u *StartChildExecutionTask) SetVersion(version int64) {
+	u.Version = version
+}
+
+// GetTaskID returns the sequence ID of the start child transfer task
 func (u *StartChildExecutionTask) GetTaskID() int64 {
 	return u.TaskID
 }
 
-// SetTaskID sets the sequence ID of the cancel transfer task.
+// SetTaskID sets the sequence ID of the start child transfer task
 func (u *StartChildExecutionTask) SetTaskID(id int64) {
 	u.TaskID = id
 }
 
-// GetType returns the type of the activity task
+// GetType returns the type of the history replication task
 func (a *HistoryReplicationTask) GetType() int {
 	return ReplicationTaskTypeHistory
 }
 
-// GetTaskID returns the sequence ID of the activity task
+// GetVersion returns the version of the history replication task
+func (a *HistoryReplicationTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the history replication task
+func (a *HistoryReplicationTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the history replication task
 func (a *HistoryReplicationTask) GetTaskID() int64 {
 	return a.TaskID
 }
 
-// SetTaskID sets the sequence ID of the activity task
+// SetTaskID sets the sequence ID of the history replication task
 func (a *HistoryReplicationTask) SetTaskID(id int64) {
 	a.TaskID = id
 }
@@ -1152,6 +1304,11 @@ func (a *HistoryReplicationTask) SetTaskID(id int64) {
 // GetTaskID returns the task ID for transfer task
 func (t *TransferTaskInfo) GetTaskID() int64 {
 	return t.TaskID
+}
+
+// GetTaskVersion returns the task version for transfer task
+func (t *TransferTaskInfo) GetTaskVersion() int64 {
+	return t.Version
 }
 
 // GetTaskType returns the task type for transfer task
@@ -1162,6 +1319,11 @@ func (t *TransferTaskInfo) GetTaskType() int {
 // GetTaskID returns the task ID for replication task
 func (t *ReplicationTaskInfo) GetTaskID() int64 {
 	return t.TaskID
+}
+
+// GetTaskVersion returns the task version for replication task
+func (t *ReplicationTaskInfo) GetTaskVersion() int64 {
+	return t.Version
 }
 
 // GetTaskType returns the task type for replication task

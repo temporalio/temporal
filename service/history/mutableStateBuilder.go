@@ -107,6 +107,7 @@ type (
 
 	// TODO: This should be part of persistence layer
 	decisionInfo struct {
+		Version         int64
 		ScheduleID      int64
 		StartedID       int64
 		RequestID       string
@@ -255,6 +256,13 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	}
 
 	return nil
+}
+
+func (e *mutableStateBuilder) getVersion() int64 {
+	if e.replicationState == nil {
+		return emptyVersion
+	}
+	return e.replicationState.CurrentVersion
 }
 
 func (e *mutableStateBuilder) updateReplicationStateVersion(version int64) {
@@ -841,6 +849,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(timerID string) {
 // GetPendingDecision returns details about the in-progress decision task
 func (e *mutableStateBuilder) GetPendingDecision(scheduleEventID int64) (*decisionInfo, bool) {
 	di := &decisionInfo{
+		Version:         e.executionInfo.DecisionVersion,
 		ScheduleID:      e.executionInfo.DecisionScheduleID,
 		StartedID:       e.executionInfo.DecisionStartedID,
 		RequestID:       e.executionInfo.DecisionRequestID,
@@ -900,6 +909,7 @@ func (e *mutableStateBuilder) UpdateDecision(di *decisionInfo) {
 // DeleteDecision deletes a decision task.
 func (e *mutableStateBuilder) DeleteDecision() {
 	emptyDecisionInfo := &decisionInfo{
+		Version:         emptyVersion,
 		ScheduleID:      emptyEventID,
 		StartedID:       emptyEventID,
 		RequestID:       emptyUUID,
@@ -915,6 +925,7 @@ func (e *mutableStateBuilder) FailDecision() {
 	e.clearStickyness()
 
 	failDecisionInfo := &decisionInfo{
+		Version:         emptyVersion,
 		ScheduleID:      emptyEventID,
 		StartedID:       emptyEventID,
 		RequestID:       emptyUUID,
@@ -1121,12 +1132,13 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		scheduleID = newDecisionEvent.GetEventId()
 	}
 
-	return e.ReplicateDecisionTaskScheduledEvent(scheduleID, taskList, startToCloseTimeoutSeconds)
+	return e.ReplicateDecisionTaskScheduledEvent(e.getVersion(), scheduleID, taskList, startToCloseTimeoutSeconds)
 }
 
-func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(scheduleID int64, taskList string,
+func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string,
 	startToCloseTimeoutSeconds int32) *decisionInfo {
 	di := &decisionInfo{
+		Version:         version,
 		ScheduleID:      scheduleID,
 		StartedID:       emptyEventID,
 		RequestID:       emptyUUID,
@@ -1170,11 +1182,11 @@ func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64,
 		timestamp = int64(0)
 	}
 
-	di = e.ReplicateDecisionTaskStartedEvent(di, scheduleID, startedID, requestID, timestamp)
+	di = e.ReplicateDecisionTaskStartedEvent(di, e.getVersion(), scheduleID, startedID, requestID, timestamp)
 	return event, di
 }
 
-func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(di *decisionInfo, scheduleID, startedID int64,
+func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(di *decisionInfo, version, scheduleID, startedID int64,
 	requestID string, timestamp int64) *decisionInfo {
 	// Replicator calls it with a nil decision info, and it is safe to always lookup the decision in this case as it
 	// does not have to deal with transient decision case.
@@ -1185,6 +1197,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskStartedEvent(di *decisionInfo
 	e.executionInfo.State = persistence.WorkflowStateRunning
 	// Update mutable decision state
 	di = &decisionInfo{
+		Version:         version,
 		ScheduleID:      scheduleID,
 		StartedID:       startedID,
 		RequestID:       requestID,
@@ -1370,6 +1383,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	}
 
 	ai := &persistence.ActivityInfo{
+		Version:                  event.GetVersion(),
 		ScheduleID:               scheduleEventID,
 		ScheduledEvent:           scheduleEvent,
 		ScheduledTime:            time.Unix(0, *event.Timestamp),
@@ -1705,6 +1719,7 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 	// TODO: Evaluate if we need cancelRequestID also part of history event
 	initiatedEventID := event.GetEventId()
 	ri := &persistence.RequestCancelInfo{
+		Version:         event.GetVersion(),
 		InitiatedID:     initiatedEventID,
 		CancelRequestID: cancelRequestID,
 	}
@@ -1778,6 +1793,7 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 	initiatedEventID := event.GetEventId()
 	attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
 	ri := &persistence.SignalInfo{
+		Version:         event.GetVersion(),
 		InitiatedID:     initiatedEventID,
 		SignalRequestID: signalRequestID,
 		SignalName:      attributes.GetSignalName(),
@@ -1857,6 +1873,7 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(event *workflow.History
 	// TODO: Time skew need to be taken in to account.
 	expiryTime := time.Now().Add(fireTimeout)
 	ti := &persistence.TimerInfo{
+		Version:    event.GetVersion(),
 		TimerID:    timerID,
 		ExpiryTime: expiryTime,
 		StartedID:  event.GetEventId(),
@@ -2064,6 +2081,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(doma
 			TaskList:   newStateBuilder.executionInfo.TaskList,
 			ScheduleID: di.ScheduleID,
 		}},
+		DecisionVersion:             di.Version,
 		DecisionScheduleID:          di.ScheduleID,
 		DecisionStartedID:           di.StartedID,
 		DecisionStartToCloseTimeout: di.DecisionTimeout,
@@ -2093,6 +2111,7 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 
 	initiatedEventID := event.GetEventId()
 	ci := &persistence.ChildExecutionInfo{
+		Version:         event.GetVersion(),
 		InitiatedID:     initiatedEventID,
 		InitiatedEvent:  initiatedEvent,
 		StartedID:       emptyEventID,

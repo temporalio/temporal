@@ -30,6 +30,8 @@ import (
 )
 
 const (
+	emptyVersion int64 = -2234
+
 	firstEventID     int64 = 1
 	emptyEventID     int64 = -23
 	bufferedEventID  int64 = -123

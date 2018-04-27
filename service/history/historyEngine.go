@@ -232,6 +232,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	var transferTasks []persistence.Task
+	decisionVersion := emptyVersion
 	decisionScheduleID := emptyEventID
 	decisionStartID := emptyEventID
 	decisionTimeout := int32(0)
@@ -245,6 +246,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
 			DomainID: domainID, TaskList: taskList, ScheduleID: di.ScheduleID,
 		}}
+		decisionVersion = di.Version
 		decisionScheduleID = di.ScheduleID
 		decisionStartID = di.StartedID
 		decisionTimeout = di.DecisionTimeout
@@ -281,11 +283,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
 	if createReplicationTask {
-		domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
-		if err != nil {
-			return nil, err
-		}
-
 		failoverVersion := domainEntry.GetFailoverVersion()
 		replicationState = &persistence.ReplicationState{
 			CurrentVersion:   failoverVersion,
@@ -304,6 +301,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
+
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
 			DomainID:                    domainID,
@@ -320,6 +318,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			LastProcessedEvent:          emptyEventID,
 			TransferTasks:               transferTasks,
 			ReplicationTasks:            replicationTasks,
+			DecisionVersion:             decisionVersion,
 			DecisionScheduleID:          decisionScheduleID,
 			DecisionStartedID:           decisionStartID,
 			DecisionStartToCloseTimeout: decisionTimeout,
@@ -1809,9 +1808,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 	}
 
 	var transferTasks []persistence.Task
-	decisionScheduleID := emptyEventID
-	decisionStartID := emptyEventID
-	decisionTimeout := int32(0)
 	di := msBuilder.AddDecisionTaskScheduledEvent()
 	if di == nil {
 		return nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
@@ -1820,9 +1816,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 	transferTasks = []persistence.Task{&persistence.DecisionTask{
 		DomainID: domainID, TaskList: taskList, ScheduleID: di.ScheduleID,
 	}}
-	decisionScheduleID = di.ScheduleID
-	decisionStartID = di.StartedID
-	decisionTimeout = di.DecisionTimeout
+	decisionVersion := di.Version
+	decisionScheduleID := di.ScheduleID
+	decisionStartID := di.StartedID
+	decisionTimeout := di.DecisionTimeout
 
 	duration := time.Duration(*request.ExecutionStartToCloseTimeoutSeconds) * time.Second
 	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
@@ -1865,6 +1862,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          emptyEventID,
 			TransferTasks:               transferTasks,
+			DecisionVersion:             decisionVersion,
 			DecisionScheduleID:          decisionScheduleID,
 			DecisionStartedID:           decisionStartID,
 			DecisionStartToCloseTimeout: decisionTimeout,
