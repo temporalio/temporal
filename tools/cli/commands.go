@@ -49,62 +49,66 @@ import (
 Flags used to specify cli command line arguments
 */
 const (
-	FlagAddress                   = "address"
-	FlagAddressWithAlias          = FlagAddress + ", ad"
-	FlagDomain                    = "domain"
-	FlagDomainWithAlias           = FlagDomain + ", do"
-	FlagWorkflowID                = "workflow_id"
-	FlagWorkflowIDWithAlias       = FlagWorkflowID + ", wid, w"
-	FlagRunID                     = "run_id"
-	FlagRunIDWithAlias            = FlagRunID + ", rid, r"
-	FlagTaskList                  = "tasklist"
-	FlagTaskListWithAlias         = FlagTaskList + ", tl"
-	FlagTaskListType              = "tasklisttype"
-	FlagTaskListTypeWithAlias     = FlagTaskListType + ", tlt"
-	FlagWorkflowType              = "workflow_type"
-	FlagWorkflowTypeWithAlias     = FlagWorkflowType + ", wt"
-	FlagExecutionTimeout          = "execution_timeout"
-	FlagExecutionTimeoutWithAlias = FlagExecutionTimeout + ", et"
-	FlagDecisionTimeout           = "decision_timeout"
-	FlagDecisionTimeoutWithAlias  = FlagDecisionTimeout + ", dt"
-	FlagContextTimeout            = "context_timeout"
-	FlagContextTimeoutWithAlias   = FlagContextTimeout + ", ct"
-	FlagInput                     = "input"
-	FlagInputWithAlias            = FlagInput + ", i"
-	FlagInputFile                 = "input_file"
-	FlagInputFileWithAlias        = FlagInputFile + ", if"
-	FlagReason                    = "reason"
-	FlagReasonWithAlias           = FlagReason + ", re"
-	FlagOpen                      = "open"
-	FlagOpenWithAlias             = FlagOpen + ", op"
-	FlagMore                      = "more"
-	FlagMoreWithAlias             = FlagMore + ", m"
-	FlagPageSize                  = "pagesize"
-	FlagPageSizeWithAlias         = FlagPageSize + ", ps"
-	FlagEarliestTime              = "earliest_time"
-	FlagEarliestTimeWithAlias     = FlagEarliestTime + ", et"
-	FlagLatestTime                = "latest_time"
-	FlagLatestTimeWithAlias       = FlagLatestTime + ", lt"
-	FlagPrintRawTime              = "print_raw_time"
-	FlagPrintRawTimeWithAlias     = FlagPrintRawTime + ", prt"
-	FlagPrintDateTime             = "print_datetime"
-	FlagPrintDateTimeWithAlias    = FlagPrintDateTime + ", pdt"
-	FlagDescription               = "description"
-	FlagDescriptionWithAlias      = FlagDescription + ", desc"
-	FlagOwnerEmail                = "owner_email"
-	FlagOwnerEmailWithAlias       = FlagOwnerEmail + ", oe"
-	FlagRetentionDays             = "retention_days"
-	FlagRetentionDaysWithAlias    = FlagRetentionDays + ", rd"
-	FlagEmitMetric                = "emit_metric"
-	FlagEmitMetricWithAlias       = FlagEmitMetric + ", em"
-	FlagName                      = "name"
-	FlagNameWithAlias             = FlagName + ", n"
-	FlagOutputFilename            = "output_filename"
-	FlagOutputFilenameWithAlias   = FlagOutputFilename + ", of"
-	FlagQueryType                 = "query_type"
-	FlagQueryTypeWithAlias        = FlagQueryType + ", qt"
-	FlagShowDetail                = "show_detail"
-	FlagShowDetailWithAlias       = FlagShowDetail + ", sd"
+	FlagAddress                    = "address"
+	FlagAddressWithAlias           = FlagAddress + ", ad"
+	FlagDomain                     = "domain"
+	FlagDomainWithAlias            = FlagDomain + ", do"
+	FlagWorkflowID                 = "workflow_id"
+	FlagWorkflowIDWithAlias        = FlagWorkflowID + ", wid, w"
+	FlagRunID                      = "run_id"
+	FlagRunIDWithAlias             = FlagRunID + ", rid, r"
+	FlagTaskList                   = "tasklist"
+	FlagTaskListWithAlias          = FlagTaskList + ", tl"
+	FlagTaskListType               = "tasklisttype"
+	FlagTaskListTypeWithAlias      = FlagTaskListType + ", tlt"
+	FlagWorkflowType               = "workflow_type"
+	FlagWorkflowTypeWithAlias      = FlagWorkflowType + ", wt"
+	FlagExecutionTimeout           = "execution_timeout"
+	FlagExecutionTimeoutWithAlias  = FlagExecutionTimeout + ", et"
+	FlagDecisionTimeout            = "decision_timeout"
+	FlagDecisionTimeoutWithAlias   = FlagDecisionTimeout + ", dt"
+	FlagContextTimeout             = "context_timeout"
+	FlagContextTimeoutWithAlias    = FlagContextTimeout + ", ct"
+	FlagInput                      = "input"
+	FlagInputWithAlias             = FlagInput + ", i"
+	FlagInputFile                  = "input_file"
+	FlagInputFileWithAlias         = FlagInputFile + ", if"
+	FlagReason                     = "reason"
+	FlagReasonWithAlias            = FlagReason + ", re"
+	FlagOpen                       = "open"
+	FlagOpenWithAlias              = FlagOpen + ", op"
+	FlagMore                       = "more"
+	FlagMoreWithAlias              = FlagMore + ", m"
+	FlagPageSize                   = "pagesize"
+	FlagPageSizeWithAlias          = FlagPageSize + ", ps"
+	FlagEarliestTime               = "earliest_time"
+	FlagEarliestTimeWithAlias      = FlagEarliestTime + ", et"
+	FlagLatestTime                 = "latest_time"
+	FlagLatestTimeWithAlias        = FlagLatestTime + ", lt"
+	FlagPrintRawTime               = "print_raw_time"
+	FlagPrintRawTimeWithAlias      = FlagPrintRawTime + ", prt"
+	FlagPrintDateTime              = "print_datetime"
+	FlagPrintDateTimeWithAlias     = FlagPrintDateTime + ", pdt"
+	FlagDescription                = "description"
+	FlagDescriptionWithAlias       = FlagDescription + ", desc"
+	FlagOwnerEmail                 = "owner_email"
+	FlagOwnerEmailWithAlias        = FlagOwnerEmail + ", oe"
+	FlagRetentionDays              = "retention_days"
+	FlagRetentionDaysWithAlias     = FlagRetentionDays + ", rd"
+	FlagEmitMetric                 = "emit_metric"
+	FlagEmitMetricWithAlias        = FlagEmitMetric + ", em"
+	FlagName                       = "name"
+	FlagNameWithAlias              = FlagName + ", n"
+	FlagOutputFilename             = "output_filename"
+	FlagOutputFilenameWithAlias    = FlagOutputFilename + ", of"
+	FlagQueryType                  = "query_type"
+	FlagQueryTypeWithAlias         = FlagQueryType + ", qt"
+	FlagShowDetail                 = "show_detail"
+	FlagShowDetailWithAlias        = FlagShowDetail + ", sd"
+	FlagActiveClusterName          = "active_cluster"
+	FlagActiveClusterNameWithAlias = FlagActiveClusterName + ", ac"
+	FlagClusters                   = "clusters"
+	FlagClustersWithAlias          = FlagClusters + ", cl"
 )
 
 const (
@@ -179,6 +183,22 @@ func RegisterDomain(c *cli.Context) {
 			return
 		}
 	}
+	var activeClusterName string
+	if c.IsSet(FlagActiveClusterName) {
+		activeClusterName = c.String(FlagActiveClusterName)
+	}
+	var clusters []*s.ClusterReplicationConfiguration
+	if c.IsSet(FlagClusters) {
+		clusterStr := c.String(FlagClusters)
+		clusters = append(clusters, &s.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterStr),
+		})
+		for _, clusterStr := range c.Args() {
+			clusters = append(clusters, &s.ClusterReplicationConfiguration{
+				ClusterName: common.StringPtr(clusterStr),
+			})
+		}
+	}
 
 	request := &s.RegisterDomainRequest{
 		Name:                                   common.StringPtr(domain),
@@ -186,6 +206,8 @@ func RegisterDomain(c *cli.Context) {
 		OwnerEmail:                             common.StringPtr(ownerEmail),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
+		Clusters:                               clusters,
+		ActiveClusterName:                      common.StringPtr(activeClusterName),
 	}
 
 	ctx, cancel := newContext()
@@ -207,47 +229,83 @@ func UpdateDomain(c *cli.Context) {
 	domainClient := getDomainClient(c)
 	domain := getRequiredGlobalOption(c, FlagDomain)
 
+	var updateRequest *s.UpdateDomainRequest
 	ctx, cancel := newContext()
 	defer cancel()
-	info, config, err := domainClient.Describe(ctx, domain)
-	if err != nil {
-		if _, ok := err.(*s.EntityNotExistsError); !ok {
-			fmt.Printf("Operation failed: %v.\n", err.Error())
-		} else {
-			fmt.Printf("Domain %s does not exist.\n", domain)
-		}
-	}
 
-	description := info.GetDescription()
-	if c.IsSet(FlagDescription) {
-		description = c.String(FlagDescription)
-	}
-	ownerEmail := info.GetOwnerEmail()
-	if c.IsSet(FlagOwnerEmail) {
-		ownerEmail = c.String(FlagOwnerEmail)
-	}
-	retentionDays := config.GetWorkflowExecutionRetentionPeriodInDays()
-	if c.IsSet(FlagRetentionDays) {
-		retentionDays = int32(c.Int(FlagRetentionDays))
-	}
-	emitMetric := config.GetEmitMetric()
-	if c.IsSet(FlagEmitMetric) {
-		emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
+	if c.IsSet(FlagActiveClusterName) {
+		activeCluster := c.String(FlagActiveClusterName)
+		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
+		replicationConfig := &s.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(activeCluster),
+		}
+		updateRequest = &s.UpdateDomainRequest{
+			Name: common.StringPtr(domain),
+			ReplicationConfiguration: replicationConfig,
+		}
+	} else {
+		resp, err := domainClient.Describe(ctx, domain)
 		if err != nil {
-			ErrorAndExit("Update Domain failed", err)
+			if _, ok := err.(*s.EntityNotExistsError); !ok {
+				fmt.Printf("Operation failed: %v.\n", err.Error())
+			} else {
+				fmt.Printf("Domain %s does not exist.\n", domain)
+			}
+		}
+
+		description := resp.DomainInfo.GetDescription()
+		ownerEmail := resp.DomainInfo.GetOwnerEmail()
+		retentionDays := resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays()
+		emitMetric := resp.Configuration.GetEmitMetric()
+		var clusters []*s.ClusterReplicationConfiguration
+
+		if c.IsSet(FlagDescription) {
+			description = c.String(FlagDescription)
+		}
+		if c.IsSet(FlagOwnerEmail) {
+			ownerEmail = c.String(FlagOwnerEmail)
+		}
+		if c.IsSet(FlagRetentionDays) {
+			retentionDays = int32(c.Int(FlagRetentionDays))
+		}
+		if c.IsSet(FlagEmitMetric) {
+			emitMetric, err = strconv.ParseBool(c.String(FlagEmitMetric))
+			if err != nil {
+				ErrorAndExit("Update Domain failed", err)
+			}
+		}
+		if c.IsSet(FlagClusters) {
+			clusterStr := c.String(FlagClusters)
+			clusters = append(clusters, &s.ClusterReplicationConfiguration{
+				ClusterName: common.StringPtr(clusterStr),
+			})
+			for _, clusterStr := range c.Args() {
+				clusters = append(clusters, &s.ClusterReplicationConfiguration{
+					ClusterName: common.StringPtr(clusterStr),
+				})
+			}
+		}
+
+		updateInfo := &s.UpdateDomainInfo{
+			Description: common.StringPtr(description),
+			OwnerEmail:  common.StringPtr(ownerEmail),
+		}
+		updateConfig := &s.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+		}
+		replicationConfig := &s.DomainReplicationConfiguration{
+			Clusters: clusters,
+		}
+		updateRequest = &s.UpdateDomainRequest{
+			Name:                     common.StringPtr(domain),
+			UpdatedInfo:              updateInfo,
+			Configuration:            updateConfig,
+			ReplicationConfiguration: replicationConfig,
 		}
 	}
 
-	updateInfo := &s.UpdateDomainInfo{
-		Description: common.StringPtr(description),
-		OwnerEmail:  common.StringPtr(ownerEmail),
-	}
-	updateConfig := &s.DomainConfiguration{
-		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
-		EmitMetric:                             common.BoolPtr(emitMetric),
-	}
-
-	err = domainClient.Update(ctx, domain, updateInfo, updateConfig)
+	err := domainClient.Update(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {
 			fmt.Printf("Operation failed: %v.\n", err.Error())
@@ -266,7 +324,7 @@ func DescribeDomain(c *cli.Context) {
 
 	ctx, cancel := newContext()
 	defer cancel()
-	info, config, err := domainClient.Describe(ctx, domain)
+	resp, err := domainClient.Describe(ctx, domain)
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {
 			fmt.Printf("Operation failed: %v.\n", err.Error())
@@ -274,13 +332,16 @@ func DescribeDomain(c *cli.Context) {
 			fmt.Printf("Domain %s does not exist.\n", domain)
 		}
 	} else {
-		fmt.Printf("Name:%v, Description:%v, OwnerEmail:%v, Status:%v, RetentionInDays:%v, EmitMetrics:%v\n",
-			info.GetName(),
-			info.GetDescription(),
-			info.GetOwnerEmail(),
-			info.GetStatus(),
-			config.GetWorkflowExecutionRetentionPeriodInDays(),
-			config.GetEmitMetric())
+		fmt.Printf("Name: %v\nDescription: %v\nOwnerEmail: %v\nStatus: %v\nRetentionInDays: %v\n"+
+			"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\n",
+			resp.DomainInfo.GetName(),
+			resp.DomainInfo.GetDescription(),
+			resp.DomainInfo.GetOwnerEmail(),
+			resp.DomainInfo.GetStatus(),
+			resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
+			resp.Configuration.GetEmitMetric(),
+			resp.ReplicationConfiguration.GetActiveClusterName(),
+			clustersToString(resp.ReplicationConfiguration.Clusters))
 	}
 }
 
@@ -1150,6 +1211,18 @@ func trimWorkflowType(str string) string {
 			res = "..." + res[len(res)-maxWorkflowTypeLength:]
 		} else {
 			res = ".../" + res
+		}
+	}
+	return res
+}
+
+func clustersToString(clusters []*s.ClusterReplicationConfiguration) string {
+	var res string
+	for i, cluster := range clusters {
+		if i == 0 {
+			res = res + cluster.GetClusterName()
+		} else {
+			res = res + ", " + cluster.GetClusterName()
 		}
 	}
 	return res

@@ -115,6 +115,17 @@ var describeDomainResponse = &shared.DescribeDomainResponse{
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(3),
 		EmitMetric:                             common.BoolPtr(true),
 	},
+	ReplicationConfiguration: &shared.DomainReplicationConfiguration{
+		ActiveClusterName: common.StringPtr("active"),
+		Clusters: []*shared.ClusterReplicationConfiguration{
+			&shared.ClusterReplicationConfiguration{
+				ClusterName: common.StringPtr("active"),
+			},
+			&shared.ClusterReplicationConfiguration{
+				ClusterName: common.StringPtr("standby"),
+			},
+		},
+	},
 }
 
 func (s *cliAppSuite) TestDomainUpdate() {

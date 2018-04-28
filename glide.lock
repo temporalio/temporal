@@ -1,5 +1,5 @@
-hash: 692b6e00919597293746e2c2a0b2c645fc550be9be89951aa10afafd1a4e5c6b
-updated: 2018-02-20T18:14:25.806846-08:00
+hash: c7071c079fd1f8761f84a8fe7184fb1fc1fb0ff15737b1f5b8dab655235af7f8
+updated: 2018-04-25T16:52:55.238405-07:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -12,7 +12,7 @@ imports:
   subpackages:
   - quantile
 - name: github.com/bsm/sarama-cluster
-  version: 3001c2453136632aa3219a58ea3795bb584b83b5
+  version: cf455bc755fe41ac9bb2861e7a961833d9c2ecc3
 - name: github.com/cactus/go-statsd-client
   version: 138b925ccdf617776955904ba7759fce64406cec
   subpackages:
@@ -51,7 +51,7 @@ imports:
   - internal/murmur
   - internal/streams
 - name: github.com/golang/mock
-  version: 13f360950a79f5864a972c786a10a50e44b69541
+  version: c34cdb4725f4c3844d095133c6e40e448b86589b
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
@@ -62,6 +62,10 @@ imports:
   version: 553a641470496b2327abcac10b36396bd98e45c9
 - name: github.com/hailocab/go-hostpool
   version: e80d13ce29ede4452c43dea11e79b9bc8a15b478
+- name: github.com/mattn/go-colorable
+  version: efa589957cd060542a26d2dd7832fd6a6c6c3ade
+- name: github.com/mattn/go-isatty
+  version: 6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c
 - name: github.com/mattn/go-runewidth
   version: 97311d9f7767e3d6f422ea06661bc2c7a19e8a5d
 - name: github.com/matttproud/golang_protobuf_extensions
@@ -162,7 +166,7 @@ imports:
   - swim
   - util
 - name: github.com/uber/tchannel-go
-  version: acd4eb54c11531814d9cd0344fdc53bebe86ab12
+  version: cc0c40929b0dbdb755b727a8c253de2b5d4af46b
   subpackages:
   - internal/argreader
   - json
@@ -180,7 +184,21 @@ imports:
 - name: go.uber.org/atomic
   version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
 - name: go.uber.org/cadence
-  version: 570324de7bb1008983846c97ee4d80d24e277854
+  version: bc546f2a3620d372efe608c366a4b8603a65ccce
+  subpackages:
+  - .gen/go/cadence
+  - .gen/go/cadence/workflowserviceclient
+  - .gen/go/cadence/workflowservicetest
+  - .gen/go/shared
+  - client
+  - encoded
+  - internal
+  - internal/common
+  - internal/common/backoff
+  - internal/common/cache
+  - internal/common/metrics
+  - internal/common/util
+  - workflow
 - name: go.uber.org/multierr
   version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
 - name: go.uber.org/net/metrics
@@ -190,17 +208,25 @@ imports:
   - push
   - tallypush
 - name: go.uber.org/thriftrw
-  version: 6216e5bb19132c14e979cf9c62abae6f022a0c0d
+  version: 43dfafd7bb1c99f0460d645a1959b73f6dfa536f
   subpackages:
+  - envelope
+  - internal/envelope/exception
+  - protocol
+  - protocol/binary
+  - thriftreflect
   - version
+  - wire
 - name: go.uber.org/yarpc
-  version: 112080bb21323a681a9b269fa7b5a1489558aab0
+  version: 4ac8938c1046d4db2dc26a1436699935a8c5bb35
   subpackages:
   - api/backoff
   - api/encoding
   - api/middleware
   - api/peer
   - api/transport
+  - encoding/thrift
+  - encoding/thrift/internal
   - encoding/thrift/thriftrw-plugin-yarpc
   - internal
   - internal/backoff
@@ -219,15 +245,17 @@ imports:
   - internal/yarpcerrors
   - peer
   - peer/hostport
+  - pkg/encoding
   - pkg/errors
   - pkg/lifecycle
+  - pkg/procedure
   - transport/http
   - transport/tchannel
   - transport/tchannel/internal
   - yarpcconfig
   - yarpcerrors
 - name: go.uber.org/zap
-  version: 35aad584952c3e7020db7b839f6b102de6271f89
+  version: eeedf312bc6c57391d84767a4cd413f02a917974
   subpackages:
   - buffer
   - internal/bufferpool
@@ -235,7 +263,7 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/net
-  version: cbe0f9307d0156177f9dd5dc85da1a31abc5f2fb
+  version: 5f9ae10d9af5b1c89ae6904293b14b064d4ada23
   repo: https://github.com/golang/net
   subpackages:
   - bpf

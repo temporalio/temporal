@@ -222,9 +222,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		}
 	}
 	if !activeClusterInClusters {
-		errMsg := "Active cluster is not contained in all clusters"
-		err := &gen.BadRequestError{Message: errMsg}
-		return wh.error(err, scope)
+		return wh.error(errActiveClusterNotInClusters, scope)
 	}
 
 	domainRequest := &persistence.CreateDomainRequest{
