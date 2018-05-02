@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 
 	"context"
+
 	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client/kafka"
 	h "github.com/uber/cadence/.gen/go/history"

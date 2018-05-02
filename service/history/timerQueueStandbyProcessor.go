@@ -261,17 +261,26 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
-		_, isPending := msBuilder.GetPendingDecision(timerTask.EventID)
-		if isPending {
-			// active cluster will add an decision timeout event and schedule a decision
-			// standby cluster should just call ack manager to retry this task
-			// since we are stilling waiting for the decision timeout event / decision completion to be replicated
-			//
-			// we do not need to notity new timer to base, since if there is no new event being replicated
-			// checking again if the timer can be completed is meaningless
-			return ErrTaskRetry
+		di, isPending := msBuilder.GetPendingDecision(timerTask.EventID)
+
+		if !isPending {
+			return nil
 		}
-		return nil
+
+		ok, err := verifyTimerTaskVersion(t.shard, timerTask.DomainID, di.Version, timerTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		// active cluster will add an decision timeout event and schedule a decision
+		// standby cluster should just call ack manager to retry this task
+		// since we are stilling waiting for the decision timeout event / decision completion to be replicated
+		//
+		// we do not need to notity new timer to base, since if there is no new event being replicated
+		// checking again if the timer can be completed is meaningless
+		return ErrTaskRetry
 	})
 }
 
@@ -283,6 +292,14 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persi
 	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
 		// we do not need to notity new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
+
+		ok, err := verifyTimerTaskVersion(t.shard, timerTask.DomainID, msBuilder.GetStartVersion(), timerTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
 		return ErrTaskRetry
 	})
 }

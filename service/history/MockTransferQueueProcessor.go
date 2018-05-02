@@ -18,50 +18,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package history
 
-import "time"
+import (
+	"time"
 
-type (
-	// TimeSource is an interface for any
-	// entity that provides the current
-	// time. Its primarily used to mock
-	// out timesources in unit test
-	TimeSource interface {
-		Now() time.Time
-	}
-	// RealTimeSource serves real wall-clock time
-	RealTimeSource struct{}
-
-	// FakeTimeSource serves fake controlled time
-	FakeTimeSource struct {
-		now time.Time
-	}
+	"github.com/stretchr/testify/mock"
 )
 
-// NewRealTimeSource returns a time source that servers
-// real wall clock time
-func NewRealTimeSource() *RealTimeSource {
-	return &RealTimeSource{}
+// MockTransferQueueProcessor is used as mock implementation for Processor
+type MockTransferQueueProcessor struct {
+	mock.Mock
 }
 
-// Now return the real current time
-func (ts *RealTimeSource) Now() time.Time {
-	return time.Now()
+// Start is mock implementation for Start of Processor
+func (_m *MockTransferQueueProcessor) Start() {
+	_m.Called()
 }
 
-// NewFakeTimeSource returns a time source that servers
-// fake controlled time
-func NewFakeTimeSource() *FakeTimeSource {
-	return &FakeTimeSource{}
+// Stop is mock implementation for Stop of Processor
+func (_m *MockTransferQueueProcessor) Stop() {
+	_m.Called()
 }
 
-// Now return the fake current time
-func (ts *FakeTimeSource) Now() time.Time {
-	return ts.now
-}
-
-// Update update the fake current time
-func (ts *FakeTimeSource) Update(now time.Time) {
-	ts.now = now
+// NotifyNewTask is mock implementation for NotifyNewTask of Processor
+func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, currentTime time.Time) {
+	_m.Called(clusterName, currentTime)
 }

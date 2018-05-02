@@ -26,7 +26,7 @@ import (
 )
 
 type (
-	// Service is the mock implementation for Service interface
+	// MessagingClient is the mock implementation for Service interface
 	MessagingClient struct {
 		consumerMock  kafka.Consumer
 		publisherMock messaging.Producer
@@ -35,6 +35,7 @@ type (
 
 var _ messaging.Client = (*MessagingClient)(nil)
 
+// NewMockMessagingClient generate a dummy implementation of messaging client
 func NewMockMessagingClient(publisher messaging.Producer, consumer kafka.Consumer) messaging.Client {
 	return &MessagingClient{
 		publisherMock: publisher,
@@ -42,11 +43,12 @@ func NewMockMessagingClient(publisher messaging.Producer, consumer kafka.Consume
 	}
 }
 
-// GetHostName returns the name of host running the service
+// NewConsumer generates a dummy implementation of kafka consumer
 func (c *MessagingClient) NewConsumer(topicName, consumerName string, concurrency int) (kafka.Consumer, error) {
 	return c.consumerMock, nil
 }
 
+// NewProducer generates a dummy implementation of kafka producer
 func (c *MessagingClient) NewProducer(topicName string) (messaging.Producer, error) {
 	return c.publisherMock, nil
 }

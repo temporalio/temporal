@@ -173,7 +173,7 @@ func (s *timerQueueProcessorSuite) addDecisionTimer(domainID string, we workflow
 	di := addDecisionTaskScheduledEvent(builder)
 	startedEvent := addDecisionTaskStartedEvent(builder, di.ScheduleID, state.ExecutionInfo.TaskList, "identity")
 
-	timeOutTask := tb.AddDecisionTimoutTask(di.ScheduleID, di.Attempt, 1)
+	timeOutTask := tb.AddStartToCloseDecisionTimoutTask(di.ScheduleID, di.Attempt, 1)
 	timerTasks := []persistence.Task{timeOutTask}
 
 	s.updateTimerSeqNumbers(timerTasks)
@@ -256,7 +256,7 @@ func (s *timerQueueProcessorSuite) TestSingleTimerTask() {
 
 	processor := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.matchingClient, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
-	processor.NotifyNewTimers(cluster.TestCurrentClusterName, tt)
+	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), tt)
 
 	for {
 		timerInfo, err := s.GetTimerIndexTasks()
@@ -289,7 +289,7 @@ func (s *timerQueueProcessorSuite) TestManyTimerTasks() {
 
 	processor := newTimerQueueProcessor(s.ShardContext, s.engineImpl, s.matchingClient, s.logger).(*timerQueueProcessorImpl)
 	processor.Start()
-	processor.NotifyNewTimers(cluster.TestCurrentClusterName, tt)
+	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), tt)
 
 	for {
 		timerInfo, err := s.GetTimerIndexTasks()
@@ -328,7 +328,7 @@ func (s *timerQueueProcessorSuite) TestTimerTaskAfterProcessorStart() {
 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	tt := s.addDecisionTimer(domainID, workflowExecution, tBuilder)
-	processor.NotifyNewTimers(cluster.TestCurrentClusterName, tt)
+	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), tt)
 
 	s.waitForTimerTasksToProcess(processor)
 
@@ -425,7 +425,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithOutS
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	processor.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -469,7 +469,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_WithStar
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -512,7 +512,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	processor.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	processor.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(processor)
 	s.Equal(uint64(1), processor.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -555,7 +555,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_WithStart()
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -602,7 +602,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskStartToClose_CompletedAc
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -644,7 +644,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_JustSche
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -688,7 +688,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Started(
 	timerTasks := []persistence.Task{tt}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -736,7 +736,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToClose_Complete
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -760,7 +760,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskHeartBeat_JustStarted() 
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	ase, timerTasks := s.addHeartBeatTimer(domainID, workflowExecution, tBuilder)
 
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
 	running := s.checkTimedOutEventFor(domainID, workflowExecution, *ase.EventId)
@@ -815,7 +815,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTask_SameExpiry() {
 	timerTasks := []persistence.Task{t}
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -847,7 +847,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers() {
 	tBuilder := newTimerBuilder(s.ShardContext.GetConfig(), s.logger, &mockTimeSource{currTime: time.Now()})
 	timerID := "tid1"
 	timerTasks := s.addUserTimer(domainID, workflowExecution, timerID, tBuilder)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(1), p.getTimerFiredCount(cluster.TestCurrentClusterName))
 	running := s.checkTimedOutEventForUserTimer(domainID, workflowExecution, timerID)
@@ -888,7 +888,7 @@ func (s *timerQueueProcessorSuite) TestTimerUserTimers_SameExpiry() {
 	timerTasks = append(timerTasks, t)
 
 	s.updateHistoryAndTimers(builder, timerTasks, condition)
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, timerTasks)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), timerTasks)
 
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(len(timerTasks)), p.getTimerFiredCount(cluster.TestCurrentClusterName))
@@ -930,7 +930,7 @@ func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	// close workflow
 	s.closeWorkflow(domainID, workflowExecution)
 
-	p.NotifyNewTimers(cluster.TestCurrentClusterName, tt)
+	p.NotifyNewTimers(cluster.TestCurrentClusterName, s.ShardContext.GetCurrentTime(cluster.TestCurrentClusterName), tt)
 	s.waitForTimerTasksToProcess(p)
 	s.Equal(uint64(3), p.getTimerFiredCount(cluster.TestCurrentClusterName))
 

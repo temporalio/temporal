@@ -50,14 +50,15 @@ type Config struct {
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                           int
-	TimerProcessorTaskWorkerCount                int
-	TimerProcessorUpdateFailureRetryCount        int
+	TimerTaskWorkerCount                         int
+	TimerTaskMaxRetryCount                       int
 	TimerProcessorGetFailureRetryCount           int
 	TimerProcessorCompleteTimerFailureRetryCount int
 	TimerProcessorUpdateAckInterval              time.Duration
 	TimerProcessorForceUpdateInterval            time.Duration
 	TimerProcessorCompleteTimerInterval          time.Duration
 	TimerProcessorMaxPollInterval                time.Duration
+	TimerProcessorStandbyTaskDelay               time.Duration
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                              int
@@ -102,21 +103,22 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		DefaultScheduleToCloseActivityTimeoutInSecs:        10,
 		DefaultStartToCloseActivityTimeoutInSecs:           10,
 		TimerTaskBatchSize:                                 100,
-		TimerProcessorTaskWorkerCount:                      30,
-		TimerProcessorUpdateFailureRetryCount:              5,
+		TimerTaskWorkerCount:                               30,
+		TimerTaskMaxRetryCount:                             5,
 		TimerProcessorGetFailureRetryCount:                 5,
 		TimerProcessorCompleteTimerFailureRetryCount:       10,
 		TimerProcessorUpdateAckInterval:                    10 * time.Second,
 		TimerProcessorForceUpdateInterval:                  10 * time.Minute,
 		TimerProcessorCompleteTimerInterval:                1 * time.Second,
 		TimerProcessorMaxPollInterval:                      60 * time.Second,
+		TimerProcessorStandbyTaskDelay:                     0 * time.Minute,
 		TransferTaskBatchSize:                              10,
 		TransferProcessorMaxPollRPS:                        100,
 		TransferProcessorMaxPollInterval:                   60 * time.Second,
 		TransferProcessorUpdateAckInterval:                 10 * time.Second,
 		TransferProcessorForceUpdateInterval:               10 * time.Minute,
 		TransferProcessorCompleteTransferInterval:          1 * time.Second,
-		TransferProcessorStandbyTaskDelay:                  3 * time.Minute,
+		TransferProcessorStandbyTaskDelay:                  0 * time.Minute,
 		TransferTaskWorkerCount:                            10,
 		TransferTaskMaxRetryCount:                          100,
 		TransferProcessorCompleteTransferFailureRetryCount: 10,

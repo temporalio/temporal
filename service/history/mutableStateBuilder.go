@@ -112,7 +112,7 @@ type (
 		StartedID       int64
 		RequestID       string
 		DecisionTimeout int32
-		Tasklist        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
+		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
 		Attempt         int64
 		Timestamp       int64
 	}
@@ -258,7 +258,14 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	return nil
 }
 
-func (e *mutableStateBuilder) getVersion() int64 {
+func (e *mutableStateBuilder) GetStartVersion() int64 {
+	if e.replicationState == nil {
+		return emptyVersion
+	}
+	return e.replicationState.StartVersion
+}
+
+func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 	if e.replicationState == nil {
 		return emptyVersion
 	}
@@ -914,6 +921,7 @@ func (e *mutableStateBuilder) HasBufferedReplicationTasks() bool {
 
 // UpdateDecision updates a decision task.
 func (e *mutableStateBuilder) UpdateDecision(di *decisionInfo) {
+	e.executionInfo.DecisionVersion = di.Version
 	e.executionInfo.DecisionScheduleID = di.ScheduleID
 	e.executionInfo.DecisionStartedID = di.StartedID
 	e.executionInfo.DecisionRequestID = di.RequestID
@@ -1017,7 +1025,7 @@ func (e *mutableStateBuilder) getHistoryEvent(serializedEvent []byte) (*workflow
 	return event, true
 }
 
-func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(domainID, domainName string,
+func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(domainID string,
 	parentExecutionInfo *h.ParentExecutionInfo, execution workflow.WorkflowExecution, previousExecutionState *mutableStateBuilder,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
 	taskList := previousExecutionState.executionInfo.TaskList
@@ -1041,7 +1049,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(d
 
 	createRequest := &workflow.StartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
-		Domain:                              common.StringPtr(domainName),
+		Domain:                              common.StringPtr(domainID),
 		WorkflowId:                          execution.WorkflowId,
 		TaskList:                            tl,
 		WorkflowType:                        wType,
@@ -1151,7 +1159,7 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		scheduleID = newDecisionEvent.GetEventId()
 	}
 
-	return e.ReplicateDecisionTaskScheduledEvent(e.getVersion(), scheduleID, taskList, startToCloseTimeoutSeconds)
+	return e.ReplicateDecisionTaskScheduledEvent(e.GetCurrentVersion(), scheduleID, taskList, startToCloseTimeoutSeconds)
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string,
@@ -1162,7 +1170,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, sched
 		StartedID:       emptyEventID,
 		RequestID:       emptyUUID,
 		DecisionTimeout: startToCloseTimeoutSeconds,
-		Tasklist:        taskList,
+		TaskList:        taskList,
 		Attempt:         e.executionInfo.DecisionAttempt,
 	}
 
@@ -1201,7 +1209,7 @@ func (e *mutableStateBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64,
 		timestamp = int64(0)
 	}
 
-	di = e.ReplicateDecisionTaskStartedEvent(di, e.getVersion(), scheduleID, startedID, requestID, timestamp)
+	di = e.ReplicateDecisionTaskStartedEvent(di, e.GetCurrentVersion(), scheduleID, startedID, requestID, timestamp)
 	return event, di
 }
 
@@ -1729,8 +1737,8 @@ func (e *mutableStateBuilder) AddRequestCancelExternalWorkflowExecutionInitiated
 		return nil, nil
 	}
 
-	ri := e.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
-	return event, ri
+	rci := e.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+	return event, rci
 }
 
 func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(
@@ -1794,24 +1802,24 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionFai
 }
 
 func (e *mutableStateBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,
-	signalRequestID string, request *workflow.SignalExternalWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
+	signalRequestID string, request *workflow.SignalExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.SignalInfo) {
 
 	event := e.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(decisionCompletedEventID, request)
 	if event == nil {
-		return nil
+		return nil, nil
 	}
 
-	e.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+	si := e.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
 
-	return event
+	return event, si
 }
 
 func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event *workflow.HistoryEvent,
-	signalRequestID string) {
+	signalRequestID string) *persistence.SignalInfo {
 	// TODO: Consider also writing signalRequestID to history event
 	initiatedEventID := event.GetEventId()
 	attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
-	ri := &persistence.SignalInfo{
+	si := &persistence.SignalInfo{
 		Version:         event.GetVersion(),
 		InitiatedID:     initiatedEventID,
 		SignalRequestID: signalRequestID,
@@ -1820,8 +1828,9 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 		Control:         attributes.Control,
 	}
 
-	e.pendingSignalInfoIDs[initiatedEventID] = ri
-	e.updateSignalInfos[ri] = struct{}{}
+	e.pendingSignalInfoIDs[initiatedEventID] = si
+	e.updateSignalInfos[si] = struct{}{}
+	return si
 }
 
 func (e *mutableStateBuilder) AddExternalWorkflowExecutionSignaled(initiatedID int64,
@@ -2036,9 +2045,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		newStateBuilder = newMutableStateBuilder(e.config, e.logger)
 	}
 	domainID := domainEntry.GetInfo().ID
-	domainName := domainEntry.GetInfo().Name
-	startedEvent := newStateBuilder.AddWorkflowExecutionStartedEventForContinueAsNew(domainID, domainName,
-		parentInfo, newExecution, e, attributes)
+	startedEvent := newStateBuilder.AddWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes)
 	if startedEvent == nil {
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
@@ -2047,14 +2054,13 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
 	}
 
-	e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, domainName, continueAsNewEvent, startedEvent, di,
-		newStateBuilder)
+	e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder)
 
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
-func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID,
-	domainName string, continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
+func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID string,
+	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
 	newStateBuilder *mutableStateBuilder) {
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes

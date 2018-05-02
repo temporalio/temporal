@@ -23,6 +23,7 @@ package history
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -37,6 +38,7 @@ import (
 type (
 	historyReplicator struct {
 		shard             ShardContext
+		historyEngine     *historyEngineImpl
 		historyCache      *historyCache
 		domainCache       cache.DomainCache
 		historyMgr        persistence.HistoryManager
@@ -45,10 +47,11 @@ type (
 	}
 )
 
-func newHistoryReplicator(shard ShardContext, historyCache *historyCache, domainCache cache.DomainCache,
+func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, historyCache *historyCache, domainCache cache.DomainCache,
 	historyMgr persistence.HistoryManager, logger bark.Logger) *historyReplicator {
 	replicator := &historyReplicator{
 		shard:             shard,
+		historyEngine:     historyEngine,
 		historyCache:      historyCache,
 		domainCache:       domainCache,
 		historyMgr:        historyMgr,
@@ -64,7 +67,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		return nil
 	}
 
-	domainID, err := getDomainUUID(request.DomainUUID)
+	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
 		return err
 	}
@@ -120,11 +123,19 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionContext, msBuilder *mutableStateBuilder,
 	request *h.ReplicateEventsRequest) error {
-	domainID, err := getDomainUUID(request.DomainUUID)
+
+	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
 		return err
 	}
+	if len(request.History.Events) == 0 {
+		return nil
+	}
+
 	execution := *request.WorkflowExecution
+
+	transferTasks := []persistence.Task{}
+	timerTasks := []persistence.Task{}
 
 	var lastEvent *shared.HistoryEvent
 	decisionVersionID := emptyVersion
@@ -148,6 +159,8 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			}
 			msBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, execution, requestID, attributes)
 
+			timerTasks = append(timerTasks, r.scheduleWorkflowTimerTask(event, msBuilder))
+
 		case shared.EventTypeDecisionTaskScheduled:
 			attributes := event.DecisionTaskScheduledEventAttributes
 			di := msBuilder.ReplicateDecisionTaskScheduledEvent(event.GetVersion(), event.GetEventId(), attributes.TaskList.GetName(),
@@ -158,6 +171,9 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			decisionStartID = di.StartedID
 			decisionTimeout = di.DecisionTimeout
 
+			transferTasks = append(transferTasks, r.scheduleDecisionTransferTask(domainID, r.getTaskList(msBuilder), di.ScheduleID))
+			// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+
 		case shared.EventTypeDecisionTaskStarted:
 			attributes := event.DecisionTaskStartedEventAttributes
 			di := msBuilder.ReplicateDecisionTaskStartedEvent(nil, event.GetVersion(), attributes.GetScheduledEventId(), event.GetEventId(),
@@ -167,6 +183,8 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			decisionScheduleID = di.ScheduleID
 			decisionStartID = di.StartedID
 			decisionTimeout = di.DecisionTimeout
+
+			timerTasks = append(timerTasks, r.scheduleDecisionTimerTask(event, di.ScheduleID, di.Attempt, di.DecisionTimeout))
 
 		case shared.EventTypeDecisionTaskCompleted:
 			attributes := event.DecisionTaskCompletedEventAttributes
@@ -184,7 +202,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 				attributes.GetStartedEventId())
 
 		case shared.EventTypeActivityTaskScheduled:
-			msBuilder.ReplicateActivityTaskScheduledEvent(event)
+			ai := msBuilder.ReplicateActivityTaskScheduledEvent(event)
+
+			transferTasks = append(transferTasks, r.scheduleActivityTransferTask(domainID, r.getTaskList(msBuilder), ai.ScheduleID))
+			if timerTask := r.scheduleActivityTimerTask(event, msBuilder); timerTask != nil {
+				timerTasks = append(timerTasks, timerTask)
+			}
 
 		case shared.EventTypeActivityTaskStarted:
 			msBuilder.ReplicateActivityTaskStartedEvent(event)
@@ -211,6 +234,9 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 
 		case shared.EventTypeTimerStarted:
 			msBuilder.ReplicateTimerStartedEvent(event)
+			if timerTask := r.scheduleUserTimerTask(event, msBuilder); timerTask != nil {
+				timerTasks = append(timerTasks, timerTask)
+			}
 
 		case shared.EventTypeTimerFired:
 			msBuilder.ReplicateTimerFiredEvent(event)
@@ -224,7 +250,14 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		case shared.EventTypeStartChildWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			createRequestID := uuid.New()
-			msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(event, createRequestID)
+			cei := msBuilder.ReplicateStartChildWorkflowExecutionInitiatedEvent(event, createRequestID)
+
+			attributes := event.StartChildWorkflowExecutionInitiatedEventAttributes
+			childDomainEntry, err := r.shard.GetDomainCache().GetDomain(attributes.GetDomain())
+			if err != nil {
+				return err
+			}
+			transferTasks = append(transferTasks, r.scheduleStartChildWorkflowTransferTask(childDomainEntry.GetInfo().ID, attributes.GetWorkflowId(), cei.InitiatedID))
 
 		case shared.EventTypeStartChildWorkflowExecutionFailed:
 			msBuilder.ReplicateStartChildWorkflowExecutionFailedEvent(event)
@@ -250,7 +283,16 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		case shared.EventTypeRequestCancelExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			cancelRequestID := uuid.New()
-			msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+			rci := msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
+
+			attributes := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
+			transferTasks = append(transferTasks, r.scheduleCancelExternalWorkflowTransferTask(
+				attributes.GetDomain(),
+				attributes.WorkflowExecution.GetWorkflowId(),
+				attributes.WorkflowExecution.GetRunId(),
+				attributes.GetChildWorkflowOnly(),
+				rci.InitiatedID,
+			))
 
 		case shared.EventTypeRequestCancelExternalWorkflowExecutionFailed:
 			msBuilder.ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(event)
@@ -261,7 +303,16 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		case shared.EventTypeSignalExternalWorkflowExecutionInitiated:
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			signalRequestID := uuid.New()
-			msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+			si := msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
+
+			attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
+			transferTasks = append(transferTasks, r.scheduleSignalWorkflowTransferTask(
+				attributes.GetDomain(),
+				attributes.WorkflowExecution.GetWorkflowId(),
+				attributes.WorkflowExecution.GetRunId(),
+				attributes.GetChildWorkflowOnly(),
+				si.InitiatedID,
+			))
 
 		case shared.EventTypeSignalExternalWorkflowExecutionFailed:
 			msBuilder.ReplicateSignalExternalWorkflowExecutionFailedEvent(event)
@@ -280,30 +331,57 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 
 		case shared.EventTypeWorkflowExecutionCompleted:
 			msBuilder.ReplicateWorkflowExecutionCompletedEvent(event)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionFailed:
 			msBuilder.ReplicateWorkflowExecutionFailedEvent(event)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionTimedOut:
 			msBuilder.ReplicateWorkflowExecutionTimedoutEvent(event)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionCanceled:
 			msBuilder.ReplicateWorkflowExecutionCanceledEvent(event)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionTerminated:
 			msBuilder.ReplicateWorkflowExecutionTerminatedEvent(event)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 		case shared.EventTypeWorkflowExecutionContinuedAsNew:
 			// ContinuedAsNew event also has history for first 2 events for next run as they are created transactionally
+			newTransferTasks := []persistence.Task{}
+			newTimerTasks := []persistence.Task{}
 			newRunHistory := request.NewRunHistory
 			startedEvent := newRunHistory.Events[0]
 			startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
 			dtScheduledEvent := newRunHistory.Events[1]
-			domainEntry, err := r.shard.GetDomainCache().GetDomainByID(domainID)
-			if err != nil {
-				return err
-			}
-			domainName := domainEntry.GetInfo().Name
 
 			// History event only have the parentDomainName.  Lookup the domain ID from cache
 			var parentDomainID *string
@@ -338,15 +416,17 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			// Set the history from replication task on the newStateBuilder
 			newStateBuilder.hBuilder = newHistoryBuilderFromEvents(newRunHistory.Events, r.logger)
 
-			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(request.GetSourceCluster(), domainID, domainName, event,
-				startedEvent, di, newStateBuilder)
+			newTransferTasks = append(newTransferTasks, r.scheduleDecisionTransferTask(domainID, r.getTaskList(newStateBuilder), di.ScheduleID))
+			newTimerTasks = append(newTimerTasks, r.scheduleWorkflowTimerTask(event, newStateBuilder))
+
+			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(request.GetSourceCluster(), domainID, event, startedEvent, di, newStateBuilder)
 
 			// Generate a transaction ID for appending events to history
 			transactionID, err := r.shard.GetNextTransferTaskID()
 			if err != nil {
 				return err
 			}
-			err = context.replicateContinueAsNewWorkflowExecution(newStateBuilder, nil, nil, transactionID)
+			err = context.replicateContinueAsNewWorkflowExecution(newStateBuilder, newTransferTasks, newTimerTasks, transactionID)
 			if err != nil {
 				return err
 			}
@@ -414,12 +494,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 				ExecutionContext:            nil,
 				NextEventID:                 msBuilder.GetNextEventID(),
 				LastProcessedEvent:          emptyEventID,
-				TransferTasks:               nil, // TODO: Generate transfer task
+				TransferTasks:               transferTasks, // TODO: Generate transfer task
 				DecisionVersion:             decisionVersionID,
 				DecisionScheduleID:          decisionScheduleID,
 				DecisionStartedID:           decisionStartID,
 				DecisionStartToCloseTimeout: decisionTimeout,
-				TimerTasks:                  nil, // TODO: Generate workflow timeout task
+				TimerTasks:                  timerTasks, // TODO: Generate workflow timeout task
 				ContinueAsNew:               !isBrandNew,
 				PreviousRunID:               prevRunID,
 				ReplicationState:            replicationState,
@@ -428,6 +508,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			if err != nil {
 				return "", err
 			}
+
 			return execution.GetRunId(), nil
 		}
 
@@ -448,7 +529,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		if err2 != nil {
 			return err2
 		}
-		err = context.replicateWorkflowExecution(request, lastEvent.GetEventId(), transactionID)
+		err = context.replicateWorkflowExecution(request, transferTasks, timerTasks, lastEvent.GetEventId(), transactionID)
+	}
+
+	if err != nil {
+		now := time.Unix(0, lastEvent.GetTimestamp())
+		r.notify(request.GetSourceCluster(), now, transferTasks, timerTasks)
 	}
 
 	return err
@@ -471,6 +557,7 @@ func (r *historyReplicator) FlushBuffer(context *workflowExecutionContext, msBui
 		msBuilder.DeleteBufferedReplicationTask(nextEventID)
 
 		req := &h.ReplicateEventsRequest{
+			SourceCluster:     request.SourceCluster,
 			DomainUUID:        request.DomainUUID,
 			WorkflowExecution: request.WorkflowExecution,
 			FirstEventId:      common.Int64Ptr(bt.FirstEventID),
@@ -496,4 +583,106 @@ func (r *historyReplicator) Serialize(history *shared.History) (*persistence.Ser
 		return nil, err
 	}
 	return h, nil
+}
+
+func (r *historyReplicator) scheduleDecisionTransferTask(domainID string, tasklist string, scheduleID int64) persistence.Task {
+	return &persistence.DecisionTask{
+		DomainID:   domainID,
+		TaskList:   tasklist,
+		ScheduleID: scheduleID,
+	}
+}
+
+func (r *historyReplicator) scheduleActivityTransferTask(domainID string, tasklist string, scheduleID int64) persistence.Task {
+	return &persistence.ActivityTask{
+		DomainID:   domainID,
+		TaskList:   tasklist,
+		ScheduleID: scheduleID,
+	}
+}
+
+func (r *historyReplicator) scheduleStartChildWorkflowTransferTask(domainID string, workflowID string, initiatedID int64) persistence.Task {
+	return &persistence.StartChildExecutionTask{
+		TargetDomainID:   domainID,
+		TargetWorkflowID: workflowID,
+		InitiatedID:      initiatedID,
+	}
+}
+
+func (r *historyReplicator) scheduleCancelExternalWorkflowTransferTask(domainID string, workflowID string,
+	runID string, childWorkflowOnly bool, initiatedID int64) persistence.Task {
+	return &persistence.CancelExecutionTask{
+		TargetDomainID:          domainID,
+		TargetWorkflowID:        workflowID,
+		TargetRunID:             runID,
+		TargetChildWorkflowOnly: childWorkflowOnly,
+		InitiatedID:             initiatedID,
+	}
+}
+
+func (r *historyReplicator) scheduleSignalWorkflowTransferTask(domainID string, workflowID string,
+	runID string, childWorkflowOnly bool, initiatedID int64) persistence.Task {
+	return &persistence.SignalExecutionTask{
+		TargetDomainID:          domainID,
+		TargetWorkflowID:        workflowID,
+		TargetRunID:             runID,
+		TargetChildWorkflowOnly: childWorkflowOnly,
+		InitiatedID:             initiatedID,
+	}
+}
+
+func (r *historyReplicator) scheduleDeleteHistoryTransferTask() persistence.Task {
+	return &persistence.CloseExecutionTask{}
+}
+
+func (r *historyReplicator) scheduleDecisionTimerTask(event *shared.HistoryEvent, scheduleID int64, attempt int64, timeoutSecond int32) persistence.Task {
+	return r.getTimerBuilder(event).AddStartToCloseDecisionTimoutTask(scheduleID, attempt, timeoutSecond)
+}
+
+func (r *historyReplicator) scheduleUserTimerTask(event *shared.HistoryEvent, msBuilder *mutableStateBuilder) persistence.Task {
+	return r.getTimerBuilder(event).GetUserTimerTaskIfNeeded(msBuilder)
+}
+
+func (r *historyReplicator) scheduleActivityTimerTask(event *shared.HistoryEvent, msBuilder *mutableStateBuilder) persistence.Task {
+	return r.getTimerBuilder(event).GetActivityTimerTaskIfNeeded(msBuilder)
+}
+
+func (r *historyReplicator) scheduleWorkflowTimerTask(event *shared.HistoryEvent, msBuilder *mutableStateBuilder) persistence.Task {
+	now := time.Unix(0, event.GetTimestamp())
+	timeout := now.Add(time.Duration(msBuilder.executionInfo.WorkflowTimeout) * time.Second)
+	return &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout}
+}
+
+func (r *historyReplicator) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID string) (persistence.Task, error) {
+	var retentionInDays int32
+	domainEntry, err := r.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			return nil, err
+		}
+	}
+	retentionInDays = domainEntry.GetConfig().Retention
+	return r.getTimerBuilder(event).createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24), nil
+}
+
+func (r *historyReplicator) getTaskList(msBuilder *mutableStateBuilder) string {
+	// on the standby side, sticky tasklist is meaningless, so always use the normal tasklist
+	return msBuilder.executionInfo.TaskList
+}
+
+func (r *historyReplicator) getTimerBuilder(event *shared.HistoryEvent) *timerBuilder {
+	timeSource := common.NewFakeTimeSource()
+	now := time.Unix(0, event.GetTimestamp())
+	timeSource.Update(now)
+	return newTimerBuilder(r.shard.GetConfig(), r.logger, timeSource)
+}
+
+func (r *historyReplicator) notify(clusterName string, now time.Time, transferTasks []persistence.Task, timerTasks []persistence.Task) {
+	r.shard.SetCurrentTime(clusterName, now)
+	if len(transferTasks) != 0 {
+		r.historyEngine.txProcessor.NotifyNewTask(clusterName, now)
+	}
+	if len(timerTasks) != 0 {
+		r.historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
+	}
 }

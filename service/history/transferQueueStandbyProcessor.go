@@ -192,7 +192,18 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
 		activityInfo, isPending := msBuilder.GetActivityInfo(transferTask.ScheduleID)
-		if isPending && activityInfo.StartedID == emptyEventID {
+
+		if !isPending {
+			return nil
+		}
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, activityInfo.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		if activityInfo.StartedID == emptyEventID {
 			return ErrTaskRetry
 		}
 		return nil
@@ -207,9 +218,28 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
 		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
-		if isPending && decisionInfo.StartedID == emptyEventID {
+
+		if !isPending {
+			if transferTask.ScheduleID == firstEventID+1 {
+				return t.recordWorkflowStarted(msBuilder)
+			}
+			return nil
+		}
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, decisionInfo.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		if decisionInfo.StartedID == emptyEventID {
 			return ErrTaskRetry
 		}
+
+		if transferTask.ScheduleID == firstEventID+1 {
+			return t.recordWorkflowStarted(msBuilder)
+		}
+
 		return nil
 	})
 }
@@ -221,6 +251,13 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 
 	processTaskIfClosed := true
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, msBuilder.GetCurrentVersion(), transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
 
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
@@ -238,19 +275,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 			retentionSeconds = int64(domainEntry.GetConfig().Retention) * 24 * 60 * 60
 		}
 
-		return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			DomainUUID: transferTask.DomainID,
-			Execution: workflow.WorkflowExecution{
-				WorkflowId: common.StringPtr(transferTask.WorkflowID),
-				RunId:      common.StringPtr(transferTask.RunID),
-			},
-			WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
-			StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
-			CloseTimestamp:   msBuilder.getLastUpdatedTimestamp(),
-			Status:           getWorkflowExecutionCloseStatus(msBuilder.executionInfo.CloseStatus),
-			HistoryLength:    msBuilder.GetNextEventID(),
-			RetentionSeconds: retentionSeconds,
-		})
+		return t.recordWorkflowClosed(msBuilder, retentionSeconds)
 	})
 }
 
@@ -261,11 +286,19 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
-		_, isPending := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
-		if isPending {
-			return ErrTaskRetry
+		requestCancelInfo, isPending := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
+
+		if !isPending {
+			return nil
 		}
-		return nil
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, requestCancelInfo.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		return ErrTaskRetry
 	})
 }
 
@@ -276,11 +309,19 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
-		_, isPending := msBuilder.GetSignalInfo(transferTask.ScheduleID)
-		if isPending {
-			return ErrTaskRetry
+		signalInfo, isPending := msBuilder.GetSignalInfo(transferTask.ScheduleID)
+
+		if !isPending {
+			return nil
 		}
-		return nil
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, signalInfo.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		return ErrTaskRetry
 	})
 }
 
@@ -292,7 +333,18 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
 		childWorkflowInfo, isPending := msBuilder.GetChildExecutionInfo(transferTask.ScheduleID)
-		if isPending && childWorkflowInfo.StartedID == emptyEventID {
+
+		if !isPending {
+			return nil
+		}
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, childWorkflowInfo.Version, transferTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		if childWorkflowInfo.StartedID == emptyEventID {
 			return ErrTaskRetry
 		}
 		return nil
@@ -344,4 +396,33 @@ func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(tran
 		WorkflowId: common.StringPtr(transferTask.WorkflowID),
 		RunId:      common.StringPtr(transferTask.RunID),
 	}
+}
+
+func (t *transferQueueStandbyProcessorImpl) recordWorkflowStarted(msBuilder *mutableStateBuilder) error {
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
+		DomainUUID: msBuilder.executionInfo.DomainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
+			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+		},
+		WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
+		StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTimeout:  int64(msBuilder.executionInfo.WorkflowTimeout),
+	})
+}
+
+func (t *transferQueueStandbyProcessorImpl) recordWorkflowClosed(msBuilder *mutableStateBuilder, retentionSeconds int64) error {
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
+		DomainUUID: msBuilder.executionInfo.DomainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
+			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+		},
+		WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
+		StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
+		CloseTimestamp:   msBuilder.getLastUpdatedTimestamp(),
+		Status:           getWorkflowExecutionCloseStatus(msBuilder.executionInfo.CloseStatus),
+		HistoryLength:    msBuilder.GetNextEventID(),
+		RetentionSeconds: retentionSeconds,
+	})
 }

@@ -133,8 +133,8 @@ func newTimerBuilder(config *Config, logger bark.Logger, timeSource common.TimeS
 	}
 }
 
-// AddDecisionTimeoutTask - Add a decision timeout task.
-func (tb *timerBuilder) AddDecisionTimoutTask(scheduleID, scheduleAttempt int64,
+// AddStartToCloseDecisionTimoutTask - Add a decision start to close timeout task.
+func (tb *timerBuilder) AddStartToCloseDecisionTimoutTask(scheduleID, scheduleAttempt int64,
 	startToCloseTimeout int32) *persistence.DecisionTimeoutTask {
 	timeOutTask := tb.createDecisionTimeoutTask(startToCloseTimeout, scheduleID, scheduleAttempt,
 		w.TimeoutTypeStartToClose)

@@ -204,7 +204,7 @@ func (_m *ExecutionManager) GetWorkflowExecution(request *persistence.GetWorkflo
 	return r0, r1
 }
 
-// GetWorkflowExecution provides a mock function with given fields: request
+// GetCurrentExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) GetCurrentExecution(request *persistence.GetCurrentExecutionRequest) (*persistence.GetCurrentExecutionResponse, error) {
 	ret := _m.Called(request)
 

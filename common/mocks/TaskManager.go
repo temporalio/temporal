@@ -41,10 +41,8 @@ func (_m *TaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) 
 	var r1 error
 	if rf, ok := ret.Get(0).(func(*persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error)); ok {
 		return rf(request)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.LeaseTaskListResponse)
-		}
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*persistence.LeaseTaskListResponse)
 	}
 
 	if rf, ok := ret.Get(1).(func(*persistence.LeaseTaskListRequest) error); ok {
@@ -123,10 +121,8 @@ func (_m *TaskManager) GetTasks(request *persistence.GetTasksRequest) (*persiste
 	var r0 *persistence.GetTasksResponse
 	if rf, ok := ret.Get(0).(func(*persistence.GetTasksRequest) (*persistence.GetTasksResponse, error)); ok {
 		return rf(request)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.GetTasksResponse)
-		}
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*persistence.GetTasksResponse)
 	}
 
 	var r1 error

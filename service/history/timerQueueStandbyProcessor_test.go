@@ -146,7 +146,6 @@ func (s *timerQueueStandbyProcessorSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockVisibilityMgr.AssertExpectations(s.T())
-	s.mockClusterMetadata.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 	s.mocktimerQueueAckMgr.AssertExpectations(s.T())
 }
@@ -160,7 +159,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() 
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -186,11 +186,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Pending() 
 	tBuilder := newTimerBuilder(s.mockShard.GetConfig(), s.logger, common.NewRealTimeSource())
 	tBuilder.AddUserTimer(timerInfo, msBuilder)
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeUserTimer, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeUserTimer,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: tBuilder.GetUserTimerTaskIfNeeded(msBuilder).(*persistence.UserTimerTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -210,7 +212,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Success() 
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -236,11 +239,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Success() 
 	tBuilder := newTimerBuilder(s.mockShard.GetConfig(), s.logger, common.NewRealTimeSource())
 	tBuilder.AddUserTimer(timerInfo, msBuilder)
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeUserTimer, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeUserTimer,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: tBuilder.GetUserTimerTaskIfNeeded(msBuilder).(*persistence.UserTimerTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -263,7 +268,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Multiple()
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -295,11 +301,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessExpiredUserTimer_Multiple()
 	tBuilder.AddUserTimer(timerInfo2, msBuilder)
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeUserTimer, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeUserTimer,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: tBuilder.GetUserTimerTaskIfNeeded(msBuilder).(*persistence.UserTimerTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -322,7 +330,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -351,11 +360,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Pending() {
 	tBuilder := newTimerBuilder(s.mockShard.GetConfig(), s.logger, common.NewRealTimeSource())
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeActivityTimeout, TimeoutType: int(workflow.TimeoutTypeScheduleToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeActivityTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeScheduleToClose),
 		VisibilityTimestamp: tBuilder.GetActivityTimerTaskIfNeeded(msBuilder).(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -375,7 +386,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -407,11 +419,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 	tBuilder.AddStartToCloseActivityTimeout(timerInfo)
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeActivityTimeout, TimeoutType: int(workflow.TimeoutTypeScheduleToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeActivityTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeScheduleToClose),
 		VisibilityTimestamp: tBuilder.GetActivityTimerTaskIfNeeded(msBuilder).(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -434,7 +448,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple() 
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -473,11 +488,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple() 
 	tBuilder.AddScheduleToCloseActivityTimeout(timerInfo2)
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeActivityTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeActivityTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: tBuilder.GetActivityTimerTaskIfNeeded(msBuilder).(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp(),
 		EventID:             di.ScheduleID,
 	}
@@ -500,7 +517,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -518,11 +536,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Pending() {
 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeDecisionTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: time.Now(),
 		EventID:             di.ScheduleID,
 	}
@@ -542,7 +562,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -562,11 +583,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessDecisionTimeout_Success() {
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeDecisionTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeDecisionTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: time.Now(),
 		EventID:             di.ScheduleID,
 	}
@@ -587,7 +610,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -607,11 +631,13 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Pending() {
 	addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeWorkflowTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: time.Now(),
 	}
 
@@ -630,7 +656,8 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Success() {
 	workflowType := "some random workflow type"
 	taskListName := "some random task list"
 
-	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, 0)
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
 	msBuilder.AddWorkflowExecutionStartedEvent(
 		execution,
 		&history.StartWorkflowExecutionRequest{
@@ -651,16 +678,58 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessWorkflowTimeout_Success() {
 	addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
 
 	timerTask := &persistence.TimerTaskInfo{
-		DomainID:   domainID,
-		WorkflowID: execution.GetWorkflowId(),
-		RunID:      execution.GetRunId(),
-		TaskID:     int64(100),
-		TaskType:   persistence.TaskTypeWorkflowTimeout, TimeoutType: int(workflow.TimeoutTypeStartToClose),
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeWorkflowTimeout,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: time.Now(),
 	}
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mocktimerQueueAckMgr.On("completeTimerTask", timerTask).Return(nil).Once()
+
+	s.Nil(s.timerQueueStandbyProcessor.process(timerTask))
+}
+
+func (s *timerQueueStandbyProcessorSuite) TestProcessRetryTimeout() {
+	domainID := "some random domain ID"
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	workflowType := "some random workflow type"
+	taskListName := "some random task list"
+
+	version := int64(4096)
+	msBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, version)
+	msBuilder.AddWorkflowExecutionStartedEvent(
+		execution,
+		&history.StartWorkflowExecutionRequest{
+			DomainUUID: common.StringPtr(domainID),
+			StartRequest: &workflow.StartWorkflowExecutionRequest{
+				WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+				TaskList:     &workflow.TaskList{Name: common.StringPtr(taskListName)},
+				ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(2),
+				TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+			},
+		},
+	)
+
+	timerTask := &persistence.TimerTaskInfo{
+		Version:             version,
+		DomainID:            domainID,
+		WorkflowID:          execution.GetWorkflowId(),
+		RunID:               execution.GetRunId(),
+		TaskID:              int64(100),
+		TaskType:            persistence.TaskTypeRetryTimer,
+		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
+		VisibilityTimestamp: time.Now(),
+	}
+
 	s.mocktimerQueueAckMgr.On("completeTimerTask", timerTask).Return(nil).Once()
 
 	s.Nil(s.timerQueueStandbyProcessor.process(timerTask))

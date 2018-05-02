@@ -1306,8 +1306,8 @@ func (t *TransferTaskInfo) GetTaskID() int64 {
 	return t.TaskID
 }
 
-// GetTaskVersion returns the task version for transfer task
-func (t *TransferTaskInfo) GetTaskVersion() int64 {
+// GetVersion returns the task version for transfer task
+func (t *TransferTaskInfo) GetVersion() int64 {
 	return t.Version
 }
 
@@ -1321,13 +1321,28 @@ func (t *ReplicationTaskInfo) GetTaskID() int64 {
 	return t.TaskID
 }
 
-// GetTaskVersion returns the task version for replication task
-func (t *ReplicationTaskInfo) GetTaskVersion() int64 {
+// GetVersion returns the task version for replication task
+func (t *ReplicationTaskInfo) GetVersion() int64 {
 	return t.Version
 }
 
 // GetTaskType returns the task type for replication task
 func (t *ReplicationTaskInfo) GetTaskType() int {
+	return t.TaskType
+}
+
+// GetTaskID returns the task ID for timer task
+func (t *TimerTaskInfo) GetTaskID() int64 {
+	return t.TaskID
+}
+
+// GetVersion returns the task version for timer task
+func (t *TimerTaskInfo) GetVersion() int64 {
+	return t.Version
+}
+
+// GetTaskType returns the task type for timer task
+func (t *TimerTaskInfo) GetTaskType() int {
 	return t.TaskType
 }
 

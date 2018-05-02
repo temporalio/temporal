@@ -781,7 +781,7 @@ func (s *historyBuilderSuite) validateDecisionTaskScheduledEvent(di *decisionInf
 	taskList string, timeout int32) {
 	s.NotNil(di)
 	s.Equal(eventID, di.ScheduleID)
-	s.Equal(taskList, di.Tasklist)
+	s.Equal(taskList, di.TaskList)
 }
 
 func (s *historyBuilderSuite) validateDecisionTaskStartedEvent(event *workflow.HistoryEvent, eventID, scheduleID int64,

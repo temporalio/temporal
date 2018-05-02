@@ -23,10 +23,12 @@ package mocks
 import mock "github.com/stretchr/testify/mock"
 import membership "github.com/uber/cadence/common/membership"
 
+// ServiceResolver is an mock implementation
 type ServiceResolver struct {
 	mock.Mock
 }
 
+// Lookup is am mock implementation
 func (_m *ServiceResolver) Lookup(key string) (*membership.HostInfo, error) {
 	ret := _m.Called(key)
 
@@ -49,6 +51,7 @@ func (_m *ServiceResolver) Lookup(key string) (*membership.HostInfo, error) {
 	return r0, r1
 }
 
+// AddListener is am mock implementation
 func (_m *ServiceResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	ret := _m.Called(name, notifyChannel)
 
@@ -62,6 +65,7 @@ func (_m *ServiceResolver) AddListener(name string, notifyChannel chan<- *member
 	return r0
 }
 
+// RemoveListener is am mock implementation
 func (_m *ServiceResolver) RemoveListener(name string) error {
 	ret := _m.Called(name)
 

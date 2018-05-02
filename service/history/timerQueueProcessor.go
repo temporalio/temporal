@@ -107,7 +107,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 
 // NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks []persistence.Task) {
+func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTime time.Time, timerTasks []persistence.Task) {
 	if clusterName == t.currentClusterName {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 	} else {
@@ -115,20 +115,9 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, timerTasks
 		if !ok {
 			panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 		}
+		standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay))
 		standbyTimerProcessor.notifyNewTimers(timerTasks)
 	}
-}
-
-func (t *timerQueueProcessorImpl) SetCurrentTime(clusterName string, currentTime time.Time) {
-	if clusterName == t.currentClusterName {
-		panic(fmt.Sprintf("Cannot change current time of current cluster: %s.", clusterName))
-	}
-
-	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
-	if !ok {
-		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
-	}
-	standbyTimerProcessor.setCurrentTime(currentTime)
 }
 
 func (t *timerQueueProcessorImpl) FailoverDomain(domainID string, standbyClusterName string) {

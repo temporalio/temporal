@@ -123,18 +123,23 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 }
 
 func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
-	lastEventID, transactionID int64) error {
+	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64) error {
 
 	nextEventID := lastEventID + 1
 	c.msBuilder.updateReplicationStateLastEventID(request.GetSourceCluster(), lastEventID)
 	c.msBuilder.executionInfo.NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateHelper(builder, nil, nil, false, transactionID)
+	return c.updateHelper(builder, transferTasks, timerTasks, false, transactionID)
 }
 
 func (c *workflowExecutionContext) updateVersion() error {
 	if c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && c.msBuilder.replicationState != nil {
+
+		if !c.msBuilder.isWorkflowExecutionRunning() {
+			// we should not update the version on mutable state when the workflow is finished
+			return nil
+		}
 		// Support for global domains is enabled and we are performing an update for global domain
 		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.executionInfo.DomainID)
 		if err != nil {
@@ -231,7 +236,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 
 	// this is the current failover version
-	version := c.msBuilder.getVersion()
+	version := c.msBuilder.GetCurrentVersion()
 	for _, task := range transferTasks {
 		task.SetVersion(version)
 	}

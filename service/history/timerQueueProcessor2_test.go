@@ -217,10 +217,13 @@ func (s *timerQueueProcessor2Suite) TestTimerUpdateTimesOut() {
 	// Start timer Processor.
 	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
 
-	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(cluster.TestCurrentClusterName, []persistence.Task{&persistence.DecisionTimeoutTask{
-		VisibilityTimestamp: timerTask.VisibilityTimestamp,
-		EventID:             timerTask.EventID,
-	}})
+	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
+		cluster.TestCurrentClusterName,
+		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+		[]persistence.Task{&persistence.DecisionTimeoutTask{
+			VisibilityTimestamp: timerTask.VisibilityTimestamp,
+			EventID:             timerTask.EventID,
+		}})
 
 	<-waitCh
 	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()
@@ -282,9 +285,12 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	<-waitCh
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil)
-	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(cluster.TestCurrentClusterName, []persistence.Task{&persistence.WorkflowTimeoutTask{
-		VisibilityTimestamp: timerTask.VisibilityTimestamp,
-	}})
+	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
+		cluster.TestCurrentClusterName,
+		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),
+		[]persistence.Task{&persistence.WorkflowTimeoutTask{
+			VisibilityTimestamp: timerTask.VisibilityTimestamp,
+		}})
 
 	<-waitCh
 	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Stop()

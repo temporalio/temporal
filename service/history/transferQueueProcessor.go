@@ -124,7 +124,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, currentTi
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
 	currentClusterTime := t.shard.GetCurrentTime(t.currentClusterName)
-	if currentClusterTime.Sub(currentTime) > t.config.TransferProcessorStandbyTaskDelay {
+	if currentClusterTime.Sub(currentTime) >= t.config.TransferProcessorStandbyTaskDelay {
 		standbyTaskProcessor.notifyNewTask()
 	}
 }
