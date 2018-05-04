@@ -3,7 +3,7 @@ cassandra:
   keyspace: "cadence_standby"
   visibilityKeyspace: "cadence_visibility_standby"
   consistency: "One"
-  numHistoryShards: 4
+  numHistoryShards: 1
 
 ringpop:
   name: cadence_standby

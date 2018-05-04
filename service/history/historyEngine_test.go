@@ -293,20 +293,20 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
 		DomainUUID:          common.StringPtr(domainID),
 		Execution:           &execution,
-		ExpectedNextEventId: common.Int64Ptr(4),
+		ExpectedNextEventId: common.Int64Ptr(3),
 	})
 	s.Nil(err)
 	s.Equal(int64(4), *response.NextEventId)
 
 	// long poll, new event happen before long poll timeout
-	go asycWorkflowUpdate(time.Second * 10)
+	go asycWorkflowUpdate(time.Second * 2)
 	start := time.Now()
 	response, err = s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
 		DomainUUID:          common.StringPtr(domainID),
 		Execution:           &execution,
-		ExpectedNextEventId: common.Int64Ptr(5),
+		ExpectedNextEventId: common.Int64Ptr(4),
 	})
-	s.True(time.Now().After(start.Add(time.Second * 5)))
+	s.True(time.Now().After(start.Add(time.Second * 1)))
 	s.Nil(err)
 	s.Equal(int64(5), *response.NextEventId)
 }
@@ -334,7 +334,7 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &history.GetMutableStateRequest{
 		DomainUUID:          common.StringPtr(domainID),
 		Execution:           &execution,
-		ExpectedNextEventId: common.Int64Ptr(5),
+		ExpectedNextEventId: common.Int64Ptr(4),
 	})
 	s.Nil(err)
 	s.Equal(int64(4), *response.NextEventId)

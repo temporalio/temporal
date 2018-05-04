@@ -2227,9 +2227,7 @@ func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *tim
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	err := s.ShardContext.UpdateWorkflowExecution(request)
 	if err == nil {
-		if len(request.TransferTasks) > 0 {
-			s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName))
-		}
+		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}
@@ -2241,9 +2239,7 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 	*persistence.CreateWorkflowExecutionResponse, error) {
 	resp, err := s.ShardContext.CreateWorkflowExecution(request)
 	if err == nil {
-		if len(request.TransferTasks) > 0 {
-			s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName))
-		}
+		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}

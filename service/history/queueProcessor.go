@@ -252,8 +252,8 @@ ProcessRetryLoop:
 					backoff := time.Duration(retryCount * 100)
 					time.Sleep(backoff * time.Millisecond)
 					retryCount++
-					continue ProcessRetryLoop
 				}
+				continue ProcessRetryLoop
 			}
 			return
 		}

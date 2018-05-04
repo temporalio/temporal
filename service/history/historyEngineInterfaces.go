@@ -112,7 +112,7 @@ type (
 
 	transferQueueProcessor interface {
 		common.Daemon
-		NotifyNewTask(clusterName string, currentTime time.Time)
+		NotifyNewTask(clusterName string, currentTime time.Time, transferTasks []persistence.Task)
 	}
 
 	// TODO the timer quque processor and the one below, timer processor

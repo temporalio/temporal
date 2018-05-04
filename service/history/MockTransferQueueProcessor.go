@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/uber/cadence/common/persistence"
 )
 
 // MockTransferQueueProcessor is used as mock implementation for Processor
@@ -42,6 +43,6 @@ func (_m *MockTransferQueueProcessor) Stop() {
 }
 
 // NotifyNewTask is mock implementation for NotifyNewTask of Processor
-func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, currentTime time.Time) {
-	_m.Called(clusterName, currentTime)
+func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, currentTime time.Time, transferTask []persistence.Task) {
+	_m.Called(clusterName, currentTime, transferTask)
 }

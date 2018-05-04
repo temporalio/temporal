@@ -108,6 +108,9 @@ func (t *timerQueueStandbyProcessorImpl) getTimerGate() TimerGate {
 
 func (t *timerQueueStandbyProcessorImpl) setCurrentTime(currentTime time.Time) {
 	t.timerGate.SetCurrentTime(currentTime)
+}
+
+func (t *timerQueueStandbyProcessorImpl) retryTasks() {
 	t.timerQueueProcessorBase.retryTasks()
 }
 

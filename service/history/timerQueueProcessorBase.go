@@ -163,38 +163,45 @@ RetryProcessor:
 
 func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup, notificationChan chan struct{}) {
 	defer workerWG.Done()
+
 	for {
 		select {
 		case task, ok := <-t.tasksCh:
 			if !ok {
 				return
 			}
+			t.processWithRetry(notificationChan, task)
+		}
+	}
+}
 
-		UpdateFailureLoop:
-			for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount; {
-
-				// clear the existing notification
-				select {
-				case <-notificationChan:
-				default:
-				}
-
-				err := t.timerProcessor.process(task)
-				if err != nil {
-					if err == ErrTaskRetry {
-						<-notificationChan
-					} else {
-						// We will retry until we don't find the timer task any more.
-						t.logger.Infof("Failed to process timer: %v; %v.", task, err)
-						backoff := time.Duration(attempt * 100)
-						time.Sleep(backoff * time.Millisecond)
-						attempt++
-					}
-				} else {
-					atomic.AddUint64(&t.timerFiredCount, 1)
-					break UpdateFailureLoop
-				}
+func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
+ProcessRetryLoop:
+	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount; {
+		select {
+		case <-t.shutdownCh:
+			return
+		default:
+			// clear the existing notification
+			select {
+			case <-notificationChan:
+			default:
 			}
+
+			err := t.timerProcessor.process(task)
+			if err != nil {
+				if err == ErrTaskRetry {
+					<-notificationChan
+				} else {
+					logging.LogTaskProcessingFailedEvent(t.logger, task.GetTaskID(), task.GetTaskType(), err)
+					backoff := time.Duration(attempt * 100)
+					time.Sleep(backoff * time.Millisecond)
+					attempt++
+				}
+				continue ProcessRetryLoop
+			}
+			atomic.AddUint64(&t.timerFiredCount, 1)
+			return
 		}
 	}
 }

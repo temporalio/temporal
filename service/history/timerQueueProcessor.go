@@ -110,14 +110,16 @@ func (t *timerQueueProcessorImpl) Stop() {
 func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTime time.Time, timerTasks []persistence.Task) {
 	if clusterName == t.currentClusterName {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
-	} else {
-		standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
-		if !ok {
-			panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
-		}
-		standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay))
-		standbyTimerProcessor.notifyNewTimers(timerTasks)
+		return
 	}
+
+	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
+	if !ok {
+		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
+	}
+	standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay))
+	standbyTimerProcessor.notifyNewTimers(timerTasks)
+	standbyTimerProcessor.retryTasks()
 }
 
 func (t *timerQueueProcessorImpl) FailoverDomain(domainID string, standbyClusterName string) {
