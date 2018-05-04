@@ -93,9 +93,17 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 			return err
 		}
 
+		// TODO
+		// WARNING
+		// CODE SHOULD BE REMOVE WHEN IN PROD
+		// TEMP CODE LOGIC FOR TESTING ONLY
+		if firstEvent.GetEventId() < msBuilder.GetNextEventID() {
+			return nil
+		}
+
 		// Check for out of order replication task and store it in the buffer
 		if firstEvent.GetEventId() > msBuilder.GetNextEventID() {
-			if t := msBuilder.BufferReplicationTask(request); t == nil {
+			if err := msBuilder.BufferReplicationTask(request); err != nil {
 				return errors.New("failed to add buffered replication task")
 			}
 

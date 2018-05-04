@@ -354,7 +354,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 }
 
 func (e *mutableStateBuilder) BufferReplicationTask(
-	request *h.ReplicateEventsRequest) *persistence.BufferedReplicationTask {
+	request *h.ReplicateEventsRequest) error {
 	if _, ok := e.GetBufferedReplicationTask(request.GetFirstEventId()); ok {
 		// Have an existing replication task
 		return nil
@@ -366,7 +366,7 @@ func (e *mutableStateBuilder) BufferReplicationTask(
 		historyBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), request.History.Events)
 		serializedHistoryBatch, err = e.hBuilder.serializer.Serialize(historyBatch)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
@@ -375,7 +375,7 @@ func (e *mutableStateBuilder) BufferReplicationTask(
 			request.NewRunHistory.Events)
 		serializedNewRunHistoryBatch, err = e.hBuilder.serializer.Serialize(newRunHistoryBatch)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
@@ -390,7 +390,7 @@ func (e *mutableStateBuilder) BufferReplicationTask(
 	e.bufferedReplicationTasks[request.GetFirstEventId()] = bt
 	e.updateBufferedReplicationTasks = bt
 
-	return bt
+	return nil
 }
 
 func (e *mutableStateBuilder) GetBufferedReplicationTask(firstEventID int64) (*persistence.BufferedReplicationTask,
