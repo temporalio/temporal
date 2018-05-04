@@ -284,10 +284,13 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			cancelRequestID := uuid.New()
 			rci := msBuilder.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(event, cancelRequestID)
-
 			attributes := event.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes
+			targetDomainEntry, err := r.shard.GetDomainCache().GetDomain(attributes.GetDomain())
+			if err != nil {
+				return err
+			}
 			transferTasks = append(transferTasks, r.scheduleCancelExternalWorkflowTransferTask(
-				attributes.GetDomain(),
+				targetDomainEntry.GetInfo().ID,
 				attributes.WorkflowExecution.GetWorkflowId(),
 				attributes.WorkflowExecution.GetRunId(),
 				attributes.GetChildWorkflowOnly(),
@@ -304,10 +307,13 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			// Create a new request ID which is used by transfer queue processor if domain is failed over at this point
 			signalRequestID := uuid.New()
 			si := msBuilder.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(event, signalRequestID)
-
 			attributes := event.SignalExternalWorkflowExecutionInitiatedEventAttributes
+			targetDomainEntry, err := r.shard.GetDomainCache().GetDomain(attributes.GetDomain())
+			if err != nil {
+				return err
+			}
 			transferTasks = append(transferTasks, r.scheduleSignalWorkflowTransferTask(
-				attributes.GetDomain(),
+				targetDomainEntry.GetInfo().ID,
 				attributes.WorkflowExecution.GetWorkflowId(),
 				attributes.WorkflowExecution.GetRunId(),
 				attributes.GetChildWorkflowOnly(),
