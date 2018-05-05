@@ -434,6 +434,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			newTimerTasks = append(newTimerTasks, r.scheduleWorkflowTimerTask(event, newStateBuilder))
 
 			msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(request.GetSourceCluster(), domainID, event, startedEvent, di, newStateBuilder)
+			transferTasks = append(transferTasks, r.scheduleDeleteHistoryTransferTask())
+			timerTask, err := r.scheduleDeleteHistoryTimerTask(event, domainID)
+			if err != nil {
+				return err
+			}
+			timerTasks = append(timerTasks, timerTask)
 
 			// Generate a transaction ID for appending events to history
 			transactionID, err := r.shard.GetNextTransferTaskID()
