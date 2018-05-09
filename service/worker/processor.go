@@ -197,11 +197,12 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 									WorkflowId: task.HistoryTaskAttributes.WorkflowId,
 									RunId:      task.HistoryTaskAttributes.RunId,
 								},
-								FirstEventId:  task.HistoryTaskAttributes.FirstEventId,
-								NextEventId:   task.HistoryTaskAttributes.NextEventId,
-								Version:       task.HistoryTaskAttributes.Version,
-								History:       task.HistoryTaskAttributes.History,
-								NewRunHistory: task.HistoryTaskAttributes.NewRunHistory,
+								FirstEventId:    task.HistoryTaskAttributes.FirstEventId,
+								NextEventId:     task.HistoryTaskAttributes.NextEventId,
+								Version:         task.HistoryTaskAttributes.Version,
+								ReplicationInfo: task.HistoryTaskAttributes.ReplicationInfo,
+								History:         task.HistoryTaskAttributes.History,
+								NewRunHistory:   task.HistoryTaskAttributes.NewRunHistory,
 							})
 
 							// ReplicateEvents succeeded, break out of the loop and complete task

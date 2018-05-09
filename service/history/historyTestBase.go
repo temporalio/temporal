@@ -260,6 +260,11 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 	return s.executionMgr.UpdateWorkflowExecution(request)
 }
 
+// ResetMutableState test implementation
+func (s *TestShardContext) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
+	return s.executionMgr.ResetMutableState(request)
+}
+
 // AppendHistoryEvents test implementation
 func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error {
 	return s.historyMgr.AppendHistoryEvents(request)

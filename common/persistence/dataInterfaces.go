@@ -583,6 +583,22 @@ type (
 		DeleteBufferedReplicationTask *int64
 	}
 
+	// ResetMutableStateRequest is used to reset workflow execution state
+	ResetMutableStateRequest struct {
+		ExecutionInfo    *WorkflowExecutionInfo
+		ReplicationState *ReplicationState
+		Condition        int64
+		RangeID          int64
+
+		// Mutable state
+		InsertActivityInfos       []*ActivityInfo
+		InsertTimerInfos          []*TimerInfo
+		InsertChildExecutionInfos []*ChildExecutionInfo
+		InsertRequestCancelInfos  []*RequestCancelInfo
+		InsertSignalInfos         []*SignalInfo
+		InsertSignalRequestedIDs  []string
+	}
+
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
 		DomainID   string
@@ -855,6 +871,7 @@ type (
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error
+		ResetMutableState(request *ResetMutableStateRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)

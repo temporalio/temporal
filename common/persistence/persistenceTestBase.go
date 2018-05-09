@@ -689,6 +689,69 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 	})
 }
 
+// UpdateAllMutableState is a utility method to update workflow execution
+func (s *TestBase) UpdateAllMutableState(updatedMutableState *WorkflowMutableState, condition int64) error {
+	var aInfos []*ActivityInfo
+	for _, ai := range updatedMutableState.ActivitInfos {
+		aInfos = append(aInfos, ai)
+	}
+
+	var tInfos []*TimerInfo
+	for _, ti := range updatedMutableState.TimerInfos {
+		tInfos = append(tInfos, ti)
+	}
+
+	var cInfos []*ChildExecutionInfo
+	for _, ci := range updatedMutableState.ChildExecutionInfos {
+		cInfos = append(cInfos, ci)
+	}
+
+	var rcInfos []*RequestCancelInfo
+	for _, rci := range updatedMutableState.RequestCancelInfos {
+		rcInfos = append(rcInfos, rci)
+	}
+
+	var sInfos []*SignalInfo
+	for _, si := range updatedMutableState.SignalInfos {
+		sInfos = append(sInfos, si)
+	}
+
+	var srIDs []string
+	for id := range updatedMutableState.SignalRequestedIDs {
+		srIDs = append(srIDs, id)
+	}
+	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
+		ExecutionInfo:             updatedMutableState.ExecutionInfo,
+		ReplicationState:          updatedMutableState.ReplicationState,
+		Condition:                 condition,
+		RangeID:                   s.ShardInfo.RangeID,
+		UpsertActivityInfos:       aInfos,
+		UpserTimerInfos:           tInfos,
+		UpsertChildExecutionInfos: cInfos,
+		UpsertRequestCancelInfos:  rcInfos,
+		UpsertSignalInfos:         sInfos,
+		UpsertSignalRequestedIDs:  srIDs,
+	})
+}
+
+// ResetMutableState is  utility method to reset mutable state
+func (s *TestBase) ResetMutableState(info *WorkflowExecutionInfo, replicationState *ReplicationState, nextEventID int64,
+	activityInfos []*ActivityInfo, timerInfos []*TimerInfo, childExecutionInfos []*ChildExecutionInfo,
+	requestCancelInfos []*RequestCancelInfo, signalInfos []*SignalInfo, ids []string) error {
+	return s.WorkflowMgr.ResetMutableState(&ResetMutableStateRequest{
+		ExecutionInfo:             info,
+		ReplicationState:          replicationState,
+		Condition:                 nextEventID,
+		RangeID:                   s.ShardInfo.RangeID,
+		InsertActivityInfos:       activityInfos,
+		InsertTimerInfos:          timerInfos,
+		InsertChildExecutionInfos: childExecutionInfos,
+		InsertRequestCancelInfos:  requestCancelInfos,
+		InsertSignalInfos:         signalInfos,
+		InsertSignalRequestedIDs:  ids,
+	})
+}
+
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 	return s.WorkflowMgr.DeleteWorkflowExecution(&DeleteWorkflowExecutionRequest{

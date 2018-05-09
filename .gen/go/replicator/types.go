@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 	"math"
@@ -520,15 +521,54 @@ func (v *DomainTaskAttributes) GetFailoverVersion() (o int64) {
 }
 
 type HistoryTaskAttributes struct {
-	DomainId      *string         `json:"domainId,omitempty"`
-	WorkflowId    *string         `json:"workflowId,omitempty"`
-	RunId         *string         `json:"runId,omitempty"`
-	FirstEventId  *int64          `json:"firstEventId,omitempty"`
-	NextEventId   *int64          `json:"nextEventId,omitempty"`
-	Version       *int64          `json:"version,omitempty"`
-	History       *shared.History `json:"history,omitempty"`
-	NewRunHistory *shared.History `json:"newRunHistory,omitempty"`
+	DomainId        *string                             `json:"domainId,omitempty"`
+	WorkflowId      *string                             `json:"workflowId,omitempty"`
+	RunId           *string                             `json:"runId,omitempty"`
+	FirstEventId    *int64                              `json:"firstEventId,omitempty"`
+	NextEventId     *int64                              `json:"nextEventId,omitempty"`
+	Version         *int64                              `json:"version,omitempty"`
+	ReplicationInfo map[string]*history.ReplicationInfo `json:"replicationInfo,omitempty"`
+	History         *shared.History                     `json:"history,omitempty"`
+	NewRunHistory   *shared.History                     `json:"newRunHistory,omitempty"`
 }
+
+type _Map_String_ReplicationInfo_MapItemList map[string]*history.ReplicationInfo
+
+func (m _Map_String_ReplicationInfo_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		if v == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", k)
+		}
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := v.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_ReplicationInfo_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 
 // ToWire translates a HistoryTaskAttributes struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -547,7 +587,7 @@ type HistoryTaskAttributes struct {
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [8]wire.Field
+		fields [9]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -601,12 +641,20 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
+	if v.ReplicationInfo != nil {
+		w, err = wire.NewValueMap(_Map_String_ReplicationInfo_MapItemList(v.ReplicationInfo)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
 	if v.History != nil {
 		w, err = v.History.ToWire()
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 70, Value: w}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 	if v.NewRunHistory != nil {
@@ -614,11 +662,45 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 80, Value: w}
+		fields[i] = wire.Field{ID: 90, Value: w}
 		i++
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ReplicationInfo_Read(w wire.Value) (*history.ReplicationInfo, error) {
+	var v history.ReplicationInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _Map_String_ReplicationInfo_Read(m wire.MapItemList) (map[string]*history.ReplicationInfo, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make(map[string]*history.ReplicationInfo, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := _ReplicationInfo_Read(x.Value)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 func _History_Read(w wire.Value) (*shared.History, error) {
@@ -710,6 +792,14 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 
 			}
 		case 70:
+			if field.Value.Type() == wire.TMap {
+				v.ReplicationInfo, err = _Map_String_ReplicationInfo_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
 			if field.Value.Type() == wire.TStruct {
 				v.History, err = _History_Read(field.Value)
 				if err != nil {
@@ -717,7 +807,7 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
-		case 80:
+		case 90:
 			if field.Value.Type() == wire.TStruct {
 				v.NewRunHistory, err = _History_Read(field.Value)
 				if err != nil {
@@ -738,7 +828,7 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [8]string
+	var fields [9]string
 	i := 0
 	if v.DomainId != nil {
 		fields[i] = fmt.Sprintf("DomainId: %v", *(v.DomainId))
@@ -764,6 +854,10 @@ func (v *HistoryTaskAttributes) String() string {
 		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
 		i++
 	}
+	if v.ReplicationInfo != nil {
+		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
 	if v.History != nil {
 		fields[i] = fmt.Sprintf("History: %v", v.History)
 		i++
@@ -774,6 +868,23 @@ func (v *HistoryTaskAttributes) String() string {
 	}
 
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*history.ReplicationInfo) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this HistoryTaskAttributes match the
@@ -797,6 +908,9 @@ func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
 		return false
 	}
 	if !_I64_EqualsPtr(v.Version, rhs.Version) {
+		return false
+	}
+	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
 		return false
 	}
 	if !((v.History == nil && rhs.History == nil) || (v.History != nil && rhs.History != nil && v.History.Equals(rhs.History))) {

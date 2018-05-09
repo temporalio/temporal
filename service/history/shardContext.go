@@ -60,6 +60,7 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
+		ResetMutableState(request *persistence.ResetMutableStateRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error
 		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
@@ -359,6 +360,53 @@ Update_Loop:
 					// Retry the operation if we still have the shard ownership
 					if currentRangeID != s.getRangeID() {
 						continue Update_Loop
+					} else {
+						// Shard is stolen, trigger shutdown of history engine
+						s.closeShard()
+					}
+				}
+			default:
+				{
+					// We have no idea if the write failed or will eventually make it to
+					// persistence. Increment RangeID to guarantee that subsequent reads
+					// will either see that write, or know for certain that it failed.
+					// This allows the callers to reliably check the outcome by performing
+					// a read.
+					err1 := s.renewRangeLocked(false)
+					if err1 != nil {
+						// At this point we have no choice but to unload the shard, so that it
+						// gets a new RangeID when it's reloaded.
+						s.closeShard()
+					}
+				}
+			}
+		}
+
+		return err
+	}
+
+	return ErrMaxAttemptsExceeded
+}
+
+func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
+	s.Lock()
+	defer s.Unlock()
+
+Reset_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		currentRangeID := s.getRangeID()
+		request.RangeID = currentRangeID
+		err := s.executionManager.ResetMutableState(request)
+		if err != nil {
+			switch err.(type) {
+			case *persistence.ConditionFailedError, *shared.ServiceBusyError:
+				// No special handling required for these errors
+			case *persistence.ShardOwnershipLostError:
+				{
+					// RangeID might have been renewed by the same host while this update was in flight
+					// Retry the operation if we still have the shard ownership
+					if currentRangeID != s.getRangeID() {
+						continue Reset_Loop
 					} else {
 						// Shard is stolen, trigger shutdown of history engine
 						s.closeShard()

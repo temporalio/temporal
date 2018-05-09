@@ -186,6 +186,49 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	}
 }
 
+func (e *mutableStateBuilder) ResetSnapshot() *persistence.ResetMutableStateRequest {
+	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
+	for _, info := range e.pendingActivityInfoIDs {
+		insertActivities = append(insertActivities, info)
+	}
+
+	insertTimers := make([]*persistence.TimerInfo, 0, len(e.pendingTimerInfoIDs))
+	for _, info := range e.pendingTimerInfoIDs {
+		insertTimers = append(insertTimers, info)
+	}
+
+	insertChildExecutions := make([]*persistence.ChildExecutionInfo, 0, len(e.pendingChildExecutionInfoIDs))
+	for _, info := range e.pendingChildExecutionInfoIDs {
+		insertChildExecutions = append(insertChildExecutions, info)
+	}
+
+	insertRequestCancels := make([]*persistence.RequestCancelInfo, 0, len(e.pendingRequestCancelInfoIDs))
+	for _, info := range e.pendingRequestCancelInfoIDs {
+		insertRequestCancels = append(insertRequestCancels, info)
+	}
+
+	insertSignals := make([]*persistence.SignalInfo, 0, len(e.pendingSignalInfoIDs))
+	for _, info := range e.pendingSignalInfoIDs {
+		insertSignals = append(insertSignals, info)
+	}
+
+	insertSignalRequested := make([]string, 0, len(e.pendingSignalRequestedIDs))
+	for id := range e.pendingSignalRequestedIDs {
+		insertSignalRequested = append(insertSignalRequested, id)
+	}
+
+	return &persistence.ResetMutableStateRequest{
+		ExecutionInfo:             e.executionInfo,
+		ReplicationState:          e.replicationState,
+		InsertActivityInfos:       insertActivities,
+		InsertTimerInfos:          insertTimers,
+		InsertChildExecutionInfos: insertChildExecutions,
+		InsertRequestCancelInfos:  insertRequestCancels,
+		InsertSignalInfos:         insertSignals,
+		InsertSignalRequestedIDs:  insertSignalRequested,
+	}
+}
+
 func (e *mutableStateBuilder) FlushBufferedEvents() error {
 	// put new events into 2 buckets:
 	//  1) if the event was added while there was in-flight decision, then put it in buffered bucket

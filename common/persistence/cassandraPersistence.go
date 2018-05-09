@@ -421,8 +421,30 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
+	templateResetActivityInfoQuery = `UPDATE executions ` +
+		`SET activity_map = ?` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
 	templateUpdateTimerInfoQuery = `UPDATE executions ` +
 		`SET timer_map[ ? ] =` + templateTimerInfoType + ` ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
+	templateResetTimerInfoQuery = `UPDATE executions ` +
+		`SET timer_map = ?` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -443,8 +465,30 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
+	templateResetChildExecutionInfoQuery = `UPDATE executions ` +
+		`SET child_executions_map = ?` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
 	templateUpdateRequestCancelInfoQuery = `UPDATE executions ` +
 		`SET request_cancel_map[ ? ] =` + templateRequestCancelInfoType + ` ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
+	templateResetRequestCancelInfoQuery = `UPDATE executions ` +
+		`SET request_cancel_map = ?` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -465,8 +509,30 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
+	templateResetSignalInfoQuery = `UPDATE executions ` +
+		`SET signal_map = ?` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
 	templateUpdateSignalRequestedQuery = `UPDATE executions ` +
 		`SET signal_requested = signal_requested + ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
+	templateResetSignalRequestedQuery = `UPDATE executions ` +
+		`SET signal_requested = ?` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -1558,6 +1624,176 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	return nil
 }
 
+func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateRequest) error {
+	batch := d.session.NewBatch(gocql.LoggedBatch)
+	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	executionInfo := request.ExecutionInfo
+	replicationState := request.ReplicationState
+
+	lastReplicationInfo := make(map[string]map[string]interface{})
+	for k, v := range replicationState.LastReplicationInfo {
+		lastReplicationInfo[k] = createReplicationInfoMap(v)
+	}
+
+	batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
+		executionInfo.DomainID,
+		executionInfo.WorkflowID,
+		executionInfo.RunID,
+		executionInfo.ParentDomainID,
+		executionInfo.ParentWorkflowID,
+		executionInfo.ParentRunID,
+		executionInfo.InitiatedID,
+		executionInfo.CompletionEvent,
+		executionInfo.TaskList,
+		executionInfo.WorkflowTypeName,
+		executionInfo.WorkflowTimeout,
+		executionInfo.DecisionTimeoutValue,
+		executionInfo.ExecutionContext,
+		executionInfo.State,
+		executionInfo.CloseStatus,
+		executionInfo.LastFirstEventID,
+		executionInfo.NextEventID,
+		executionInfo.LastProcessedEvent,
+		executionInfo.StartTimestamp,
+		cqlNowTimestamp,
+		executionInfo.CreateRequestID,
+		executionInfo.DecisionVersion,
+		executionInfo.DecisionScheduleID,
+		executionInfo.DecisionStartedID,
+		executionInfo.DecisionRequestID,
+		executionInfo.DecisionTimeout,
+		executionInfo.DecisionAttempt,
+		executionInfo.DecisionTimestamp,
+		executionInfo.CancelRequested,
+		executionInfo.CancelRequestID,
+		executionInfo.StickyTaskList,
+		executionInfo.StickyScheduleToStartTimeout,
+		executionInfo.ClientLibraryVersion,
+		executionInfo.ClientFeatureVersion,
+		executionInfo.ClientImpl,
+		replicationState.CurrentVersion,
+		replicationState.StartVersion,
+		replicationState.LastWriteVersion,
+		replicationState.LastWriteEventID,
+		lastReplicationInfo,
+		executionInfo.NextEventID,
+		d.shardID,
+		rowTypeExecution,
+		executionInfo.DomainID,
+		executionInfo.WorkflowID,
+		executionInfo.RunID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		request.Condition)
+
+	d.resetActivityInfos(batch, request.InsertActivityInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	d.resetTimerInfos(batch, request.InsertTimerInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	d.resetChildExecutionInfos(batch, request.InsertChildExecutionInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	d.resetRequestCancelInfos(batch, request.InsertRequestCancelInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	d.resetSignalInfos(batch, request.InsertSignalInfos, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	d.resetSignalRequested(batch, request.InsertSignalRequestedIDs, executionInfo.DomainID, executionInfo.WorkflowID,
+		executionInfo.RunID, request.Condition)
+
+	// Verifies that the RangeID has not changed
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		d.shardID,
+		rowTypeShard,
+		rowTypeShardDomainID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+	}()
+
+	if err != nil {
+		if isTimeoutError(err) {
+			// Write may have succeeded, but we don't know
+			// return this info to the caller so they have the option of trying to find out by executing a read
+			return &TimeoutError{Msg: fmt.Sprintf("ResetMutableState timed out. Error: %v", err)}
+		} else if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("ResetMutableState operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("ResetMutableState operation failed. Error: %v", err),
+		}
+	}
+
+	if !applied {
+		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
+		// the next_event_id check failed. Check the row info returned by Cassandra to figure out which one it is.
+	GetFailureReasonLoop:
+		for {
+			rowType, ok := previous["type"].(int)
+			if !ok {
+				// This should never happen, as all our rows have the type field.
+				break GetFailureReasonLoop
+			}
+
+			if rowType == rowTypeShard {
+				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
+					// UpdateWorkflowExecution failed because rangeID was modified
+					return &ShardOwnershipLostError{
+						ShardID: d.shardID,
+						Msg: fmt.Sprintf("Failed to reset mutable state.  Request RangeID: %v, Actual RangeID: %v",
+							request.RangeID, rangeID),
+					}
+				}
+			} else {
+				if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
+					// CreateWorkflowExecution failed because next event ID is unexpected
+					return &ConditionFailedError{
+						Msg: fmt.Sprintf("Failed to reset mutable state.  Request Condition: %v, Actual Value: %v",
+							request.Condition, nextEventID),
+					}
+				}
+			}
+
+			previous = make(map[string]interface{})
+			if !iter.MapScan(previous) {
+				// Cassandra returns the actual row that caused a condition failure, so we should always return
+				// from the checks above, but just in case.
+				break GetFailureReasonLoop
+			}
+		}
+
+		// At this point we only know that the write was not applied.
+		// Return the row information returned by Cassandra.
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
+
+		return &ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to reset mutable state.  RangeID: %v, Condition: %v, columns: (%v)",
+				request.RangeID, request.Condition, strings.Join(columns, ",")),
+		}
+	}
+
+	return nil
+}
+
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
@@ -2372,6 +2608,20 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 	}
 }
 
+func (d *cassandraPersistence) resetActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, domainID,
+	workflowID, runID string, condition int64) {
+	batch.Query(templateResetActivityInfoQuery,
+		resetActivityInfoMap(activityInfos),
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
+}
+
 func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos []*TimerInfo, deleteInfos []string,
 	domainID, workflowID, runID string, condition int64, rangeID int64) {
 
@@ -2405,6 +2655,20 @@ func (d *cassandraPersistence) updateTimerInfos(batch *gocql.Batch, timerInfos [
 			rowTypeExecutionTaskID,
 			condition)
 	}
+}
+
+func (d *cassandraPersistence) resetTimerInfos(batch *gocql.Batch, timerInfos []*TimerInfo, domainID, workflowID,
+	runID string, condition int64) {
+	batch.Query(templateResetTimerInfoQuery,
+		resetTimerInfoMap(timerInfos),
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
 }
 
 func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, childExecutionInfos []*ChildExecutionInfo,
@@ -2444,6 +2708,20 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 	}
 }
 
+func (d *cassandraPersistence) resetChildExecutionInfos(batch *gocql.Batch, childExecutionInfos []*ChildExecutionInfo,
+	domainID, workflowID, runID string, condition int64) {
+	batch.Query(templateResetChildExecutionInfoQuery,
+		resetChildExecutionInfoMap(childExecutionInfos),
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
+}
+
 func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requestCancelInfos []*RequestCancelInfo,
 	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) {
 
@@ -2476,6 +2754,20 @@ func (d *cassandraPersistence) updateRequestCancelInfos(batch *gocql.Batch, requ
 			rowTypeExecutionTaskID,
 			condition)
 	}
+}
+
+func (d *cassandraPersistence) resetRequestCancelInfos(batch *gocql.Batch, requestCancelInfos []*RequestCancelInfo,
+	domainID, workflowID, runID string, condition int64) {
+	batch.Query(templateResetRequestCancelInfoQuery,
+		resetRequestCancelInfoMap(requestCancelInfos),
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
 }
 
 func (d *cassandraPersistence) updateSignalInfos(batch *gocql.Batch, signalInfos []*SignalInfo,
@@ -2515,6 +2807,20 @@ func (d *cassandraPersistence) updateSignalInfos(batch *gocql.Batch, signalInfos
 	}
 }
 
+func (d *cassandraPersistence) resetSignalInfos(batch *gocql.Batch, signalInfos []*SignalInfo,
+	domainID, workflowID, runID string, condition int64) {
+	batch.Query(templateResetSignalInfoQuery,
+		resetSignalInfoMap(signalInfos),
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
+}
+
 func (d *cassandraPersistence) updateSignalsRequested(batch *gocql.Batch, signalReqIDs []string, deleteSignalReqID string,
 	domainID, workflowID, runID string, condition int64, rangeID int64) {
 
@@ -2544,6 +2850,20 @@ func (d *cassandraPersistence) updateSignalsRequested(batch *gocql.Batch, signal
 			rowTypeExecutionTaskID,
 			condition)
 	}
+}
+
+func (d *cassandraPersistence) resetSignalRequested(batch *gocql.Batch, signalRequested []string,
+	domainID, workflowID, runID string, condition int64) {
+	batch.Query(templateResetSignalRequestedQuery,
+		signalRequested,
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
 }
 
 func (d *cassandraPersistence) updateBufferedEvents(batch *gocql.Batch, newBufferedEvents *SerializedHistoryEventBatch,
@@ -3020,6 +3340,109 @@ func createBufferedReplicationTaskInfo(result map[string]interface{}) *BufferedR
 	}
 
 	return info
+}
+
+func resetActivityInfoMap(activityInfos []*ActivityInfo) map[int64]map[string]interface{} {
+	aMap := make(map[int64]map[string]interface{})
+	for _, a := range activityInfos {
+		aInfo := make(map[string]interface{})
+		aInfo["version"] = a.Version
+		aInfo["schedule_id"] = a.ScheduleID
+		aInfo["scheduled_event"] = a.ScheduledEvent
+		aInfo["scheduled_time"] = a.ScheduledTime
+		aInfo["started_id"] = a.StartedID
+		aInfo["started_event"] = a.StartedEvent
+		aInfo["started_time"] = a.StartedTime
+		aInfo["activity_id"] = a.ActivityID
+		aInfo["request_id"] = a.RequestID
+		aInfo["details"] = a.Details
+		aInfo["schedule_to_start_timeout"] = a.ScheduleToStartTimeout
+		aInfo["schedule_to_close_timeout"] = a.ScheduleToCloseTimeout
+		aInfo["start_to_close_timeout"] = a.StartToCloseTimeout
+		aInfo["heart_beat_timeout"] = a.HeartbeatTimeout
+		aInfo["cancel_requested"] = a.CancelRequested
+		aInfo["cancel_request_id"] = a.CancelRequestID
+		aInfo["last_hb_updated_time"] = a.LastHeartBeatUpdatedTime
+		aInfo["timer_task_status"] = a.TimerTaskStatus
+		aInfo["attempt"] = a.Attempt
+		aInfo["task_list"] = a.TaskList
+		aInfo["started_identity"] = a.StartedIdentity
+		aInfo["has_retry_policy"] = a.HasRetryPolicy
+		aInfo["init_interval"] = a.InitialInterval
+		aInfo["backoff_coefficient"] = a.BackoffCoefficient
+		aInfo["max_interval"] = a.MaximumInterval
+		aInfo["expiration_time"] = a.ExpirationTime
+		aInfo["max_attempts"] = a.MaximumAttempts
+		aInfo["non_retriable_errors"] = a.NonRetriableErrors
+
+		aMap[a.ScheduleID] = aInfo
+	}
+
+	return aMap
+}
+
+func resetTimerInfoMap(timerInfos []*TimerInfo) map[string]map[string]interface{} {
+	tMap := make(map[string]map[string]interface{})
+	for _, t := range timerInfos {
+		tInfo := make(map[string]interface{})
+		tInfo["version"] = t.Version
+		tInfo["timer_id"] = t.TimerID
+		tInfo["started_id"] = t.StartedID
+		tInfo["expiry_time"] = t.ExpiryTime
+		tInfo["task_id"] = t.TaskID
+
+		tMap[t.TimerID] = tInfo
+	}
+
+	return tMap
+}
+
+func resetChildExecutionInfoMap(childExecutionInfos []*ChildExecutionInfo) map[int64]map[string]interface{} {
+	cMap := make(map[int64]map[string]interface{})
+	for _, c := range childExecutionInfos {
+		cInfo := make(map[string]interface{})
+		cInfo["version"] = c.Version
+		cInfo["initiated_id"] = c.InitiatedID
+		cInfo["initiated_event"] = c.InitiatedEvent
+		cInfo["started_id"] = c.StartedID
+		cInfo["started_event"] = c.StartedEvent
+		cInfo["create_request_id"] = c.CreateRequestID
+
+		cMap[c.InitiatedID] = cInfo
+	}
+
+	return cMap
+}
+
+func resetRequestCancelInfoMap(requestCancelInfos []*RequestCancelInfo) map[int64]map[string]interface{} {
+	rcMap := make(map[int64]map[string]interface{})
+	for _, rc := range requestCancelInfos {
+		rcInfo := make(map[string]interface{})
+		rcInfo["version"] = rc.Version
+		rcInfo["initiated_id"] = rc.InitiatedID
+		rcInfo["cancel_request_id"] = rc.CancelRequestID
+
+		rcMap[rc.InitiatedID] = rcInfo
+	}
+
+	return rcMap
+}
+
+func resetSignalInfoMap(signalInfos []*SignalInfo) map[int64]map[string]interface{} {
+	sMap := make(map[int64]map[string]interface{})
+	for _, s := range signalInfos {
+		sInfo := make(map[string]interface{})
+		sInfo["version"] = s.Version
+		sInfo["initiated_id"] = s.InitiatedID
+		sInfo["signal_request_id"] = s.SignalRequestID
+		sInfo["signal_name"] = s.SignalName
+		sInfo["input"] = s.Input
+		sInfo["control"] = s.Control
+
+		sMap[s.InitiatedID] = sInfo
+	}
+
+	return sMap
 }
 
 func createSerializedHistoryEventBatch(result map[string]interface{}) *SerializedHistoryEventBatch {

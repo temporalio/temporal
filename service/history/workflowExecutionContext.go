@@ -108,6 +108,20 @@ func (c *workflowExecutionContext) loadWorkflowExecution() (*mutableStateBuilder
 	return msBuilder, nil
 }
 
+func (c *workflowExecutionContext) resetWorkflowExecution(resetBuilder *mutableStateBuilder) (*mutableStateBuilder,
+	error) {
+	snapshotRequest := resetBuilder.ResetSnapshot()
+	snapshotRequest.Condition = c.updateCondition
+
+	err := c.shard.ResetMutableState(snapshotRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	c.clear()
+	return c.loadWorkflowExecution()
+}
+
 func (c *workflowExecutionContext) updateWorkflowExecutionWithContext(context []byte, transferTasks []persistence.Task,
 	timerTasks []persistence.Task, transactionID int64) error {
 	c.msBuilder.executionInfo.ExecutionContext = context

@@ -196,15 +196,21 @@ struct RecordChildExecutionCompletedRequest {
   50: optional shared.HistoryEvent completionEvent
 }
 
+struct ReplicationInfo {
+  10: optional i64 (js.type = "Long") version
+  20: optional i64 (js.type = "Long") lastEventId
+}
+
 struct ReplicateEventsRequest {
-  5:  optional string sourceCluster
-  10: optional string domainUUID
-  20: optional shared.WorkflowExecution workflowExecution
-  30: optional i64 (js.type = "Long") firstEventId
-  40: optional i64 (js.type = "Long") nextEventId
-  50: optional i64 (js.type = "Long") version
-  60: optional shared.History history
-  70: optional shared.History newRunHistory
+  10:  optional string sourceCluster
+  20: optional string domainUUID
+  30: optional shared.WorkflowExecution workflowExecution
+  40: optional i64 (js.type = "Long") firstEventId
+  50: optional i64 (js.type = "Long") nextEventId
+  60: optional i64 (js.type = "Long") version
+  70: optional map<string, ReplicationInfo> replicationInfo
+  80: optional shared.History history
+  90: optional shared.History newRunHistory
 }
 
 /**

@@ -1851,6 +1851,381 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	}
 }
 
+func (s *cassandraPersistenceSuite) TestResetMutableState() {
+	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-reset-mutable-state-test"),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	currentTime := time.Now().UTC()
+	expiryTime := currentTime.Add(10 * time.Second)
+	updatedState := &WorkflowMutableState{
+		ExecutionInfo: updatedInfo,
+		ActivitInfos: map[int64]*ActivityInfo{
+			4: {
+				Version:                  7789,
+				ScheduleID:               4,
+				ScheduledEvent:           []byte("scheduled_event_4"),
+				ScheduledTime:            currentTime,
+				StartedID:                6,
+				StartedEvent:             []byte("started_event_1"),
+				StartedTime:              currentTime,
+				ScheduleToCloseTimeout:   1,
+				ScheduleToStartTimeout:   2,
+				StartToCloseTimeout:      3,
+				HeartbeatTimeout:         4,
+				LastHeartBeatUpdatedTime: currentTime,
+				TimerTaskStatus:          1,
+			},
+			5: {
+				Version:                  7789,
+				ScheduleID:               5,
+				ScheduledEvent:           []byte("scheduled_event_5"),
+				ScheduledTime:            currentTime,
+				StartedID:                7,
+				StartedEvent:             []byte("started_event_2"),
+				StartedTime:              currentTime,
+				ScheduleToCloseTimeout:   1,
+				ScheduleToStartTimeout:   2,
+				StartToCloseTimeout:      3,
+				HeartbeatTimeout:         4,
+				LastHeartBeatUpdatedTime: currentTime,
+				TimerTaskStatus:          1,
+			}},
+
+		TimerInfos: map[string]*TimerInfo{
+			"t1": {
+				Version:    2333,
+				TimerID:    "t1",
+				StartedID:  1,
+				ExpiryTime: expiryTime,
+				TaskID:     500,
+			},
+			"t2": {
+				Version:    2333,
+				TimerID:    "t2",
+				StartedID:  2,
+				ExpiryTime: expiryTime,
+				TaskID:     501,
+			},
+			"t3": {
+				Version:    2333,
+				TimerID:    "t3",
+				StartedID:  3,
+				ExpiryTime: expiryTime,
+				TaskID:     502,
+			},
+		},
+
+		ChildExecutionInfos: map[int64]*ChildExecutionInfo{
+			9: {
+				Version:         2334,
+				InitiatedID:     9,
+				InitiatedEvent:  nil,
+				StartedID:       11,
+				StartedEvent:    nil,
+				CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+			},
+		},
+
+		RequestCancelInfos: map[int64]*RequestCancelInfo{
+			19: {
+				Version:         2335,
+				InitiatedID:     19,
+				CancelRequestID: "cancel_requested_id",
+			},
+		},
+
+		SignalInfos: map[int64]*SignalInfo{
+			39: {
+				Version:         2336,
+				InitiatedID:     39,
+				SignalRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+				SignalName:      "signalA",
+				Input:           []byte("signal_input_A"),
+				Control:         []byte("signal_control_A"),
+			},
+		},
+
+		SignalRequestedIDs: map[string]struct{}{
+			"00000000-0000-0000-0000-000000000001": {},
+			"00000000-0000-0000-0000-000000000002": {},
+			"00000000-0000-0000-0000-000000000003": {},
+		},
+	}
+
+	err2 := s.UpdateAllMutableState(updatedState, int64(3))
+	s.Nil(err2, "No error expected.")
+
+	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(state1, "expected valid state.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+
+	s.Equal(2, len(state1.ActivitInfos))
+	ai, ok := state1.ActivitInfos[4]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(int64(7789), ai.Version)
+	s.Equal(int64(4), ai.ScheduleID)
+	s.Equal([]byte("scheduled_event_4"), ai.ScheduledEvent)
+	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
+	s.Equal(int64(6), ai.StartedID)
+	s.Equal([]byte("started_event_1"), ai.StartedEvent)
+	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
+	s.Equal(int32(2), ai.ScheduleToStartTimeout)
+	s.Equal(int32(3), ai.StartToCloseTimeout)
+	s.Equal(int32(4), ai.HeartbeatTimeout)
+	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.Equal(int32(1), ai.TimerTaskStatus)
+
+	ai, ok = state1.ActivitInfos[5]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(int64(7789), ai.Version)
+	s.Equal(int64(5), ai.ScheduleID)
+	s.Equal([]byte("scheduled_event_5"), ai.ScheduledEvent)
+	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
+	s.Equal(int64(7), ai.StartedID)
+	s.Equal([]byte("started_event_2"), ai.StartedEvent)
+	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
+	s.Equal(int32(2), ai.ScheduleToStartTimeout)
+	s.Equal(int32(3), ai.StartToCloseTimeout)
+	s.Equal(int32(4), ai.HeartbeatTimeout)
+	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.Equal(int32(1), ai.TimerTaskStatus)
+
+	s.Equal(3, len(state1.TimerInfos))
+	ti, ok := state1.TimerInfos["t1"]
+	s.True(ok)
+	s.NotNil(ti)
+	s.Equal(int64(2333), ti.Version)
+	s.Equal("t1", ti.TimerID)
+	s.Equal(int64(1), ti.StartedID)
+	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.Equal(int64(500), ti.TaskID)
+
+	ti, ok = state1.TimerInfos["t2"]
+	s.True(ok)
+	s.NotNil(ti)
+	s.Equal(int64(2333), ti.Version)
+	s.Equal("t2", ti.TimerID)
+	s.Equal(int64(2), ti.StartedID)
+	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.Equal(int64(501), ti.TaskID)
+
+	ti, ok = state1.TimerInfos["t3"]
+	s.True(ok)
+	s.NotNil(ti)
+	s.Equal(int64(2333), ti.Version)
+	s.Equal("t3", ti.TimerID)
+	s.Equal(int64(3), ti.StartedID)
+	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.Equal(int64(502), ti.TaskID)
+
+	s.Equal(1, len(state1.ChildExecutionInfos))
+	ci, ok := state1.ChildExecutionInfos[9]
+	s.True(ok)
+	s.NotNil(ci)
+	s.Equal(int64(2334), ci.Version)
+
+	s.Equal(1, len(state1.RequestCancelInfos))
+	rci, ok := state1.RequestCancelInfos[19]
+	s.True(ok)
+	s.NotNil(rci)
+	s.Equal(int64(2335), rci.Version)
+
+	s.Equal(1, len(state1.SignalInfos))
+	si, ok := state1.SignalInfos[39]
+	s.True(ok)
+	s.NotNil(si)
+	s.Equal(int64(2336), si.Version)
+
+	s.Equal(3, len(state1.SignalRequestedIDs))
+	_, contains := state1.SignalRequestedIDs["00000000-0000-0000-0000-000000000001"]
+	s.True(contains)
+	_, contains = state1.SignalRequestedIDs["00000000-0000-0000-0000-000000000002"]
+	s.True(contains)
+	_, contains = state1.SignalRequestedIDs["00000000-0000-0000-0000-000000000003"]
+	s.True(contains)
+
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+	updatedInfo1.NextEventID = int64(3)
+	resetActivityInfos := []*ActivityInfo{
+		{
+			Version:                  8789,
+			ScheduleID:               40,
+			ScheduledEvent:           []byte("scheduled_event_40"),
+			ScheduledTime:            currentTime,
+			StartedID:                60,
+			StartedEvent:             []byte("started_event_10"),
+			StartedTime:              currentTime,
+			ScheduleToCloseTimeout:   10,
+			ScheduleToStartTimeout:   20,
+			StartToCloseTimeout:      30,
+			HeartbeatTimeout:         40,
+			LastHeartBeatUpdatedTime: currentTime,
+			TimerTaskStatus:          1,
+		}}
+
+	resetTimerInfos := []*TimerInfo{
+		{
+			Version:    3333,
+			TimerID:    "t1_new",
+			StartedID:  1,
+			ExpiryTime: expiryTime,
+			TaskID:     600,
+		},
+		{
+			Version:    3333,
+			TimerID:    "t2_new",
+			StartedID:  2,
+			ExpiryTime: expiryTime,
+			TaskID:     601,
+		}}
+
+	resetChildExecutionInfos := []*ChildExecutionInfo{
+		{
+			Version:         3334,
+			InitiatedID:     10,
+			InitiatedEvent:  nil,
+			StartedID:       15,
+			StartedEvent:    nil,
+			CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		}}
+
+	resetRequestCancelInfos := []*RequestCancelInfo{
+		{
+			Version:         3335,
+			InitiatedID:     29,
+			CancelRequestID: "new_cancel_requested_id",
+		}}
+
+	resetSignalInfos := []*SignalInfo{
+		{
+			Version:         3336,
+			InitiatedID:     39,
+			SignalRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+			SignalName:      "signalB",
+			Input:           []byte("signal_input_b"),
+			Control:         []byte("signal_control_b"),
+		},
+		{
+			Version:         3336,
+			InitiatedID:     42,
+			SignalRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+			SignalName:      "signalC",
+			Input:           []byte("signal_input_c"),
+			Control:         []byte("signal_control_c"),
+		}}
+
+	rState := &ReplicationState{
+		CurrentVersion: int64(8789),
+		StartVersion:   int64(8780),
+	}
+
+	err3 := s.ResetMutableState(updatedInfo1, rState, int64(5), resetActivityInfos, resetTimerInfos,
+		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
+	s.Nil(err3, "No error expected.")
+
+	state4, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err4, "No error expected.")
+	s.NotNil(state4, "expected valid state.")
+	info4 := state4.ExecutionInfo
+	s.NotNil(info4, "Valid Workflow info expected.")
+	s.Equal(int64(3), info4.NextEventID)
+
+	s.Equal(1, len(state4.ActivitInfos))
+	ai, ok = state4.ActivitInfos[40]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(int64(8789), ai.Version)
+	s.Equal(int64(40), ai.ScheduleID)
+	s.Equal([]byte("scheduled_event_40"), ai.ScheduledEvent)
+	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
+	s.Equal(int64(60), ai.StartedID)
+	s.Equal([]byte("started_event_10"), ai.StartedEvent)
+	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.Equal(int32(10), ai.ScheduleToCloseTimeout)
+	s.Equal(int32(20), ai.ScheduleToStartTimeout)
+	s.Equal(int32(30), ai.StartToCloseTimeout)
+	s.Equal(int32(40), ai.HeartbeatTimeout)
+	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.Equal(int32(1), ai.TimerTaskStatus)
+
+	s.Equal(2, len(state4.TimerInfos))
+	ti, ok = state4.TimerInfos["t1_new"]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(int64(3333), ti.Version)
+	s.Equal("t1_new", ti.TimerID)
+	s.Equal(int64(1), ti.StartedID)
+	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.Equal(int64(600), ti.TaskID)
+
+	ti, ok = state4.TimerInfos["t2_new"]
+	s.True(ok)
+	s.NotNil(ai)
+	s.Equal(int64(3333), ti.Version)
+	s.Equal("t2_new", ti.TimerID)
+	s.Equal(int64(2), ti.StartedID)
+	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.Equal(int64(601), ti.TaskID)
+
+	s.Equal(1, len(state4.ChildExecutionInfos))
+	ci, ok = state4.ChildExecutionInfos[10]
+	s.True(ok)
+	s.NotNil(ci)
+	s.Equal(int64(3334), ci.Version)
+	s.Equal(int64(10), ci.InitiatedID)
+	s.Equal(int64(15), ci.StartedID)
+
+	s.Equal(1, len(state4.RequestCancelInfos))
+	rci, ok = state4.RequestCancelInfos[29]
+	s.True(ok)
+	s.NotNil(rci)
+	s.Equal(int64(3335), rci.Version)
+	s.Equal(int64(29), rci.InitiatedID)
+	s.Equal("new_cancel_requested_id", rci.CancelRequestID)
+
+	s.Equal(2, len(state4.SignalInfos))
+	si, ok = state4.SignalInfos[39]
+	s.True(ok)
+	s.NotNil(si)
+	s.Equal(int64(3336), si.Version)
+	s.Equal(int64(39), si.InitiatedID)
+	s.Equal("signalB", si.SignalName)
+	s.Equal([]byte("signal_input_b"), si.Input)
+	s.Equal([]byte("signal_control_b"), si.Control)
+
+	si, ok = state4.SignalInfos[42]
+	s.True(ok)
+	s.NotNil(si)
+	s.Equal(int64(3336), si.Version)
+	s.Equal(int64(42), si.InitiatedID)
+	s.Equal("signalC", si.SignalName)
+	s.Equal([]byte("signal_input_c"), si.Input)
+	s.Equal([]byte("signal_control_c"), si.Control)
+
+	s.Equal(0, len(state4.SignalRequestedIDs))
+}
+
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {
 	return &WorkflowExecutionInfo{
 		DomainID:             sourceInfo.DomainID,

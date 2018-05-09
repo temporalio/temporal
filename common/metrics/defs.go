@@ -124,6 +124,8 @@ const (
 	PersistenceGetWorkflowExecutionScope
 	// PersistenceUpdateWorkflowExecutionScope tracks UpdateWorkflowExecution calls made by service to persistence layer
 	PersistenceUpdateWorkflowExecutionScope
+	// PersistenceResetMutableStateScope tracks ResetMutableState calls made by service to persistence layer
+	PersistenceResetMutableStateScope
 	// PersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecution calls made by service to persistence layer
 	PersistenceDeleteWorkflowExecutionScope
 	// PersistenceGetCurrentExecutionScope tracks GetCurrentExecution calls made by service to persistence layer
@@ -432,6 +434,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceCreateWorkflowExecutionScope:                  {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution"},
 		PersistenceUpdateWorkflowExecutionScope:                  {operation: "UpdateWorkflowExecution"},
+		PersistenceResetMutableStateScope:                        {operation: "ResetMutableState"},
 		PersistenceDeleteWorkflowExecutionScope:                  {operation: "DeleteWorkflowExecution"},
 		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},

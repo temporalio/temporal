@@ -214,6 +214,20 @@ func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *Up
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) ResetMutableState(request *ResetMutableStateRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceResetMutableStateScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceResetMutableStateScope, metrics.PersistenceLatency)
+	err := p.persistence.ResetMutableState(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceResetMutableStateScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
 
