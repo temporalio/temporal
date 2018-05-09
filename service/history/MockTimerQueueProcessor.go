@@ -42,6 +42,11 @@ func (_m *MockTimerQueueProcessor) Stop() {
 	_m.Called()
 }
 
+// FailoverDomain is mock implementation for FailoverDomain of Processor
+func (_m *MockTimerQueueProcessor) FailoverDomain(domainID string, standbyClusterName string) {
+	_m.Called(domainID, standbyClusterName)
+}
+
 // NotifyNewTimers is mock implementation for NotifyNewTimers of Processor
 func (_m *MockTimerQueueProcessor) NotifyNewTimers(clusterName string, currentTime time.Time, timerTask []persistence.Task) {
 	_m.Called(clusterName, currentTime, timerTask)

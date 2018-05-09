@@ -276,6 +276,12 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 			&persistence.GetDomainResponse{
 				Info:   &persistence.DomainInfo{ID: domainID},
 				Config: &persistence.DomainConfig{Retention: 1},
+				ReplicationConfig: &persistence.DomainReplicationConfig{
+					ActiveClusterName: cluster.TestCurrentClusterName,
+					Clusters: []*persistence.ClusterReplicationConfig{
+						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					},
+				},
 			},
 			nil,
 		)
@@ -349,6 +355,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -379,6 +391,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -408,6 +426,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -450,6 +474,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -496,6 +526,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -537,6 +573,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -623,6 +665,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -715,6 +763,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -795,6 +849,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -886,6 +946,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -963,6 +1029,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1025,6 +1097,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1095,6 +1173,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1156,6 +1240,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1220,6 +1310,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1276,6 +1372,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1333,6 +1435,12 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	).Once()
@@ -1361,6 +1469,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1390,6 +1504,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1418,6 +1538,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1447,6 +1573,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1479,6 +1611,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1513,6 +1651,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1564,6 +1708,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1621,6 +1771,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1672,6 +1828,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1741,6 +1903,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1807,6 +1975,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1860,6 +2034,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1927,6 +2107,12 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1961,6 +2147,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -1989,6 +2181,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2018,6 +2216,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2048,6 +2252,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2081,6 +2291,12 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2115,6 +2331,12 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2170,6 +2392,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2222,6 +2450,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2273,6 +2507,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2347,6 +2587,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2413,6 +2659,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2466,6 +2718,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2535,6 +2793,12 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2600,6 +2864,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2654,6 +2924,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2713,6 +2989,12 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2762,6 +3044,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2816,6 +3104,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2882,6 +3176,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2921,6 +3221,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2955,6 +3261,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -2989,6 +3301,12 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3040,6 +3358,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3106,6 +3430,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3174,6 +3504,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3223,6 +3559,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3290,6 +3632,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3339,6 +3687,12 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3399,6 +3753,12 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3510,6 +3870,12 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3531,65 +3897,71 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
-// func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer() {
-// 	domainID := validDomainID
-// 	we := workflow.WorkflowExecution{
-// 		WorkflowId: common.StringPtr("wId"),
-// 		RunId:      common.StringPtr(validRunID),
-// 	}
-// 	tl := "testTaskList"
-// 	taskToken, _ := json.Marshal(&common.TaskToken{
-// 		WorkflowID: *we.WorkflowId,
-// 		RunID:      *we.RunId,
-// 		ScheduleID: 2,
-// 	})
-// 	identity := "testIdentity"
-// 	timerID := "t1"
+func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	taskToken, _ := json.Marshal(&common.TaskToken{
+		WorkflowID: *we.WorkflowId,
+		RunID:      *we.RunId,
+		ScheduleID: 2,
+	})
+	identity := "testIdentity"
+	timerID := "t1"
 
-// 	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
-// 	// Verify cancel timer with a start event.
-// 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
-// 	di := addDecisionTaskScheduledEvent(msBuilder)
-// 	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+	// Verify cancel timer with a start event.
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+	addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 
-// 	ms := createMutableState(msBuilder)
-// 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	ms := createMutableState(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-// 	decisions := []*workflow.Decision{{
-// 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelTimer),
-// 		CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
-// 			TimerId: common.StringPtr(timerID),
-// 		},
-// 	}}
+	decisions := []*workflow.Decision{{
+		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCancelTimer),
+		CancelTimerDecisionAttributes: &workflow.CancelTimerDecisionAttributes{
+			TimerId: common.StringPtr(timerID),
+		},
+	}}
 
-// 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-// 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-// 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
 
-// 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
-// 		&persistence.GetDomainResponse{
-// 			Info:   &persistence.DomainInfo{ID: domainID},
-// 			Config: &persistence.DomainConfig{Retention: 1},
-// 		},
-// 		nil,
-// 	)
-// 	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
-// 		DomainUUID: common.StringPtr(domainID),
-// 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
-// 			TaskToken:        taskToken,
-// 			Decisions:        decisions,
-// 			ExecutionContext: []byte("context"),
-// 			Identity:         &identity,
-// 		},
-// 	})
-// 	s.Nil(err)
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+		},
+		nil,
+	)
+	err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+		DomainUUID: common.StringPtr(domainID),
+		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        taskToken,
+			Decisions:        decisions,
+			ExecutionContext: []byte("context"),
+			Identity:         &identity,
+		},
+	})
+	s.Nil(err)
 
-// 	executionBuilder := s.getBuilder(domainID, we)
-// 	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
-// 	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
-// 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
-// 	s.False(executionBuilder.HasPendingDecisionTask())
-// }
+	executionBuilder := s.getBuilder(domainID, we)
+	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
+	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+	s.False(executionBuilder.HasPendingDecisionTask())
+}
 
 func (s *engineSuite) TestSignalWorkflowExecution() {
 	signalRequest := &history.SignalWorkflowExecutionRequest{}
@@ -3627,6 +3999,12 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3675,6 +4053,12 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3717,6 +4101,12 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)
@@ -3751,6 +4141,12 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
 		},
 		nil,
 	)

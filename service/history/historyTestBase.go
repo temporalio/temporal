@@ -63,6 +63,7 @@ var (
 type (
 	// TestShardContext shard context for testing.
 	TestShardContext struct {
+		shardID int
 		sync.RWMutex
 		service                   service.Service
 		shardInfo                 *persistence.ShardInfo
@@ -105,6 +106,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	}
 
 	return &TestShardContext{
+		shardID:                   0,
 		service:                   service.NewTestService(clusterMetadata, nil, metricsClient, logger),
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
@@ -116,6 +118,11 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
 	}
+}
+
+// GetShardID test implementation
+func (s *TestShardContext) GetShardID() int {
+	return s.shardID
 }
 
 // GetService test implementation

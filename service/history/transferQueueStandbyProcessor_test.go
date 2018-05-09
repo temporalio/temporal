@@ -90,15 +90,21 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	// ack manager will use the domain information
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
-		Config:         &persistence.DomainConfig{Retention: 1},
-		IsGlobalDomain: true,
-		ReplicationConfig: &persistence.DomainReplicationConfig{
-			ActiveClusterName: cluster.TestAlternativeClusterName,
-			// Clusters attr is not used.
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: "domainID"},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestAlternativeClusterName},
+				},
+			},
+			IsGlobalDomain: true,
 		},
-	}, nil).Once()
+		nil,
+	)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockProducer = &mocks.KafkaProducer{}

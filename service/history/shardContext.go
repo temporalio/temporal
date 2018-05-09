@@ -41,6 +41,7 @@ import (
 type (
 	// ShardContext represents a history engine shard
 	ShardContext interface {
+		GetShardID() int
 		GetService() service.Service
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
@@ -95,6 +96,10 @@ type (
 )
 
 var _ ShardContext = (*shardContextImpl)(nil)
+
+func (s *shardContextImpl) GetShardID() int {
+	return s.shardID
+}
 
 func (s *shardContextImpl) GetService() service.Service {
 	return s.service

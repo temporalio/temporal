@@ -170,6 +170,22 @@ func (e *historyEngineImpl) Start() {
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Start()
 	}
+
+	// set the failover callback
+	e.shard.GetDomainCache().RegisterDomainChangeCallback(
+		e.shard.GetShardID(),
+		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
+			if prevDomain.GetReplicationConfig() != nil && nextDomain.GetReplicationConfig() != nil {
+				prevActiveCluster := prevDomain.GetReplicationConfig().ActiveClusterName
+				nextActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
+				if prevActiveCluster != nextActiveCluster && nextActiveCluster == e.currentClusterName {
+					domainID := prevDomain.GetInfo().ID
+					e.txProcessor.FailoverDomain(domainID, prevActiveCluster)
+					e.timerProcessor.FailoverDomain(domainID, prevActiveCluster)
+				}
+			}
+		},
+	)
 }
 
 // Stop the service.
@@ -182,6 +198,9 @@ func (e *historyEngineImpl) Stop() {
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Stop()
 	}
+
+	// unset the failover callback
+	e.shard.GetDomainCache().UnregisterDomainChangeCallback(e.shard.GetShardID())
 }
 
 // StartWorkflowExecution starts a workflow execution
