@@ -75,3 +75,6 @@ kafka:
       cluster: test
     standby:
       cluster: test
+  cadence-cluster-to-topic:
+    active: active
+    standby: standby

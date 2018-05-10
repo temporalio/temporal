@@ -69,9 +69,8 @@ func (r *Replicator) Start() error {
 	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
 	for cluster := range r.clusterMetadata.GetAllClusterFailoverVersions() {
 		if cluster != currentClusterName {
-			topicName := getTopicName(cluster)
 			consumerName := getConsumerName(currentClusterName, cluster)
-			r.processors = append(r.processors, newReplicationTaskProcessor(cluster, topicName, consumerName, r.client,
+			r.processors = append(r.processors, newReplicationTaskProcessor(cluster, consumerName, r.client,
 				r.config, r.logger, r.metricsClient, r.domainReplicator, r.historyClient))
 		}
 	}
@@ -94,8 +93,4 @@ func (r *Replicator) Stop() {
 
 func getConsumerName(currentCluster, remoteCluster string) string {
 	return fmt.Sprintf("%v_consumer_for_%v", currentCluster, remoteCluster)
-}
-
-func getTopicName(sourceCluster string) string {
-	return sourceCluster
 }
