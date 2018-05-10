@@ -318,9 +318,9 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		}
 		replicationTasks = append(replicationTasks, replicationTask)
 	}
+	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
-
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
 			DomainID:                    domainID,
@@ -1866,6 +1866,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(signalWithStartRequ
 		return nil, err
 	}
 	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
@@ -2572,4 +2573,13 @@ func getStartRequest(domainID string,
 		StartRequest: req,
 	}
 	return startRequest
+}
+
+func setTaskVersion(version int64, transferTasks []persistence.Task, timerTasks []persistence.Task) {
+	for _, task := range transferTasks {
+		task.SetVersion(version)
+	}
+	for _, task := range timerTasks {
+		task.SetVersion(version)
+	}
 }

@@ -2134,25 +2134,28 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		newStateBuilder.updateReplicationStateLastEventID(sourceClusterName, di.ScheduleID)
 	}
 
+	newTransferTasks := []persistence.Task{&persistence.DecisionTask{
+		DomainID:   domainID,
+		TaskList:   newStateBuilder.executionInfo.TaskList,
+		ScheduleID: di.ScheduleID,
+	}}
+	setTaskVersion(newStateBuilder.GetCurrentVersion(), newTransferTasks, nil)
+
 	e.continueAsNew = &persistence.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            newExecution,
-		ParentDomainID:       parentDomainID,
-		ParentExecution:      parentExecution,
-		InitiatedID:          initiatedID,
-		TaskList:             newStateBuilder.executionInfo.TaskList,
-		WorkflowTypeName:     newStateBuilder.executionInfo.WorkflowTypeName,
-		WorkflowTimeout:      newStateBuilder.executionInfo.WorkflowTimeout,
-		DecisionTimeoutValue: newStateBuilder.executionInfo.DecisionTimeoutValue,
-		ExecutionContext:     nil,
-		NextEventID:          newStateBuilder.GetNextEventID(),
-		LastProcessedEvent:   emptyEventID,
-		TransferTasks: []persistence.Task{&persistence.DecisionTask{
-			DomainID:   domainID,
-			TaskList:   newStateBuilder.executionInfo.TaskList,
-			ScheduleID: di.ScheduleID,
-		}},
+		RequestID:                   uuid.New(),
+		DomainID:                    domainID,
+		Execution:                   newExecution,
+		ParentDomainID:              parentDomainID,
+		ParentExecution:             parentExecution,
+		InitiatedID:                 initiatedID,
+		TaskList:                    newStateBuilder.executionInfo.TaskList,
+		WorkflowTypeName:            newStateBuilder.executionInfo.WorkflowTypeName,
+		WorkflowTimeout:             newStateBuilder.executionInfo.WorkflowTimeout,
+		DecisionTimeoutValue:        newStateBuilder.executionInfo.DecisionTimeoutValue,
+		ExecutionContext:            nil,
+		NextEventID:                 newStateBuilder.GetNextEventID(),
+		LastProcessedEvent:          emptyEventID,
+		TransferTasks:               newTransferTasks,
 		DecisionVersion:             di.Version,
 		DecisionScheduleID:          di.ScheduleID,
 		DecisionStartedID:           di.StartedID,

@@ -62,8 +62,8 @@ clustersInfo:
   masterClusterName: "active"
   currentClusterName: "standby"
   clusterInitialFailoverVersion:
-    active: 0
-    standby: 1
+    active: 1
+    standby: 0
 
 kafka:
   clusters:

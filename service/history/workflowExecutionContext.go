@@ -249,14 +249,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		replicationTasks = append(replicationTasks, c.msBuilder.createReplicationTask())
 	}
 
-	// this is the current failover version
-	version := c.msBuilder.GetCurrentVersion()
-	for _, task := range transferTasks {
-		task.SetVersion(version)
-	}
-	for _, task := range timerTasks {
-		task.SetVersion(version)
-	}
+	setTaskVersion(c.msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:                 c.msBuilder.executionInfo,

@@ -259,6 +259,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			decisionStartID = di.StartedID
 			decisionTimeout = di.DecisionTimeout
 		}
+		setTaskVersion(msBuilder.GetCurrentVersion(), sBuilder.transferTasks, sBuilder.timerTasks)
 
 		createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
 			_, err = r.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
