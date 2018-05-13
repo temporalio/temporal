@@ -133,7 +133,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 		lastEvent := events[len(events)-1]
 		if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
 			newRunID := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
-			newRunHistory, err = p.getHistory(task.DomainID, task.WorkflowID, newRunID, firstEventID, int64(3))
+			newRunHistory, err = p.getHistory(task.DomainID, task.WorkflowID, newRunID, common.FirstEventID, int64(3))
 			if err != nil {
 				return err
 			}

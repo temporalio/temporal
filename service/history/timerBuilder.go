@@ -274,7 +274,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 	tb.pendingActivityTimers = msBuilder.pendingActivityInfoIDs
 	tb.activityTimers = make(timers, 0, len(msBuilder.pendingActivityInfoIDs))
 	for _, v := range msBuilder.pendingActivityInfoIDs {
-		if v.ScheduleID != emptyEventID {
+		if v.ScheduleID != common.EmptyEventID {
 			scheduleToCloseExpiry := v.ExpirationTime
 			if scheduleToCloseExpiry.IsZero() {
 				// v.ExpirationTime could be zero for old activity_infos before this code change (for retry)
@@ -290,7 +290,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
 				TaskCreated:     (v.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) != 0}
 			tb.activityTimers = append(tb.activityTimers, td)
 
-			if v.StartedID != emptyEventID {
+			if v.StartedID != common.EmptyEventID {
 				startToCloseExpiry := v.StartedTime.Add(time.Duration(v.StartToCloseTimeout) * time.Second)
 				td := &timerDetails{
 					TimerSequenceID: TimerSequenceID{VisibilityTimestamp: startToCloseExpiry},
@@ -416,7 +416,7 @@ func (tb *timerBuilder) createNewTask(td *timerDetails) persistence.Task {
 			VisibilityTimestamp: td.TimerSequenceID.VisibilityTimestamp,
 			EventID:             tt.StartedID,
 		}
-	} else if td.ActivityID != 0 && td.ActivityID != emptyEventID {
+	} else if td.ActivityID != 0 && td.ActivityID != common.EmptyEventID {
 		return &persistence.ActivityTimeoutTask{
 			VisibilityTimestamp: td.TimerSequenceID.VisibilityTimestamp,
 			EventID:             td.EventID,

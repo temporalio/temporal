@@ -203,7 +203,7 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 			return nil
 		}
 
-		if activityInfo.StartedID == emptyEventID {
+		if activityInfo.StartedID == common.EmptyEventID {
 			return ErrTaskRetry
 		}
 		return nil
@@ -220,7 +220,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
 
 		if !isPending {
-			if transferTask.ScheduleID == firstEventID+1 {
+			if transferTask.ScheduleID == common.FirstEventID+1 {
 				return t.recordWorkflowStarted(msBuilder)
 			}
 			return nil
@@ -232,11 +232,11 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 			return nil
 		}
 
-		if decisionInfo.StartedID == emptyEventID {
+		if decisionInfo.StartedID == common.EmptyEventID {
 			return ErrTaskRetry
 		}
 
-		if transferTask.ScheduleID == firstEventID+1 {
+		if transferTask.ScheduleID == common.FirstEventID+1 {
 			return t.recordWorkflowStarted(msBuilder)
 		}
 
@@ -344,7 +344,7 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 			return nil
 		}
 
-		if childWorkflowInfo.StartedID == emptyEventID {
+		if childWorkflowInfo.StartedID == common.EmptyEventID {
 			return ErrTaskRetry
 		}
 		return nil

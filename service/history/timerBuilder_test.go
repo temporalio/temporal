@@ -180,7 +180,7 @@ func (s *timerBuilderProcessorSuite) TestTimerBuilderDuplicateTimerID() {
 func (s *timerBuilderProcessorSuite) TestTimerBuilder_GetActivityTimer() {
 	// ScheduleToStart being more than HB.
 	builder := newMutableStateBuilder(s.config, s.logger)
-	ase, ai := builder.AddActivityTaskScheduledEvent(emptyEventID,
+	ase, ai := builder.AddActivityTaskScheduledEvent(common.EmptyEventID,
 		&workflow.ScheduleActivityTaskDecisionAttributes{
 			ActivityId:                    common.StringPtr("test-id"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),

@@ -29,15 +29,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-const (
-	emptyVersion int64 = -2234
-
-	firstEventID     int64 = 1
-	emptyEventID     int64 = -23
-	bufferedEventID  int64 = -123
-	transientEventID int64 = -124
-)
-
 type (
 	historyBuilder struct {
 		serializer persistence.HistorySerializer
