@@ -27,6 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 	"testing"
@@ -119,7 +120,8 @@ func (s *integrationSuite) TearDownSuite() {
 }
 
 func (s *integrationSuite) SetupTest() {
-
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
 }
 
 func (s *integrationSuite) TearDownTest() {
@@ -1498,7 +1500,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		WorkflowType: workflowType,
 		TaskList:     taskList,
 		Input:        nil,
-		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(300),
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(70),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(2),
 		Identity:                            common.StringPtr(identity),
 	}
@@ -1510,62 +1512,75 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	workflowComplete := false
 	activitiesScheduled := false
-	activitiesMap := map[int64]*workflow.HistoryEvent{}
+	lastHeartbeatMap := make(map[int64]int)
 	failWorkflow := false
 	failReason := ""
-	var activityATimedout bool
-	var activityALastHeartbeat int
+	activityCount := 10
+	activitiesTimedout := 0
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
 		if !activitiesScheduled {
 			activitiesScheduled = true
-			return nil, []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:   common.StringPtr("A"),
-					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:     &workflow.TaskList{Name: &tl},
-					Input:        []byte("Heartbeat"),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(35),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(20),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(3), // ActivityID A is expected to timeout using Heartbeat
-				},
-			}}, nil
+			decisions := []*workflow.Decision{}
+			for i := 0; i < activityCount; i++ {
+				aID := fmt.Sprintf("activity_%v", i)
+				d := &workflow.Decision{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+					ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:   common.StringPtr(aID),
+						ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+						TaskList:     &workflow.TaskList{Name: &tl},
+						Input:        []byte("Heartbeat"),
+						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(60),
+						ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+						StartToCloseTimeoutSeconds:    common.Int32Ptr(60),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(3),
+					},
+				}
+
+				decisions = append(decisions, d)
+			}
+
+			return nil, decisions, nil
 		} else if previousStartedEventID > 0 {
+		ProcessLoop:
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.GetEventType() == workflow.EventTypeActivityTaskScheduled {
-					activitiesMap[event.GetEventId()] = event
+					lastHeartbeatMap[event.GetEventId()] = 0
+				}
+
+				if event.GetEventType() == workflow.EventTypeActivityTaskCompleted ||
+					event.GetEventType() == workflow.EventTypeActivityTaskFailed {
+					failWorkflow = true
+					failReason = "Expected activities to timeout but seeing completion instead"
 				}
 
 				if event.GetEventType() == workflow.EventTypeActivityTaskTimedOut {
 					timeoutEvent := event.ActivityTaskTimedOutEventAttributes
-					scheduledEvent, ok := activitiesMap[timeoutEvent.GetScheduledEventId()]
+					_, ok := lastHeartbeatMap[timeoutEvent.GetScheduledEventId()]
 					if !ok {
-						return nil, []*workflow.Decision{{
-							DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
-							FailWorkflowExecutionDecisionAttributes: &workflow.FailWorkflowExecutionDecisionAttributes{
-								Reason: common.StringPtr("ScheduledEvent not found."),
-							},
-						}}, nil
+						failWorkflow = true
+						failReason = "ScheduledEvent not found."
+						break ProcessLoop
 					}
 
 					switch timeoutEvent.GetTimeoutType() {
 					case workflow.TimeoutTypeHeartbeat:
-						if scheduledEvent.ActivityTaskScheduledEventAttributes.GetActivityId() == "A" {
-							activityATimedout = true
-							activityALastHeartbeat, _ = strconv.Atoi(string(timeoutEvent.Details))
-						} else {
-							failWorkflow = true
-							failReason = "ActivityID A is expected to timeout with Heartbeat"
-						}
+						activitiesTimedout++
+						scheduleID := timeoutEvent.GetScheduledEventId()
+						lastHeartbeat, _ := strconv.Atoi(string(timeoutEvent.Details))
+						lastHeartbeatMap[scheduleID] = lastHeartbeat
+					default:
+						failWorkflow = true
+						failReason = "Expected Heartbeat timeout but recieved another timeout"
+						break ProcessLoop
 					}
 				}
 			}
 		}
 
 		if failWorkflow {
-			s.logger.Errorf("Failing workflow.")
+			s.logger.Errorf("Failing workflow. Reason: %v", failReason)
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
 				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
@@ -1575,7 +1590,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 			}}, nil
 		}
 
-		if activityATimedout {
+		if activitiesTimedout == activityCount {
 			s.logger.Info("Completing Workflow.")
 			workflowComplete = true
 			return nil, []*workflow.Decision{{
@@ -1591,25 +1606,25 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
 		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
-		s.Equal(id, *execution.WorkflowId)
-		s.Equal(activityName, *activityType.Name)
-		timeoutType := string(input)
-		switch timeoutType {
-		case "Heartbeat":
-			s.logger.Info("Starting hearbeat activity.")
-			go func() {
-				for i := 0; i < 6; i++ {
-					s.logger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
-					_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
-						TaskToken: taskToken, Details: []byte(strconv.Itoa(i))})
-					s.Nil(err)
-					time.Sleep(1 * time.Second)
+		s.logger.Infof("Starting heartbeat activity. ID: %v", activityID)
+		for i := 0; i < 10; i++ {
+			if !workflowComplete {
+				s.logger.Infof("Heartbeating for activity: %s, count: %d", activityID, i)
+				_, err := s.engine.RecordActivityTaskHeartbeat(createContext(), &workflow.RecordActivityTaskHeartbeatRequest{
+					TaskToken: taskToken, Details: []byte(strconv.Itoa(i))})
+				if err != nil {
+					s.logger.Errorf("Activity heartbeat failed.  ID: %v, Progress: %v, Error: %v", activityID, i, err)
 				}
-				s.logger.Info("End Heartbeating.")
-			}()
-			s.logger.Info("Sleeping hearbeat activity.")
-			time.Sleep(12 * time.Second)
+
+				secondsToSleep := rand.Intn(3)
+				s.logger.Infof("Activity ID '%v' sleeping for: %v seconds", activityID, secondsToSleep)
+				time.Sleep(time.Duration(secondsToSleep) * time.Second)
+			}
 		}
+		s.logger.Infof("End Heartbeating. ID: %v", activityID)
+
+		s.logger.Infof("Sleeping activity before completion. ID: %v", activityID)
+		time.Sleep(5 * time.Second)
 
 		return []byte("Activity Result."), false, nil
 	}
@@ -1628,7 +1643,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	_, err := poller.pollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < activityCount; i++ {
 		go func() {
 			err = poller.pollAndProcessActivityTask(false)
 			s.logger.Infof("Activity Processing Completed.  Error: %v", err)
@@ -1651,8 +1666,13 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		RunId:      common.StringPtr(we.GetRunId()),
 	})
 	s.True(workflowComplete)
-	s.True(activityATimedout)
-	s.Equal(5, activityALastHeartbeat)
+	s.False(failWorkflow, failReason)
+	s.Equal(activityCount, activitiesTimedout)
+	s.Equal(activityCount, len(lastHeartbeatMap))
+	for aID, lastHeartbeat := range lastHeartbeatMap {
+		s.logger.Infof("Last heartbeat for activity with scheduleID '%v': %v", aID, lastHeartbeat)
+		s.Equal(9, lastHeartbeat)
+	}
 }
 
 func (s *integrationSuite) TestSequential_UserTimers() {
