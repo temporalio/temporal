@@ -37,14 +37,14 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		BatchSize           int
-		WorkerCount         int
-		MaxPollRPS          int
-		MaxPollInterval     time.Duration
-		UpdateAckInterval   time.Duration
-		ForceUpdateInterval time.Duration
-		MaxRetryCount       int
-		MetricScope         int
+		BatchSize            int
+		WorkerCount          int
+		MaxPollRPS           int
+		MaxPollInterval      time.Duration
+		UpdateAckInterval    time.Duration
+		MaxRetryCount        int
+		MetricScope          int
+		UpdateShardTaskCount int
 	}
 
 	queueProcessorBase struct {

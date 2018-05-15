@@ -22,7 +22,6 @@ package history
 
 import (
 	"sync"
-	"time"
 
 	"github.com/uber-common/bark"
 
@@ -44,7 +43,6 @@ type (
 		processor     processor
 		logger        bark.Logger
 		metricsClient metrics.Client
-		lastUpdated   time.Time
 		finishedChan  chan struct{}
 
 		sync.RWMutex
@@ -53,6 +51,8 @@ type (
 		maxReadLevel     int64
 		ackLevel         int64
 		isReadFinished   bool
+		// number of finished and acked tasks, used to reduce # of calls to update shard
+		finishedTaskCounter int
 	}
 )
 
@@ -68,7 +68,6 @@ func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processo
 		ackLevel:         ackLevel,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
-		lastUpdated:      time.Now(),
 		finishedChan:     nil,
 	}
 }
@@ -85,7 +84,6 @@ func newQueueFailoverAckMgr(shard ShardContext, options *QueueProcessorOptions, 
 		ackLevel:         ackLevel,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
-		lastUpdated:      time.Now(),
 		finishedChan:     make(chan struct{}, 1),
 	}
 }
@@ -157,8 +155,7 @@ func (a *queueAckMgrImpl) updateAckLevel() {
 	a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
 
 	a.Lock()
-	initialAckLevel := a.ackLevel
-	updatedAckLevel := a.ackLevel
+	ackLevel := a.ackLevel
 
 MoveAckLevelLoop:
 	for current := a.ackLevel + 1; current <= a.readLevel; current++ {
@@ -166,34 +163,35 @@ MoveAckLevelLoop:
 		if acked, ok := a.outstandingTasks[current]; ok {
 			if acked {
 				a.logger.Debugf("Updating ack level: %v", current)
-				a.ackLevel = current
-				updatedAckLevel = current
+				ackLevel = current
+				a.finishedTaskCounter++
 				delete(a.outstandingTasks, current)
 			} else {
 				break MoveAckLevelLoop
 			}
 		}
 	}
+	a.ackLevel = ackLevel
+
 	if a.isFailover && a.isReadFinished && len(a.outstandingTasks) == 0 {
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown
 		a.finishedChan <- struct{}{}
 	}
-	a.Unlock()
 
-	// Do not update Acklevel if nothing changed upto force update interval
-	if initialAckLevel == updatedAckLevel && time.Since(a.lastUpdated) < a.options.ForceUpdateInterval {
-		return
-	}
-
-	if !a.isFailover {
-		if err := a.processor.updateAckLevel(updatedAckLevel); err != nil {
-			a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
-			logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
-		} else {
-			a.lastUpdated = time.Now()
-		}
+	if a.finishedTaskCounter < a.options.UpdateShardTaskCount {
+		a.Unlock()
 	} else {
-		// TODO deal with failover ack level persistence, issue #646
+		a.finishedTaskCounter = 0
+		a.Unlock()
+
+		if !a.isFailover {
+			if err := a.processor.updateAckLevel(ackLevel); err != nil {
+				a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+				logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
+			}
+		} else {
+			// TODO deal with failover ack level persistence, issue #646
+		}
 	}
 }

@@ -45,7 +45,6 @@ type (
 		executionMgr  persistence.ExecutionManager
 		logger        bark.Logger
 		metricsClient metrics.Client
-		lastUpdated   time.Time
 		config        *Config
 		// immutable max possible timer level
 		maxAckLevel time.Time
@@ -64,6 +63,8 @@ type (
 		readLevel TimerSequenceID
 		// timer task ack level
 		ackLevel TimerSequenceID
+		// number of finished and acked tasks, used to reduce # of calls to update shard
+		finishedTaskCounter int
 	}
 	// for each cluster, the ack level is the point in time when
 	// all timers before the ack level are processed.
@@ -101,7 +102,6 @@ func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, clust
 		executionMgr:     shard.GetExecutionManager(),
 		metricsClient:    metricsClient,
 		logger:           logger,
-		lastUpdated:      time.Now(), // this has nothing to do with remote cluster, so use the local time
 		config:           shard.GetConfig(),
 		outstandingTasks: make(map[TimerSequenceID]bool),
 		readLevel:        ackLevel,
@@ -126,7 +126,6 @@ func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Clien
 		executionMgr:     shard.GetExecutionManager(),
 		metricsClient:    metricsClient,
 		logger:           logger,
-		lastUpdated:      time.Now(), // this has nothing to do with remote cluster, so use the local time
 		config:           shard.GetConfig(),
 		outstandingTasks: make(map[TimerSequenceID]bool),
 		readLevel:        ackLevel,
@@ -234,8 +233,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateCounter)
 
 	t.Lock()
-	initialAckLevel := t.ackLevel
-	updatedAckLevel := t.ackLevel
+	ackLevel := t.ackLevel
 	outstandingTasks := t.outstandingTasks
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
@@ -250,27 +248,27 @@ MoveAckLevelLoop:
 	for _, current := range sequenceIDs {
 		acked := outstandingTasks[current]
 		if acked {
-			updatedAckLevel = current
+			ackLevel = current
+			t.finishedTaskCounter++
 			delete(outstandingTasks, current)
 		} else {
 			break MoveAckLevelLoop
 		}
 	}
-	t.ackLevel = updatedAckLevel
+	t.ackLevel = ackLevel
 
 	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shundown
 		t.finishedChan <- struct{}{}
 	}
-	t.Unlock()
-
-	// Do not update Acklevel if nothing changed upto force update interval
-	if initialAckLevel == updatedAckLevel && time.Since(t.lastUpdated) < t.config.TimerProcessorForceUpdateInterval {
-		return
+	if t.finishedTaskCounter < t.config.TimerProcessorUpdateShardTaskCount {
+		t.Unlock()
+	} else {
+		t.finishedTaskCounter = 0
+		t.Unlock()
+		t.updateTimerAckLevel(ackLevel)
 	}
-
-	t.updateTimerAckLevel(updatedAckLevel)
 }
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
@@ -303,8 +301,6 @@ func (t *timerQueueAckMgrImpl) updateTimerAckLevel(ackLevel TimerSequenceID) {
 		if err := t.shard.UpdateTimerClusterAckLevel(t.clusterName, ackLevel.VisibilityTimestamp); err != nil {
 			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
 			t.logger.Errorf("Error updating timer ack level for shard: %v", err)
-		} else {
-			t.lastUpdated = time.Now() // this has nothing to do with remote cluster, so use the local time
 		}
 	} else {
 		// TODO failover ack manager should persist failover ack level to Cassandra: issue #646

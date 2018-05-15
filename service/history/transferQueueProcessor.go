@@ -45,9 +45,11 @@ type (
 		visibilityMgr         persistence.VisibilityManager
 		matchingClient        matching.Client
 		historyClient         history.Client
+		ackLevel              int64
 		logger                bark.Logger
 		isStarted             int32
 		isStopped             int32
+		finishedTaskCounter   int
 		shutdownChan          chan struct{}
 		activeTaskProcessor   *transferQueueActiveProcessorImpl
 		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
@@ -76,7 +78,9 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 		visibilityMgr:         visibilityMgr,
 		matchingClient:        matchingClient,
 		historyClient:         historyClient,
+		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
+		finishedTaskCounter:   0,
 		shutdownChan:          make(chan struct{}),
 		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, matchingClient, historyClient, logger),
 		standbyTaskProcessors: standbyTaskProcessors,
@@ -167,7 +171,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 }
 
 func (t *transferQueueProcessorImpl) completeTransfer() error {
-	lowerAckLevel := t.shard.GetTransferAckLevel()
+	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getAckLevel()
 
 	if t.isGlobalDomainEnabled {
@@ -208,12 +212,18 @@ LoadCompleteLoop:
 			if err := executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: task.GetTaskID()}); err != nil {
 				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", task, err)
 			}
+			t.finishedTaskCounter++
 		}
 
 		if !more {
 			break LoadCompleteLoop
 		}
 	}
-	t.shard.UpdateTransferAckLevel(upperAckLevel)
+	t.ackLevel = upperAckLevel
+
+	if t.finishedTaskCounter >= t.config.TransferProcessorUpdateShardTaskCount {
+		t.finishedTaskCounter = 0
+		t.shard.UpdateTransferAckLevel(upperAckLevel)
+	}
 	return nil
 }

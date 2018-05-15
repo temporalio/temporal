@@ -70,6 +70,16 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
+	// override config for testing
+	s.ShardContext.config.ShardUpdateMinInterval = 0 * time.Second
+	s.ShardContext.config.TransferProcessorUpdateShardTaskCount = 1
+	s.ShardContext.config.TimerProcessorUpdateShardTaskCount = 1
+	s.ShardContext.config.ReplicatorProcessorUpdateShardTaskCount = 1
+	s.ShardContext.config.TransferProcessorCompleteTransferInterval = 100 * time.Millisecond
+	s.ShardContext.config.TimerProcessorCompleteTimerInterval = 100 * time.Millisecond
+	s.ShardContext.config.TransferProcessorUpdateAckInterval = 100 * time.Millisecond
+	s.ShardContext.config.TimerProcessorUpdateAckInterval = 100 * time.Millisecond
+
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	historyCache.disabled = true
 	// set the standby cluster's timer ack level to max since we are not testing it

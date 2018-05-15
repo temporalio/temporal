@@ -87,6 +87,7 @@ type (
 		metricsClient    metrics.Client
 
 		sync.RWMutex
+		lastUpdated               time.Time
 		shardInfo                 *persistence.ShardInfo
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
@@ -559,6 +560,10 @@ func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 }
 
 func (s *shardContextImpl) updateShardInfoLocked() error {
+	now := time.Now()
+	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval).After(now) {
+		return nil
+	}
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 
 	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
@@ -571,6 +576,8 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 		if _, ok := err.(*persistence.ShardOwnershipLostError); ok {
 			s.closeShard()
 		}
+	} else {
+		s.lastUpdated = now
 	}
 
 	return err

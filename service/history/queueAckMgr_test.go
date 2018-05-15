@@ -138,8 +138,9 @@ func (s *queueAckMgrSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
 		metricsClient:             s.metricsClient,
 	}
+	s.mockShard.config.ShardUpdateMinInterval = 0 * time.Second
 
-	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{ForceUpdateInterval: 1 * time.Second, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
+	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{UpdateShardTaskCount: 1, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
 }
 
 func (s *queueAckMgrSuite) TearDownTest() {
@@ -339,8 +340,9 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
 		metricsClient:             s.metricsClient,
 	}
+	s.mockShard.config.ShardUpdateMinInterval = 0 * time.Second
 
-	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{ForceUpdateInterval: 1 * time.Second, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
+	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{UpdateShardTaskCount: 1, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
 }
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
