@@ -294,16 +294,38 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 			return execution.GetRunId(), nil
 		}
 
+		// TODO
+		// The failover version checking && overwriting should be performed here: #675
+		// TODO
+
+		workflowExistsErrHandler := func(err *persistence.WorkflowExecutionAlreadyStartedError) error {
+			// set the prev run ID for database conditional update
+			prevRunID := err.RunID
+			prevState := err.State
+			if prevState != persistence.WorkflowStateCompleted {
+				if prevRunID == execution.GetRunId() {
+					// this is a duplicate execution of the start execution event
+					// or this is an execution of the duplicate start execution event
+					return nil
+				}
+				return err
+			}
+			// if the existing workflow is completed, ignore the worklow ID reuse policy
+			// since the policy should be applied by the active cluster,
+			// standby cluster should apply this event without question.
+			return nil
+		}
+
 		// try to create the workflow execution
 		isBrandNew := true
 		_, err = createWorkflow(isBrandNew, "")
 		// if err still non nil, see if retry
-		/*if errExist, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
+		if errExist, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
 			if err = workflowExistsErrHandler(errExist); err == nil {
 				isBrandNew = false
 				_, err = createWorkflow(isBrandNew, errExist.RunID)
 			}
-		}*/
+		}
 
 	default:
 		// Generate a transaction ID for appending events to history
