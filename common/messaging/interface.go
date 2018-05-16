@@ -29,8 +29,8 @@ import (
 type (
 	// Client is the interface used to abstract out interaction with messaging system for replication
 	Client interface {
-		NewConsumer(cadenceCluster, consumerName string, concurrency int) (kafka.Consumer, error)
-		NewProducer(cadenceCluster string) (Producer, error)
+		NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (kafka.Consumer, error)
+		NewProducer(sourceCluster string) (Producer, error)
 	}
 
 	// Producer is the interface used to send replication tasks to other clusters through replicator

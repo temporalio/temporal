@@ -241,7 +241,7 @@ func (_m *ExecutionManager) UpdateWorkflowExecution(request *persistence.UpdateW
 	return r0
 }
 
-// UpdateWorkflowExecution provides a mock function with given fields: request
+// ResetMutableState provides a mock function with given fields: request
 func (_m *ExecutionManager) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
 	ret := _m.Called(request)
 

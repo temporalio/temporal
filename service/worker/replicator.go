@@ -70,7 +70,7 @@ func (r *Replicator) Start() error {
 	for cluster := range r.clusterMetadata.GetAllClusterFailoverVersions() {
 		if cluster != currentClusterName {
 			consumerName := getConsumerName(currentClusterName, cluster)
-			r.processors = append(r.processors, newReplicationTaskProcessor(cluster, consumerName, r.client,
+			r.processors = append(r.processors, newReplicationTaskProcessor(currentClusterName, cluster, consumerName, r.client,
 				r.config, r.logger, r.metricsClient, r.domainReplicator, r.historyClient))
 		}
 	}

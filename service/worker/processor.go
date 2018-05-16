@@ -50,6 +50,7 @@ type (
 	}
 
 	replicationTaskProcessor struct {
+		currentCluster   string
 		sourceCluster    string
 		topicName        string
 		consumerName     string
@@ -74,15 +75,16 @@ var (
 	ErrUnknownReplicationTask = errors.New("unknown replication task")
 )
 
-func newReplicationTaskProcessor(sourceCluster, consumer string, client messaging.Client, config *Config,
+func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
 	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
 	historyClient history.Client) *replicationTaskProcessor {
 	return &replicationTaskProcessor{
-		sourceCluster: sourceCluster,
-		consumerName:  consumer,
-		client:        client,
-		shutdownCh:    make(chan struct{}),
-		config:        config,
+		currentCluster: currentCluster,
+		sourceCluster:  sourceCluster,
+		consumerName:   consumer,
+		client:         client,
+		shutdownCh:     make(chan struct{}),
+		config:         config,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueReplicationTaskProcessorComponent,
 			logging.TagSourceCluster:     sourceCluster,
@@ -100,7 +102,7 @@ func (p *replicationTaskProcessor) Start() error {
 	}
 
 	logging.LogReplicationTaskProcessorStartingEvent(p.logger)
-	consumer, err := p.client.NewConsumer(p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency)
+	consumer, err := p.client.NewConsumer(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency)
 	if err != nil {
 		logging.LogReplicationTaskProcessorStartFailedEvent(p.logger, err)
 		return err

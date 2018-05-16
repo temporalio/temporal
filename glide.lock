@@ -132,7 +132,7 @@ imports:
   subpackages:
   - utils
 - name: github.com/uber-go/kafka-client
-  version: 01a7eeb4f9ea6e4c16a6ec5d159076c88244c947
+  version: d3982364cc55cd78569fc58a587ff5ec0e06ab20
   subpackages:
   - internal/consumer
   - internal/list

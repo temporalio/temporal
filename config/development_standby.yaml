@@ -73,8 +73,22 @@ kafka:
   topics:
     active:
       cluster: test
+    active-retry:
+      cluster: test
+    active-dlq:
+      cluster: test
     standby:
       cluster: test
-  cadence-cluster-to-topic:
-    active: active
-    standby: standby
+    standby-retry:
+      cluster: test
+    standby-dlq:
+      cluster: test
+  cadence-cluster-topics:
+    active:
+      topic: active
+      retry-topic: active-retry
+      dlq-topic: active-dlq
+    standby:
+      topic: standby
+      retry-topic: standby-retry
+      dlq-topic: standby-dlq
