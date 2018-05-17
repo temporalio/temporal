@@ -319,23 +319,20 @@ Update_History_Loop:
 		}
 
 		ai, running := msBuilder.GetActivityInfo(scheduleID)
-		if !running {
-			// activity already closed
-			return nil
-		}
-		if int64(ai.Attempt) != timerTask.ScheduleAttempt && timerTask.TimeoutType != int(workflow.TimeoutTypeScheduleToClose) {
-			// timer was created for older attempts
-			return nil
-		}
+		if running {
+			// If current one is HB task then we may need to create the next heartbeat timer.  Clear the create flag for this
+			// heartbeat timer so we can create it again if needed.
+			// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
+			// where we create next timer task based on that new updated timestamp.
+			isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
+			if isHeartBeatTask {
+				ai.TimerTaskStatus = ai.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
+				msBuilder.UpdateActivity(ai)
+			}
 
-		// If current one is HB task then we may need to create the next heartbeat timer.  Clear the create flag for this
-		// heartbeat timer so we can create it again if needed.
-		// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
-		// where we create next timer task based on that new updated timestamp.
-		isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
-		if isHeartBeatTask {
-			ai.TimerTaskStatus = ai.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
-			msBuilder.UpdateActivity(ai)
+			// No need to check for attempt on the timer task.  ExpireActivityTimer logic below already checks if the
+			// activity should be timedout and it will not let the timer expire for earlier attempts.  And creation of
+			// duplicate timer task is protected by Created flag.
 		}
 
 		var timerTasks []persistence.Task

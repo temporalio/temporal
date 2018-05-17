@@ -507,10 +507,20 @@ func (p *taskPoller) pollAndProcessDecisionTaskWithSticky(dumpHistory bool, drop
 	return p.pollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, true, true, int64(0))
 }
 
+func (p *taskPoller) pollAndProcessDecisionTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
+	return p.pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(0), 1)
+}
+
 func (p *taskPoller) pollAndProcessDecisionTaskWithAttempt(dumpHistory bool, dropTask bool,
 	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64) (isQueryTask bool, err error) {
+	return p.pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, pollStickyTaskList,
+		respondStickyTaskList, decisionAttempt, 5)
+}
+
+func (p *taskPoller) pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory bool, dropTask bool,
+	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64, retryCount int) (isQueryTask bool, err error) {
 Loop:
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < retryCount; attempt++ {
 
 		taskList := p.taskList
 		if pollStickyTaskList {
@@ -1027,6 +1037,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	tl := "integration-activity-retry-tasklist"
 	identity := "worker1"
 	activityName := "activity_retry"
+	timeoutActivityName := "timeout_activity"
 
 	workflowType := &workflow.WorkflowType{}
 	workflowType.Name = common.StringPtr(wt)
@@ -1052,47 +1063,84 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
 	workflowComplete := false
-	activityCount := int32(1)
-	activityCounter := int32(0)
+	activitiesScheduled := false
+	var activityAScheduled, activityAFailed, activityBScheduled, activityBTimeout *workflow.HistoryEvent
 
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
-		if activityCounter < activityCount {
-			activityCounter++
-			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+		if !activitiesScheduled {
+			activitiesScheduled = true
 
-			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
-				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
-					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
-					TaskList:     &workflow.TaskList{Name: &tl},
-					Input:        buf.Bytes(),
-					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(15),
-					ScheduleToStartTimeoutSeconds: common.Int32Ptr(3),
-					StartToCloseTimeoutSeconds:    common.Int32Ptr(15),
-					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
-					RetryPolicy: &workflow.RetryPolicy{
-						InitialIntervalInSeconds: common.Int32Ptr(1),
-						MaximumAttempts:          common.Int32Ptr(3),
-						MaximumIntervalInSeconds: common.Int32Ptr(1),
-						NonRetriableErrorReasons: []string{"bad-bug"},
-						BackoffCoefficient:       common.Float64Ptr(1),
+			return nil, []*workflow.Decision{
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+					ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:   common.StringPtr("A"),
+						ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+						TaskList:     &workflow.TaskList{Name: &tl},
+						Input:        []byte("1"),
+						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(4),
+						ScheduleToStartTimeoutSeconds: common.Int32Ptr(4),
+						StartToCloseTimeoutSeconds:    common.Int32Ptr(4),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(1),
+						RetryPolicy: &workflow.RetryPolicy{
+							InitialIntervalInSeconds: common.Int32Ptr(1),
+							MaximumAttempts:          common.Int32Ptr(3),
+							MaximumIntervalInSeconds: common.Int32Ptr(1),
+							NonRetriableErrorReasons: []string{"bad-bug"},
+							BackoffCoefficient:       common.Float64Ptr(1),
+						},
 					},
+				},
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+					ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+						ActivityId:   common.StringPtr("B"),
+						ActivityType: &workflow.ActivityType{Name: common.StringPtr(timeoutActivityName)},
+						TaskList:     &workflow.TaskList{Name: common.StringPtr("no_worker_tasklist")},
+						Input:        []byte("2"),
+						ScheduleToCloseTimeoutSeconds: common.Int32Ptr(5),
+						ScheduleToStartTimeoutSeconds: common.Int32Ptr(5),
+						StartToCloseTimeoutSeconds:    common.Int32Ptr(5),
+						HeartbeatTimeoutSeconds:       common.Int32Ptr(0),
+					},
+				}}, nil
+		} else if previousStartedEventID > 0 {
+			for _, event := range history.Events[previousStartedEventID:] {
+				switch event.GetEventType() {
+				case workflow.EventTypeActivityTaskScheduled:
+					switch event.ActivityTaskScheduledEventAttributes.GetActivityId() {
+					case "A":
+						activityAScheduled = event
+					case "B":
+						activityBScheduled = event
+					}
+
+				case workflow.EventTypeActivityTaskFailed:
+					if event.ActivityTaskFailedEventAttributes.GetScheduledEventId() == activityAScheduled.GetEventId() {
+						activityAFailed = event
+					}
+
+				case workflow.EventTypeActivityTaskTimedOut:
+					if event.ActivityTaskTimedOutEventAttributes.GetScheduledEventId() == activityBScheduled.GetEventId() {
+						activityBTimeout = event
+					}
+				}
+			}
+		}
+
+		if activityAFailed != nil && activityBTimeout != nil {
+			s.logger.Info("Completing Workflow.")
+			workflowComplete = true
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+				CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+					Result: []byte("Done."),
 				},
 			}}, nil
 		}
 
-		s.logger.Info("Completing Workflow.")
-
-		workflowComplete = true
-		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
-			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
-			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
-				Result: []byte("Done."),
-			},
-		}}, nil
+		return nil, []*workflow.Decision{}, nil
 	}
 
 	activityExecutedCount := 0
@@ -1122,7 +1170,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks, err)
+	s.True(err == nil, err)
 
 	err = poller.pollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
@@ -1131,10 +1179,28 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
+	for i := 0; i < 3; i++ {
+		s.False(workflowComplete)
 
-	s.False(workflowComplete)
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.Nil(err)
+		s.logger.Infof("Processing decision task: %v", i)
+		_, err := poller.pollAndProcessDecisionTaskWithoutRetry(false, false)
+		if err != nil {
+			s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
+				WorkflowId: common.StringPtr(id),
+				RunId:      common.StringPtr(we.GetRunId()),
+			})
+		}
+		s.Nil(err, "Poll for decision task failed.")
+
+		if workflowComplete {
+			break
+		}
+	}
+
+	s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      common.StringPtr(we.GetRunId()),
+	})
 	s.True(workflowComplete)
 	s.True(activityExecutedCount == 2)
 }
