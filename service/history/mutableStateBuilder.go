@@ -625,6 +625,11 @@ func (e *mutableStateBuilder) isStickyTaskListEnabled() bool {
 }
 
 func (e *mutableStateBuilder) createNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent {
+	return e.createNewHistoryEventWithTimestamp(eventType, time.Now().UnixNano())
+}
+
+func (e *mutableStateBuilder) createNewHistoryEventWithTimestamp(eventType workflow.EventType,
+	timestamp int64) *workflow.HistoryEvent {
 	eventID := e.executionInfo.NextEventID
 	if e.shouldBufferEvent(eventType) {
 		eventID = common.BufferedEventID
@@ -633,7 +638,16 @@ func (e *mutableStateBuilder) createNewHistoryEvent(eventType workflow.EventType
 		e.executionInfo.NextEventID++
 	}
 
-	return e.createNewHistoryEventWithTimestamp(eventID, eventType, time.Now().UnixNano())
+	ts := common.Int64Ptr(timestamp)
+	historyEvent := &workflow.HistoryEvent{}
+	historyEvent.EventId = common.Int64Ptr(eventID)
+	historyEvent.Timestamp = ts
+	historyEvent.EventType = common.EventTypePtr(eventType)
+	if e.replicationState != nil {
+		historyEvent.Version = common.Int64Ptr(e.replicationState.CurrentVersion)
+	}
+
+	return historyEvent
 }
 
 func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bool {
@@ -685,20 +699,6 @@ func (e *mutableStateBuilder) shouldBufferEvent(eventType workflow.EventType) bo
 	default:
 		return true
 	}
-}
-
-func (e *mutableStateBuilder) createNewHistoryEventWithTimestamp(eventID int64, eventType workflow.EventType,
-	timestamp int64) *workflow.HistoryEvent {
-	ts := common.Int64Ptr(timestamp)
-	historyEvent := &workflow.HistoryEvent{}
-	historyEvent.EventId = common.Int64Ptr(eventID)
-	historyEvent.Timestamp = ts
-	historyEvent.EventType = common.EventTypePtr(eventType)
-	if e.replicationState != nil {
-		historyEvent.Version = common.Int64Ptr(e.replicationState.CurrentVersion)
-	}
-
-	return historyEvent
 }
 
 func (e *mutableStateBuilder) getWorkflowType() *workflow.WorkflowType {
@@ -1312,9 +1312,10 @@ func (e *mutableStateBuilder) AddDecisionTaskCompletedEvent(scheduleEventID, sta
 	e.BeforeAddDecisionTaskCompletedEvent()
 	if di.Attempt > 0 {
 		// Create corresponding DecisionTaskSchedule and DecisionTaskStarted events for decisions we have been retrying
-		scheduledEvent := e.hBuilder.AddDecisionTaskScheduledEvent(e.executionInfo.TaskList, di.DecisionTimeout, di.Attempt)
-		startedEvent := e.hBuilder.AddDecisionTaskStartedEvent(scheduledEvent.GetEventId(), di.RequestID,
-			request.GetIdentity())
+		scheduledEvent := e.hBuilder.AddTransientDecisionTaskScheduledEvent(e.executionInfo.TaskList, di.DecisionTimeout,
+			di.Attempt, di.Timestamp)
+		startedEvent := e.hBuilder.AddTransientDecisionTaskStartedEvent(scheduledEvent.GetEventId(), di.RequestID,
+			request.GetIdentity(), di.Timestamp)
 		startedEventID = startedEvent.GetEventId()
 	}
 	// Now write the completed event

@@ -4428,6 +4428,7 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	failureCount := 10
 	signalCount := 0
 	sendSignal := false
+	lastDecisionTimestamp := int64(0)
 	//var signalEvent *workflow.HistoryEvent
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
@@ -4475,6 +4476,12 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		}
 
 		workflowComplete = true
+		time.Sleep(time.Second)
+		s.logger.Warnf("PrevStarted: %v, StartedEventID: %v, Size: %v", previousStartedEventID, startedEventID,
+			len(history.Events))
+		lastDecisionEvent := history.Events[startedEventID-1]
+		s.Equal(workflow.EventTypeDecisionTaskStarted, lastDecisionEvent.GetEventType())
+		lastDecisionTimestamp = lastDecisionEvent.GetTimestamp()
 		return nil, []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
@@ -4561,10 +4568,19 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	events := s.getHistory(s.domainName, workflowExecution)
 	var lastEvent *workflow.HistoryEvent
+	var lastDecisionStartedEvent *workflow.HistoryEvent
 	for _, e := range events {
+		if e.GetEventType() == workflow.EventTypeDecisionTaskStarted {
+			lastDecisionStartedEvent = e
+		}
 		lastEvent = e
 	}
 	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, lastEvent.GetEventType())
+	s.logger.Infof("Last Decision Time: %v, Last Decision History Timestamp: %v, Complete Timestamp: %v",
+		time.Unix(0, lastDecisionTimestamp), time.Unix(0, lastDecisionStartedEvent.GetTimestamp()),
+		time.Unix(0, lastEvent.GetTimestamp()))
+	s.Equal(lastDecisionTimestamp, lastDecisionStartedEvent.GetTimestamp())
+	s.True(time.Duration(lastEvent.GetTimestamp()-lastDecisionTimestamp) >= time.Second)
 }
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {

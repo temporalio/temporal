@@ -78,9 +78,23 @@ func (b *historyBuilder) AddDecisionTaskScheduledEvent(taskList string,
 	return b.addEventToHistory(event)
 }
 
+func (b *historyBuilder) AddTransientDecisionTaskScheduledEvent(taskList string,
+	startToCloseTimeoutSeconds int32, attempt int64, timestamp int64) *workflow.HistoryEvent {
+	event := b.newTransientDecisionTaskScheduledEvent(taskList, startToCloseTimeoutSeconds, attempt, timestamp)
+
+	return b.addEventToHistory(event)
+}
+
 func (b *historyBuilder) AddDecisionTaskStartedEvent(scheduleEventID int64, requestID string,
 	identity string) *workflow.HistoryEvent {
 	event := b.newDecisionTaskStartedEvent(scheduleEventID, requestID, identity)
+
+	return b.addEventToHistory(event)
+}
+
+func (b *historyBuilder) AddTransientDecisionTaskStartedEvent(scheduleEventID int64, requestID string,
+	identity string, timestamp int64) *workflow.HistoryEvent {
+	event := b.newTransientDecisionTaskStartedEvent(scheduleEventID, requestID, identity, timestamp)
 
 	return b.addEventToHistory(event)
 }
@@ -452,9 +466,23 @@ func (b *historyBuilder) newDecisionTaskScheduledEvent(taskList string, startToC
 	return setDecisionTaskScheduledEventInfo(historyEvent, taskList, startToCloseTimeoutSeconds, attempt)
 }
 
+func (b *historyBuilder) newTransientDecisionTaskScheduledEvent(taskList string, startToCloseTimeoutSeconds int32,
+	attempt int64, timestamp int64) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEventWithTimestamp(workflow.EventTypeDecisionTaskScheduled, timestamp)
+
+	return setDecisionTaskScheduledEventInfo(historyEvent, taskList, startToCloseTimeoutSeconds, attempt)
+}
+
 func (b *historyBuilder) newDecisionTaskStartedEvent(scheduledEventID int64, requestID string,
 	identity string) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.createNewHistoryEvent(workflow.EventTypeDecisionTaskStarted)
+
+	return setDecisionTaskStartedEventInfo(historyEvent, scheduledEventID, requestID, identity)
+}
+
+func (b *historyBuilder) newTransientDecisionTaskStartedEvent(scheduledEventID int64, requestID string,
+	identity string, timestamp int64) *workflow.HistoryEvent {
+	historyEvent := b.msBuilder.createNewHistoryEventWithTimestamp(workflow.EventTypeDecisionTaskStarted, timestamp)
 
 	return setDecisionTaskStartedEventInfo(historyEvent, scheduledEventID, requestID, identity)
 }
