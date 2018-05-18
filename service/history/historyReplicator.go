@@ -110,7 +110,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check if this is the first event after failover
 		if rState.LastWriteVersion < request.GetVersion() {
-			previousActiveCluster := r.metadataMgr.ClusterNameForFailoverVersion(rState.CurrentVersion)
+			previousActiveCluster := r.metadataMgr.ClusterNameForFailoverVersion(rState.LastWriteVersion)
 			ri, ok := request.ReplicationInfo[previousActiveCluster]
 			if !ok {
 				r.logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Current: %v",
