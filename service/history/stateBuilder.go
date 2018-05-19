@@ -147,8 +147,8 @@ func (b *stateBuilder) applyEvents(version int64, sourceClusterName string, doma
 			// No mutable state action is needed
 
 		case shared.EventTypeTimerStarted:
-			b.msBuilder.ReplicateTimerStartedEvent(event)
-			if timerTask := b.scheduleUserTimerTask(event, b.msBuilder); timerTask != nil {
+			ti := b.msBuilder.ReplicateTimerStartedEvent(event)
+			if timerTask := b.scheduleUserTimerTask(event, ti, b.msBuilder); timerTask != nil {
 				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
@@ -414,8 +414,10 @@ func (b *stateBuilder) scheduleDecisionTimerTask(event *shared.HistoryEvent, sch
 }
 
 func (b *stateBuilder) scheduleUserTimerTask(event *shared.HistoryEvent,
-	msBuilder *mutableStateBuilder) persistence.Task {
-	return b.getTimerBuilder(event).GetUserTimerTaskIfNeeded(msBuilder)
+	ti *persistence.TimerInfo, msBuilder *mutableStateBuilder) persistence.Task {
+	timerBuilder := b.getTimerBuilder(event)
+	timerBuilder.AddUserTimer(ti, msBuilder)
+	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
 }
 
 func (b *stateBuilder) scheduleActivityTimerTask(event *shared.HistoryEvent,

@@ -42,10 +42,11 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	logger bark.Logger) *conflictResolver {
 
 	return &conflictResolver{
-		shard:      shard,
-		context:    context,
-		historyMgr: historyMgr,
-		logger:     logger,
+		shard:              shard,
+		context:            context,
+		historyMgr:         historyMgr,
+		hSerializerFactory: persistence.NewHistorySerializerFactory(),
+		logger:             logger,
 	}
 }
 
