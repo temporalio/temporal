@@ -21,6 +21,7 @@
 package history
 
 import (
+	"context"
 	"sync/atomic"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -78,6 +79,11 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 
 func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+	return c.getOrCreateWorkflowExecutionWithTimeout(context.Background(), domainID, execution)
+}
+
+func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
+	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 	if execution.GetWorkflowId() == "" {
 		return nil, nil, &workflow.BadRequestError{Message: "Can't load workflow execution.  WorkflowId not set."}
 	}
@@ -124,12 +130,16 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 				// TODO see issue #668, there are certain type or errors which can bypass the clear
 				context.clear()
 			}
-			context.Unlock()
+			context.locker.Unlock()
 			c.Release(key)
 		}
 	}
 
-	context.Lock()
+	if err := context.locker.Lock(ctx); err != nil {
+		// ctx is done before lock can be acquired
+		c.Release(key)
+		return nil, nil, err
+	}
 	return context, releaseFunc, nil
 }
 

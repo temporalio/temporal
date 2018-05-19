@@ -22,17 +22,15 @@ package history
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
-
-	"github.com/uber-common/bark"
 )
 
 const (
@@ -47,7 +45,7 @@ type (
 		executionManager  persistence.ExecutionManager
 		logger            bark.Logger
 
-		sync.Mutex
+		locker          common.RWMutex
 		msBuilder       *mutableStateBuilder
 		updateCondition int64
 		deleteTimerTask persistence.Task
@@ -71,6 +69,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		shard:             shard,
 		executionManager:  executionManager,
 		logger:            lg,
+		locker:            common.NewRWMutex(),
 	}
 }
 

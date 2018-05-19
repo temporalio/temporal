@@ -195,7 +195,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context,
 		return nil, err1
 	}
 
-	response, err2 := engine.RecordActivityTaskHeartbeat(wrappedRequest)
+	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRecordActivityTaskHeartbeatScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -224,7 +224,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context,
 		return nil, err1
 	}
 
-	response, err2 := engine.RecordActivityTaskStarted(recordRequest)
+	response, err2 := engine.RecordActivityTaskStarted(ctx, recordRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRecordActivityTaskStartedScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -265,7 +265,7 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 		return nil, err1
 	}
 
-	response, err2 := engine.RecordDecisionTaskStarted(recordRequest)
+	response, err2 := engine.RecordDecisionTaskStarted(ctx, recordRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRecordDecisionTaskStartedScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -306,7 +306,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskCompleted(wrappedRequest)
+	err2 := engine.RespondActivityTaskCompleted(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -347,7 +347,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskFailed(wrappedRequest)
+	err2 := engine.RespondActivityTaskFailed(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskFailedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -388,7 +388,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RespondActivityTaskCanceled(wrappedRequest)
+	err2 := engine.RespondActivityTaskCanceled(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCanceledScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -482,7 +482,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RespondDecisionTaskFailed(wrappedRequest)
+	err2 := engine.RespondDecisionTaskFailed(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -568,7 +568,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *hist.D
 		return nil, err1
 	}
 
-	resp, err2 := engine.DescribeWorkflowExecution(request)
+	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryDescribeWorkflowExecutionScope, h.convertError(err2))
 		return nil, h.convertError(err2)
@@ -602,7 +602,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.RequestCancelWorkflowExecution(request)
+	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRequestCancelWorkflowExecutionScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -632,7 +632,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.SignalWorkflowExecution(wrappedRequest)
+	err2 := engine.SignalWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistorySignalWorkflowExecutionScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -665,7 +665,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err1
 	}
 
-	resp, err2 := engine.SignalWithStartWorkflowExecution(wrappedRequest)
+	resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
 		tmpErr := h.convertError(err2)
 		h.updateErrorMetric(metrics.HistorySignalWithStartWorkflowExecutionScope, tmpErr)
@@ -696,7 +696,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context,
 		return err1
 	}
 
-	engine.RemoveSignalMutableState(wrappedRequest)
+	engine.RemoveSignalMutableState(ctx, wrappedRequest)
 
 	return nil
 }
@@ -722,7 +722,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 		return err1
 	}
 
-	err2 := engine.TerminateWorkflowExecution(wrappedRequest)
+	err2 := engine.TerminateWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -757,7 +757,7 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.Schedu
 		return err1
 	}
 
-	err2 := engine.ScheduleDecisionTask(request)
+	err2 := engine.ScheduleDecisionTask(ctx, request)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -790,7 +790,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return err1
 	}
 
-	err2 := engine.RecordChildExecutionCompleted(request)
+	err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRecordChildExecutionCompletedScope, h.convertError(err2))
 		return h.convertError(err2)
@@ -823,7 +823,7 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.Re
 		return nil, err
 	}
 
-	resp, err := engine.ResetStickyTaskList(resetRequest)
+	resp, err := engine.ResetStickyTaskList(ctx, resetRequest)
 	if err != nil {
 		h.updateErrorMetric(metrics.HistoryResetStickyTaskListScope, h.convertError(err))
 		return nil, h.convertError(err)

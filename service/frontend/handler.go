@@ -2021,7 +2021,7 @@ func (wh *WorkflowHandler) startRequestProfile(scope int) tally.Stopwatch {
 }
 
 func (wh *WorkflowHandler) error(err error, scope int) error {
-	switch err.(type) {
+	switch err := err.(type) {
 	case *gen.InternalServiceError:
 		logging.LogInternalServiceError(wh.Service.GetLogger(), err)
 		wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
@@ -2047,11 +2047,16 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 	case *gen.QueryFailedError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
-	default:
-		logging.LogUncategorizedError(wh.Service.GetLogger(), err)
-		wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-		return &gen.InternalServiceError{Message: err.Error()}
+	case *yarpcerrors.Status:
+		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+			wh.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeout)
+			return err
+		}
 	}
+
+	logging.LogUncategorizedError(wh.Service.GetLogger(), err)
+	wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
+	return &gen.InternalServiceError{Message: err.Error()}
 }
 
 func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope int) error {

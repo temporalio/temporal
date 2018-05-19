@@ -52,25 +52,25 @@ type (
 		StartWorkflowExecution(request *h.StartWorkflowExecutionRequest) (*workflow.StartWorkflowExecutionResponse,
 			error)
 		GetMutableState(ctx context.Context, request *h.GetMutableStateRequest) (*h.GetMutableStateResponse, error)
-		ResetStickyTaskList(resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
-		DescribeWorkflowExecution(
+		ResetStickyTaskList(ctx context.Context, resetRequest *h.ResetStickyTaskListRequest) (*h.ResetStickyTaskListResponse, error)
+		DescribeWorkflowExecution(ctx context.Context,
 			request *h.DescribeWorkflowExecutionRequest) (*workflow.DescribeWorkflowExecutionResponse, error)
-		RecordDecisionTaskStarted(request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
-		RecordActivityTaskStarted(request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
+		RecordDecisionTaskStarted(ctx context.Context, request *h.RecordDecisionTaskStartedRequest) (*h.RecordDecisionTaskStartedResponse, error)
+		RecordActivityTaskStarted(ctx context.Context, request *h.RecordActivityTaskStartedRequest) (*h.RecordActivityTaskStartedResponse, error)
 		RespondDecisionTaskCompleted(ctx context.Context, request *h.RespondDecisionTaskCompletedRequest) error
-		RespondDecisionTaskFailed(request *h.RespondDecisionTaskFailedRequest) error
-		RespondActivityTaskCompleted(request *h.RespondActivityTaskCompletedRequest) error
-		RespondActivityTaskFailed(request *h.RespondActivityTaskFailedRequest) error
-		RespondActivityTaskCanceled(request *h.RespondActivityTaskCanceledRequest) error
-		RecordActivityTaskHeartbeat(request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
-		RequestCancelWorkflowExecution(request *h.RequestCancelWorkflowExecutionRequest) error
-		SignalWorkflowExecution(request *h.SignalWorkflowExecutionRequest) error
-		SignalWithStartWorkflowExecution(request *h.SignalWithStartWorkflowExecutionRequest) (
+		RespondDecisionTaskFailed(ctx context.Context, request *h.RespondDecisionTaskFailedRequest) error
+		RespondActivityTaskCompleted(ctx context.Context, request *h.RespondActivityTaskCompletedRequest) error
+		RespondActivityTaskFailed(ctx context.Context, request *h.RespondActivityTaskFailedRequest) error
+		RespondActivityTaskCanceled(ctx context.Context, request *h.RespondActivityTaskCanceledRequest) error
+		RecordActivityTaskHeartbeat(ctx context.Context, request *h.RecordActivityTaskHeartbeatRequest) (*workflow.RecordActivityTaskHeartbeatResponse, error)
+		RequestCancelWorkflowExecution(ctx context.Context, request *h.RequestCancelWorkflowExecutionRequest) error
+		SignalWorkflowExecution(ctx context.Context, request *h.SignalWorkflowExecutionRequest) error
+		SignalWithStartWorkflowExecution(ctx context.Context, request *h.SignalWithStartWorkflowExecutionRequest) (
 			*workflow.StartWorkflowExecutionResponse, error)
-		RemoveSignalMutableState(request *h.RemoveSignalMutableStateRequest) error
-		TerminateWorkflowExecution(request *h.TerminateWorkflowExecutionRequest) error
-		ScheduleDecisionTask(request *h.ScheduleDecisionTaskRequest) error
-		RecordChildExecutionCompleted(request *h.RecordChildExecutionCompletedRequest) error
+		RemoveSignalMutableState(ctx context.Context, request *h.RemoveSignalMutableStateRequest) error
+		TerminateWorkflowExecution(ctx context.Context, request *h.TerminateWorkflowExecutionRequest) error
+		ScheduleDecisionTask(ctx context.Context, request *h.ScheduleDecisionTaskRequest) error
+		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
 		ReplicateEvents(request *h.ReplicateEventsRequest) error
 	}
 

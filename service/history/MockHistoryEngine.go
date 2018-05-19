@@ -90,7 +90,7 @@ func (_m *MockHistoryEngine) GetMutableState(ctx context.Context, request *gohis
 }
 
 // ResetStickyTaskList is mock implementation for ResetStickyTaskList of HistoryEngine
-func (_m *MockHistoryEngine) ResetStickyTaskList(request *gohistory.ResetStickyTaskListRequest) (*gohistory.ResetStickyTaskListResponse, error) {
+func (_m *MockHistoryEngine) ResetStickyTaskList(ctx context.Context, request *gohistory.ResetStickyTaskListRequest) (*gohistory.ResetStickyTaskListResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *gohistory.ResetStickyTaskListResponse
@@ -113,7 +113,7 @@ func (_m *MockHistoryEngine) ResetStickyTaskList(request *gohistory.ResetStickyT
 }
 
 // DescribeWorkflowExecution is mock implementation for DescribeWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) DescribeWorkflowExecution(request *gohistory.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse, error) {
+func (_m *MockHistoryEngine) DescribeWorkflowExecution(ctx context.Context, request *gohistory.DescribeWorkflowExecutionRequest) (*shared.DescribeWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *shared.DescribeWorkflowExecutionResponse
@@ -136,7 +136,7 @@ func (_m *MockHistoryEngine) DescribeWorkflowExecution(request *gohistory.Descri
 }
 
 // RecordDecisionTaskStarted is mock implementation for RecordDecisionTaskStarted of HistoryEngine
-func (_m *MockHistoryEngine) RecordDecisionTaskStarted(request *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
+func (_m *MockHistoryEngine) RecordDecisionTaskStarted(ctx context.Context, request *gohistory.RecordDecisionTaskStartedRequest) (*gohistory.RecordDecisionTaskStartedResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *gohistory.RecordDecisionTaskStartedResponse
@@ -159,7 +159,7 @@ func (_m *MockHistoryEngine) RecordDecisionTaskStarted(request *gohistory.Record
 }
 
 // RecordActivityTaskStarted is mock implementation for RecordActivityTaskStarted of HistoryEngine
-func (_m *MockHistoryEngine) RecordActivityTaskStarted(request *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
+func (_m *MockHistoryEngine) RecordActivityTaskStarted(ctx context.Context, request *gohistory.RecordActivityTaskStartedRequest) (*gohistory.RecordActivityTaskStartedResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *gohistory.RecordActivityTaskStartedResponse
@@ -196,7 +196,7 @@ func (_m *MockHistoryEngine) RespondDecisionTaskCompleted(ctx context.Context, r
 }
 
 // RespondDecisionTaskFailed is mock implementation for RespondDecisionTaskFailed of HistoryEngine
-func (_m *MockHistoryEngine) RespondDecisionTaskFailed(request *gohistory.RespondDecisionTaskFailedRequest) error {
+func (_m *MockHistoryEngine) RespondDecisionTaskFailed(ctx context.Context, request *gohistory.RespondDecisionTaskFailedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -210,7 +210,7 @@ func (_m *MockHistoryEngine) RespondDecisionTaskFailed(request *gohistory.Respon
 }
 
 // RespondActivityTaskCompleted is mock implementation for RespondActivityTaskCompleted of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *gohistory.RespondActivityTaskCompletedRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskCompleted(ctx context.Context, request *gohistory.RespondActivityTaskCompletedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -224,7 +224,7 @@ func (_m *MockHistoryEngine) RespondActivityTaskCompleted(request *gohistory.Res
 }
 
 // RespondActivityTaskFailed is mock implementation for RespondActivityTaskFailed of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskFailed(request *gohistory.RespondActivityTaskFailedRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskFailed(ctx context.Context, request *gohistory.RespondActivityTaskFailedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -238,7 +238,7 @@ func (_m *MockHistoryEngine) RespondActivityTaskFailed(request *gohistory.Respon
 }
 
 // RespondActivityTaskCanceled is mock implementation for RespondActivityTaskCanceled of HistoryEngine
-func (_m *MockHistoryEngine) RespondActivityTaskCanceled(request *gohistory.RespondActivityTaskCanceledRequest) error {
+func (_m *MockHistoryEngine) RespondActivityTaskCanceled(ctx context.Context, request *gohistory.RespondActivityTaskCanceledRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -252,7 +252,7 @@ func (_m *MockHistoryEngine) RespondActivityTaskCanceled(request *gohistory.Resp
 }
 
 // RecordActivityTaskHeartbeat is mock implementation for RecordActivityTaskHeartbeat of HistoryEngine
-func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *gohistory.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
+func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(ctx context.Context, request *gohistory.RecordActivityTaskHeartbeatRequest) (*shared.RecordActivityTaskHeartbeatResponse, error) {
 	ret := _m.Called(request)
 
 	var r0 *shared.RecordActivityTaskHeartbeatResponse
@@ -275,7 +275,7 @@ func (_m *MockHistoryEngine) RecordActivityTaskHeartbeat(request *gohistory.Reco
 }
 
 // RequestCancelWorkflowExecution is mock implementation for RequestCancelWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) RequestCancelWorkflowExecution(request *gohistory.RequestCancelWorkflowExecutionRequest) error {
+func (_m *MockHistoryEngine) RequestCancelWorkflowExecution(ctx context.Context, request *gohistory.RequestCancelWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -289,7 +289,7 @@ func (_m *MockHistoryEngine) RequestCancelWorkflowExecution(request *gohistory.R
 }
 
 // SignalWorkflowExecution is mock implementation for SignalWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) SignalWorkflowExecution(request *gohistory.SignalWorkflowExecutionRequest) error {
+func (_m *MockHistoryEngine) SignalWorkflowExecution(ctx context.Context, request *gohistory.SignalWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -303,7 +303,7 @@ func (_m *MockHistoryEngine) SignalWorkflowExecution(request *gohistory.SignalWo
 }
 
 // SignalWithStartWorkflowExecution is mock implementation for SignalWithStartWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) SignalWithStartWorkflowExecution(request *gohistory.SignalWithStartWorkflowExecutionRequest) (
+func (_m *MockHistoryEngine) SignalWithStartWorkflowExecution(ctx context.Context, request *gohistory.SignalWithStartWorkflowExecutionRequest) (
 	*shared.StartWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)
 
@@ -327,7 +327,7 @@ func (_m *MockHistoryEngine) SignalWithStartWorkflowExecution(request *gohistory
 }
 
 // RemoveSignalMutableState is mock implementation for RemoveSignalMutableState of HistoryEngine
-func (_m *MockHistoryEngine) RemoveSignalMutableState(request *gohistory.RemoveSignalMutableStateRequest) error {
+func (_m *MockHistoryEngine) RemoveSignalMutableState(ctx context.Context, request *gohistory.RemoveSignalMutableStateRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -341,7 +341,7 @@ func (_m *MockHistoryEngine) RemoveSignalMutableState(request *gohistory.RemoveS
 }
 
 // TerminateWorkflowExecution is mock implementation for TerminateWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) TerminateWorkflowExecution(request *gohistory.TerminateWorkflowExecutionRequest) error {
+func (_m *MockHistoryEngine) TerminateWorkflowExecution(ctx context.Context, request *gohistory.TerminateWorkflowExecutionRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -355,7 +355,7 @@ func (_m *MockHistoryEngine) TerminateWorkflowExecution(request *gohistory.Termi
 }
 
 // ScheduleDecisionTask is mock implementation for ScheduleDecisionTask of HistoryEngine
-func (_m *MockHistoryEngine) ScheduleDecisionTask(request *gohistory.ScheduleDecisionTaskRequest) error {
+func (_m *MockHistoryEngine) ScheduleDecisionTask(ctx context.Context, request *gohistory.ScheduleDecisionTaskRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
@@ -369,7 +369,7 @@ func (_m *MockHistoryEngine) ScheduleDecisionTask(request *gohistory.ScheduleDec
 }
 
 // RecordChildExecutionCompleted is mock implementation for CompleteChildExecution of HistoryEngine
-func (_m *MockHistoryEngine) RecordChildExecutionCompleted(request *gohistory.RecordChildExecutionCompletedRequest) error {
+func (_m *MockHistoryEngine) RecordChildExecutionCompleted(ctx context.Context, request *gohistory.RecordChildExecutionCompletedRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error

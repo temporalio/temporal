@@ -187,7 +187,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -230,7 +230,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -276,7 +276,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -326,7 +326,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -384,7 +384,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -441,7 +441,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -499,7 +499,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -555,7 +555,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -604,7 +604,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordDecisionTaskStarted(&h.RecordDecisionTaskStartedRequest{
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &h.RecordDecisionTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(2),
@@ -650,7 +650,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
+	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &h.RecordActivityTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
@@ -710,7 +710,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		nil,
 	)
 
-	response, err := s.historyEngine.RecordActivityTaskStarted(&h.RecordActivityTaskStartedRequest{
+	response, err := s.historyEngine.RecordActivityTaskStarted(context.Background(), &h.RecordActivityTaskStartedRequest{
 		DomainUUID:        common.StringPtr(domainID),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        common.Int64Ptr(5),
@@ -759,7 +759,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 		nil,
 	)
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(&h.RequestCancelWorkflowExecutionRequest{
+	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &h.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CancelRequest: &workflow.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &workflow.WorkflowExecution{
@@ -805,7 +805,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 		nil,
 	)
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(&h.RequestCancelWorkflowExecutionRequest{
+	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &h.RequestCancelWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CancelRequest: &workflow.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &workflow.WorkflowExecution{
@@ -1218,7 +1218,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
 	domainID := validDomainID
@@ -1261,14 +1261,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		nil,
 	)
 
-	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)
 	s.Equal(runID, resp.GetRunId())
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
 	domainID := validDomainID
@@ -1312,14 +1312,14 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 		nil,
 	)
 
-	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)
 	s.NotNil(resp.GetRunId())
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
 	sRequest := &h.SignalWithStartWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "BadRequestError{Message: Missing domain UUID.}")
 
 	domainID := validDomainID
@@ -1369,7 +1369,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		nil,
 	)
 
-	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(sRequest)
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)
 	s.NotNil(resp.GetRunId())
 	s.NotEqual(runID, resp.GetRunId())
