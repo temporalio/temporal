@@ -57,6 +57,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		domainName          string
+		domainID            string
 		foreignDomainName   string
 		mockMessagingClient messaging.Client
 		mockProducer        messaging.Producer
@@ -152,9 +153,11 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 
 	s.engine = s.host.GetFrontendClient()
 	s.domainName = "integration-test-domain"
+	s.domainID = uuid.New()
+
 	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
-			ID:          uuid.New(),
+			ID:          s.domainID,
 			Name:        s.domainName,
 			Status:      persistence.DomainStatusRegistered,
 			Description: "Test domain for integration test",
@@ -4581,6 +4584,14 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		time.Unix(0, lastEvent.GetTimestamp()))
 	s.Equal(lastDecisionTimestamp, lastDecisionStartedEvent.GetTimestamp())
 	s.True(time.Duration(lastEvent.GetTimestamp()-lastDecisionTimestamp) >= time.Second)
+
+	partialHistory, err := s.getHistoryFrom(s.domainID, *workflowExecution, lastDecisionStartedEvent.GetEventId()+1,
+		lastEvent.GetEventId()+1)
+	s.Nil(err)
+	s.Equal(2, len(partialHistory))
+	decisionCompletedEvent := partialHistory[0]
+	s.Equal(workflow.EventTypeDecisionTaskCompleted, decisionCompletedEvent.GetEventType())
+	s.Equal(lastDecisionStartedEvent.GetEventId()+1, decisionCompletedEvent.GetEventId())
 }
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -5955,6 +5966,36 @@ func (s *integrationSuite) getHistory(domain string, execution *workflow.Workflo
 	}
 
 	return events
+}
+
+func (s *integrationSuite) getHistoryFrom(domainID string, execution workflow.WorkflowExecution,
+	firstEventID, nextEventID int64) ([]*workflow.HistoryEvent, error) {
+
+	getRequest := &persistence.GetWorkflowExecutionHistoryRequest{
+		DomainID:     domainID,
+		Execution:    execution,
+		FirstEventID: firstEventID,
+		NextEventID:  nextEventID,
+		PageSize:     100,
+	}
+	resp, err := s.HistoryMgr.GetWorkflowExecutionHistory(getRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	historyEvents := []*workflow.HistoryEvent{}
+	factory := persistence.NewHistorySerializerFactory()
+	for _, e := range resp.Events {
+		persistence.SetSerializedHistoryDefaults(&e)
+		s, _ := factory.Get(e.EncodingType)
+		history, err1 := s.Deserialize(&e)
+		if err1 != nil {
+			return nil, err1
+		}
+		historyEvents = append(historyEvents, history.Events...)
+	}
+
+	return historyEvents, nil
 }
 
 func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,

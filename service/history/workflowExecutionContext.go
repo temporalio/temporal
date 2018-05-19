@@ -199,31 +199,22 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		builder = updates.newEventsBuilder
 	}
 
+	// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
 	if builder.history != nil && len(builder.history) > 0 {
-		// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
-		firstEvent := builder.history[0]
-		serializedHistory, err := builder.Serialize()
+		firstEvent := builder.GetFirstEvent()
+		// Transient decision events need to be written as a separate batch
+		if builder.HasTransientEvents() {
+			err = c.appendHistoryEvents(builder, builder.transientHistory, transactionID)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = c.appendHistoryEvents(builder, builder.history, transactionID)
 		if err != nil {
-			logging.LogHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
 			return err
 		}
 
-		if err0 := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-			DomainID:      c.domainID,
-			Execution:     c.workflowExecution,
-			TransactionID: transactionID,
-			FirstEventID:  *firstEvent.EventId,
-			Events:        serializedHistory,
-		}); err0 != nil {
-			switch err0.(type) {
-			case *persistence.ConditionFailedError:
-				return ErrConflict
-			}
-
-			logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err0,
-				fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
-			return err0
-		}
 		c.msBuilder.executionInfo.LastFirstEventID = *firstEvent.EventId
 	}
 
@@ -301,6 +292,36 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		c.msBuilder.GetNextEventID(),
 		c.msBuilder.isWorkflowExecutionRunning(),
 	))
+
+	return nil
+}
+
+func (c *workflowExecutionContext) appendHistoryEvents(builder *historyBuilder, history []*workflow.HistoryEvent,
+	transactionID int64) error {
+
+	firstEvent := history[0]
+	serializedHistory, err := builder.SerializeEvents(history)
+	if err != nil {
+		logging.LogHistorySerializationErrorEvent(c.logger, err, "Unable to serialize execution history for update.")
+		return err
+	}
+
+	if err0 := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+		DomainID:      c.domainID,
+		Execution:     c.workflowExecution,
+		TransactionID: transactionID,
+		FirstEventID:  *firstEvent.EventId,
+		Events:        serializedHistory,
+	}); err0 != nil {
+		switch err0.(type) {
+		case *persistence.ConditionFailedError:
+			return ErrConflict
+		}
+
+		logging.LogPersistantStoreErrorEvent(c.logger, logging.TagValueStoreOperationUpdateWorkflowExecution, err0,
+			fmt.Sprintf("{updateCondition: %v}", c.updateCondition))
+		return err0
+	}
 
 	return nil
 }
