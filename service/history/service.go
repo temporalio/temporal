@@ -85,6 +85,9 @@ type Config struct {
 	ExecutionMgrNumConns int
 	HistoryMgrNumConns   int
 
+	// System Limits
+	MaximumBufferedEventsBatch int
+
 	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval time.Duration
 
@@ -134,6 +137,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		ReplicatorProcessorUpdateAckInterval:               1 * time.Minute,
 		ExecutionMgrNumConns:                               100,
 		HistoryMgrNumConns:                                 100,
+		MaximumBufferedEventsBatch:                         100,
 		ShardUpdateMinInterval:                             60 * time.Second,
 		// history client: client/history/client.go set the client timeout 30s
 		LongPollExpirationInterval: dc.GetDurationProperty(

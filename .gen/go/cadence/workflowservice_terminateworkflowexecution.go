@@ -226,6 +226,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -262,6 +264,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_TerminateWorkflowExecution_Result.DomainNotActiveError")
 			}
 			return &WorkflowService_TerminateWorkflowExecution_Result{DomainNotActiveError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_TerminateWorkflowExecution_Result.LimitExceededError")
+			}
+			return &WorkflowService_TerminateWorkflowExecution_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -287,6 +294,10 @@ func init() {
 			err = result.DomainNotActiveError
 			return
 		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
 		return
 	}
 
@@ -301,6 +312,7 @@ type WorkflowService_TerminateWorkflowExecution_Result struct {
 	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
 	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
+	LimitExceededError   *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_TerminateWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -320,7 +332,7 @@ type WorkflowService_TerminateWorkflowExecution_Result struct {
 //   }
 func (v *WorkflowService_TerminateWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -364,6 +376,14 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) ToWire() (wire.Value
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
@@ -436,6 +456,14 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) FromWire(w wire.Valu
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -455,6 +483,9 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) FromWire(w wire.Valu
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("WorkflowService_TerminateWorkflowExecution_Result should have at most one field: got %v fields", count)
 	}
@@ -469,7 +500,7 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -489,6 +520,10 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) String() string {
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -513,6 +548,9 @@ func (v *WorkflowService_TerminateWorkflowExecution_Result) Equals(rhs *Workflow
 		return false
 	}
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

@@ -222,6 +222,8 @@ func init() {
 			return true
 		case *shared.EntityNotExistsError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -248,6 +250,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RespondQueryTaskCompleted_Result.EntityNotExistError")
 			}
 			return &WorkflowService_RespondQueryTaskCompleted_Result{EntityNotExistError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RespondQueryTaskCompleted_Result.LimitExceededError")
+			}
+			return &WorkflowService_RespondQueryTaskCompleted_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -265,6 +272,10 @@ func init() {
 			err = result.EntityNotExistError
 			return
 		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
 		return
 	}
 
@@ -277,6 +288,7 @@ type WorkflowService_RespondQueryTaskCompleted_Result struct {
 	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
+	LimitExceededError   *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_RespondQueryTaskCompleted_Result struct into a Thrift-level intermediate
@@ -296,7 +308,7 @@ type WorkflowService_RespondQueryTaskCompleted_Result struct {
 //   }
 func (v *WorkflowService_RespondQueryTaskCompleted_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -324,6 +336,14 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) ToWire() (wire.Value,
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
 		i++
 	}
 
@@ -380,6 +400,14 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) FromWire(w wire.Value
 				}
 
 			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -391,6 +419,9 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) FromWire(w wire.Value
 		count++
 	}
 	if v.EntityNotExistError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
 		count++
 	}
 	if count > 1 {
@@ -407,7 +438,7 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -419,6 +450,10 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) String() string {
 	}
 	if v.EntityNotExistError != nil {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -437,6 +472,9 @@ func (v *WorkflowService_RespondQueryTaskCompleted_Result) Equals(rhs *WorkflowS
 		return false
 	}
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

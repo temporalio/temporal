@@ -228,6 +228,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -269,6 +271,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RequestCancelWorkflowExecution_Result.DomainNotActiveError")
 			}
 			return &HistoryService_RequestCancelWorkflowExecution_Result{DomainNotActiveError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RequestCancelWorkflowExecution_Result.LimitExceededError")
+			}
+			return &HistoryService_RequestCancelWorkflowExecution_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -298,6 +305,10 @@ func init() {
 			err = result.DomainNotActiveError
 			return
 		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
 		return
 	}
 
@@ -313,6 +324,7 @@ type HistoryService_RequestCancelWorkflowExecution_Result struct {
 	ShardOwnershipLostError           *ShardOwnershipLostError                  `json:"shardOwnershipLostError,omitempty"`
 	CancellationAlreadyRequestedError *shared.CancellationAlreadyRequestedError `json:"cancellationAlreadyRequestedError,omitempty"`
 	DomainNotActiveError              *shared.DomainNotActiveError              `json:"domainNotActiveError,omitempty"`
+	LimitExceededError                *shared.LimitExceededError                `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a HistoryService_RequestCancelWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -332,7 +344,7 @@ type HistoryService_RequestCancelWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_RequestCancelWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -384,6 +396,14 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) ToWire() (wire.Va
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
 		i++
 	}
 
@@ -470,6 +490,14 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) FromWire(w wire.V
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -492,6 +520,9 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) FromWire(w wire.V
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("HistoryService_RequestCancelWorkflowExecution_Result should have at most one field: got %v fields", count)
 	}
@@ -506,7 +537,7 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -530,6 +561,10 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) String() string {
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -557,6 +592,9 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) Equals(rhs *Histo
 		return false
 	}
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

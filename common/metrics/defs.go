@@ -598,7 +598,8 @@ const (
 	CadenceErrDomainAlreadyExistsCounter
 	CadenceErrCancellationAlreadyRequestedCounter
 	CadenceErrQueryFailedCounter
-	CadenceErrContextTimeout
+	CadenceErrLimitExceededCounter
+	CadenceErrContextTimeoutCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -697,6 +698,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrDomainAlreadyExistsCounter:          {metricName: "cadence.errors.domain-already-exists", metricType: Counter},
 		CadenceErrCancellationAlreadyRequestedCounter: {metricName: "cadence.errors.cancellation-already-requested", metricType: Counter},
 		CadenceErrQueryFailedCounter:                  {metricName: "cadence.errors.query-failed", metricType: Counter},
+		CadenceErrLimitExceededCounter:                {metricName: "cadence.errors.limit-exceeded", metricType: Counter},
+		CadenceErrContextTimeoutCounter:               {metricName: "cadence.errors.context-timeout", metricType: Counter},
 		PersistenceRequests:                           {metricName: "persistence.requests", metricType: Counter},
 		PersistenceFailures:                           {metricName: "persistence.errors", metricType: Counter},
 		PersistenceLatency:                            {metricName: "persistence.latency", metricType: Timer},

@@ -388,6 +388,9 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 		e.bufferedEvents = append(e.bufferedEvents, e.updateBufferedEvents)
 		e.updateBufferedEvents = nil
 	}
+	if len(e.bufferedEvents) > e.config.MaximumBufferedEventsBatch {
+		return nil, ErrBufferedEventsLimitExceeded
+	}
 	e.updateBufferedReplicationTasks = nil
 	e.deleteBufferedReplicationEvent = nil
 

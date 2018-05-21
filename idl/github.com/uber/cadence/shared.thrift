@@ -61,6 +61,10 @@ exception DomainNotActiveError {
   4: required string activeCluster
 }
 
+exception LimitExceededError {
+  1: required string message
+}
+
 
 enum WorkflowIdReusePolicy {
   /*

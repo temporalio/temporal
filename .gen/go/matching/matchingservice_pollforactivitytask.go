@@ -219,6 +219,8 @@ func init() {
 			return true
 		case *shared.InternalServiceError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -240,6 +242,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_PollForActivityTask_Result.InternalServiceError")
 			}
 			return &MatchingService_PollForActivityTask_Result{InternalServiceError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_PollForActivityTask_Result.LimitExceededError")
+			}
+			return &MatchingService_PollForActivityTask_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -251,6 +258,10 @@ func init() {
 		}
 		if result.InternalServiceError != nil {
 			err = result.InternalServiceError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
 			return
 		}
 
@@ -275,6 +286,7 @@ type MatchingService_PollForActivityTask_Result struct {
 	Success              *shared.PollForActivityTaskResponse `json:"success,omitempty"`
 	BadRequestError      *shared.BadRequestError             `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError        `json:"internalServiceError,omitempty"`
+	LimitExceededError   *shared.LimitExceededError          `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a MatchingService_PollForActivityTask_Result struct into a Thrift-level intermediate
@@ -294,7 +306,7 @@ type MatchingService_PollForActivityTask_Result struct {
 //   }
 func (v *MatchingService_PollForActivityTask_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -322,6 +334,14 @@ func (v *MatchingService_PollForActivityTask_Result) ToWire() (wire.Value, error
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
 
@@ -384,6 +404,14 @@ func (v *MatchingService_PollForActivityTask_Result) FromWire(w wire.Value) erro
 				}
 
 			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -395,6 +423,9 @@ func (v *MatchingService_PollForActivityTask_Result) FromWire(w wire.Value) erro
 		count++
 	}
 	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.LimitExceededError != nil {
 		count++
 	}
 	if count != 1 {
@@ -411,7 +442,7 @@ func (v *MatchingService_PollForActivityTask_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -423,6 +454,10 @@ func (v *MatchingService_PollForActivityTask_Result) String() string {
 	}
 	if v.InternalServiceError != nil {
 		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -441,6 +476,9 @@ func (v *MatchingService_PollForActivityTask_Result) Equals(rhs *MatchingService
 		return false
 	}
 	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

@@ -2140,6 +2140,112 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.IsType(&workflow.EntityNotExistsError{}, err)
 }
 
+func (s *integrationSuite) TestRateLimitBufferedEvents() {
+	id := "integration-rate-limit-buffered-events-test"
+	wt := "integration-rate-limit-buffered-events-test-type"
+	tl := "integration-rate-limit-buffered-events-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	workflowExecution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      common.StringPtr(*we.RunId),
+	}
+
+	// decider logic
+	workflowComplete := false
+	signalsSent := false
+	signalCount := 0
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, h *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		// Count signals
+		for _, event := range h.Events[previousStartedEventID:] {
+			if event.GetEventType() == workflow.EventTypeWorkflowExecutionSignaled {
+				signalCount++
+			}
+		}
+
+		if !signalsSent {
+			signalsSent = true
+			// Buffered Signals
+			for i := 0; i < 100; i++ {
+				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.LittleEndian, i)
+				s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
+			}
+
+			// Rate limitted signals
+			for i := 0; i < 10; i++ {
+				buf := new(bytes.Buffer)
+				binary.Write(buf, binary.LittleEndian, i)
+				signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
+				s.NotNil(signalErr)
+				s.Equal(history.ErrBufferedEventsLimitExceeded, signalErr)
+			}
+
+			// First decision is empty
+			return nil, []*workflow.Decision{}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		activityHandler: nil,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	// Make first decision to schedule activity
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// Process signal in decider
+	_, err = poller.pollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.printWorkflowHistory(s.domainName, workflowExecution)
+
+	s.True(workflowComplete)
+	s.Equal(100, signalCount)
+}
+
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	id := "interation-signal-workflow-test-duplicate"
 	wt := "interation-signal-workflow-test-duplicate-type"

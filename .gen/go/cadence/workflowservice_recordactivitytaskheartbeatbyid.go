@@ -223,6 +223,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -254,6 +256,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RecordActivityTaskHeartbeatByID_Result.DomainNotActiveError")
 			}
 			return &WorkflowService_RecordActivityTaskHeartbeatByID_Result{DomainNotActiveError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_RecordActivityTaskHeartbeatByID_Result.LimitExceededError")
+			}
+			return &WorkflowService_RecordActivityTaskHeartbeatByID_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -273,6 +280,10 @@ func init() {
 		}
 		if result.DomainNotActiveError != nil {
 			err = result.DomainNotActiveError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
 			return
 		}
 
@@ -299,6 +310,7 @@ type WorkflowService_RecordActivityTaskHeartbeatByID_Result struct {
 	InternalServiceError *shared.InternalServiceError                `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError                `json:"entityNotExistError,omitempty"`
 	DomainNotActiveError *shared.DomainNotActiveError                `json:"domainNotActiveError,omitempty"`
+	LimitExceededError   *shared.LimitExceededError                  `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_RecordActivityTaskHeartbeatByID_Result struct into a Thrift-level intermediate
@@ -318,7 +330,7 @@ type WorkflowService_RecordActivityTaskHeartbeatByID_Result struct {
 //   }
 func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -362,6 +374,14 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) ToWire() (wire.
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
 
@@ -434,6 +454,14 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) FromWire(w wire
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -453,6 +481,9 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) FromWire(w wire
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_RecordActivityTaskHeartbeatByID_Result should have exactly one field: got %v fields", count)
 	}
@@ -467,7 +498,7 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) String() string
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -487,6 +518,10 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) String() string
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -511,6 +546,9 @@ func (v *WorkflowService_RecordActivityTaskHeartbeatByID_Result) Equals(rhs *Wor
 		return false
 	}
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

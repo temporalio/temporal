@@ -2047,9 +2047,12 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 	case *gen.QueryFailedError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
+	case *gen.LimitExceededError:
+		wh.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
+		return err
 	case *yarpcerrors.Status:
 		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
-			wh.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeout)
+			wh.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 			return err
 		}
 	}

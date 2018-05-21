@@ -207,6 +207,9 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *gen.QueryFailedError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrQueryFailedCounter)
 		return err
+	case *gen.LimitExceededError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
+		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return &gen.InternalServiceError{Message: err.Error()}

@@ -221,6 +221,8 @@ func init() {
 			return true
 		case *shared.EntityNotExistsError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -247,6 +249,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DescribeTaskList_Result.EntityNotExistError")
 			}
 			return &WorkflowService_DescribeTaskList_Result{EntityNotExistError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DescribeTaskList_Result.LimitExceededError")
+			}
+			return &WorkflowService_DescribeTaskList_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -262,6 +269,10 @@ func init() {
 		}
 		if result.EntityNotExistError != nil {
 			err = result.EntityNotExistError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
 			return
 		}
 
@@ -287,6 +298,7 @@ type WorkflowService_DescribeTaskList_Result struct {
 	BadRequestError      *shared.BadRequestError          `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError     `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError     `json:"entityNotExistError,omitempty"`
+	LimitExceededError   *shared.LimitExceededError       `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_DescribeTaskList_Result struct into a Thrift-level intermediate
@@ -306,7 +318,7 @@ type WorkflowService_DescribeTaskList_Result struct {
 //   }
 func (v *WorkflowService_DescribeTaskList_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -344,6 +356,14 @@ func (v *WorkflowService_DescribeTaskList_Result) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
 
 	if i != 1 {
 		return wire.Value{}, fmt.Errorf("WorkflowService_DescribeTaskList_Result should have exactly one field: got %v fields", i)
@@ -354,6 +374,12 @@ func (v *WorkflowService_DescribeTaskList_Result) ToWire() (wire.Value, error) {
 
 func _DescribeTaskListResponse_Read(w wire.Value) (*shared.DescribeTaskListResponse, error) {
 	var v shared.DescribeTaskListResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _LimitExceededError_Read(w wire.Value) (*shared.LimitExceededError, error) {
+	var v shared.LimitExceededError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -412,6 +438,14 @@ func (v *WorkflowService_DescribeTaskList_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -428,6 +462,9 @@ func (v *WorkflowService_DescribeTaskList_Result) FromWire(w wire.Value) error {
 	if v.EntityNotExistError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_DescribeTaskList_Result should have exactly one field: got %v fields", count)
 	}
@@ -442,7 +479,7 @@ func (v *WorkflowService_DescribeTaskList_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -458,6 +495,10 @@ func (v *WorkflowService_DescribeTaskList_Result) String() string {
 	}
 	if v.EntityNotExistError != nil {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -479,6 +520,9 @@ func (v *WorkflowService_DescribeTaskList_Result) Equals(rhs *WorkflowService_De
 		return false
 	}
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

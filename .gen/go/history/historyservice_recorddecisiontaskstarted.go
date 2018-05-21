@@ -227,6 +227,8 @@ func init() {
 			return true
 		case *shared.DomainNotActiveError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -268,6 +270,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RecordDecisionTaskStarted_Result.DomainNotActiveError")
 			}
 			return &HistoryService_RecordDecisionTaskStarted_Result{DomainNotActiveError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RecordDecisionTaskStarted_Result.LimitExceededError")
+			}
+			return &HistoryService_RecordDecisionTaskStarted_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -297,6 +304,10 @@ func init() {
 			err = result.DomainNotActiveError
 			return
 		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -323,6 +334,7 @@ type HistoryService_RecordDecisionTaskStarted_Result struct {
 	EntityNotExistError      *shared.EntityNotExistsError       `json:"entityNotExistError,omitempty"`
 	ShardOwnershipLostError  *ShardOwnershipLostError           `json:"shardOwnershipLostError,omitempty"`
 	DomainNotActiveError     *shared.DomainNotActiveError       `json:"domainNotActiveError,omitempty"`
+	LimitExceededError       *shared.LimitExceededError         `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a HistoryService_RecordDecisionTaskStarted_Result struct into a Thrift-level intermediate
@@ -342,7 +354,7 @@ type HistoryService_RecordDecisionTaskStarted_Result struct {
 //   }
 func (v *HistoryService_RecordDecisionTaskStarted_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -402,6 +414,14 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) ToWire() (wire.Value, 
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
 		i++
 	}
 
@@ -496,6 +516,14 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) FromWire(w wire.Value)
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -521,6 +549,9 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) FromWire(w wire.Value)
 	if v.DomainNotActiveError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_RecordDecisionTaskStarted_Result should have exactly one field: got %v fields", count)
 	}
@@ -535,7 +566,7 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -563,6 +594,10 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) String() string {
 	}
 	if v.DomainNotActiveError != nil {
 		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -593,6 +628,9 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) Equals(rhs *HistorySer
 		return false
 	}
 	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

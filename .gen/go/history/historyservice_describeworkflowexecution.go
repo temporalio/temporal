@@ -223,6 +223,8 @@ func init() {
 			return true
 		case *ShardOwnershipLostError:
 			return true
+		case *shared.LimitExceededError:
+			return true
 		default:
 			return false
 		}
@@ -254,6 +256,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.ShardOwnershipLostError")
 			}
 			return &HistoryService_DescribeWorkflowExecution_Result{ShardOwnershipLostError: e}, nil
+		case *shared.LimitExceededError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.LimitExceededError")
+			}
+			return &HistoryService_DescribeWorkflowExecution_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
@@ -273,6 +280,10 @@ func init() {
 		}
 		if result.ShardOwnershipLostError != nil {
 			err = result.ShardOwnershipLostError
+			return
+		}
+		if result.LimitExceededError != nil {
+			err = result.LimitExceededError
 			return
 		}
 
@@ -299,6 +310,7 @@ type HistoryService_DescribeWorkflowExecution_Result struct {
 	InternalServiceError    *shared.InternalServiceError              `json:"internalServiceError,omitempty"`
 	EntityNotExistError     *shared.EntityNotExistsError              `json:"entityNotExistError,omitempty"`
 	ShardOwnershipLostError *ShardOwnershipLostError                  `json:"shardOwnershipLostError,omitempty"`
+	LimitExceededError      *shared.LimitExceededError                `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a HistoryService_DescribeWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -318,7 +330,7 @@ type HistoryService_DescribeWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -364,6 +376,14 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, 
 		fields[i] = wire.Field{ID: 4, Value: w}
 		i++
 	}
+	if v.LimitExceededError != nil {
+		w, err = v.LimitExceededError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
 
 	if i != 1 {
 		return wire.Value{}, fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", i)
@@ -398,6 +418,12 @@ func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, err
 
 func _ShardOwnershipLostError_Read(w wire.Value) (*ShardOwnershipLostError, error) {
 	var v ShardOwnershipLostError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _LimitExceededError_Read(w wire.Value) (*shared.LimitExceededError, error) {
+	var v shared.LimitExceededError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -464,6 +490,14 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value)
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -483,6 +517,9 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value)
 	if v.ShardOwnershipLostError != nil {
 		count++
 	}
+	if v.LimitExceededError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -497,7 +534,7 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -517,6 +554,10 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
 	}
 	if v.ShardOwnershipLostError != nil {
 		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
+		i++
+	}
+	if v.LimitExceededError != nil {
+		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
 		i++
 	}
 
@@ -541,6 +582,9 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) Equals(rhs *HistorySer
 		return false
 	}
 	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
+		return false
+	}
+	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
 		return false
 	}
 

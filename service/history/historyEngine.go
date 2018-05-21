@@ -101,6 +101,8 @@ var (
 	ErrDeserializingToken = &workflow.BadRequestError{Message: "Error deserializing task token."}
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
 	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
+	// ErrBufferedEventsLimitExceeded is the error indicating limit reached for maximum number of buffered events
+	ErrBufferedEventsLimitExceeded = &workflow.LimitExceededError{Message: "Exceeded workflow execution limit for buffered events"}
 	// FailedWorkflowCloseState is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowCloseState = map[int]bool{
