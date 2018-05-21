@@ -23,21 +23,20 @@ package common
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 type (
-	// RWMutex accepts a context in its Lock method.
+	// Mutex accepts a context in its Lock method.
 	// It blocks the goroutine until either the lock is acquired or the context
 	// is closed.
-	RWMutex interface {
+	Mutex interface {
 		Lock(context.Context) error
 		Unlock()
-		RLock(context.Context) error
-		RUnlock()
 	}
 
-	rwMutexImpl struct {
-		sync.RWMutex
+	mutexImpl struct {
+		sync.Mutex
 	}
 )
 
@@ -47,64 +46,37 @@ const (
 	bailed
 )
 
-// NewRWMutex creates a new RWMutex
-func NewRWMutex() RWMutex {
-	return &rwMutexImpl{}
+// NewMutex creates a new RWMutex
+func NewMutex() Mutex {
+	return &mutexImpl{}
 }
 
-func (m *rwMutexImpl) Lock(ctx context.Context) error {
-	lock := func() {
-		m.RWMutex.Lock()
-	}
-	unlock := func() {
-		m.RWMutex.Unlock()
-	}
-	return m.lockInternal(ctx, lock, unlock)
+func (m *mutexImpl) Lock(ctx context.Context) error {
+	return m.lockInternal(ctx)
 }
 
-func (m *rwMutexImpl) RLock(ctx context.Context) error {
-	lock := func() {
-		m.RWMutex.RLock()
-	}
-	unlock := func() {
-		m.RWMutex.RUnlock()
-	}
-	return m.lockInternal(ctx, lock, unlock)
-}
-
-func (m *rwMutexImpl) lockInternal(ctx context.Context, lock func(), unlock func()) error {
-	var stateLock sync.Mutex
-	state := acquiring
+func (m *mutexImpl) lockInternal(ctx context.Context) error {
+	var state int32 = acquiring
 
 	acquiredCh := make(chan struct{})
-	acquire := func() {
-		lock()
-
-		stateLock.Lock()
-		defer stateLock.Unlock()
-		if state == bailed {
+	go func() {
+		m.Mutex.Lock()
+		if !atomic.CompareAndSwapInt32(&state, acquiring, acquired) {
 			// already bailed due to context closing
-			unlock()
-		} else {
-			state = acquired
+			m.Unlock()
 		}
 
 		close(acquiredCh)
-	}
-	go acquire()
+	}()
 
 	select {
 	case <-acquiredCh:
 		return nil
 	case <-ctx.Done():
 		{
-			stateLock.Lock()
-			defer stateLock.Unlock()
-			if state == acquired {
-				// Lock was already acquired before context expired
+			if !atomic.CompareAndSwapInt32(&state, acquiring, bailed) {
 				return nil
 			}
-			state = bailed
 			return ctx.Err()
 		}
 	}

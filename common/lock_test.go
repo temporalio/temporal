@@ -45,24 +45,20 @@ func (s *LockSuite) SetupTest() {
 }
 
 func (s *LockSuite) TestBasicLocking() {
-	lock := NewRWMutex()
+	lock := NewMutex()
 	err1 := lock.Lock(context.Background())
 	s.Nil(err1)
 	lock.Unlock()
-
-	err2 := lock.RLock(context.Background())
-	s.Nil(err2)
-	lock.RUnlock()
 }
 
 func (s *LockSuite) TestExpiredContext() {
-	lock := NewRWMutex()
+	lock := NewMutex()
 	err1 := lock.Lock(context.Background())
 	s.Nil(err1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	cancel()
-	err2 := lock.RLock(ctx)
+	err2 := lock.Lock(ctx)
 	s.NotNil(err2)
 	s.Equal(err2, ctx.Err())
 
@@ -71,4 +67,13 @@ func (s *LockSuite) TestExpiredContext() {
 	err3 := lock.Lock(context.Background())
 	s.Nil(err3)
 	lock.Unlock()
+}
+
+func BenchmarkLock(b *testing.B) {
+	l := NewMutex()
+	ctx := context.Background()
+	for n := 0; n < b.N; n++ {
+		l.Lock(ctx)
+		l.Unlock()
+	}
 }

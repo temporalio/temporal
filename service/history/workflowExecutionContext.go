@@ -45,7 +45,7 @@ type (
 		executionManager  persistence.ExecutionManager
 		logger            bark.Logger
 
-		locker          common.RWMutex
+		locker          common.Mutex
 		msBuilder       *mutableStateBuilder
 		updateCondition int64
 		deleteTimerTask persistence.Task
@@ -69,7 +69,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		shard:             shard,
 		executionManager:  executionManager,
 		logger:            lg,
-		locker:            common.NewRWMutex(),
+		locker:            common.NewMutex(),
 	}
 }
 
