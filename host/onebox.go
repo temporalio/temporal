@@ -45,6 +45,7 @@ import (
 	"github.com/uber/cadence/service/frontend"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
+	"github.com/uber/cadence/service/worker"
 	ringpop "github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
@@ -58,6 +59,7 @@ const maxRpJoinTimeout = 30 * time.Second
 
 var (
 	integration = flag.Bool("integration", true, "run integration tests")
+	topicName   = []string{"active", "standby"}
 )
 
 const (
@@ -93,6 +95,9 @@ type (
 		shutdownCh            chan struct{}
 		shutdownWG            sync.WaitGroup
 		frontEndService       service.Service
+		clusterNo             int // cluster number
+		replicator            *worker.Replicator
+		enableWorkerService   bool // tmp flag used to tell if onbox should create worker service
 	}
 
 	ringpopFactoryImpl struct {
@@ -106,7 +111,7 @@ func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Clie
 	metadataMgr persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
 	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
-	logger bark.Logger) Cadence {
+	logger bark.Logger, clusterNo int, enableWorker bool) Cadence {
 
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
@@ -121,7 +126,13 @@ func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Clie
 		taskMgr:               taskMgr,
 		executionMgrFactory:   executionMgrFactory,
 		shutdownCh:            make(chan struct{}),
+		clusterNo:             clusterNo,
+		enableWorkerService:   enableWorker,
 	}
+}
+
+func (c *cadenceImpl) enableWorker() bool {
+	return c.enableWorkerService
 }
 
 func (c *cadenceImpl) Start() error {
@@ -129,41 +140,66 @@ func (c *cadenceImpl) Start() error {
 	rpHosts = append(rpHosts, c.FrontendAddress())
 	rpHosts = append(rpHosts, c.MatchingServiceAddress())
 	rpHosts = append(rpHosts, c.HistoryServiceAddress()...)
+	if c.enableWorker() {
+		rpHosts = append(rpHosts, c.WorkerServiceAddress())
+	}
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(c.logger, c.shardMgr, c.metadataMgr, c.visibilityMgr, c.historyMgr, c.executionMgrFactory, rpHosts, &startWG)
-	go c.startMatching(c.logger, c.taskMgr, rpHosts, &startWG)
+	go c.startHistory(c.shardMgr, c.metadataMgr, c.visibilityMgr, c.historyMgr, c.executionMgrFactory, rpHosts, &startWG)
+	go c.startMatching(c.taskMgr, rpHosts, &startWG)
 	startWG.Wait()
 
+	if c.enableWorker() {
+		startWG.Add(1)
+		go c.startWorker(rpHosts, &startWG)
+		startWG.Wait()
+	}
+
 	startWG.Add(1)
-	go c.startFrontend(c.logger, rpHosts, &startWG)
+	go c.startFrontend(rpHosts, &startWG)
 	startWG.Wait()
 	return nil
 }
 
 func (c *cadenceImpl) Stop() {
-	c.shutdownWG.Add(3)
+	if c.enableWorker() {
+		c.shutdownWG.Add(4)
+	} else {
+		c.shutdownWG.Add(3)
+	}
 	c.frontendHandler.Stop()
 	for _, historyHandler := range c.historyHandlers {
 		historyHandler.Stop()
 	}
 	c.matchingHandler.Stop()
+	if c.enableWorker() {
+		c.replicator.Stop()
+	}
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
 }
 
 func (c *cadenceImpl) FrontendAddress() string {
+	if c.clusterNo != 0 {
+		return "127.0.0.1:8104"
+	}
 	return "127.0.0.1:7104"
 }
 
 func (c *cadenceImpl) FrontendPProfPort() int {
+	if c.clusterNo != 0 {
+		return 8105
+	}
 	return 7105
 }
 
 func (c *cadenceImpl) HistoryServiceAddress() []string {
 	hosts := []string{}
 	startPort := 7200
+	if c.clusterNo != 0 {
+		startPort = 8200
+	}
 	for i := 0; i < c.numberOfHistoryHosts; i++ {
 		port := startPort + i
 		hosts = append(hosts, fmt.Sprintf("127.0.0.1:%v", port))
@@ -176,6 +212,9 @@ func (c *cadenceImpl) HistoryServiceAddress() []string {
 func (c *cadenceImpl) HistoryPProfPort() []int {
 	ports := []int{}
 	startPort := 7300
+	if c.clusterNo != 0 {
+		startPort = 8300
+	}
 	for i := 0; i < c.numberOfHistoryHosts; i++ {
 		port := startPort + i
 		ports = append(ports, port)
@@ -186,11 +225,31 @@ func (c *cadenceImpl) HistoryPProfPort() []int {
 }
 
 func (c *cadenceImpl) MatchingServiceAddress() string {
+	if c.clusterNo != 0 {
+		return "127.0.0.1:8106"
+	}
 	return "127.0.0.1:7106"
 }
 
 func (c *cadenceImpl) MatchingPProfPort() int {
+	if c.clusterNo != 0 {
+		return 8107
+	}
 	return 7107
+}
+
+func (c *cadenceImpl) WorkerServiceAddress() string {
+	if c.clusterNo != 0 {
+		return "127.0.0.1:8108"
+	}
+	return "127.0.0.1:7108"
+}
+
+func (c *cadenceImpl) WorkerPProfPort() int {
+	if c.clusterNo != 0 {
+		return 8109
+	}
+	return 7109
 }
 
 func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
@@ -202,12 +261,12 @@ func (c *cadenceImpl) GetFrontendService() service.Service {
 	return c.frontEndService
 }
 
-func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	params := new(service.BootstrapParams)
 	params.Name = common.FrontendServiceName
-	params.Logger = logger
+	params.Logger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.FrontendPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), logger)
+	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
@@ -217,13 +276,22 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	params.DynamicConfig = dynamicconfig.NewNopClient()
 
 	// TODO when cross DC is public, remove this temporary override
-	kafkaProducer := &mocks.KafkaProducer{}
-	kafkaProducer.On("Publish", mock.Anything).Return(nil)
+	var kafkaProducer messaging.Producer
+	var err error
+	if c.enableWorker() {
+		kafkaProducer, err = c.messagingClient.NewProducer(topicName[c.clusterNo])
+		if err != nil {
+			c.logger.WithField("error", err).Fatal("Failed to create kafka producer when start frontend")
+		}
+	} else {
+		kafkaProducer = &mocks.KafkaProducer{}
+		kafkaProducer.(*mocks.KafkaProducer).On("Publish", mock.Anything).Return(nil)
+	}
 
 	c.frontEndService = service.New(params)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontend.NewConfig(), c.metadataMgr, c.historyMgr, c.visibilityMgr, kafkaProducer)
-	err := c.frontendHandler.Start()
+	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
 	}
@@ -232,7 +300,7 @@ func (c *cadenceImpl) startFrontend(logger bark.Logger, rpHosts []string, startW
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.ShardManager,
+func (c *cadenceImpl) startHistory(shardMgr persistence.ShardManager,
 	metadataMgr persistence.MetadataManager, visibilityMgr persistence.VisibilityManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, rpHosts []string, startWG *sync.WaitGroup) {
 
@@ -240,9 +308,9 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 	for i, hostport := range c.HistoryServiceAddress() {
 		params := new(service.BootstrapParams)
 		params.Name = common.HistoryServiceName
-		params.Logger = logger
+		params.Logger = c.logger
 		params.PProfInitializer = newPProfInitializerImpl(c.logger, pprofPorts[i])
-		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, logger)
+		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, hostport, c.logger)
 		params.MetricScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 		params.ClusterMetadata = c.clusterMetadata
@@ -262,14 +330,14 @@ func (c *cadenceImpl) startHistory(logger bark.Logger, shardMgr persistence.Shar
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.TaskManager,
+func (c *cadenceImpl) startMatching(taskMgr persistence.TaskManager,
 	rpHosts []string, startWG *sync.WaitGroup) {
 
 	params := new(service.BootstrapParams)
 	params.Name = common.MatchingServiceName
-	params.Logger = logger
+	params.Logger = c.logger
 	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.MatchingPProfPort())
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), logger)
+	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingServiceAddress(), c.logger)
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
@@ -279,6 +347,36 @@ func (c *cadenceImpl) startMatching(logger bark.Logger, taskMgr persistence.Task
 		service, matching.NewConfig(dynamicconfig.NewNopCollection()), taskMgr,
 	)
 	c.matchingHandler.Start()
+	startWG.Done()
+	<-c.shutdownCh
+	c.shutdownWG.Done()
+}
+
+func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
+	params := new(service.BootstrapParams)
+	params.Name = common.WorkerServiceName
+	params.Logger = c.logger
+	params.PProfInitializer = newPProfInitializerImpl(c.logger, c.WorkerPProfPort())
+	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerServiceAddress(), c.logger)
+	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
+	params.RingpopFactory = newRingpopFactory(common.FrontendServiceName, rpHosts)
+	params.ClusterMetadata = c.clusterMetadata
+	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+	service := service.New(params)
+	service.Start()
+
+	historyClient, err := service.GetClientFactory().NewHistoryClient()
+	if err != nil {
+		c.logger.WithField("error", err).Fatal("Failed to create history service client when start worker")
+	}
+	metadataManager := persistence.NewMetadataPersistenceClient(c.metadataMgr, service.GetMetricsClient())
+
+	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient, worker.NewConfig(), c.messagingClient, c.logger,
+		service.GetMetricsClient())
+	if err := c.replicator.Start(); err != nil {
+		c.replicator.Stop()
+		c.logger.WithField("error", err).Fatal("Fail to start replicator when start worker")
+	}
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()

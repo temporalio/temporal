@@ -32,6 +32,7 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
+	"math/rand"
 )
 
 const (
@@ -178,4 +179,15 @@ func IsValidContext(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// GenerateRandomString is used for generate test string
+func GenerateRandomString(n int) string {
+	rand.Seed(time.Now().UnixNano())
+	letterRunes := []rune("random")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

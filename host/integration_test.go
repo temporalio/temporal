@@ -56,6 +56,8 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		suite.Suite
+		persistence.TestBase
 		domainName          string
 		domainID            string
 		foreignDomainName   string
@@ -64,8 +66,6 @@ type (
 		host                Cadence
 		engine              wsc.Interface
 		logger              bark.Logger
-		suite.Suite
-		persistence.TestBase
 	}
 
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -138,7 +138,7 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 	options.SchemaDir = ".."
 	options.EnableGlobalDomain = enableGlobalDomain
 	options.IsMasterCluster = isMasterCluster
-	s.SetupWorkflowStoreWithOptions(options)
+	s.SetupWorkflowStoreWithOptions(options, nil)
 
 	s.setupShards()
 
@@ -147,8 +147,7 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
 	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger)
-
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()

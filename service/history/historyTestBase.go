@@ -339,7 +339,7 @@ func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOptions) {
-	s.TestBase.SetupWorkflowStoreWithOptions(options)
+	s.TestBase.SetupWorkflowStoreWithOptions(options, nil)
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)

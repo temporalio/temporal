@@ -44,6 +44,8 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		suite.Suite
+		persistence.TestBase
 		domainName          string
 		foreignDomainName   string
 		mockMessagingClient messaging.Client
@@ -51,8 +53,6 @@ type (
 		host                Cadence
 		engine              wsc.Interface
 		logger              bark.Logger
-		suite.Suite
-		persistence.TestBase
 	}
 )
 
@@ -101,7 +101,7 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	options.SchemaDir = ".."
 	options.EnableGlobalDomain = enableGlobalDomain
 	options.IsMasterCluster = isMasterCluster
-	s.SetupWorkflowStoreWithOptions(options)
+	s.SetupWorkflowStoreWithOptions(options, nil)
 
 	s.setupShards()
 
@@ -110,7 +110,7 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
 	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger)
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
 
 	s.host.Start()
 

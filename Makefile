@@ -24,6 +24,8 @@ BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
 INTEG_TEST_ROOT=./host
 INTEG_TEST_DIR=host
+INTEG_TEST_XDC_ROOT=./hostxdc
+INTEG_TEST_XDC_DIR=hostxdc
 
 define thriftrwrule
 THRIFTRW_GEN_SRC += $(THRIFT_GENDIR)/go/$1/$1.go
@@ -47,12 +49,11 @@ ALL_SRC := $(shell find . -name "*.go" | grep -v -e Godeps -e vendor \
 TOOLS_SRC := $(shell find ./tools -name "*.go")
 TOOLS_SRC += $(TOOLS_CMD_ROOT)
 
-# all directories with *_test.go files in them
-TEST_DIRS := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+# all directories with *_test.go files in them (exclude hostxdc)
+TEST_DIRS := $(filter-out $(INTEG_TEST_XDC_ROOT)%, $(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 
 # all tests other than integration test fall into the pkg_test category
 PKG_TEST_DIRS := $(filter-out $(INTEG_TEST_ROOT)%,$(TEST_DIRS))
-
 
 # Need the following option to have integration tests
 # count towards coverage. godoc below:
@@ -96,6 +97,10 @@ test: vendor/glide.updated bins
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
 		go test -timeout 15m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
+	done; \
+	# need to run xdc tests with race detector off because of ringpop bug causing data race issue
+	@for dir in $(INTEG_TEST_XDC_ROOT); do \
+		go test -timeout 15m -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
@@ -106,6 +111,11 @@ cover_profile: clean bins_nothrift
 	@mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
 	@time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
 	@cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
+
+	@echo Running integration test for cross dc
+	@mkdir -p $(BUILD)/$(INTEG_TEST_XDC_DIR)
+	@time go test $(INTEG_TEST_XDC_ROOT) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out || exit 1;
+	@cat $(BUILD)/$(INTEG_TEST_XDC_DIR)/coverage.out | grep -v "mode: atomic" >> $(BUILD)/cover.out
 
 	@echo Running package tests:
 	@for dir in $(PKG_TEST_DIRS); do \

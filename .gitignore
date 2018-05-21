@@ -12,6 +12,8 @@
 .DS_Store
 test
 test.log
+test_xdc
+test_xdc.log
 
 # Executables produced by cadence repo
 /cadence*

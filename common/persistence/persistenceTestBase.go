@@ -110,20 +110,26 @@ func (g *testTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
 }
 
 // SetupWorkflowStoreWithOptions to setup workflow test base
-func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
+func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions, metadata cluster.Metadata) {
 	log := bark.NewLoggerFromLogrus(log.New())
 
-	s.ClusterMetadata = cluster.GetTestClusterMetadata(
-		options.EnableGlobalDomain,
-		options.IsMasterCluster,
-	)
+	if metadata == nil {
+		s.ClusterMetadata = cluster.GetTestClusterMetadata(
+			options.EnableGlobalDomain,
+			options.IsMasterCluster,
+		)
+	} else {
+		s.ClusterMetadata = metadata
+		log = log.WithField("Cluster", metadata.GetCurrentClusterName())
+	}
+	currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
 
 	// Setup Workflow keyspace and deploy schema for tests
 	s.CassandraTestCluster.setupTestCluster(options)
 	shardID := 0
 	var err error
 	s.ShardMgr, err = NewCassandraShardPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
-		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, s.ClusterMetadata.GetCurrentClusterName(), log)
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, currentClusterName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -151,7 +157,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 	}
 
 	s.MetadataManager, err = NewCassandraMetadataPersistence(options.ClusterHost, options.ClusterPort, options.ClusterUser,
-		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, s.ClusterMetadata.GetCurrentClusterName(), log)
+		options.ClusterPassword, options.Datacenter, s.CassandraTestCluster.keyspace, currentClusterName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -173,8 +179,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options TestBaseOptions) {
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
 		TimerAckLevel:           time.Time{},
-		ClusterTimerAckLevel:    map[string]time.Time{cluster.TestCurrentClusterName: time.Time{}},
-		ClusterTransferAckLevel: map[string]int64{cluster.TestCurrentClusterName: 0},
+		ClusterTimerAckLevel:    map[string]time.Time{currentClusterName: time.Time{}},
+		ClusterTransferAckLevel: map[string]int64{currentClusterName: 0},
 	}
 
 	err1 := s.ShardMgr.CreateShard(&CreateShardRequest{
@@ -979,7 +985,7 @@ func (s *TestBase) SetupWorkflowStore() {
 		ClusterPassword:    testPassword,
 		DropKeySpace:       true,
 		EnableGlobalDomain: false,
-	})
+	}, nil)
 }
 
 // TearDownWorkflowStore to cleanup

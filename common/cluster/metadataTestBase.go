@@ -28,9 +28,9 @@ const (
 	// TestFailoverVersionIncrement is failover version increment used for test
 	TestFailoverVersionIncrement = int64(10)
 	// TestCurrentClusterName is current cluster used for test
-	TestCurrentClusterName = "current-cluster"
+	TestCurrentClusterName = "active"
 	// TestAlternativeClusterName is alternative cluster used for test
-	TestAlternativeClusterName = "alternative-cluster"
+	TestAlternativeClusterName = "standby"
 )
 
 var (
