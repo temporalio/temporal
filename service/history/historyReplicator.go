@@ -205,10 +205,17 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
-		// TODO: Support for child execution
 		var parentExecution *shared.WorkflowExecution
 		initiatedID := common.EmptyEventID
 		parentDomainID := ""
+		if msBuilder.executionInfo.ParentDomainID != "" {
+			initiatedID = msBuilder.executionInfo.InitiatedID
+			parentDomainID = msBuilder.executionInfo.ParentDomainID
+			parentExecution = &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(msBuilder.executionInfo.ParentWorkflowID),
+				RunId:      common.StringPtr(msBuilder.executionInfo.ParentRunID),
+			}
+		}
 
 		// Serialize the history
 		serializedHistory, serializedError := r.Serialize(request.History)
