@@ -65,6 +65,9 @@ exception LimitExceededError {
   1: required string message
 }
 
+exception AccessDeniedError {
+  1: required string message
+}
 
 enum WorkflowIdReusePolicy {
   /*

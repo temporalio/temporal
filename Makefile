@@ -17,6 +17,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/matching.thrift \
   idl/github.com/uber/cadence/replicator.thrift \
   idl/github.com/uber/cadence/shared.thrift \
+  idl/github.com/uber/cadence/admin.thrift \
 
 PROGS = cadence
 TEST_ARG ?= -race -v -timeout 10m

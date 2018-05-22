@@ -30,6 +30,9 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 
+	"github.com/uber/cadence/.gen/go/admin"
+	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 	"go.uber.org/cadence/.gen/go/shared"
@@ -37,17 +40,23 @@ import (
 
 type cliAppSuite struct {
 	suite.Suite
-	app      *cli.App
-	mockCtrl *gomock.Controller
-	service  *workflowservicetest.MockClient
+	app          *cli.App
+	mockCtrl     *gomock.Controller
+	service      *workflowservicetest.MockClient
+	adminService *adminservicetest.MockClient
 }
 
 type workflowClientBuilderMock struct {
-	service workflowserviceclient.Interface
+	service      workflowserviceclient.Interface
+	adminService adminserviceclient.Interface
 }
 
 func (mock *workflowClientBuilderMock) BuildServiceClient(c *cli.Context) (workflowserviceclient.Interface, error) {
 	return mock.service, nil
+}
+
+func (mock *workflowClientBuilderMock) BuildAdminServiceClient(c *cli.Context) (adminserviceclient.Interface, error) {
+	return mock.adminService, nil
 }
 
 // this is the mock for yarpcCallOptions, make sure length are the same
@@ -73,7 +82,8 @@ func (s *cliAppSuite) SetupSuite() {
 func (s *cliAppSuite) SetupTest() {
 	s.mockCtrl = gomock.NewController(s.T())
 	s.service = workflowservicetest.NewMockClient(s.mockCtrl)
-	SetBuilder(&workflowClientBuilderMock{service: s.service})
+	s.adminService = adminservicetest.NewMockClient(s.mockCtrl)
+	SetBuilder(&workflowClientBuilderMock{service: s.service, adminService: s.adminService})
 }
 
 func (s *cliAppSuite) TearDownTest() {
@@ -387,6 +397,17 @@ var describeTaskListResponse = &shared.DescribeTaskListResponse{
 			Identity:       common.StringPtr("tester"),
 		},
 	},
+}
+
+func (s *cliAppSuite) TestAdminInquiryWorkflow() {
+	resp := &admin.InquiryWorkflowExecutionResponse{
+		ShardId:     common.StringPtr("test-shard-id"),
+		HistoryAddr: common.StringPtr("ip:port"),
+	}
+
+	s.adminService.EXPECT().InquiryWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
+	err := s.app.Run([]string{"", "--do", domainName, "admin", "wf", "inquiry", "-w", "test-wf-id"})
+	s.Nil(err)
 }
 
 func (s *cliAppSuite) TestDescribeTaskList() {

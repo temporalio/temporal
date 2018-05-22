@@ -127,8 +127,11 @@ func (s *Service) Start() {
 		kafkaProducer = &mocks.KafkaProducer{}
 	}
 
-	handler := NewWorkflowHandler(base, s.config, metadata, history, visibility, kafkaProducer)
-	handler.Start()
+	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, visibility, kafkaProducer)
+	wfHandler.Start()
+
+	adminHandler := NewAdminHandler(base, p.CassandraConfig.NumHistoryShards)
+	adminHandler.Start()
 
 	log.Infof("%v started", common.FrontendServiceName)
 

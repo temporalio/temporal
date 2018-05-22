@@ -23,6 +23,7 @@ package cli
 import (
 	"errors"
 
+	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/urfave/cli"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
@@ -41,6 +42,7 @@ const (
 // The customized builder may have more processing on Env, Address and other info.
 type WorkflowClientBuilderInterface interface {
 	BuildServiceClient(c *cli.Context) (workflowserviceclient.Interface, error)
+	BuildAdminServiceClient(c *cli.Context) (adminserviceclient.Interface, error)
 }
 
 // WorkflowClientBuilder build client to cadence service
@@ -78,6 +80,24 @@ func (b *WorkflowClientBuilder) BuildServiceClient(c *cli.Context) (workflowserv
 	}
 
 	return workflowserviceclient.New(b.dispatcher.ClientConfig(_cadenceFrontendService)), nil
+}
+
+// BuildAdminServiceClient builds a rpc service client to cadence admin service
+func (b *WorkflowClientBuilder) BuildAdminServiceClient(c *cli.Context) (adminserviceclient.Interface, error) {
+	b.hostPort = localHostPort
+	if addr := c.GlobalString(FlagAddress); addr != "" {
+		b.hostPort = addr
+	}
+
+	if err := b.build(); err != nil {
+		return nil, err
+	}
+
+	if b.dispatcher == nil {
+		b.logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
+	}
+
+	return adminserviceclient.New(b.dispatcher.ClientConfig(_cadenceFrontendService)), nil
 }
 
 func (b *WorkflowClientBuilder) build() error {

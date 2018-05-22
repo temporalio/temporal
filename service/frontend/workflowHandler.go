@@ -1266,7 +1266,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	if err := wh.validateExecution(getRequest.Execution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(getRequest.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -1424,7 +1424,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context,
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	if err := wh.validateExecution(signalRequest.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(signalRequest.WorkflowExecution, scope); err != nil {
 		return err
 	}
 
@@ -1535,7 +1535,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context,
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	if err := wh.validateExecution(terminateRequest.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(terminateRequest.WorkflowExecution, scope); err != nil {
 		return err
 	}
 
@@ -1576,7 +1576,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	if err := wh.validateExecution(cancelRequest.WorkflowExecution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(cancelRequest.WorkflowExecution, scope); err != nil {
 		return err
 	}
 
@@ -1788,7 +1788,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	if err := wh.validateExecution(queryRequest.Execution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(queryRequest.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -1893,7 +1893,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, wh.error(err, scope)
 	}
 
-	if err := wh.validateExecution(request.Execution, scope); err != nil {
+	if err := wh.validateExecutionAndEmitMetrics(request.Execution, scope); err != nil {
 		return nil, err
 	}
 
@@ -2076,15 +2076,23 @@ func (wh *WorkflowHandler) validateTaskList(t *gen.TaskList, scope int) error {
 	return nil
 }
 
-func (wh *WorkflowHandler) validateExecution(w *gen.WorkflowExecution, scope int) error {
+func (wh *WorkflowHandler) validateExecutionAndEmitMetrics(w *gen.WorkflowExecution, scope int) error {
+	err := validateExecution(w)
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	return nil
+}
+
+func validateExecution(w *gen.WorkflowExecution) error {
 	if w == nil {
-		return wh.error(errExecutionNotSet, scope)
+		return errExecutionNotSet
 	}
 	if w.WorkflowId == nil || w.GetWorkflowId() == "" {
-		return wh.error(errWorkflowIDNotSet, scope)
+		return errWorkflowIDNotSet
 	}
 	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return wh.error(errInvalidRunID, scope)
+		return errInvalidRunID
 	}
 	return nil
 }

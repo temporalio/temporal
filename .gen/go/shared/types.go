@@ -34,6 +34,116 @@ import (
 	"strings"
 )
 
+type AccessDeniedError struct {
+	Message string `json:"message,required"`
+}
+
+// ToWire translates a AccessDeniedError struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *AccessDeniedError) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	w, err = wire.NewValueString(v.Message), error(nil)
+	if err != nil {
+		return w, err
+	}
+	fields[i] = wire.Field{ID: 1, Value: w}
+	i++
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a AccessDeniedError struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a AccessDeniedError struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v AccessDeniedError
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *AccessDeniedError) FromWire(w wire.Value) error {
+	var err error
+
+	messageIsSet := false
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 1:
+			if field.Value.Type() == wire.TBinary {
+				v.Message, err = field.Value.GetString(), error(nil)
+				if err != nil {
+					return err
+				}
+				messageIsSet = true
+			}
+		}
+	}
+
+	if !messageIsSet {
+		return errors.New("field Message of AccessDeniedError is required")
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a AccessDeniedError
+// struct.
+func (v *AccessDeniedError) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	fields[i] = fmt.Sprintf("Message: %v", v.Message)
+	i++
+
+	return fmt.Sprintf("AccessDeniedError{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this AccessDeniedError match the
+// provided AccessDeniedError.
+//
+// This function performs a deep comparison.
+func (v *AccessDeniedError) Equals(rhs *AccessDeniedError) bool {
+	if !(v.Message == rhs.Message) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AccessDeniedError) Error() string {
+	return v.String()
+}
+
 type ActivityTaskCancelRequestedEventAttributes struct {
 	ActivityId                   *string `json:"activityId,omitempty"`
 	DecisionTaskCompletedEventId *int64  `json:"decisionTaskCompletedEventId,omitempty"`

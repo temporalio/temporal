@@ -66,6 +66,19 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate cadence tasklist",
 			Subcommands: newTaskListCommands(),
 		},
+		{
+			Name:    "admin",
+			Aliases: []string{"adm"},
+			Usage:   "Run admin operation",
+			Subcommands: []cli.Command{
+				{
+					Name:        "workflow",
+					Aliases:     []string{"wf"},
+					Usage:       "Run admin operation on workflow",
+					Subcommands: newAdminWorkflowCommands(),
+				},
+			},
+		},
 	}
 
 	// set builder if not customized
