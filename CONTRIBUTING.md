@@ -52,7 +52,7 @@ make bins
 
 ## Testing
 
-Before running the tests you must have `cassandra` running locally:
+Before running the tests you must have `cassandra` and `kafka` running locally:
 
 ```bash
 # for OS X
@@ -61,6 +61,8 @@ brew install cassandra
 # start cassandra
 /usr/local/bin/cassandra
 ```
+
+To run kafka, follow kafka quickstart guide [here](https://kafka.apache.org/quickstart)
 
 Run all the tests:
 
