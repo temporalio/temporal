@@ -6,7 +6,7 @@ Business logic is modeled as workflows and activities. Workflows are the impleme
 
 The Cadence server brokers and persists tasks and events generated during workflow execution, which provides certain scalability and realiability guarantees for workflow executions. An individual activity execution is not fault tolerant as it can fail for various reasons. But the workflow that defines in which order and how (location, input parameters, timeouts, etc.) activities are executed is guaranteed to continue execution under various failure conditions.
 
-This repo contains the source code of the Cadence server. The client lib you can use to implement workflows, activities and worker can be found [here](https://github.com/uber-go/cadence-client).
+This repo contains the source code of the Cadence server. To implement workflows, activities and worker use [Go client](https://github.com/uber-go/cadence-client) or [Java client](https://github.com/uber-java/cadence-client).
 
 See Maxim's talk at [Data@Scale Conference](https://atscaleconference.com/videos/cadence-microservice-architecture-beyond-requestreply) for an architectural overview of Cadence.
 
