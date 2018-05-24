@@ -69,6 +69,9 @@ Run all the tests:
 ```bash
 make test
 
+# `make test` currently do not include crossdc tests, start kafka and run 
+make test_xdc
+
 # or go to folder with *_test.go, e.g
 cd service/history/ 
 go test -v

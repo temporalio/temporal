@@ -98,8 +98,12 @@ test: vendor/glide.updated bins
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
 		go test -timeout 15m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
-	done; \
-	# need to run xdc tests with race detector off because of ringpop bug causing data race issue
+	done;
+
+# need to run xdc tests with race detector off because of ringpop bug causing data race issue
+test_xdc: vendor/glide.updated bins
+	@rm -f test
+	@rm -f test.log
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
 		go test -timeout 15m -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
