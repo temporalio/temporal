@@ -120,6 +120,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) error
 
+	ResetStickyTaskList(
+		ctx context.Context,
+		ResetRequest *shared.ResetStickyTaskListRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.ResetStickyTaskListResponse, error)
+
 	RespondActivityTaskCanceled(
 		ctx context.Context,
 		CanceledRequest *shared.RespondActivityTaskCanceledRequest,
@@ -548,6 +554,29 @@ func (c client) RequestCancelWorkflowExecution(
 	}
 
 	err = cadence.WorkflowService_RequestCancelWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) ResetStickyTaskList(
+	ctx context.Context,
+	_ResetRequest *shared.ResetStickyTaskListRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ResetStickyTaskListResponse, err error) {
+
+	args := cadence.WorkflowService_ResetStickyTaskList_Helper.Args(_ResetRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result cadence.WorkflowService_ResetStickyTaskList_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = cadence.WorkflowService_ResetStickyTaskList_Helper.UnwrapResponse(&result)
 	return
 }
 

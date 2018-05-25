@@ -1061,6 +1061,16 @@ struct WorkflowQuery {
   20: optional binary queryArgs
 }
 
+struct ResetStickyTaskListRequest {
+  10: optional string domain
+  20: optional WorkflowExecution execution
+}
+
+struct ResetStickyTaskListResponse {
+    // The reason to keep this response is to allow returning
+    // information in the future.
+}
+
 struct RespondQueryTaskCompletedRequest {
   10: optional binary taskToken
   20: optional QueryTaskCompletedType completedType

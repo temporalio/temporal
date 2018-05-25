@@ -1772,6 +1772,39 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 	return resp, nil
 }
 
+// ResetStickyTaskList reset the volatile information in mutable state of a given workflow.
+func (wh *WorkflowHandler) ResetStickyTaskList(ctx context.Context, resetRequest *gen.ResetStickyTaskListRequest) (*gen.ResetStickyTaskListResponse, error) {
+	scope := metrics.FrontendResetStickyTaskListScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if resetRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if resetRequest.GetDomain() == "" {
+		return nil, wh.error(errDomainNotSet, scope)
+	}
+
+	if err := wh.validateExecutionAndEmitMetrics(resetRequest.Execution, scope); err != nil {
+		return nil, err
+	}
+
+	domainID, err := wh.domainCache.GetDomainID(resetRequest.GetDomain())
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	_, err = wh.history.ResetStickyTaskList(ctx, &h.ResetStickyTaskListRequest{
+		DomainUUID: common.StringPtr(domainID),
+		Execution:  resetRequest.Execution,
+	})
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	return &gen.ResetStickyTaskListResponse{}, nil
+}
+
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 	queryRequest *gen.QueryWorkflowRequest) (*gen.QueryWorkflowResponse, error) {
