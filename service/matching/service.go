@@ -112,7 +112,7 @@ func (s *Service) Start() {
 		log.Fatalf("failed to create task persistence: %v", err)
 	}
 
-	taskPersistence = persistence.NewTaskPersistenceClient(taskPersistence, base.GetMetricsClient())
+	taskPersistence = persistence.NewTaskPersistenceClient(taskPersistence, base.GetMetricsClient(), log)
 
 	handler := NewHandler(base, s.config, taskPersistence)
 	handler.Start()

@@ -48,6 +48,7 @@ const (
 	TagConsumerName         = "consumer-name"
 	TagPartition            = "partition"
 	TagOffset               = "offset"
+	TagScope                = "scope"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

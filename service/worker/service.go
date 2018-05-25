@@ -84,7 +84,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadataManager = persistence.NewMetadataPersistenceClient(metadataManager, base.GetMetricsClient())
+	metadataManager = persistence.NewMetadataPersistenceClient(metadataManager, base.GetMetricsClient(), log)
 
 	history, err := base.GetClientFactory().NewHistoryClient()
 	if err != nil {

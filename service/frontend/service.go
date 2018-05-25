@@ -86,7 +86,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient())
+	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient(), log)
 
 	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -99,7 +99,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create visiblity manager: %v", err)
 	}
-	visibility = persistence.NewVisibilityPersistenceClient(visibility, base.GetMetricsClient())
+	visibility = persistence.NewVisibilityPersistenceClient(visibility, base.GetMetricsClient(), log)
 
 	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -114,7 +114,7 @@ func (s *Service) Start() {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
 	}
 
-	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient())
+	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient(), log)
 
 	// TODO when global domain is enabled, uncomment the line below and remove the line after
 	var kafkaProducer messaging.Producer
