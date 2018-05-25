@@ -400,7 +400,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 
 // RespondDecisionTaskCompleted - records completion of a decision task
 func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
-	wrappedRequest *hist.RespondDecisionTaskCompletedRequest) error {
+	wrappedRequest *hist.RespondDecisionTaskCompletedRequest) (*hist.RespondDecisionTaskCompletedResponse, error) {
 	h.startWG.Wait()
 
 	h.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CadenceRequests)
@@ -408,7 +408,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 	defer sw.Stop()
 
 	if wrappedRequest.GetDomainUUID() == "" {
-		return errDomainNotSet
+		return nil, errDomainNotSet
 	}
 
 	completeRequest := wrappedRequest.CompleteRequest
@@ -416,7 +416,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, err0)
-		return err0
+		return nil, err0
 	}
 
 	h.Service.GetLogger().Debugf("RespondDecisionTaskCompleted. DomainID: %v, WorkflowID: %v, RunID: %v, ScheduleID: %v",
@@ -427,22 +427,22 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
-		return err0
+		return nil, err0
 	}
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, err1)
-		return err1
+		return nil, err1
 	}
 
-	err2 := engine.RespondDecisionTaskCompleted(ctx, wrappedRequest)
+	response, err2 := engine.RespondDecisionTaskCompleted(ctx, wrappedRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, h.convertError(err2))
-		return h.convertError(err2)
+		return nil, h.convertError(err2)
 	}
 
-	return nil
+	return response, nil
 }
 
 // RespondDecisionTaskFailed - failed response to decision task

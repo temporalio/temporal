@@ -865,6 +865,12 @@ struct RespondDecisionTaskCompletedRequest {
   30: optional binary executionContext
   40: optional string identity
   50: optional StickyExecutionAttributes stickyAttributes
+  60: optional bool returnNewDecisionTask
+  70: optional bool forceCreateNewDecisionTask
+}
+
+struct RespondDecisionTaskCompletedResponse {
+  10: optional PollForDecisionTaskResponse decisionTask
 }
 
 struct RespondDecisionTaskFailedRequest {

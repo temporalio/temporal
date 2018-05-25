@@ -890,7 +890,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 		nil,
 	)
 
-	err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &h.RespondDecisionTaskCompletedRequest{
+	_, err := s.historyEngine.RespondDecisionTaskCompleted(context.Background(), &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID: common.StringPtr(domainID),
 		CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
 			TaskToken:        taskToken,

@@ -149,18 +149,18 @@ func (c *metricClient) RecordActivityTaskStarted(
 func (c *metricClient) RespondDecisionTaskCompleted(
 	context context.Context,
 	request *h.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption) (*h.RespondDecisionTaskCompletedResponse, error) {
 	c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.CadenceRequests)
 
 	sw := c.metricsClient.StartTimer(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.CadenceLatency)
-	err := c.client.RespondDecisionTaskCompleted(context, request, opts...)
+	response, err := c.client.RespondDecisionTaskCompleted(context, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.HistoryClientRespondDecisionTaskCompletedScope, metrics.HistoryClientFailures)
 	}
 
-	return err
+	return response, err
 }
 
 func (c *metricClient) RespondDecisionTaskFailed(

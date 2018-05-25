@@ -812,18 +812,18 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 }
 
 // RespondDecisionTaskCompleted completes a decision task
-func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (retError error) {
+func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (response *h.RespondDecisionTaskCompletedResponse, retError error) {
 
 	domainEntry, err := e.getActiveDomainEntry(req.DomainUUID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	domainID := domainEntry.GetInfo().ID
 
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
-		return ErrDeserializingToken
+		return nil, ErrDeserializingToken
 	}
 
 	workflowExecution := workflow.WorkflowExecution{
@@ -838,7 +838,7 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, re
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, workflowExecution)
 	if err0 != nil {
-		return err0
+		return nil, err0
 	}
 	defer func() { release(retError) }()
 
@@ -846,7 +846,7 @@ Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		msBuilder, err1 := context.loadWorkflowExecution()
 		if err1 != nil {
-			return err1
+			return nil, err1
 		}
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
@@ -864,13 +864,13 @@ Update_History_Loop:
 
 		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || di.Attempt != token.ScheduleAttempt ||
 			di.StartedID == common.EmptyEventID {
-			return &workflow.EntityNotExistsError{Message: "Decision task not found."}
+			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
 
 		startedID := di.StartedID
 		completedEvent := msBuilder.AddDecisionTaskCompletedEvent(scheduleID, startedID, request)
 		if completedEvent == nil {
-			return &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
+			return nil, &workflow.InternalServiceError{Message: "Unable to add DecisionTaskCompleted event to history."}
 		}
 
 		failDecision := false
@@ -911,7 +911,7 @@ Update_History_Loop:
 					// TODO: Error handling for ActivitySchedule failed when domain lookup fails
 					domainEntry, err := e.shard.GetDomainCache().GetDomain(*attributes.Domain)
 					if err != nil {
-						return &workflow.InternalServiceError{Message: "Unable to schedule activity across domain."}
+						return nil, &workflow.InternalServiceError{Message: "Unable to schedule activity across domain."}
 					}
 					targetDomainID = domainEntry.GetInfo().ID
 				}
@@ -953,7 +953,7 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 				if e := msBuilder.AddCompletedWorkflowEvent(completedID, attributes); e == nil {
-					return &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
+					return nil, &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
 				}
 				isComplete = true
 			case workflow.DecisionTypeFailWorkflowExecution:
@@ -979,7 +979,7 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 				if e := msBuilder.AddFailWorkflowEvent(completedID, attributes); e == nil {
-					return &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+					return nil, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 				}
 				isComplete = true
 			case workflow.DecisionTypeCancelWorkflowExecution:
@@ -1090,7 +1090,7 @@ Update_History_Loop:
 				} else {
 					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
-						return &workflow.InternalServiceError{
+						return nil, &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to cancel workflow across domain: %v.", attributes.GetDomain())}
 					}
 					foreignDomainID = foreignDomainEntry.GetInfo().ID
@@ -1100,7 +1100,7 @@ Update_History_Loop:
 				wfCancelReqEvent, _ := msBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(completedID,
 					cancelRequestID, attributes)
 				if wfCancelReqEvent == nil {
-					return &workflow.InternalServiceError{Message: "Unable to add external cancel workflow request."}
+					return nil, &workflow.InternalServiceError{Message: "Unable to add external cancel workflow request."}
 				}
 
 				transferTasks = append(transferTasks, &persistence.CancelExecutionTask{
@@ -1128,7 +1128,7 @@ Update_History_Loop:
 				} else {
 					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
-						return &workflow.InternalServiceError{
+						return nil, &workflow.InternalServiceError{
 							Message: fmt.Sprintf("Unable to signal workflow across domain: %v.", attributes.GetDomain())}
 					}
 					foreignDomainID = foreignDomainEntry.GetInfo().ID
@@ -1138,7 +1138,7 @@ Update_History_Loop:
 				wfSignalReqEvent, _ := msBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(completedID,
 					signalRequestID, attributes)
 				if wfSignalReqEvent == nil {
-					return &workflow.InternalServiceError{Message: "Unable to add external signal workflow request."}
+					return nil, &workflow.InternalServiceError{Message: "Unable to add external signal workflow request."}
 				}
 
 				transferTasks = append(transferTasks, &persistence.SignalExecutionTask{
@@ -1178,7 +1178,7 @@ Update_History_Loop:
 					parentDomainID := msBuilder.executionInfo.ParentDomainID
 					parentDomainEntry, err := e.shard.GetDomainCache().GetDomainByID(parentDomainID)
 					if err != nil {
-						return err
+						return nil, err
 					}
 					parentDomainName = parentDomainEntry.GetInfo().Name
 				}
@@ -1186,7 +1186,7 @@ Update_History_Loop:
 				runID := uuid.New()
 				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, runID, parentDomainName, attributes)
 				if err != nil {
-					return err
+					return nil, err
 				}
 
 				// add timer task to new workflow
@@ -1215,7 +1215,7 @@ Update_History_Loop:
 					// TODO: Error handling for DecisionType_StartChildWorkflowExecution failed when domain lookup fails
 					domainEntry, err := e.shard.GetDomainCache().GetDomain(*attributes.Domain)
 					if err != nil {
-						return &workflow.InternalServiceError{Message: "Unable to schedule child execution across domain."}
+						return nil, &workflow.InternalServiceError{Message: "Unable to schedule child execution across domain."}
 					}
 					targetDomainID = domainEntry.GetInfo().ID
 				}
@@ -1229,8 +1229,12 @@ Update_History_Loop:
 				})
 
 			default:
-				return &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", *d.DecisionType)}
+				return nil, &workflow.BadRequestError{Message: fmt.Sprintf("Unknown decision type: %v", *d.DecisionType)}
 			}
+		}
+
+		if err != nil {
+			return nil, err
 		}
 
 		if failDecision {
@@ -1239,7 +1243,7 @@ Update_History_Loop:
 			var err1 error
 			msBuilder, err1 = e.failDecision(context, scheduleID, startedID, failCause, request)
 			if err1 != nil {
-				return err1
+				return nil, err1
 			}
 			isComplete = false
 			hasUnhandledEvents = true
@@ -1255,26 +1259,40 @@ Update_History_Loop:
 			}
 		}
 
-		// Schedule another decision task if new events came in during this decision
-		if hasUnhandledEvents {
+		// Schedule another decision task if new events came in during this decision or if request forced to
+		createNewDecisionTask := hasUnhandledEvents || request.GetForceCreateNewDecisionTask()
+
+		var newDecisionTaskScheduledID int64
+		if createNewDecisionTask {
 			di := msBuilder.AddDecisionTaskScheduledEvent()
-			transferTasks = append(transferTasks, &persistence.DecisionTask{
-				DomainID:   domainID,
-				TaskList:   di.TaskList,
-				ScheduleID: di.ScheduleID,
-			})
-			if msBuilder.isStickyTaskListEnabled() {
-				tBuilder := e.getTimerBuilder(&context.workflowExecution)
-				stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-					msBuilder.executionInfo.StickyScheduleToStartTimeout)
-				timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+			newDecisionTaskScheduledID = di.ScheduleID
+			// skip transfer task for decision if request asking to return new decision task
+			if !request.GetReturnNewDecisionTask() {
+				transferTasks = append(transferTasks, &persistence.DecisionTask{
+					DomainID:   domainID,
+					TaskList:   di.TaskList,
+					ScheduleID: di.ScheduleID,
+				})
+				if msBuilder.isStickyTaskListEnabled() {
+					tBuilder := e.getTimerBuilder(&context.workflowExecution)
+					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
+						msBuilder.executionInfo.StickyScheduleToStartTimeout)
+					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+				}
+			} else {
+				// start the new decision task if request asked to do so
+				// TODO: replace the poll request
+				msBuilder.AddDecisionTaskStartedEvent(di.ScheduleID, "request-from-RespondDecisionTaskCompleted", &workflow.PollForDecisionTaskRequest{
+					TaskList: &workflow.TaskList{Name: common.StringPtr(di.TaskList)},
+					Identity: request.Identity,
+				})
 			}
 		}
 
 		if isComplete {
 			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, tBuilder)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			transferTasks = append(transferTasks, tranT)
 			timerTasks = append(timerTasks, timerT)
@@ -1283,7 +1301,7 @@ Update_History_Loop:
 		// Generate a transaction ID for appending events to history
 		transactionID, err3 := e.shard.GetNextTransferTaskID()
 		if err3 != nil {
-			return err3
+			return nil, err3
 		}
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
@@ -1304,7 +1322,7 @@ Update_History_Loop:
 				continue Update_History_Loop
 			}
 
-			return updateErr
+			return nil, updateErr
 		}
 
 		// add continueAsNewTimerTask
@@ -1312,10 +1330,16 @@ Update_History_Loop:
 		// Inform timer about the new ones.
 		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 
-		return err
+		response = &h.RespondDecisionTaskCompletedResponse{}
+		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
+			di, _ := msBuilder.GetPendingDecision(newDecisionTaskScheduledID)
+			response.StartedResponse = e.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, request.GetIdentity())
+		}
+
+		return response, nil
 	}
 
-	return ErrMaxAttemptsExceeded
+	return nil, ErrMaxAttemptsExceeded
 }
 
 func (e *historyEngineImpl) RespondDecisionTaskFailed(ctx context.Context, req *h.RespondDecisionTaskFailedRequest) error {

@@ -79,6 +79,10 @@ struct RespondDecisionTaskCompletedRequest {
   20: optional shared.RespondDecisionTaskCompletedRequest completeRequest
 }
 
+struct RespondDecisionTaskCompletedResponse {
+  10: optional RecordDecisionTaskStartedResponse startedResponse
+}
+
 struct RespondDecisionTaskFailedRequest {
   10: optional string domainUUID
   20: optional shared.RespondDecisionTaskFailedRequest failedRequest
@@ -304,7 +308,7 @@ service HistoryService {
   * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
   * for completing the DecisionTask.
   **/
-  void RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)
+  RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: RespondDecisionTaskCompletedRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

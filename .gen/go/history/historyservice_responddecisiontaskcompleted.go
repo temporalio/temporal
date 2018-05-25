@@ -178,31 +178,30 @@ var HistoryService_RespondDecisionTaskCompleted_Helper = struct {
 	IsException func(error) bool
 
 	// WrapResponse returns the result struct for RespondDecisionTaskCompleted
-	// given the error returned by it. The provided error may
-	// be nil if RespondDecisionTaskCompleted did not fail.
+	// given its return value and error.
 	//
-	// This allows mapping errors returned by RespondDecisionTaskCompleted into a
-	// serializable result struct. WrapResponse returns a
-	// non-nil error if the provided error cannot be thrown by
-	// RespondDecisionTaskCompleted
+	// This allows mapping values and errors returned by
+	// RespondDecisionTaskCompleted into a serializable result struct.
+	// WrapResponse returns a non-nil error if the provided
+	// error cannot be thrown by RespondDecisionTaskCompleted
 	//
-	//   err := RespondDecisionTaskCompleted(args)
-	//   result, err := HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse(err)
+	//   value, err := RespondDecisionTaskCompleted(args)
+	//   result, err := HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse(value, err)
 	//   if err != nil {
 	//     return fmt.Errorf("unexpected error from RespondDecisionTaskCompleted: %v", err)
 	//   }
 	//   serialize(result)
-	WrapResponse func(error) (*HistoryService_RespondDecisionTaskCompleted_Result, error)
+	WrapResponse func(*RespondDecisionTaskCompletedResponse, error) (*HistoryService_RespondDecisionTaskCompleted_Result, error)
 
 	// UnwrapResponse takes the result struct for RespondDecisionTaskCompleted
-	// and returns the erorr returned by it (if any).
+	// and returns the value or error returned by it.
 	//
 	// The error is non-nil only if RespondDecisionTaskCompleted threw an
 	// exception.
 	//
 	//   result := deserialize(bytes)
-	//   err := HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(result)
-	UnwrapResponse func(*HistoryService_RespondDecisionTaskCompleted_Result) error
+	//   value, err := HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_RespondDecisionTaskCompleted_Result) (*RespondDecisionTaskCompletedResponse, error)
 }{}
 
 func init() {
@@ -233,9 +232,9 @@ func init() {
 		}
 	}
 
-	HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse = func(err error) (*HistoryService_RespondDecisionTaskCompleted_Result, error) {
+	HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse = func(success *RespondDecisionTaskCompletedResponse, err error) (*HistoryService_RespondDecisionTaskCompleted_Result, error) {
 		if err == nil {
-			return &HistoryService_RespondDecisionTaskCompleted_Result{}, nil
+			return &HistoryService_RespondDecisionTaskCompleted_Result{Success: success}, nil
 		}
 
 		switch e := err.(type) {
@@ -273,7 +272,7 @@ func init() {
 
 		return nil, err
 	}
-	HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse = func(result *HistoryService_RespondDecisionTaskCompleted_Result) (err error) {
+	HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse = func(result *HistoryService_RespondDecisionTaskCompleted_Result) (success *RespondDecisionTaskCompletedResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -298,6 +297,13 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+
+		if result.Success != nil {
+			success = result.Success
+			return
+		}
+
+		err = errors.New("expected a non-void result")
 		return
 	}
 
@@ -306,13 +312,17 @@ func init() {
 // HistoryService_RespondDecisionTaskCompleted_Result represents the result of a HistoryService.RespondDecisionTaskCompleted function call.
 //
 // The result of a RespondDecisionTaskCompleted execution is sent and received over the wire as this struct.
+//
+// Success is set only if the function did not throw an exception.
 type HistoryService_RespondDecisionTaskCompleted_Result struct {
-	BadRequestError         *shared.BadRequestError      `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError `json:"internalServiceError,omitempty"`
-	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
-	DomainNotActiveError    *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
-	LimitExceededError      *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
+	// Value returned by RespondDecisionTaskCompleted after a successful execution.
+	Success                 *RespondDecisionTaskCompletedResponse `json:"success,omitempty"`
+	BadRequestError         *shared.BadRequestError               `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError          `json:"internalServiceError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError          `json:"entityNotExistError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError              `json:"shardOwnershipLostError,omitempty"`
+	DomainNotActiveError    *shared.DomainNotActiveError          `json:"domainNotActiveError,omitempty"`
+	LimitExceededError      *shared.LimitExceededError            `json:"limitExceededError,omitempty"`
 }
 
 // ToWire translates a HistoryService_RespondDecisionTaskCompleted_Result struct into a Thrift-level intermediate
@@ -332,12 +342,20 @@ type HistoryService_RespondDecisionTaskCompleted_Result struct {
 //   }
 func (v *HistoryService_RespondDecisionTaskCompleted_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
+	if v.Success != nil {
+		w, err = v.Success.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 0, Value: w}
+		i++
+	}
 	if v.BadRequestError != nil {
 		w, err = v.BadRequestError.ToWire()
 		if err != nil {
@@ -387,11 +405,17 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) ToWire() (wire.Valu
 		i++
 	}
 
-	if i > 1 {
-		return wire.Value{}, fmt.Errorf("HistoryService_RespondDecisionTaskCompleted_Result should have at most one field: got %v fields", i)
+	if i != 1 {
+		return wire.Value{}, fmt.Errorf("HistoryService_RespondDecisionTaskCompleted_Result should have exactly one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RespondDecisionTaskCompletedResponse_Read(w wire.Value) (*RespondDecisionTaskCompletedResponse, error) {
+	var v RespondDecisionTaskCompletedResponse
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a HistoryService_RespondDecisionTaskCompleted_Result struct from its Thrift-level
@@ -416,6 +440,14 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) FromWire(w wire.Val
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
+		case 0:
+			if field.Value.Type() == wire.TStruct {
+				v.Success, err = _RespondDecisionTaskCompletedResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		case 1:
 			if field.Value.Type() == wire.TStruct {
 				v.BadRequestError, err = _BadRequestError_Read(field.Value)
@@ -468,6 +500,9 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) FromWire(w wire.Val
 	}
 
 	count := 0
+	if v.Success != nil {
+		count++
+	}
 	if v.BadRequestError != nil {
 		count++
 	}
@@ -486,8 +521,8 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) FromWire(w wire.Val
 	if v.LimitExceededError != nil {
 		count++
 	}
-	if count > 1 {
-		return fmt.Errorf("HistoryService_RespondDecisionTaskCompleted_Result should have at most one field: got %v fields", count)
+	if count != 1 {
+		return fmt.Errorf("HistoryService_RespondDecisionTaskCompleted_Result should have exactly one field: got %v fields", count)
 	}
 
 	return nil
@@ -500,8 +535,12 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
+	if v.Success != nil {
+		fields[i] = fmt.Sprintf("Success: %v", v.Success)
+		i++
+	}
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
 		i++
@@ -535,6 +574,9 @@ func (v *HistoryService_RespondDecisionTaskCompleted_Result) String() string {
 //
 // This function performs a deep comparison.
 func (v *HistoryService_RespondDecisionTaskCompleted_Result) Equals(rhs *HistoryService_RespondDecisionTaskCompleted_Result) bool {
+	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
+		return false
+	}
 	if !((v.BadRequestError == nil && rhs.BadRequestError == nil) || (v.BadRequestError != nil && rhs.BadRequestError != nil && v.BadRequestError.Equals(rhs.BadRequestError))) {
 		return false
 	}

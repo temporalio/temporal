@@ -488,7 +488,7 @@ func (m *MockClient) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	_CompleteRequest *history.RespondDecisionTaskCompletedRequest,
 	opts ...yarpc.CallOption,
-) (err error) {
+) (success *history.RespondDecisionTaskCompletedResponse, err error) {
 
 	args := []interface{}{ctx, _CompleteRequest}
 	for _, o := range opts {
@@ -496,6 +496,8 @@ func (m *MockClient) RespondDecisionTaskCompleted(
 	}
 	i := 0
 	ret := m.ctrl.Call(m, "RespondDecisionTaskCompleted", args...)
+	success, _ = ret[i].(*history.RespondDecisionTaskCompletedResponse)
+	i++
 	err, _ = ret[i].(error)
 	return
 }

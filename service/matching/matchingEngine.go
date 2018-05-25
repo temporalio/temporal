@@ -530,39 +530,32 @@ func (e *matchingEngineImpl) createPollForDecisionTaskResponse(context *taskCont
 	historyResponse *h.RecordDecisionTaskStartedResponse) *m.PollForDecisionTaskResponse {
 	task := context.info
 
-	response := &m.PollForDecisionTaskResponse{}
-	response.WorkflowExecution = workflowExecutionPtr(context.workflowExecution)
+	var token []byte
 	if context.queryTaskInfo != nil {
 		// for a query task
 		queryRequest := context.queryTaskInfo.queryRequest
-		token := &common.QueryTaskToken{
+		taskToken := &common.QueryTaskToken{
 			DomainID: *queryRequest.DomainUUID,
 			TaskList: *queryRequest.TaskList.Name,
 			TaskID:   context.queryTaskInfo.taskID,
 		}
-		response.TaskToken, _ = e.tokenSerializer.SerializeQueryTaskToken(token)
-		response.Query = context.queryTaskInfo.queryRequest.QueryRequest.Query
+		token, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
 	} else {
-		token := &common.TaskToken{
+		taskoken := &common.TaskToken{
 			DomainID:        task.DomainID,
 			WorkflowID:      task.WorkflowID,
 			RunID:           task.RunID,
 			ScheduleID:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
 		}
-		response.TaskToken, _ = e.tokenSerializer.Serialize(token)
-		response.WorkflowType = historyResponse.WorkflowType
-		response.Attempt = common.Int64Ptr(historyResponse.GetAttempt())
+		token, _ = e.tokenSerializer.Serialize(taskoken)
 	}
-	if historyResponse.GetPreviousStartedEventId() != common.EmptyEventID {
-		response.PreviousStartedEventId = historyResponse.PreviousStartedEventId
+
+	response := common.CreateMatchingPollForDecisionTaskResponse(historyResponse, workflowExecutionPtr(context.workflowExecution), token)
+	if context.queryTaskInfo != nil {
+		response.Query = context.queryTaskInfo.queryRequest.QueryRequest.Query
 	}
-	response.WorkflowType = historyResponse.WorkflowType
-	response.StartedEventId = historyResponse.StartedEventId
-	response.StickyExecutionEnabled = historyResponse.StickyExecutionEnabled
 	response.BacklogCountHint = common.Int64Ptr(context.backlogCountHint)
-	response.NextEventId = historyResponse.NextEventId
-	response.DecisionInfo = historyResponse.DecisionInfo
 
 	return response
 }

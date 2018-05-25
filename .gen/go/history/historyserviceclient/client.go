@@ -118,7 +118,7 @@ type Interface interface {
 		ctx context.Context,
 		CompleteRequest *history.RespondDecisionTaskCompletedRequest,
 		opts ...yarpc.CallOption,
-	) error
+	) (*history.RespondDecisionTaskCompletedResponse, error)
 
 	RespondDecisionTaskFailed(
 		ctx context.Context,
@@ -484,7 +484,7 @@ func (c client) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	_CompleteRequest *history.RespondDecisionTaskCompletedRequest,
 	opts ...yarpc.CallOption,
-) (err error) {
+) (success *history.RespondDecisionTaskCompletedResponse, err error) {
 
 	args := history.HistoryService_RespondDecisionTaskCompleted_Helper.Args(_CompleteRequest)
 
@@ -499,7 +499,7 @@ func (c client) RespondDecisionTaskCompleted(
 		return
 	}
 
-	err = history.HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(&result)
+	success, err = history.HistoryService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(&result)
 	return
 }
 

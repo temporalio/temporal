@@ -102,7 +102,7 @@ type Interface interface {
 	RespondDecisionTaskCompleted(
 		ctx context.Context,
 		CompleteRequest *history.RespondDecisionTaskCompletedRequest,
-	) error
+	) (*history.RespondDecisionTaskCompletedResponse, error)
 
 	RespondDecisionTaskFailed(
 		ctx context.Context,
@@ -296,7 +296,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 					Type:  transport.Unary,
 					Unary: thrift.UnaryHandler(h.RespondDecisionTaskCompleted),
 				},
-				Signature:    "RespondDecisionTaskCompleted(CompleteRequest *history.RespondDecisionTaskCompletedRequest)",
+				Signature:    "RespondDecisionTaskCompleted(CompleteRequest *history.RespondDecisionTaskCompletedRequest) (*history.RespondDecisionTaskCompletedResponse)",
 				ThriftModule: history.ThriftModule,
 			},
 
@@ -628,10 +628,10 @@ func (h handler) RespondDecisionTaskCompleted(ctx context.Context, body wire.Val
 		return thrift.Response{}, err
 	}
 
-	err := h.impl.RespondDecisionTaskCompleted(ctx, args.CompleteRequest)
+	success, err := h.impl.RespondDecisionTaskCompleted(ctx, args.CompleteRequest)
 
 	hadError := err != nil
-	result, err := history.HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse(err)
+	result, err := history.HistoryService_RespondDecisionTaskCompleted_Helper.WrapResponse(success, err)
 
 	var response thrift.Response
 	if err == nil {

@@ -4481,6 +4481,116 @@ func (v *RespondDecisionTaskCompletedRequest) GetDomainUUID() (o string) {
 	return
 }
 
+type RespondDecisionTaskCompletedResponse struct {
+	StartedResponse *RecordDecisionTaskStartedResponse `json:"startedResponse,omitempty"`
+}
+
+// ToWire translates a RespondDecisionTaskCompletedResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RespondDecisionTaskCompletedResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.StartedResponse != nil {
+		w, err = v.StartedResponse.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RecordDecisionTaskStartedResponse_Read(w wire.Value) (*RecordDecisionTaskStartedResponse, error) {
+	var v RecordDecisionTaskStartedResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a RespondDecisionTaskCompletedResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RespondDecisionTaskCompletedResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RespondDecisionTaskCompletedResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RespondDecisionTaskCompletedResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.StartedResponse, err = _RecordDecisionTaskStartedResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RespondDecisionTaskCompletedResponse
+// struct.
+func (v *RespondDecisionTaskCompletedResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.StartedResponse != nil {
+		fields[i] = fmt.Sprintf("StartedResponse: %v", v.StartedResponse)
+		i++
+	}
+
+	return fmt.Sprintf("RespondDecisionTaskCompletedResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RespondDecisionTaskCompletedResponse match the
+// provided RespondDecisionTaskCompletedResponse.
+//
+// This function performs a deep comparison.
+func (v *RespondDecisionTaskCompletedResponse) Equals(rhs *RespondDecisionTaskCompletedResponse) bool {
+	if !((v.StartedResponse == nil && rhs.StartedResponse == nil) || (v.StartedResponse != nil && rhs.StartedResponse != nil && v.StartedResponse.Equals(rhs.StartedResponse))) {
+		return false
+	}
+
+	return true
+}
+
 type RespondDecisionTaskFailedRequest struct {
 	DomainUUID    *string                                  `json:"domainUUID,omitempty"`
 	FailedRequest *shared.RespondDecisionTaskFailedRequest `json:"failedRequest,omitempty"`

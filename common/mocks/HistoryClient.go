@@ -212,17 +212,26 @@ func (_m *HistoryClient) RespondActivityTaskFailed(ctx context.Context, failRequ
 }
 
 // RespondDecisionTaskCompleted provides a mock function with given fields: ctx, completeRequest
-func (_m *HistoryClient) RespondDecisionTaskCompleted(ctx context.Context, completeRequest *history.RespondDecisionTaskCompletedRequest, opts ...yarpc.CallOption) error {
+func (_m *HistoryClient) RespondDecisionTaskCompleted(ctx context.Context, completeRequest *history.RespondDecisionTaskCompletedRequest, opts ...yarpc.CallOption) (*history.RespondDecisionTaskCompletedResponse, error) {
 	ret := _m.Called(ctx, completeRequest)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *history.RespondDecisionTaskCompletedRequest) error); ok {
+	var r0 *history.RespondDecisionTaskCompletedResponse
+	if rf, ok := ret.Get(0).(func(context.Context, *history.RespondDecisionTaskCompletedRequest) *history.RespondDecisionTaskCompletedResponse); ok {
 		r0 = rf(ctx, completeRequest)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*history.RespondDecisionTaskCompletedResponse)
+		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *history.RespondDecisionTaskCompletedRequest) error); ok {
+		r1 = rf(ctx, completeRequest)
+	} else {
+		r1 = ret.Error(0)
+	}
+
+	return r0, r1
 }
 
 // RespondDecisionTaskFailed provides a mock function with given fields: ctx, failedRequest

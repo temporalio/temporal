@@ -209,23 +209,25 @@ func (c *clientImpl) RecordActivityTaskStarted(
 func (c *clientImpl) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	request *h.RespondDecisionTaskCompletedRequest,
-	opts ...yarpc.CallOption) error {
+	opts ...yarpc.CallOption) (*h.RespondDecisionTaskCompletedResponse, error) {
 	taskToken, err := c.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	client, err := c.getHostForRequest(taskToken.WorkflowID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *h.RespondDecisionTaskCompletedResponse
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		return client.RespondDecisionTaskCompleted(ctx, request, opts...)
+		response, err = client.RespondDecisionTaskCompleted(ctx, request, opts...)
+		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
-	return err
+	return response, err
 }
 
 func (c *clientImpl) RespondDecisionTaskFailed(

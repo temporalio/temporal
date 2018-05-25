@@ -30,6 +30,8 @@ import (
 	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
+	h "github.com/uber/cadence/.gen/go/history"
+	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
 	"math/rand"
@@ -190,4 +192,22 @@ func GenerateRandomString(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+// CreateMatchingPollForDecisionTaskResponse create response for matching's PollForDecisionTask
+func CreateMatchingPollForDecisionTaskResponse(historyResponse *h.RecordDecisionTaskStartedResponse, workflowExecution *workflow.WorkflowExecution, token []byte) *m.PollForDecisionTaskResponse {
+	matchingResp := &m.PollForDecisionTaskResponse{
+		WorkflowExecution:      workflowExecution,
+		TaskToken:              token,
+		Attempt:                Int64Ptr(historyResponse.GetAttempt()),
+		WorkflowType:           historyResponse.WorkflowType,
+		StartedEventId:         historyResponse.StartedEventId,
+		StickyExecutionEnabled: historyResponse.StickyExecutionEnabled,
+		NextEventId:            historyResponse.NextEventId,
+		DecisionInfo:           historyResponse.DecisionInfo,
+	}
+	if historyResponse.GetPreviousStartedEventId() != EmptyEventID {
+		matchingResp.PreviousStartedEventId = historyResponse.PreviousStartedEventId
+	}
+	return matchingResp
 }

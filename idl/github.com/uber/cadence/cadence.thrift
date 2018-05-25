@@ -125,8 +125,9 @@ service WorkflowService {
   * potentially new ActivityTask being created for corresponding decisions.  It will also create a DecisionTaskCompleted
   * event in the history for that session.  Use the 'taskToken' provided as response of PollForDecisionTask API call
   * for completing the DecisionTask.
+  * The response could contain a new decision task if there is one or if the request asking for one.
   **/
-  void RespondDecisionTaskCompleted(1: shared.RespondDecisionTaskCompletedRequest completeRequest)
+  shared.RespondDecisionTaskCompletedResponse RespondDecisionTaskCompleted(1: shared.RespondDecisionTaskCompletedRequest completeRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,

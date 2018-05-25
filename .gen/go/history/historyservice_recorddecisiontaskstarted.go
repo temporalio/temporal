@@ -432,12 +432,6 @@ func (v *HistoryService_RecordDecisionTaskStarted_Result) ToWire() (wire.Value, 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _RecordDecisionTaskStartedResponse_Read(w wire.Value) (*RecordDecisionTaskStartedResponse, error) {
-	var v RecordDecisionTaskStartedResponse
-	err := v.FromWire(w)
-	return &v, err
-}
-
 // FromWire deserializes a HistoryService_RecordDecisionTaskStarted_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.

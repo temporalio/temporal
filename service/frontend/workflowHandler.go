@@ -1067,38 +1067,62 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledByID(
 // RespondDecisionTaskCompleted - response to a decision task
 func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 	ctx context.Context,
-	completeRequest *gen.RespondDecisionTaskCompletedRequest) error {
+	completeRequest *gen.RespondDecisionTaskCompletedRequest) (*gen.RespondDecisionTaskCompletedResponse, error) {
 
 	scope := metrics.FrontendRespondDecisionTaskCompletedScope
 	sw := wh.startRequestProfile(scope)
 	defer sw.Stop()
 
 	if completeRequest == nil {
-		return wh.error(errRequestNotSet, scope)
+		return nil, wh.error(errRequestNotSet, scope)
 	}
 
 	// Count the request in the RPS, but we still accept it even if RPS is exceeded
 	wh.rateLimiter.TryConsume(1)
 
 	if completeRequest.TaskToken == nil {
-		return wh.error(errTaskTokenNotSet, scope)
+		return nil, wh.error(errTaskTokenNotSet, scope)
 	}
 	taskToken, err := wh.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
 	if taskToken.DomainID == "" {
-		return wh.error(errDomainNotSet, scope)
+		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	err = wh.history.RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
+	histResp, err := wh.history.RespondDecisionTaskCompleted(ctx, &h.RespondDecisionTaskCompletedRequest{
 		DomainUUID:      common.StringPtr(taskToken.DomainID),
 		CompleteRequest: completeRequest},
 	)
 	if err != nil {
-		return wh.error(err, scope)
+		return nil, wh.error(err, scope)
 	}
-	return nil
+
+	completedResp := &gen.RespondDecisionTaskCompletedResponse{}
+	if completeRequest.GetReturnNewDecisionTask() && histResp != nil && histResp.StartedResponse != nil {
+		taskToken := &common.TaskToken{
+			DomainID:        taskToken.DomainID,
+			WorkflowID:      taskToken.WorkflowID,
+			RunID:           taskToken.RunID,
+			ScheduleID:      histResp.StartedResponse.GetScheduledEventId(),
+			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
+		}
+		token, _ := wh.tokenSerializer.Serialize(taskToken)
+		workflowExecution := &gen.WorkflowExecution{
+			WorkflowId: common.StringPtr(taskToken.WorkflowID),
+			RunId:      common.StringPtr(taskToken.RunID),
+		}
+		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
+
+		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, taskToken.DomainID, matchingResp)
+		if err != nil {
+			return nil, wh.error(err, scope)
+		}
+		completedResp.DecisionTask = newDecisionTask
+	}
+
+	return completedResp, nil
 }
 
 // RespondDecisionTaskFailed - failed response to a decision task

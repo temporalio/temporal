@@ -20173,11 +20173,13 @@ func (v *RespondActivityTaskFailedRequest) GetIdentity() (o string) {
 }
 
 type RespondDecisionTaskCompletedRequest struct {
-	TaskToken        []byte                     `json:"taskToken,omitempty"`
-	Decisions        []*Decision                `json:"decisions,omitempty"`
-	ExecutionContext []byte                     `json:"executionContext,omitempty"`
-	Identity         *string                    `json:"identity,omitempty"`
-	StickyAttributes *StickyExecutionAttributes `json:"stickyAttributes,omitempty"`
+	TaskToken                  []byte                     `json:"taskToken,omitempty"`
+	Decisions                  []*Decision                `json:"decisions,omitempty"`
+	ExecutionContext           []byte                     `json:"executionContext,omitempty"`
+	Identity                   *string                    `json:"identity,omitempty"`
+	StickyAttributes           *StickyExecutionAttributes `json:"stickyAttributes,omitempty"`
+	ReturnNewDecisionTask      *bool                      `json:"returnNewDecisionTask,omitempty"`
+	ForceCreateNewDecisionTask *bool                      `json:"forceCreateNewDecisionTask,omitempty"`
 }
 
 type _List_Decision_ValueList []*Decision
@@ -20226,7 +20228,7 @@ func (_List_Decision_ValueList) Close() {}
 //   }
 func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -20270,6 +20272,22 @@ func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.ReturnNewDecisionTask != nil {
+		w, err = wire.NewValueBool(*(v.ReturnNewDecisionTask)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.ForceCreateNewDecisionTask != nil {
+		w, err = wire.NewValueBool(*(v.ForceCreateNewDecisionTask)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -20370,6 +20388,26 @@ func (v *RespondDecisionTaskCompletedRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ReturnNewDecisionTask = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ForceCreateNewDecisionTask = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -20383,7 +20421,7 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [7]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -20403,6 +20441,14 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 	}
 	if v.StickyAttributes != nil {
 		fields[i] = fmt.Sprintf("StickyAttributes: %v", v.StickyAttributes)
+		i++
+	}
+	if v.ReturnNewDecisionTask != nil {
+		fields[i] = fmt.Sprintf("ReturnNewDecisionTask: %v", *(v.ReturnNewDecisionTask))
+		i++
+	}
+	if v.ForceCreateNewDecisionTask != nil {
+		fields[i] = fmt.Sprintf("ForceCreateNewDecisionTask: %v", *(v.ForceCreateNewDecisionTask))
 		i++
 	}
 
@@ -20444,6 +20490,12 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 	if !((v.StickyAttributes == nil && rhs.StickyAttributes == nil) || (v.StickyAttributes != nil && rhs.StickyAttributes != nil && v.StickyAttributes.Equals(rhs.StickyAttributes))) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.ReturnNewDecisionTask, rhs.ReturnNewDecisionTask) {
+		return false
+	}
+	if !_Bool_EqualsPtr(v.ForceCreateNewDecisionTask, rhs.ForceCreateNewDecisionTask) {
+		return false
+	}
 
 	return true
 }
@@ -20456,6 +20508,136 @@ func (v *RespondDecisionTaskCompletedRequest) GetIdentity() (o string) {
 	}
 
 	return
+}
+
+// GetReturnNewDecisionTask returns the value of ReturnNewDecisionTask if it is set or its
+// zero value if it is unset.
+func (v *RespondDecisionTaskCompletedRequest) GetReturnNewDecisionTask() (o bool) {
+	if v.ReturnNewDecisionTask != nil {
+		return *v.ReturnNewDecisionTask
+	}
+
+	return
+}
+
+// GetForceCreateNewDecisionTask returns the value of ForceCreateNewDecisionTask if it is set or its
+// zero value if it is unset.
+func (v *RespondDecisionTaskCompletedRequest) GetForceCreateNewDecisionTask() (o bool) {
+	if v.ForceCreateNewDecisionTask != nil {
+		return *v.ForceCreateNewDecisionTask
+	}
+
+	return
+}
+
+type RespondDecisionTaskCompletedResponse struct {
+	DecisionTask *PollForDecisionTaskResponse `json:"decisionTask,omitempty"`
+}
+
+// ToWire translates a RespondDecisionTaskCompletedResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *RespondDecisionTaskCompletedResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DecisionTask != nil {
+		w, err = v.DecisionTask.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _PollForDecisionTaskResponse_Read(w wire.Value) (*PollForDecisionTaskResponse, error) {
+	var v PollForDecisionTaskResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a RespondDecisionTaskCompletedResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a RespondDecisionTaskCompletedResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v RespondDecisionTaskCompletedResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *RespondDecisionTaskCompletedResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TStruct {
+				v.DecisionTask, err = _PollForDecisionTaskResponse_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a RespondDecisionTaskCompletedResponse
+// struct.
+func (v *RespondDecisionTaskCompletedResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.DecisionTask != nil {
+		fields[i] = fmt.Sprintf("DecisionTask: %v", v.DecisionTask)
+		i++
+	}
+
+	return fmt.Sprintf("RespondDecisionTaskCompletedResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this RespondDecisionTaskCompletedResponse match the
+// provided RespondDecisionTaskCompletedResponse.
+//
+// This function performs a deep comparison.
+func (v *RespondDecisionTaskCompletedResponse) Equals(rhs *RespondDecisionTaskCompletedResponse) bool {
+	if !((v.DecisionTask == nil && rhs.DecisionTask == nil) || (v.DecisionTask != nil && rhs.DecisionTask != nil && v.DecisionTask.Equals(rhs.DecisionTask))) {
+		return false
+	}
+
+	return true
 }
 
 type RespondDecisionTaskFailedRequest struct {

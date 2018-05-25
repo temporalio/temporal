@@ -166,7 +166,7 @@ type Interface interface {
 		ctx context.Context,
 		CompleteRequest *shared.RespondDecisionTaskCompletedRequest,
 		opts ...yarpc.CallOption,
-	) error
+	) (*shared.RespondDecisionTaskCompletedResponse, error)
 
 	RespondDecisionTaskFailed(
 		ctx context.Context,
@@ -722,7 +722,7 @@ func (c client) RespondDecisionTaskCompleted(
 	ctx context.Context,
 	_CompleteRequest *shared.RespondDecisionTaskCompletedRequest,
 	opts ...yarpc.CallOption,
-) (err error) {
+) (success *shared.RespondDecisionTaskCompletedResponse, err error) {
 
 	args := cadence.WorkflowService_RespondDecisionTaskCompleted_Helper.Args(_CompleteRequest)
 
@@ -737,7 +737,7 @@ func (c client) RespondDecisionTaskCompleted(
 		return
 	}
 
-	err = cadence.WorkflowService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(&result)
+	success, err = cadence.WorkflowService_RespondDecisionTaskCompleted_Helper.UnwrapResponse(&result)
 	return
 }
 
