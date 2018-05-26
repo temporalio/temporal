@@ -886,6 +886,8 @@ func (h *Handler) updateErrorMetric(scope int, err error) {
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrEventAlreadyStartedCounter)
 	case *gen.BadRequestError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+	case *gen.DomainNotActiveError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 	case *gen.WorkflowExecutionAlreadyStartedError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
 	case *gen.EntityNotExistsError:
