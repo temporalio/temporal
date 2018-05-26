@@ -370,6 +370,8 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 	switch err.(type) {
 	case *WorkflowExecutionAlreadyStartedError:
 		p.metricClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+	case *workflow.EntityNotExistsError:
+		p.metricClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
 	case *ConditionFailedError:
