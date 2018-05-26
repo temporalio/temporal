@@ -1635,13 +1635,21 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 		lastReplicationInfo[k] = createReplicationInfoMap(v)
 	}
 
+	parentDomainID := emptyDomainID
+	if executionInfo.ParentDomainID != "" {
+		parentDomainID = executionInfo.ParentDomainID
+	}
+	parentRunID := emptyRunID
+	if executionInfo.ParentRunID != "" {
+		parentRunID = executionInfo.ParentRunID
+	}
 	batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
 		executionInfo.DomainID,
 		executionInfo.WorkflowID,
 		executionInfo.RunID,
-		executionInfo.ParentDomainID,
+		parentDomainID,
 		executionInfo.ParentWorkflowID,
-		executionInfo.ParentRunID,
+		parentRunID,
 		executionInfo.InitiatedID,
 		executionInfo.CompletionEvent,
 		executionInfo.TaskList,
