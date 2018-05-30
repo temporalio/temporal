@@ -119,6 +119,8 @@ func (r *ringpopServiceResolver) Stop() error {
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("service resolver timed out on shutdown.")
 	}
+
+	r.isStopped = true
 	return nil
 }
 
@@ -177,8 +179,9 @@ func (r *ringpopServiceResolver) refresh() {
 
 	addrs, err := r.rp.GetReachableMembers(swim.MemberWithLabelAndValue(RoleKey, r.service))
 	if err != nil {
-		// This should never happen!
-		r.logger.Fatalf("Error during ringpop refresh.  Error: %v", err)
+		// This will happen when service stop and destroy ringpop while there are go-routines pending to call this.
+		r.logger.Warnf("Error during ringpop refresh.  Error: %v", err)
+		return
 	}
 
 	for _, addr := range addrs {
