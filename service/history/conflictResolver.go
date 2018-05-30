@@ -21,6 +21,8 @@
 package history
 
 import (
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -50,7 +52,7 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	}
 }
 
-func (r *conflictResolver) reset(replayEventID int64) (*mutableStateBuilder, error) {
+func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mutableStateBuilder, error) {
 	domainID := r.context.domainID
 	execution := r.context.workflowExecution
 	replayNextEventID := replayEventID + 1
@@ -59,34 +61,60 @@ func (r *conflictResolver) reset(replayEventID int64) (*mutableStateBuilder, err
 	var err error
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder *stateBuilder
+	var lastFirstEventID int64
+	eventsToApply := replayNextEventID - common.FirstEventID
 	requestID := uuid.New()
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
-		history, nextPageToken, err = r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID,
-			nextPageToken)
+		history, nextPageToken, lastFirstEventID, err = r.getHistory(domainID, execution, common.FirstEventID,
+			replayNextEventID, nextPageToken)
+		r.logger.Debugf("Conflict Resolver GetHistory.  History Length: %v, token: %v, err: %v",
+			len(history.Events), nextPageToken, err)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, event := range history.Events {
-			if event.GetEventId() == common.FirstEventID {
-				resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(r.shard.GetConfig(), r.logger,
-					event.GetVersion())
-
-				sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
-			}
-
-			_, _, _, err = sBuilder.applyEvents(common.EmptyVersion, "", domainID, requestID, execution, history, nil)
-			if err != nil {
-				return nil, err
-			}
+		batchSize := int64(len(history.Events))
+		// NextEventID could be in the middle of the batch.  Trim the history events to not have more events then what
+		// need to be applied
+		if batchSize > eventsToApply {
+			history.Events = history.Events[0:eventsToApply]
 		}
+
+		eventsToApply -= batchSize
+
+		if len(history.Events) == 0 {
+			break
+		}
+
+		firstEvent := history.Events[0]
+		if firstEvent.GetEventId() == common.FirstEventID {
+			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(r.shard.GetConfig(), r.logger,
+				firstEvent.GetVersion())
+
+			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
+		}
+
+		_, _, _, err = sBuilder.applyEvents(common.EmptyVersion, "", domainID, requestID, execution, history, nil)
+		if err != nil {
+			return nil, err
+		}
+		resetMutableStateBuilder.executionInfo.LastFirstEventID = lastFirstEventID
 	}
+
+	// Applying events to mutableState does not move the nextEventID.  Explicitly set nextEventID to new value
+	resetMutableStateBuilder.executionInfo.NextEventID = replayNextEventID
+	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
+	// the last updated time is not important here, since this should be updated with event time afterwards
+	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
+
+	r.logger.Infof("All events applied for execution.  WorkflowID: %v, RunID: %v, NextEventID: %v",
+		execution.GetWorkflowId(), execution.GetRunId(), resetMutableStateBuilder.GetNextEventID())
 
 	return r.context.resetWorkflowExecution(resetMutableStateBuilder)
 }
 
 func (r *conflictResolver) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte) (*shared.History, []byte, error) {
+	nextEventID int64, nextPageToken []byte) (*shared.History, []byte, int64, error) {
 
 	response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
@@ -98,21 +126,25 @@ func (r *conflictResolver) getHistory(domainID string, execution shared.Workflow
 	})
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, common.EmptyEventID, err
 	}
 
+	lastFirstEventID := common.EmptyEventID
 	historyEvents := []*shared.HistoryEvent{}
 	for _, e := range response.Events {
 		persistence.SetSerializedHistoryDefaults(&e)
 		s, _ := r.hSerializerFactory.Get(e.EncodingType)
 		history, err1 := s.Deserialize(&e)
 		if err1 != nil {
-			return nil, nil, err1
+			return nil, nil, common.EmptyEventID, err1
+		}
+		if len(history.Events) > 0 {
+			lastFirstEventID = history.Events[0].GetEventId()
 		}
 		historyEvents = append(historyEvents, history.Events...)
 	}
 
 	executionHistory := &shared.History{}
 	executionHistory.Events = historyEvents
-	return executionHistory, nextPageToken, nil
+	return executionHistory, nextPageToken, lastFirstEventID, nil
 }

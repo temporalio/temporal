@@ -112,21 +112,23 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		rState := msBuilder.replicationState
 		// Check if this is a stale event
-		if rState.CurrentVersion > request.GetVersion() {
+		if rState.LastWriteVersion > request.GetVersion() {
 			// Replication state is already on a higher version, we can drop this event
 			// TODO: We need to replay external events like signal to the new version
-			r.logger.Warnf("Dropping stale replication task.  Current Version: %v, Task Version: %v", rState.CurrentVersion,
-				request.GetVersion())
+			r.logger.Warnf("Dropping stale replication task.  LastWriteV: %v, CurrentV: %v, TaskV: %v",
+				rState.LastWriteVersion, rState.CurrentVersion, request.GetVersion())
 			return nil
 		}
 
 		// Check if this is the first event after failover
 		if rState.LastWriteVersion < request.GetVersion() {
+			r.logger.Infof("First Event after replication.  WorkflowID: %v, RunID: %v, CurrentV: %v, LastWriteV: %v, LastWriteEvent: %v",
+				execution.GetWorkflowId(), execution.GetRunId(), rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID)
 			previousActiveCluster := r.metadataMgr.ClusterNameForFailoverVersion(rState.LastWriteVersion)
 			ri, ok := request.ReplicationInfo[previousActiveCluster]
 			if !ok {
-				r.logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Current: %v",
-					previousActiveCluster, request.GetSourceCluster())
+				r.logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Request: %v, ReplicationInfo: %v",
+					previousActiveCluster, request.GetSourceCluster(), request.ReplicationInfo)
 
 				// TODO: Handle missing replication information
 				return nil
@@ -134,12 +136,14 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 			// Detect conflict
 			if ri.GetLastEventId() != rState.LastWriteEventID {
-				r.logger.Infof("Conflict detected.  State: {Version: %, LastWriteEventID: %v}, Task: {SourceCluster: %v, Version: %v, LastEventID: %v}",
-					rState.CurrentVersion, rState.LastWriteEventID, request.GetSourceCluster(), ri.GetVersion(),
-					ri.GetLastEventId())
+				r.logger.Infof("Conflict detected.  State: {V: %v, LastWriteV: %v, LastWriteEvent: %v}, ReplicationInfo: {PrevC: %v, V: %v, LastEvent: %v}, Task: {SourceC: %v, V: %v, First: %v, Next: %v}",
+					rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID,
+					previousActiveCluster, ri.GetVersion(), ri.GetLastEventId(),
+					request.GetSourceCluster(), request.GetVersion(), request.GetFirstEventId(), request.GetNextEventId())
 
 				resolver := newConflictResolver(r.shard, context, r.historyMgr, r.logger)
-				msBuilder, err = resolver.reset(ri.GetLastEventId())
+				msBuilder, err = resolver.reset(ri.GetLastEventId(), msBuilder.executionInfo.StartTimestamp)
+				r.logger.Infof("Completed Resetting of workflow execution: Err: %v", err)
 				if err != nil {
 					return err
 				}

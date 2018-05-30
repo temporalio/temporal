@@ -137,13 +137,11 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 
 func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
 	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64) error {
-
 	nextEventID := lastEventID + 1
-	c.msBuilder.updateReplicationStateLastEventID(request.GetSourceCluster(), lastEventID)
 	c.msBuilder.executionInfo.NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateHelper(builder, transferTasks, timerTasks, false, transactionID)
+	return c.updateHelper(builder, transferTasks, timerTasks, false, request.GetSourceCluster(), transactionID)
 }
 
 func (c *workflowExecutionContext) updateVersion() error {
@@ -166,17 +164,13 @@ func (c *workflowExecutionContext) updateVersion() error {
 func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
 	timerTasks []persistence.Task, transactionID int64) error {
 
-	crossDCEnabled := c.msBuilder.replicationState != nil
-	if crossDCEnabled {
-		lastEventID := c.msBuilder.GetNextEventID() - 1
-		c.msBuilder.updateReplicationStateLastEventID("", lastEventID)
-	}
-
-	return c.updateHelper(nil, transferTasks, timerTasks, crossDCEnabled, transactionID)
+	// Only generate replication task if this is a global domain
+	createReplicationTask := c.msBuilder.replicationState != nil
+	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, "", transactionID)
 }
 
 func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,
-	timerTasks []persistence.Task, createReplicationTask bool,
+	timerTasks []persistence.Task, createReplicationTask bool, sourceCluster string,
 	transactionID int64) (errRet error) {
 
 	defer func() {
@@ -190,6 +184,15 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	updates, err := c.msBuilder.CloseUpdateSession()
 	if err != nil {
 		return err
+	}
+
+	// Replication state should only be updated after the UpdateSession is closed.  IDs for certain events are only
+	// generated on CloseSession as they could be buffered events.  The value for NextEventID will be wrong on
+	// mutable state if read before flushing the buffered events.
+	crossDCEnabled := c.msBuilder.replicationState != nil
+	if crossDCEnabled {
+		lastEventID := c.msBuilder.GetNextEventID() - 1
+		c.msBuilder.updateReplicationStateLastEventID(sourceCluster, lastEventID)
 	}
 
 	// Replicator passes in a custom builder as it already has the events
