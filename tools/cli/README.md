@@ -6,6 +6,7 @@ also start workflow, show workflow history, signal workflow ... and many other t
 ## How
 - Run `make bins`
 - You should see an executable `cadence`
+- (Optional) You could also use docker image `ubercadence/cli`, by replacing all the following `./cadence ...` with `docker run --rm ubercadence/cli:master ...`
 
 ## Quick Start
 Run `./cadence` to view help message. There are some top level commands and global options.   

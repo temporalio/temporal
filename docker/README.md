@@ -12,7 +12,9 @@ cd $GOPATH/src/github.com/uber/cadence/docker
 docker-compose up
 ```
 
-View metrics at localhost:8080/dashboard
+View metrics at localhost:8080/dashboard    
+View Cadence-Web at localhost:8088  
+Use Cadence-CLI with `docker run --rm ubercadence/cli:master`
 
 
 Using a pre-built image
@@ -79,7 +81,7 @@ docker push ubercadence/server:master
     image: ubercadence/server:THE.LATEST.VERSION 
     ports
 ```
-3. Create the tar.gz file and upload to relase page
+3. Create the tar.gz file and upload to release page
 ```bash
 cd github.com/uber/cadence/docker
 tar -cvf docker.tar.gz *

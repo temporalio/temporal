@@ -7,10 +7,10 @@ WORKDIR $GOPATH/src/github.com/Masterminds
 RUN git clone https://github.com/Masterminds/glide.git
 RUN cd glide && git checkout v0.12.3 && make bootstrap-dist && make install
 
-RUN mkdir -p $GOPATH/src/github.com/uber/cadence
-COPY . $GOPATH/src/github.com/uber/cadence
-WORKDIR $GOPATH/src/github.com/uber/cadence
-RUN make cadence
+ENV CADENCE_HOME $GOPATH/src/github.com/uber/cadence
+RUN git clone https://github.com/uber/cadence.git $CADENCE_HOME
+WORKDIR $CADENCE_HOME
+RUN cd $CADENCE_HOME && make cadence
 
 FROM phusion/baseimage:0.10.1
 
