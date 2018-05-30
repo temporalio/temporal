@@ -320,29 +320,18 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.Tim
 		}
 	}()
 
-Process_Loop:
-	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err := context.loadWorkflowExecution()
-		if err != nil {
-			return err
-		}
-
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if timerTask.EventID >= msBuilder.GetNextEventID() {
-			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-			t.logger.Debugf("processExpiredUserTimer: timer event ID: %v >= MS NextEventID: %v.", timerTask.EventID, msBuilder.GetNextEventID())
-			// Reload workflow execution history
-			context.clear()
-			continue Process_Loop
-		}
-
-		if !msBuilder.isWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
-			return nil
-		}
-
-		return fn(msBuilder)
+	msBuilder, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	} else if msBuilder == nil {
+		return nil
 	}
-	return ErrMaxAttemptsExceeded
+
+	if !msBuilder.isWorkflowExecutionRunning() {
+		// workflow already finished, no need to process the timer
+		return nil
+	}
+
+	return fn(msBuilder)
+
 }

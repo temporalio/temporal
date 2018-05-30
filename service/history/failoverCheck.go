@@ -21,6 +21,9 @@
 package history
 
 import (
+	"github.com/uber-common/bark"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -60,4 +63,78 @@ func verifyTimerTaskVersion(shard ShardContext, domainID string, version int64, 
 		return false, nil
 	}
 	return true, nil
+}
+
+// load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
+// if still mutable state's next event ID <= task ID, will return nil, nil
+func loadMutableStateForTransferTask(context *workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (*mutableStateBuilder, error) {
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
+	// the exception is decision consistently fail
+	// there will be no event generated, thus making the decision schedule ID == next event ID
+	isDecisionRetry := transferTask.TaskType == persistence.TransferTaskTypeDecisionTask &&
+		msBuilder.executionInfo.DecisionScheduleID == transferTask.ScheduleID &&
+		msBuilder.executionInfo.DecisionAttempt > 0
+
+	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
+		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
+		logger.Debugf("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v.", transferTask.ScheduleID, msBuilder.GetNextEventID())
+		context.clear()
+
+		msBuilder, err = context.loadWorkflowExecution()
+		if err != nil {
+			return nil, err
+		}
+		// after refresh, still mutable state's next event ID <= task ID
+		if transferTask.ScheduleID >= msBuilder.GetNextEventID() {
+			logger.Infof("Transfer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.", transferTask.ScheduleID, msBuilder.GetNextEventID())
+			return nil, nil
+		}
+	}
+	return msBuilder, nil
+}
+
+// load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
+// if still mutable state's next event ID <= task ID, will return nil, nil
+func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (*mutableStateBuilder, error) {
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); ok {
+			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
+	// the exception is decision consistently fail
+	// there will be no event generated, thus making the decision schedule ID == next event ID
+	isDecisionRetry := timerTask.TaskType == persistence.TaskTypeDecisionTimeout &&
+		msBuilder.executionInfo.DecisionScheduleID == timerTask.EventID &&
+		msBuilder.executionInfo.DecisionAttempt > 0
+
+	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
+		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
+		logger.Debugf("Timer Task Processor: task event ID: %v >= MS NextEventID: %v.", timerTask.EventID, msBuilder.GetNextEventID())
+		context.clear()
+
+		msBuilder, err = context.loadWorkflowExecution()
+		if err != nil {
+			return nil, err
+		}
+		// after refresh, still mutable state's next event ID <= task ID
+		if timerTask.EventID >= msBuilder.GetNextEventID() {
+			logger.Infof("Timer Task Processor: task event ID: %v >= MS NextEventID: %v, skip.", timerTask.EventID, msBuilder.GetNextEventID())
+			return nil, nil
+		}
+	}
+	return msBuilder, nil
 }

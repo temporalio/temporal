@@ -49,6 +49,7 @@ const (
 	TagPartition            = "partition"
 	TagOffset               = "offset"
 	TagScope                = "scope"
+	TagFailover             = "failover"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

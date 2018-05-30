@@ -104,6 +104,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 	}
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: clusterName,
+		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
 		if timer.DomainID == domainID {
@@ -223,16 +224,13 @@ func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistenc
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
-
-		if !msBuilder.isWorkflowExecutionRunning() {
-			// Workflow is completed.
+		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
 			return nil
 		}
+		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 
 		var timerTasks []persistence.Task
 		scheduleNewDecision := false
@@ -271,7 +269,7 @@ Update_History_Loop:
 
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		err := t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
+		err = t.updateWorkflowExecution(context, msBuilder, scheduleNewDecision, false, timerTasks, nil)
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
@@ -295,30 +293,15 @@ func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persis
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
+		msBuilder, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+			return nil
 		}
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 
-		scheduleID := timerTask.EventID
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if scheduleID >= msBuilder.GetNextEventID() {
-			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-			t.logger.Debugf("processActivityTimeout: scheduleID mismatch. MS NextEventID: %v, scheduleID: %v",
-				msBuilder.GetNextEventID(), scheduleID)
-			// Reload workflow execution history
-			context.clear()
-			continue Update_History_Loop
-		}
-
-		if !msBuilder.isWorkflowExecutionRunning() {
-			// Workflow is completed.
-			return nil
-		}
-
-		ai, running := msBuilder.GetActivityInfo(scheduleID)
+		ai, running := msBuilder.GetActivityInfo(timerTask.EventID)
 		if running {
 			// If current one is HB task then we may need to create the next heartbeat timer.  Clear the create flag for this
 			// heartbeat timer so we can create it again if needed.
@@ -467,25 +450,15 @@ func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-		if !msBuilder.isWorkflowExecutionRunning() {
+		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
 			return nil
 		}
 
 		scheduleID := task.EventID
 		di, found := msBuilder.GetPendingDecision(scheduleID)
-
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
-		if !found && scheduleID >= msBuilder.GetNextEventID() {
-			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-			// Reload workflow execution history
-			context.clear()
-			continue Update_History_Loop
-		}
 		if !found {
 			logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TaskTypeDecisionTimeout, task.TaskID, scheduleID)
 			return nil
@@ -551,16 +524,10 @@ func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.Time
 		if err0 != nil {
 			return err0
 		}
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			if _, ok := err1.(*workflow.EntityNotExistsError); ok {
-				// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-				return nil
-			}
-			return err1
-		}
-
-		if !msBuilder.isWorkflowExecutionRunning() {
+		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
 			return nil
 		}
 
@@ -634,20 +601,21 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
-		msBuilder, err1 := context.loadWorkflowExecution()
-		if err1 != nil {
-			return err1
-		}
-
-		if !msBuilder.isWorkflowExecutionRunning() {
-			return nil
-		}
-
-		ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.GetStartVersion(), task)
+		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if !ok {
+		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
 			return nil
+		}
+
+		// do version check for global domain task
+		if msBuilder.replicationState != nil {
+			ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.replicationState.StartVersion, task)
+			if err != nil {
+				return err
+			} else if !ok {
+				return nil
+			}
 		}
 
 		if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {

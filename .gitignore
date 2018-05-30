@@ -7,7 +7,7 @@
 *.cov
 *.html
 .tmp/
-.vscode
+.vscode/
 /vendor
 /cadence
 .DS_Store

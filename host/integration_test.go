@@ -1804,7 +1804,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 
 	for i := 0; i < activityCount; i++ {
 		go func() {
-			err = poller.pollAndProcessActivityTask(false)
+			err := poller.pollAndProcessActivityTask(false)
 			s.logger.Infof("Activity Processing Completed.  Error: %v", err)
 		}()
 	}

@@ -380,9 +380,11 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
+	} else if msBuilder == nil {
+		return nil
 	}
 	ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.GetCurrentVersion(), task)
 	if err != nil {
