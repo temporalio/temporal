@@ -956,7 +956,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	requestID := "requestID"
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
 		Msg:            "random message",
 		StartRequestID: requestID,
@@ -1005,7 +1004,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	identity := "testIdentity"
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
 		Msg:            "random message",
 		StartRequestID: "oldRequestID",
@@ -1064,7 +1062,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	expecedErrs := []bool{true, false, true}
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
-	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Times(len(expecedErrs))
 	s.mockExecutionMgr.On(
 		"CreateWorkflowExecution",
 		mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),
@@ -1152,7 +1149,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	for i, closeState := range closeStates {
 
 		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
-		s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Times(len(expecedErrs))
 		s.mockExecutionMgr.On(
 			"CreateWorkflowExecution",
 			mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),

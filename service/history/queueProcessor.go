@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -60,8 +61,7 @@ type (
 		workerNotificationChans []chan struct{}
 
 		notifyCh   chan struct{}
-		isStarted  int32
-		isStopped  int32
+		status     int32
 		shutdownWG sync.WaitGroup
 		shutdownCh chan struct{}
 	}
@@ -83,6 +83,7 @@ func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, p
 		processor:               processor,
 		rateLimiter:             common.NewTokenBucket(options.MaxPollRPS, common.NewRealTimeSource()),
 		workerNotificationChans: workerNotificationChans,
+		status:                  common.DaemonStatusInitialized,
 		notifyCh:                make(chan struct{}, 1),
 		shutdownCh:              make(chan struct{}),
 		metricsClient:           shard.GetMetricsClient(),
@@ -94,7 +95,7 @@ func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, p
 }
 
 func (p *queueProcessorBase) Start() {
-	if !atomic.CompareAndSwapInt32(&p.isStarted, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -107,16 +108,14 @@ func (p *queueProcessorBase) Start() {
 }
 
 func (p *queueProcessorBase) Stop() {
-	if !atomic.CompareAndSwapInt32(&p.isStopped, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&p.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
 	logging.LogQueueProcesorShuttingDownEvent(p.logger)
 	defer logging.LogQueueProcesorShutdownEvent(p.logger)
 
-	if atomic.LoadInt32(&p.isStarted) == 1 {
-		close(p.shutdownCh)
-	}
+	close(p.shutdownCh)
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		logging.LogQueueProcesorShutdownTimedoutEvent(p.logger)
@@ -151,7 +150,8 @@ processorPumpLoop:
 		case <-p.shutdownCh:
 			break processorPumpLoop
 		case <-p.ackMgr.getFinishedChan():
-			p.Stop()
+			// use a separate gorouting since the caller hold the shutdownWG
+			go p.Stop()
 		case <-p.notifyCh:
 			p.processBatch(tasksCh)
 		case <-pollTimer.C:
@@ -167,7 +167,7 @@ processorPumpLoop:
 	// This is the only pump which writes to tasksCh, so it is safe to close channel here
 	close(tasksCh)
 	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-		p.logger.Warn("Queue processor timed out on worker shutdown.")
+		p.logger.Warn("Queue processor timedout on worker shutdown.")
 	}
 	updateAckTimer.Stop()
 	pollTimer.Stop()
@@ -210,11 +210,12 @@ func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, notificati
 
 	for {
 		select {
+		case <-p.shutdownCh:
+			return
 		case task, ok := <-tasksCh:
 			if !ok {
 				return
 			}
-
 			p.processWithRetry(notificationChan, task)
 		}
 	}
@@ -230,7 +231,13 @@ func (p *queueProcessorBase) retryTasks() {
 }
 
 func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task queueTaskInfo) {
-	p.logger.Debugf("Processing task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	switch task.(type) {
+	case *persistence.TransferTaskInfo:
+		p.logger.Debugf("Processing transfer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	case *persistence.ReplicationTaskInfo:
+		p.logger.Debugf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	}
+
 ProcessRetryLoop:
 	for retryCount := 1; retryCount <= p.options.MaxRetryCount; {
 		select {
@@ -260,6 +267,12 @@ ProcessRetryLoop:
 	}
 
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	logging.LogOperationPanicEvent(p.logger,
-		fmt.Sprintf("Retry count exceeded for taskID: %v", task.GetTaskID()), nil)
+	switch task.(type) {
+	case *persistence.TransferTaskInfo:
+		logging.LogOperationPanicEvent(p.logger,
+			fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.GetTaskID()), nil)
+	case *persistence.ReplicationTaskInfo:
+		logging.LogOperationPanicEvent(p.logger,
+			fmt.Sprintf("Retry count exceeded for replication taskID: %v", task.GetTaskID()), nil)
+	}
 }

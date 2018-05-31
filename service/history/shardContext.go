@@ -262,7 +262,9 @@ Create_Loop:
 		response, err := s.executionManager.CreateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
-			case *shared.WorkflowExecutionAlreadyStartedError, *shared.ServiceBusyError:
+			case *shared.WorkflowExecutionAlreadyStartedError,
+				*persistence.WorkflowExecutionAlreadyStartedError,
+				*shared.ServiceBusyError:
 				// No special handling required for these errors
 			case *persistence.ShardOwnershipLostError:
 				{

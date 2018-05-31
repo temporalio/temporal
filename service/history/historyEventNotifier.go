@@ -26,17 +26,13 @@ import (
 
 	"github.com/pborman/uuid"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	"github.com/uber/cadence/common/metrics"
 )
 
 const (
 	eventsChanSize = 1000
-
-	// used for workflow pubsub status
-	statusIdle    int32 = 0
-	statusStarted int32 = 1
-	statusStopped int32 = 2
 )
 
 type (
@@ -93,7 +89,7 @@ func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(st
 	}
 	return &historyEventNotifierImpl{
 		metrics:    metrics,
-		status:     statusIdle,
+		status:     common.DaemonStatusInitialized,
 		closeChan:  make(chan bool),
 		eventsChan: make(chan *historyEventNotification, eventsChanSize),
 
@@ -213,14 +209,14 @@ func (notifier *historyEventNotifierImpl) dequeueHistoryEventNotifications() {
 }
 
 func (notifier *historyEventNotifierImpl) Start() {
-	if !atomic.CompareAndSwapInt32(&notifier.status, statusIdle, statusStarted) {
+	if !atomic.CompareAndSwapInt32(&notifier.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	go notifier.dequeueHistoryEventNotifications()
 }
 
 func (notifier *historyEventNotifierImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&notifier.status, statusStarted, statusStopped) {
+	if !atomic.CompareAndSwapInt32(&notifier.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	close(notifier.closeChan)

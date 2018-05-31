@@ -22,6 +22,7 @@ package history
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -50,8 +51,7 @@ type (
 		historyService   *historyEngineImpl
 		cache            *historyCache
 		executionManager persistence.ExecutionManager
-		isStarted        int32
-		isStopped        int32
+		status           int32
 		shutdownWG       sync.WaitGroup
 		shutdownCh       chan struct{}
 		tasksCh          chan *persistence.TimerTaskInfo
@@ -88,6 +88,7 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 		historyService:          historyService,
 		cache:                   historyService.historyCache,
 		executionManager:        shard.GetExecutionManager(),
+		status:                  common.DaemonStatusInitialized,
 		shutdownCh:              make(chan struct{}),
 		tasksCh:                 make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize),
 		config:                  shard.GetConfig(),
@@ -103,7 +104,7 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 }
 
 func (t *timerQueueProcessorBase) Start() {
-	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&t.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -114,16 +115,14 @@ func (t *timerQueueProcessorBase) Start() {
 }
 
 func (t *timerQueueProcessorBase) Stop() {
-	if !atomic.CompareAndSwapInt32(&t.isStopped, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&t.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
-	if atomic.LoadInt32(&t.isStarted) == 1 {
-		close(t.shutdownCh)
-	}
+	close(t.shutdownCh)
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
-		t.logger.Warn("Timer queue processor timed out on shutdown.")
+		t.logger.Warn("Timer queue processor timedout on shutdown.")
 	}
 
 	t.logger.Info("Timer queue processor stopped.")
@@ -132,24 +131,17 @@ func (t *timerQueueProcessorBase) Stop() {
 func (t *timerQueueProcessorBase) processorPump() {
 	defer t.shutdownWG.Done()
 
-	// Workers to process timer tasks that are expired.
-
 	var workerWG sync.WaitGroup
 	for i := 0; i < t.config.TimerTaskWorkerCount; i++ {
 		workerWG.Add(1)
 		notificationChan := t.workerNotificationChans[i]
-		go t.processTaskWorker(&workerWG, notificationChan)
+		go t.taskWorker(&workerWG, notificationChan)
 	}
 
 RetryProcessor:
 	for {
 		select {
 		case <-t.shutdownCh:
-			t.logger.Info("Timer queue processor pump shutting down.")
-			close(t.tasksCh)
-			if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
-				t.logger.Warn("Timer queue processor timed out on worker shutdown.")
-			}
 			break RetryProcessor
 		default:
 			err := t.internalProcessor()
@@ -158,14 +150,23 @@ RetryProcessor:
 			}
 		}
 	}
+
+	t.logger.Info("Timer queue processor pump shutting down.")
+	// This is the only pump which writes to tasksCh, so it is safe to close channel here
+	close(t.tasksCh)
+	if success := common.AwaitWaitGroup(&workerWG, 10*time.Second); !success {
+		t.logger.Warn("Timer queue processor timedout on worker shutdown.")
+	}
 	t.logger.Info("Timer processor exiting.")
 }
 
-func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup, notificationChan chan struct{}) {
+func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificationChan chan struct{}) {
 	defer workerWG.Done()
 
 	for {
 		select {
+		case <-t.shutdownCh:
+			return
 		case task, ok := <-t.tasksCh:
 			if !ok {
 				return
@@ -176,6 +177,7 @@ func (t *timerQueueProcessorBase) processTaskWorker(workerWG *sync.WaitGroup, no
 }
 
 func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
+	t.logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 ProcessRetryLoop:
 	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount; {
 		select {
@@ -204,6 +206,9 @@ ProcessRetryLoop:
 			return
 		}
 	}
+	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
+	logging.LogOperationPanicEvent(t.logger,
+		fmt.Sprintf("Retry count exceeded for timer taskID: %v", task.GetTaskID()), nil)
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
@@ -270,28 +275,23 @@ continueProcessor:
 			// 4. updating ack level
 			//
 			select {
-
 			case <-t.shutdownCh:
 				t.logger.Debug("Timer queue processor pump shutting down.")
 				return nil
-
 			case <-t.timerQueueAckMgr.getFinishedChan():
 				// timer queue ack manager indicate that all task scanned
 				// are finished and no more tasks
-				t.Stop()
+				// use a separate gorouting since the caller hold the shutdownWG
+				go t.Stop()
 				return nil
-
 			case <-timerGate.FireChan():
 				// Timer Fired.
-
 			case <-pollTimer.C:
 				// forced timer scan
 				pollTimer.Reset(t.config.TimerProcessorMaxPollInterval)
-
 			case <-updateAckChan:
 				t.timerQueueAckMgr.updateAckLevel()
 				continue continueProcessor
-
 			case <-t.newTimerCh:
 				t.newTimeLock.Lock()
 				newTime := t.newTime
