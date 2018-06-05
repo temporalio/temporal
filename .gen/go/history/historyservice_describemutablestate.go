@@ -31,14 +31,14 @@ import (
 	"strings"
 )
 
-// HistoryService_DescribeWorkflowExecution_Args represents the arguments for the HistoryService.DescribeWorkflowExecution function.
+// HistoryService_DescribeMutableState_Args represents the arguments for the HistoryService.DescribeMutableState function.
 //
-// The arguments for DescribeWorkflowExecution are sent and received over the wire as this struct.
-type HistoryService_DescribeWorkflowExecution_Args struct {
-	DescribeRequest *DescribeWorkflowExecutionRequest `json:"describeRequest,omitempty"`
+// The arguments for DescribeMutableState are sent and received over the wire as this struct.
+type HistoryService_DescribeMutableState_Args struct {
+	Request *DescribeMutableStateRequest `json:"request,omitempty"`
 }
 
-// ToWire translates a HistoryService_DescribeWorkflowExecution_Args struct into a Thrift-level intermediate
+// ToWire translates a HistoryService_DescribeMutableState_Args struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -53,7 +53,7 @@ type HistoryService_DescribeWorkflowExecution_Args struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *HistoryService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, error) {
+func (v *HistoryService_DescribeMutableState_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
@@ -61,8 +61,8 @@ func (v *HistoryService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, er
 		err    error
 	)
 
-	if v.DescribeRequest != nil {
-		w, err = v.DescribeRequest.ToWire()
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -73,17 +73,17 @@ func (v *HistoryService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, er
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DescribeWorkflowExecutionRequest_1_Read(w wire.Value) (*DescribeWorkflowExecutionRequest, error) {
-	var v DescribeWorkflowExecutionRequest
+func _DescribeMutableStateRequest_Read(w wire.Value) (*DescribeMutableStateRequest, error) {
+	var v DescribeMutableStateRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a HistoryService_DescribeWorkflowExecution_Args struct from its Thrift-level
+// FromWire deserializes a HistoryService_DescribeMutableState_Args struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a HistoryService_DescribeWorkflowExecution_Args struct
+// An error is returned if we were unable to build a HistoryService_DescribeMutableState_Args struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -91,19 +91,19 @@ func _DescribeWorkflowExecutionRequest_1_Read(w wire.Value) (*DescribeWorkflowEx
 //     return nil, err
 //   }
 //
-//   var v HistoryService_DescribeWorkflowExecution_Args
+//   var v HistoryService_DescribeMutableState_Args
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *HistoryService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) error {
+func (v *HistoryService_DescribeMutableState_Args) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.DescribeRequest, err = _DescribeWorkflowExecutionRequest_1_Read(field.Value)
+				v.Request, err = _DescribeMutableStateRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -115,29 +115,29 @@ func (v *HistoryService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) e
 	return nil
 }
 
-// String returns a readable string representation of a HistoryService_DescribeWorkflowExecution_Args
+// String returns a readable string representation of a HistoryService_DescribeMutableState_Args
 // struct.
-func (v *HistoryService_DescribeWorkflowExecution_Args) String() string {
+func (v *HistoryService_DescribeMutableState_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
 	var fields [1]string
 	i := 0
-	if v.DescribeRequest != nil {
-		fields[i] = fmt.Sprintf("DescribeRequest: %v", v.DescribeRequest)
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
 		i++
 	}
 
-	return fmt.Sprintf("HistoryService_DescribeWorkflowExecution_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_DescribeMutableState_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this HistoryService_DescribeWorkflowExecution_Args match the
-// provided HistoryService_DescribeWorkflowExecution_Args.
+// Equals returns true if all the fields of this HistoryService_DescribeMutableState_Args match the
+// provided HistoryService_DescribeMutableState_Args.
 //
 // This function performs a deep comparison.
-func (v *HistoryService_DescribeWorkflowExecution_Args) Equals(rhs *HistoryService_DescribeWorkflowExecution_Args) bool {
-	if !((v.DescribeRequest == nil && rhs.DescribeRequest == nil) || (v.DescribeRequest != nil && rhs.DescribeRequest != nil && v.DescribeRequest.Equals(rhs.DescribeRequest))) {
+func (v *HistoryService_DescribeMutableState_Args) Equals(rhs *HistoryService_DescribeMutableState_Args) bool {
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
 		return false
 	}
 
@@ -147,79 +147,81 @@ func (v *HistoryService_DescribeWorkflowExecution_Args) Equals(rhs *HistoryServi
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the arguments.
 //
-// This will always be "DescribeWorkflowExecution" for this struct.
-func (v *HistoryService_DescribeWorkflowExecution_Args) MethodName() string {
-	return "DescribeWorkflowExecution"
+// This will always be "DescribeMutableState" for this struct.
+func (v *HistoryService_DescribeMutableState_Args) MethodName() string {
+	return "DescribeMutableState"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Call for this struct.
-func (v *HistoryService_DescribeWorkflowExecution_Args) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_DescribeMutableState_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-// HistoryService_DescribeWorkflowExecution_Helper provides functions that aid in handling the
-// parameters and return values of the HistoryService.DescribeWorkflowExecution
+// HistoryService_DescribeMutableState_Helper provides functions that aid in handling the
+// parameters and return values of the HistoryService.DescribeMutableState
 // function.
-var HistoryService_DescribeWorkflowExecution_Helper = struct {
-	// Args accepts the parameters of DescribeWorkflowExecution in-order and returns
+var HistoryService_DescribeMutableState_Helper = struct {
+	// Args accepts the parameters of DescribeMutableState in-order and returns
 	// the arguments struct for the function.
 	Args func(
-		describeRequest *DescribeWorkflowExecutionRequest,
-	) *HistoryService_DescribeWorkflowExecution_Args
+		request *DescribeMutableStateRequest,
+	) *HistoryService_DescribeMutableState_Args
 
 	// IsException returns true if the given error can be thrown
-	// by DescribeWorkflowExecution.
+	// by DescribeMutableState.
 	//
-	// An error can be thrown by DescribeWorkflowExecution only if the
+	// An error can be thrown by DescribeMutableState only if the
 	// corresponding exception type was mentioned in the 'throws'
 	// section for it in the Thrift file.
 	IsException func(error) bool
 
-	// WrapResponse returns the result struct for DescribeWorkflowExecution
+	// WrapResponse returns the result struct for DescribeMutableState
 	// given its return value and error.
 	//
 	// This allows mapping values and errors returned by
-	// DescribeWorkflowExecution into a serializable result struct.
+	// DescribeMutableState into a serializable result struct.
 	// WrapResponse returns a non-nil error if the provided
-	// error cannot be thrown by DescribeWorkflowExecution
+	// error cannot be thrown by DescribeMutableState
 	//
-	//   value, err := DescribeWorkflowExecution(args)
-	//   result, err := HistoryService_DescribeWorkflowExecution_Helper.WrapResponse(value, err)
+	//   value, err := DescribeMutableState(args)
+	//   result, err := HistoryService_DescribeMutableState_Helper.WrapResponse(value, err)
 	//   if err != nil {
-	//     return fmt.Errorf("unexpected error from DescribeWorkflowExecution: %v", err)
+	//     return fmt.Errorf("unexpected error from DescribeMutableState: %v", err)
 	//   }
 	//   serialize(result)
-	WrapResponse func(*shared.DescribeWorkflowExecutionResponse, error) (*HistoryService_DescribeWorkflowExecution_Result, error)
+	WrapResponse func(*DescribeMutableStateResponse, error) (*HistoryService_DescribeMutableState_Result, error)
 
-	// UnwrapResponse takes the result struct for DescribeWorkflowExecution
+	// UnwrapResponse takes the result struct for DescribeMutableState
 	// and returns the value or error returned by it.
 	//
-	// The error is non-nil only if DescribeWorkflowExecution threw an
+	// The error is non-nil only if DescribeMutableState threw an
 	// exception.
 	//
 	//   result := deserialize(bytes)
-	//   value, err := HistoryService_DescribeWorkflowExecution_Helper.UnwrapResponse(result)
-	UnwrapResponse func(*HistoryService_DescribeWorkflowExecution_Result) (*shared.DescribeWorkflowExecutionResponse, error)
+	//   value, err := HistoryService_DescribeMutableState_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*HistoryService_DescribeMutableState_Result) (*DescribeMutableStateResponse, error)
 }{}
 
 func init() {
-	HistoryService_DescribeWorkflowExecution_Helper.Args = func(
-		describeRequest *DescribeWorkflowExecutionRequest,
-	) *HistoryService_DescribeWorkflowExecution_Args {
-		return &HistoryService_DescribeWorkflowExecution_Args{
-			DescribeRequest: describeRequest,
+	HistoryService_DescribeMutableState_Helper.Args = func(
+		request *DescribeMutableStateRequest,
+	) *HistoryService_DescribeMutableState_Args {
+		return &HistoryService_DescribeMutableState_Args{
+			Request: request,
 		}
 	}
 
-	HistoryService_DescribeWorkflowExecution_Helper.IsException = func(err error) bool {
+	HistoryService_DescribeMutableState_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
 		case *shared.InternalServiceError:
 			return true
 		case *shared.EntityNotExistsError:
+			return true
+		case *shared.AccessDeniedError:
 			return true
 		case *ShardOwnershipLostError:
 			return true
@@ -230,42 +232,47 @@ func init() {
 		}
 	}
 
-	HistoryService_DescribeWorkflowExecution_Helper.WrapResponse = func(success *shared.DescribeWorkflowExecutionResponse, err error) (*HistoryService_DescribeWorkflowExecution_Result, error) {
+	HistoryService_DescribeMutableState_Helper.WrapResponse = func(success *DescribeMutableStateResponse, err error) (*HistoryService_DescribeMutableState_Result, error) {
 		if err == nil {
-			return &HistoryService_DescribeWorkflowExecution_Result{Success: success}, nil
+			return &HistoryService_DescribeMutableState_Result{Success: success}, nil
 		}
 
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.BadRequestError")
 			}
-			return &HistoryService_DescribeWorkflowExecution_Result{BadRequestError: e}, nil
+			return &HistoryService_DescribeMutableState_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.InternalServiceError")
 			}
-			return &HistoryService_DescribeWorkflowExecution_Result{InternalServiceError: e}, nil
+			return &HistoryService_DescribeMutableState_Result{InternalServiceError: e}, nil
 		case *shared.EntityNotExistsError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.EntityNotExistError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.EntityNotExistError")
 			}
-			return &HistoryService_DescribeWorkflowExecution_Result{EntityNotExistError: e}, nil
+			return &HistoryService_DescribeMutableState_Result{EntityNotExistError: e}, nil
+		case *shared.AccessDeniedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.AccessDeniedError")
+			}
+			return &HistoryService_DescribeMutableState_Result{AccessDeniedError: e}, nil
 		case *ShardOwnershipLostError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.ShardOwnershipLostError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.ShardOwnershipLostError")
 			}
-			return &HistoryService_DescribeWorkflowExecution_Result{ShardOwnershipLostError: e}, nil
+			return &HistoryService_DescribeMutableState_Result{ShardOwnershipLostError: e}, nil
 		case *shared.LimitExceededError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeWorkflowExecution_Result.LimitExceededError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_DescribeMutableState_Result.LimitExceededError")
 			}
-			return &HistoryService_DescribeWorkflowExecution_Result{LimitExceededError: e}, nil
+			return &HistoryService_DescribeMutableState_Result{LimitExceededError: e}, nil
 		}
 
 		return nil, err
 	}
-	HistoryService_DescribeWorkflowExecution_Helper.UnwrapResponse = func(result *HistoryService_DescribeWorkflowExecution_Result) (success *shared.DescribeWorkflowExecutionResponse, err error) {
+	HistoryService_DescribeMutableState_Helper.UnwrapResponse = func(result *HistoryService_DescribeMutableState_Result) (success *DescribeMutableStateResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -276,6 +283,10 @@ func init() {
 		}
 		if result.EntityNotExistError != nil {
 			err = result.EntityNotExistError
+			return
+		}
+		if result.AccessDeniedError != nil {
+			err = result.AccessDeniedError
 			return
 		}
 		if result.ShardOwnershipLostError != nil {
@@ -298,22 +309,23 @@ func init() {
 
 }
 
-// HistoryService_DescribeWorkflowExecution_Result represents the result of a HistoryService.DescribeWorkflowExecution function call.
+// HistoryService_DescribeMutableState_Result represents the result of a HistoryService.DescribeMutableState function call.
 //
-// The result of a DescribeWorkflowExecution execution is sent and received over the wire as this struct.
+// The result of a DescribeMutableState execution is sent and received over the wire as this struct.
 //
 // Success is set only if the function did not throw an exception.
-type HistoryService_DescribeWorkflowExecution_Result struct {
-	// Value returned by DescribeWorkflowExecution after a successful execution.
-	Success                 *shared.DescribeWorkflowExecutionResponse `json:"success,omitempty"`
-	BadRequestError         *shared.BadRequestError                   `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError              `json:"internalServiceError,omitempty"`
-	EntityNotExistError     *shared.EntityNotExistsError              `json:"entityNotExistError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError                  `json:"shardOwnershipLostError,omitempty"`
-	LimitExceededError      *shared.LimitExceededError                `json:"limitExceededError,omitempty"`
+type HistoryService_DescribeMutableState_Result struct {
+	// Value returned by DescribeMutableState after a successful execution.
+	Success                 *DescribeMutableStateResponse `json:"success,omitempty"`
+	BadRequestError         *shared.BadRequestError       `json:"badRequestError,omitempty"`
+	InternalServiceError    *shared.InternalServiceError  `json:"internalServiceError,omitempty"`
+	EntityNotExistError     *shared.EntityNotExistsError  `json:"entityNotExistError,omitempty"`
+	AccessDeniedError       *shared.AccessDeniedError     `json:"accessDeniedError,omitempty"`
+	ShardOwnershipLostError *ShardOwnershipLostError      `json:"shardOwnershipLostError,omitempty"`
+	LimitExceededError      *shared.LimitExceededError    `json:"limitExceededError,omitempty"`
 }
 
-// ToWire translates a HistoryService_DescribeWorkflowExecution_Result struct into a Thrift-level intermediate
+// ToWire translates a HistoryService_DescribeMutableState_Result struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -328,9 +340,9 @@ type HistoryService_DescribeWorkflowExecution_Result struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, error) {
+func (v *HistoryService_DescribeMutableState_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [6]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -368,12 +380,20 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, 
 		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
+	if v.AccessDeniedError != nil {
+		w, err = v.AccessDeniedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
 	if v.ShardOwnershipLostError != nil {
 		w, err = v.ShardOwnershipLostError.ToWire()
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 4, Value: w}
+		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
 	if v.LimitExceededError != nil {
@@ -381,28 +401,64 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, 
 		if err != nil {
 			return w, err
 		}
-		fields[i] = wire.Field{ID: 5, Value: w}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
 	if i != 1 {
-		return wire.Value{}, fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("HistoryService_DescribeMutableState_Result should have exactly one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DescribeWorkflowExecutionResponse_Read(w wire.Value) (*shared.DescribeWorkflowExecutionResponse, error) {
-	var v shared.DescribeWorkflowExecutionResponse
+func _DescribeMutableStateResponse_Read(w wire.Value) (*DescribeMutableStateResponse, error) {
+	var v DescribeMutableStateResponse
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a HistoryService_DescribeWorkflowExecution_Result struct from its Thrift-level
+func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
+	var v shared.BadRequestError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
+	var v shared.InternalServiceError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
+	var v shared.EntityNotExistsError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _AccessDeniedError_Read(w wire.Value) (*shared.AccessDeniedError, error) {
+	var v shared.AccessDeniedError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _ShardOwnershipLostError_Read(w wire.Value) (*ShardOwnershipLostError, error) {
+	var v ShardOwnershipLostError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _LimitExceededError_Read(w wire.Value) (*shared.LimitExceededError, error) {
+	var v shared.LimitExceededError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a HistoryService_DescribeMutableState_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a HistoryService_DescribeWorkflowExecution_Result struct
+// An error is returned if we were unable to build a HistoryService_DescribeMutableState_Result struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -410,19 +466,19 @@ func _DescribeWorkflowExecutionResponse_Read(w wire.Value) (*shared.DescribeWork
 //     return nil, err
 //   }
 //
-//   var v HistoryService_DescribeWorkflowExecution_Result
+//   var v HistoryService_DescribeMutableState_Result
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) error {
+func (v *HistoryService_DescribeMutableState_Result) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _DescribeWorkflowExecutionResponse_Read(field.Value)
+				v.Success, err = _DescribeMutableStateResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -454,13 +510,21 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value)
 			}
 		case 4:
 			if field.Value.Type() == wire.TStruct {
-				v.ShardOwnershipLostError, err = _ShardOwnershipLostError_Read(field.Value)
+				v.AccessDeniedError, err = _AccessDeniedError_Read(field.Value)
 				if err != nil {
 					return err
 				}
 
 			}
 		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.ShardOwnershipLostError, err = _ShardOwnershipLostError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 6:
 			if field.Value.Type() == wire.TStruct {
 				v.LimitExceededError, err = _LimitExceededError_Read(field.Value)
 				if err != nil {
@@ -484,6 +548,9 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value)
 	if v.EntityNotExistError != nil {
 		count++
 	}
+	if v.AccessDeniedError != nil {
+		count++
+	}
 	if v.ShardOwnershipLostError != nil {
 		count++
 	}
@@ -491,20 +558,20 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) FromWire(w wire.Value)
 		count++
 	}
 	if count != 1 {
-		return fmt.Errorf("HistoryService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", count)
+		return fmt.Errorf("HistoryService_DescribeMutableState_Result should have exactly one field: got %v fields", count)
 	}
 
 	return nil
 }
 
-// String returns a readable string representation of a HistoryService_DescribeWorkflowExecution_Result
+// String returns a readable string representation of a HistoryService_DescribeMutableState_Result
 // struct.
-func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
+func (v *HistoryService_DescribeMutableState_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
-	var fields [6]string
+	var fields [7]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -522,6 +589,10 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
 		i++
 	}
+	if v.AccessDeniedError != nil {
+		fields[i] = fmt.Sprintf("AccessDeniedError: %v", v.AccessDeniedError)
+		i++
+	}
 	if v.ShardOwnershipLostError != nil {
 		fields[i] = fmt.Sprintf("ShardOwnershipLostError: %v", v.ShardOwnershipLostError)
 		i++
@@ -531,14 +602,14 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("HistoryService_DescribeWorkflowExecution_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("HistoryService_DescribeMutableState_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this HistoryService_DescribeWorkflowExecution_Result match the
-// provided HistoryService_DescribeWorkflowExecution_Result.
+// Equals returns true if all the fields of this HistoryService_DescribeMutableState_Result match the
+// provided HistoryService_DescribeMutableState_Result.
 //
 // This function performs a deep comparison.
-func (v *HistoryService_DescribeWorkflowExecution_Result) Equals(rhs *HistoryService_DescribeWorkflowExecution_Result) bool {
+func (v *HistoryService_DescribeMutableState_Result) Equals(rhs *HistoryService_DescribeMutableState_Result) bool {
 	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
 		return false
 	}
@@ -549,6 +620,9 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) Equals(rhs *HistorySer
 		return false
 	}
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.AccessDeniedError == nil && rhs.AccessDeniedError == nil) || (v.AccessDeniedError != nil && rhs.AccessDeniedError != nil && v.AccessDeniedError.Equals(rhs.AccessDeniedError))) {
 		return false
 	}
 	if !((v.ShardOwnershipLostError == nil && rhs.ShardOwnershipLostError == nil) || (v.ShardOwnershipLostError != nil && rhs.ShardOwnershipLostError != nil && v.ShardOwnershipLostError.Equals(rhs.ShardOwnershipLostError))) {
@@ -564,14 +638,14 @@ func (v *HistoryService_DescribeWorkflowExecution_Result) Equals(rhs *HistorySer
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the result.
 //
-// This will always be "DescribeWorkflowExecution" for this struct.
-func (v *HistoryService_DescribeWorkflowExecution_Result) MethodName() string {
-	return "DescribeWorkflowExecution"
+// This will always be "DescribeMutableState" for this struct.
+func (v *HistoryService_DescribeMutableState_Result) MethodName() string {
+	return "DescribeMutableState"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Reply for this struct.
-func (v *HistoryService_DescribeWorkflowExecution_Result) EnvelopeType() wire.EnvelopeType {
+func (v *HistoryService_DescribeMutableState_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

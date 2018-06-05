@@ -169,6 +169,22 @@ func newMutableStateBuilderWithReplicationState(config *Config, logger bark.Logg
 	return s
 }
 
+func (e *mutableStateBuilder) CopyTo() *persistence.WorkflowMutableState {
+	state := &persistence.WorkflowMutableState{}
+
+	state.ActivitInfos = e.pendingActivityInfoIDs
+	state.TimerInfos = e.pendingTimerInfoIDs
+	state.ChildExecutionInfos = e.pendingChildExecutionInfoIDs
+	state.RequestCancelInfos = e.pendingRequestCancelInfoIDs
+	state.SignalInfos = e.pendingSignalInfoIDs
+	state.SignalRequestedIDs = e.pendingSignalRequestedIDs
+	state.ExecutionInfo = e.executionInfo
+	state.ReplicationState = e.replicationState
+	state.BufferedEvents = e.bufferedEvents
+	state.BufferedReplicationTasks = e.bufferedReplicationTasks
+	return state
+}
+
 func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.pendingActivityInfoIDs = state.ActivitInfos
 	e.pendingTimerInfoIDs = state.TimerInfos

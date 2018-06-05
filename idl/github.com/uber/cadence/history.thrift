@@ -44,6 +44,16 @@ struct StartWorkflowExecutionRequest {
   30: optional ParentExecutionInfo parentExecutionInfo
 }
 
+struct DescribeMutableStateRequest{
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution execution
+}
+
+struct DescribeMutableStateResponse{
+  30: optional string mutableStateInCache
+  40: optional string mutableStateInDatabase
+}
+
 struct GetMutableStateRequest {
   10: optional string domainUUID
   20: optional shared.WorkflowExecution execution
@@ -526,5 +536,18 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+    )
+
+  /**
+  * DescribeMutableState returns information about the internal states of workflow mutable state.
+  **/
+  DescribeMutableStateResponse DescribeMutableState(1: DescribeMutableStateRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.AccessDeniedError accessDeniedError,
+      5: ShardOwnershipLostError shardOwnershipLostError,
+      6: shared.LimitExceededError limitExceededError,
     )
 }

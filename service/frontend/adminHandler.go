@@ -27,7 +27,9 @@ import (
 
 	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/admin/adminserviceserver"
+	hist "github.com/uber/cadence/.gen/go/history"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/service"
@@ -40,6 +42,7 @@ type (
 	AdminHandler struct {
 		numberOfHistoryShards int
 		service.Service
+		history history.Client
 	}
 )
 
@@ -57,6 +60,11 @@ func NewAdminHandler(
 func (adh *AdminHandler) Start() error {
 	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
 	adh.Service.Start()
+	var err error
+	adh.history, err = adh.Service.GetClientFactory().NewHistoryClient()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -65,8 +73,8 @@ func (adh *AdminHandler) Stop() {
 	adh.Service.Stop()
 }
 
-// InquiryWorkflowExecution returns information about the specified workflow execution.
-func (adh *AdminHandler) InquiryWorkflowExecution(ctx context.Context, request *gen.DescribeWorkflowExecutionRequest) (*admin.InquiryWorkflowExecutionResponse, error) {
+// DescribeWorkflowExecution returns information about the specified workflow execution.
+func (adh *AdminHandler) DescribeWorkflowExecution(ctx context.Context, request *admin.DescribeWorkflowExecutionRequest) (*admin.DescribeWorkflowExecutionResponse, error) {
 	if request == nil {
 		return nil, adh.error(errRequestNotSet)
 	}
@@ -85,11 +93,16 @@ func (adh *AdminHandler) InquiryWorkflowExecution(ctx context.Context, request *
 	}
 
 	historyAddr := historyHost.GetAddress()
-
-	return &admin.InquiryWorkflowExecutionResponse{
-		ShardId:     common.StringPtr(shardIDForOutput),
-		HistoryAddr: common.StringPtr(historyAddr),
-	}, nil
+	resp, err := adh.history.DescribeMutableState(ctx, &hist.DescribeMutableStateRequest{
+		DomainUUID: request.Domain,
+		Execution:  request.Execution,
+	})
+	return &admin.DescribeWorkflowExecutionResponse{
+		ShardId:                common.StringPtr(shardIDForOutput),
+		HistoryAddr:            common.StringPtr(historyAddr),
+		MutableStateInDatabase: resp.MutableStateInDatabase,
+		MutableStateInCache:    resp.MutableStateInCache,
+	}, err
 }
 
 func (adh *AdminHandler) error(err error) error {

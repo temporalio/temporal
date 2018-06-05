@@ -31,14 +31,14 @@ import (
 	"strings"
 )
 
-// AdminService_InquiryWorkflowExecution_Args represents the arguments for the AdminService.InquiryWorkflowExecution function.
+// AdminService_DescribeWorkflowExecution_Args represents the arguments for the AdminService.DescribeWorkflowExecution function.
 //
-// The arguments for InquiryWorkflowExecution are sent and received over the wire as this struct.
-type AdminService_InquiryWorkflowExecution_Args struct {
-	InquiryRequest *shared.DescribeWorkflowExecutionRequest `json:"inquiryRequest,omitempty"`
+// The arguments for DescribeWorkflowExecution are sent and received over the wire as this struct.
+type AdminService_DescribeWorkflowExecution_Args struct {
+	Request *DescribeWorkflowExecutionRequest `json:"request,omitempty"`
 }
 
-// ToWire translates a AdminService_InquiryWorkflowExecution_Args struct into a Thrift-level intermediate
+// ToWire translates a AdminService_DescribeWorkflowExecution_Args struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -53,7 +53,7 @@ type AdminService_InquiryWorkflowExecution_Args struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *AdminService_InquiryWorkflowExecution_Args) ToWire() (wire.Value, error) {
+func (v *AdminService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
@@ -61,8 +61,8 @@ func (v *AdminService_InquiryWorkflowExecution_Args) ToWire() (wire.Value, error
 		err    error
 	)
 
-	if v.InquiryRequest != nil {
-		w, err = v.InquiryRequest.ToWire()
+	if v.Request != nil {
+		w, err = v.Request.ToWire()
 		if err != nil {
 			return w, err
 		}
@@ -73,17 +73,17 @@ func (v *AdminService_InquiryWorkflowExecution_Args) ToWire() (wire.Value, error
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*shared.DescribeWorkflowExecutionRequest, error) {
-	var v shared.DescribeWorkflowExecutionRequest
+func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*DescribeWorkflowExecutionRequest, error) {
+	var v DescribeWorkflowExecutionRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a AdminService_InquiryWorkflowExecution_Args struct from its Thrift-level
+// FromWire deserializes a AdminService_DescribeWorkflowExecution_Args struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a AdminService_InquiryWorkflowExecution_Args struct
+// An error is returned if we were unable to build a AdminService_DescribeWorkflowExecution_Args struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -91,19 +91,19 @@ func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*shared.DescribeWorkf
 //     return nil, err
 //   }
 //
-//   var v AdminService_InquiryWorkflowExecution_Args
+//   var v AdminService_DescribeWorkflowExecution_Args
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *AdminService_InquiryWorkflowExecution_Args) FromWire(w wire.Value) error {
+func (v *AdminService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.InquiryRequest, err = _DescribeWorkflowExecutionRequest_Read(field.Value)
+				v.Request, err = _DescribeWorkflowExecutionRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -115,29 +115,29 @@ func (v *AdminService_InquiryWorkflowExecution_Args) FromWire(w wire.Value) erro
 	return nil
 }
 
-// String returns a readable string representation of a AdminService_InquiryWorkflowExecution_Args
+// String returns a readable string representation of a AdminService_DescribeWorkflowExecution_Args
 // struct.
-func (v *AdminService_InquiryWorkflowExecution_Args) String() string {
+func (v *AdminService_DescribeWorkflowExecution_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
 	var fields [1]string
 	i := 0
-	if v.InquiryRequest != nil {
-		fields[i] = fmt.Sprintf("InquiryRequest: %v", v.InquiryRequest)
+	if v.Request != nil {
+		fields[i] = fmt.Sprintf("Request: %v", v.Request)
 		i++
 	}
 
-	return fmt.Sprintf("AdminService_InquiryWorkflowExecution_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("AdminService_DescribeWorkflowExecution_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this AdminService_InquiryWorkflowExecution_Args match the
-// provided AdminService_InquiryWorkflowExecution_Args.
+// Equals returns true if all the fields of this AdminService_DescribeWorkflowExecution_Args match the
+// provided AdminService_DescribeWorkflowExecution_Args.
 //
 // This function performs a deep comparison.
-func (v *AdminService_InquiryWorkflowExecution_Args) Equals(rhs *AdminService_InquiryWorkflowExecution_Args) bool {
-	if !((v.InquiryRequest == nil && rhs.InquiryRequest == nil) || (v.InquiryRequest != nil && rhs.InquiryRequest != nil && v.InquiryRequest.Equals(rhs.InquiryRequest))) {
+func (v *AdminService_DescribeWorkflowExecution_Args) Equals(rhs *AdminService_DescribeWorkflowExecution_Args) bool {
+	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
 		return false
 	}
 
@@ -147,73 +147,73 @@ func (v *AdminService_InquiryWorkflowExecution_Args) Equals(rhs *AdminService_In
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the arguments.
 //
-// This will always be "InquiryWorkflowExecution" for this struct.
-func (v *AdminService_InquiryWorkflowExecution_Args) MethodName() string {
-	return "InquiryWorkflowExecution"
+// This will always be "DescribeWorkflowExecution" for this struct.
+func (v *AdminService_DescribeWorkflowExecution_Args) MethodName() string {
+	return "DescribeWorkflowExecution"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Call for this struct.
-func (v *AdminService_InquiryWorkflowExecution_Args) EnvelopeType() wire.EnvelopeType {
+func (v *AdminService_DescribeWorkflowExecution_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-// AdminService_InquiryWorkflowExecution_Helper provides functions that aid in handling the
-// parameters and return values of the AdminService.InquiryWorkflowExecution
+// AdminService_DescribeWorkflowExecution_Helper provides functions that aid in handling the
+// parameters and return values of the AdminService.DescribeWorkflowExecution
 // function.
-var AdminService_InquiryWorkflowExecution_Helper = struct {
-	// Args accepts the parameters of InquiryWorkflowExecution in-order and returns
+var AdminService_DescribeWorkflowExecution_Helper = struct {
+	// Args accepts the parameters of DescribeWorkflowExecution in-order and returns
 	// the arguments struct for the function.
 	Args func(
-		inquiryRequest *shared.DescribeWorkflowExecutionRequest,
-	) *AdminService_InquiryWorkflowExecution_Args
+		request *DescribeWorkflowExecutionRequest,
+	) *AdminService_DescribeWorkflowExecution_Args
 
 	// IsException returns true if the given error can be thrown
-	// by InquiryWorkflowExecution.
+	// by DescribeWorkflowExecution.
 	//
-	// An error can be thrown by InquiryWorkflowExecution only if the
+	// An error can be thrown by DescribeWorkflowExecution only if the
 	// corresponding exception type was mentioned in the 'throws'
 	// section for it in the Thrift file.
 	IsException func(error) bool
 
-	// WrapResponse returns the result struct for InquiryWorkflowExecution
+	// WrapResponse returns the result struct for DescribeWorkflowExecution
 	// given its return value and error.
 	//
 	// This allows mapping values and errors returned by
-	// InquiryWorkflowExecution into a serializable result struct.
+	// DescribeWorkflowExecution into a serializable result struct.
 	// WrapResponse returns a non-nil error if the provided
-	// error cannot be thrown by InquiryWorkflowExecution
+	// error cannot be thrown by DescribeWorkflowExecution
 	//
-	//   value, err := InquiryWorkflowExecution(args)
-	//   result, err := AdminService_InquiryWorkflowExecution_Helper.WrapResponse(value, err)
+	//   value, err := DescribeWorkflowExecution(args)
+	//   result, err := AdminService_DescribeWorkflowExecution_Helper.WrapResponse(value, err)
 	//   if err != nil {
-	//     return fmt.Errorf("unexpected error from InquiryWorkflowExecution: %v", err)
+	//     return fmt.Errorf("unexpected error from DescribeWorkflowExecution: %v", err)
 	//   }
 	//   serialize(result)
-	WrapResponse func(*InquiryWorkflowExecutionResponse, error) (*AdminService_InquiryWorkflowExecution_Result, error)
+	WrapResponse func(*DescribeWorkflowExecutionResponse, error) (*AdminService_DescribeWorkflowExecution_Result, error)
 
-	// UnwrapResponse takes the result struct for InquiryWorkflowExecution
+	// UnwrapResponse takes the result struct for DescribeWorkflowExecution
 	// and returns the value or error returned by it.
 	//
-	// The error is non-nil only if InquiryWorkflowExecution threw an
+	// The error is non-nil only if DescribeWorkflowExecution threw an
 	// exception.
 	//
 	//   result := deserialize(bytes)
-	//   value, err := AdminService_InquiryWorkflowExecution_Helper.UnwrapResponse(result)
-	UnwrapResponse func(*AdminService_InquiryWorkflowExecution_Result) (*InquiryWorkflowExecutionResponse, error)
+	//   value, err := AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*AdminService_DescribeWorkflowExecution_Result) (*DescribeWorkflowExecutionResponse, error)
 }{}
 
 func init() {
-	AdminService_InquiryWorkflowExecution_Helper.Args = func(
-		inquiryRequest *shared.DescribeWorkflowExecutionRequest,
-	) *AdminService_InquiryWorkflowExecution_Args {
-		return &AdminService_InquiryWorkflowExecution_Args{
-			InquiryRequest: inquiryRequest,
+	AdminService_DescribeWorkflowExecution_Helper.Args = func(
+		request *DescribeWorkflowExecutionRequest,
+	) *AdminService_DescribeWorkflowExecution_Args {
+		return &AdminService_DescribeWorkflowExecution_Args{
+			Request: request,
 		}
 	}
 
-	AdminService_InquiryWorkflowExecution_Helper.IsException = func(err error) bool {
+	AdminService_DescribeWorkflowExecution_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
@@ -228,37 +228,37 @@ func init() {
 		}
 	}
 
-	AdminService_InquiryWorkflowExecution_Helper.WrapResponse = func(success *InquiryWorkflowExecutionResponse, err error) (*AdminService_InquiryWorkflowExecution_Result, error) {
+	AdminService_DescribeWorkflowExecution_Helper.WrapResponse = func(success *DescribeWorkflowExecutionResponse, err error) (*AdminService_DescribeWorkflowExecution_Result, error) {
 		if err == nil {
-			return &AdminService_InquiryWorkflowExecution_Result{Success: success}, nil
+			return &AdminService_DescribeWorkflowExecution_Result{Success: success}, nil
 		}
 
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_InquiryWorkflowExecution_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.BadRequestError")
 			}
-			return &AdminService_InquiryWorkflowExecution_Result{BadRequestError: e}, nil
+			return &AdminService_DescribeWorkflowExecution_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_InquiryWorkflowExecution_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.InternalServiceError")
 			}
-			return &AdminService_InquiryWorkflowExecution_Result{InternalServiceError: e}, nil
+			return &AdminService_DescribeWorkflowExecution_Result{InternalServiceError: e}, nil
 		case *shared.EntityNotExistsError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_InquiryWorkflowExecution_Result.EntityNotExistError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.EntityNotExistError")
 			}
-			return &AdminService_InquiryWorkflowExecution_Result{EntityNotExistError: e}, nil
+			return &AdminService_DescribeWorkflowExecution_Result{EntityNotExistError: e}, nil
 		case *shared.AccessDeniedError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_InquiryWorkflowExecution_Result.AccessDeniedError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.AccessDeniedError")
 			}
-			return &AdminService_InquiryWorkflowExecution_Result{AccessDeniedError: e}, nil
+			return &AdminService_DescribeWorkflowExecution_Result{AccessDeniedError: e}, nil
 		}
 
 		return nil, err
 	}
-	AdminService_InquiryWorkflowExecution_Helper.UnwrapResponse = func(result *AdminService_InquiryWorkflowExecution_Result) (success *InquiryWorkflowExecutionResponse, err error) {
+	AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse = func(result *AdminService_DescribeWorkflowExecution_Result) (success *DescribeWorkflowExecutionResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
@@ -287,21 +287,21 @@ func init() {
 
 }
 
-// AdminService_InquiryWorkflowExecution_Result represents the result of a AdminService.InquiryWorkflowExecution function call.
+// AdminService_DescribeWorkflowExecution_Result represents the result of a AdminService.DescribeWorkflowExecution function call.
 //
-// The result of a InquiryWorkflowExecution execution is sent and received over the wire as this struct.
+// The result of a DescribeWorkflowExecution execution is sent and received over the wire as this struct.
 //
 // Success is set only if the function did not throw an exception.
-type AdminService_InquiryWorkflowExecution_Result struct {
-	// Value returned by InquiryWorkflowExecution after a successful execution.
-	Success              *InquiryWorkflowExecutionResponse `json:"success,omitempty"`
-	BadRequestError      *shared.BadRequestError           `json:"badRequestError,omitempty"`
-	InternalServiceError *shared.InternalServiceError      `json:"internalServiceError,omitempty"`
-	EntityNotExistError  *shared.EntityNotExistsError      `json:"entityNotExistError,omitempty"`
-	AccessDeniedError    *shared.AccessDeniedError         `json:"accessDeniedError,omitempty"`
+type AdminService_DescribeWorkflowExecution_Result struct {
+	// Value returned by DescribeWorkflowExecution after a successful execution.
+	Success              *DescribeWorkflowExecutionResponse `json:"success,omitempty"`
+	BadRequestError      *shared.BadRequestError            `json:"badRequestError,omitempty"`
+	InternalServiceError *shared.InternalServiceError       `json:"internalServiceError,omitempty"`
+	EntityNotExistError  *shared.EntityNotExistsError       `json:"entityNotExistError,omitempty"`
+	AccessDeniedError    *shared.AccessDeniedError          `json:"accessDeniedError,omitempty"`
 }
 
-// ToWire translates a AdminService_InquiryWorkflowExecution_Result struct into a Thrift-level intermediate
+// ToWire translates a AdminService_DescribeWorkflowExecution_Result struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -316,7 +316,7 @@ type AdminService_InquiryWorkflowExecution_Result struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *AdminService_InquiryWorkflowExecution_Result) ToWire() (wire.Value, error) {
+func (v *AdminService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
 		fields [5]wire.Field
 		i      int = 0
@@ -366,14 +366,14 @@ func (v *AdminService_InquiryWorkflowExecution_Result) ToWire() (wire.Value, err
 	}
 
 	if i != 1 {
-		return wire.Value{}, fmt.Errorf("AdminService_InquiryWorkflowExecution_Result should have exactly one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("AdminService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _InquiryWorkflowExecutionResponse_Read(w wire.Value) (*InquiryWorkflowExecutionResponse, error) {
-	var v InquiryWorkflowExecutionResponse
+func _DescribeWorkflowExecutionResponse_Read(w wire.Value) (*DescribeWorkflowExecutionResponse, error) {
+	var v DescribeWorkflowExecutionResponse
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -402,11 +402,11 @@ func _AccessDeniedError_Read(w wire.Value) (*shared.AccessDeniedError, error) {
 	return &v, err
 }
 
-// FromWire deserializes a AdminService_InquiryWorkflowExecution_Result struct from its Thrift-level
+// FromWire deserializes a AdminService_DescribeWorkflowExecution_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a AdminService_InquiryWorkflowExecution_Result struct
+// An error is returned if we were unable to build a AdminService_DescribeWorkflowExecution_Result struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -414,19 +414,19 @@ func _AccessDeniedError_Read(w wire.Value) (*shared.AccessDeniedError, error) {
 //     return nil, err
 //   }
 //
-//   var v AdminService_InquiryWorkflowExecution_Result
+//   var v AdminService_DescribeWorkflowExecution_Result
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *AdminService_InquiryWorkflowExecution_Result) FromWire(w wire.Value) error {
+func (v *AdminService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _InquiryWorkflowExecutionResponse_Read(field.Value)
+				v.Success, err = _DescribeWorkflowExecutionResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -484,15 +484,15 @@ func (v *AdminService_InquiryWorkflowExecution_Result) FromWire(w wire.Value) er
 		count++
 	}
 	if count != 1 {
-		return fmt.Errorf("AdminService_InquiryWorkflowExecution_Result should have exactly one field: got %v fields", count)
+		return fmt.Errorf("AdminService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
 
 	return nil
 }
 
-// String returns a readable string representation of a AdminService_InquiryWorkflowExecution_Result
+// String returns a readable string representation of a AdminService_DescribeWorkflowExecution_Result
 // struct.
-func (v *AdminService_InquiryWorkflowExecution_Result) String() string {
+func (v *AdminService_DescribeWorkflowExecution_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -520,14 +520,14 @@ func (v *AdminService_InquiryWorkflowExecution_Result) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("AdminService_InquiryWorkflowExecution_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("AdminService_DescribeWorkflowExecution_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this AdminService_InquiryWorkflowExecution_Result match the
-// provided AdminService_InquiryWorkflowExecution_Result.
+// Equals returns true if all the fields of this AdminService_DescribeWorkflowExecution_Result match the
+// provided AdminService_DescribeWorkflowExecution_Result.
 //
 // This function performs a deep comparison.
-func (v *AdminService_InquiryWorkflowExecution_Result) Equals(rhs *AdminService_InquiryWorkflowExecution_Result) bool {
+func (v *AdminService_DescribeWorkflowExecution_Result) Equals(rhs *AdminService_DescribeWorkflowExecution_Result) bool {
 	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
 		return false
 	}
@@ -550,14 +550,14 @@ func (v *AdminService_InquiryWorkflowExecution_Result) Equals(rhs *AdminService_
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the result.
 //
-// This will always be "InquiryWorkflowExecution" for this struct.
-func (v *AdminService_InquiryWorkflowExecution_Result) MethodName() string {
-	return "InquiryWorkflowExecution"
+// This will always be "DescribeWorkflowExecution" for this struct.
+func (v *AdminService_DescribeWorkflowExecution_Result) MethodName() string {
+	return "DescribeWorkflowExecution"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Reply for this struct.
-func (v *AdminService_InquiryWorkflowExecution_Result) EnvelopeType() wire.EnvelopeType {
+func (v *AdminService_DescribeWorkflowExecution_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

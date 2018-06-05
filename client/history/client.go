@@ -110,6 +110,30 @@ func (c *clientImpl) GetMutableState(
 	return response, nil
 }
 
+func (c *clientImpl) DescribeMutableState(
+	ctx context.Context,
+	request *h.DescribeMutableStateRequest,
+	opts ...yarpc.CallOption) (*h.DescribeMutableStateResponse, error) {
+	client, err := c.getHostForRequest(*request.Execution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *h.DescribeMutableStateResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DescribeMutableState(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) ResetStickyTaskList(
 	ctx context.Context,
 	request *h.ResetStickyTaskListRequest,

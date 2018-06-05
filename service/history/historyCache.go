@@ -82,10 +82,9 @@ func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
 	return c.getOrCreateWorkflowExecutionWithTimeout(context.Background(), domainID, execution)
 }
 
-func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
-	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+func (c *historyCache) validateWorkflowExecutionInfo(domainID string, execution *workflow.WorkflowExecution) error {
 	if execution.GetWorkflowId() == "" {
-		return nil, nil, &workflow.BadRequestError{Message: "Can't load workflow execution.  WorkflowId not set."}
+		return &workflow.BadRequestError{Message: "Can't load workflow execution.  WorkflowId not set."}
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
@@ -96,12 +95,45 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 		})
 
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 
 		execution.RunId = common.StringPtr(response.RunID)
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
-		return nil, nil, &workflow.BadRequestError{Message: "RunID is not valid UUID."}
+		return &workflow.BadRequestError{Message: "RunID is not valid UUID."}
+	}
+	return nil
+}
+
+// For analyzing mutableState, we have to try get workflowExecutionContext from cache and also load from database
+func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
+	execution workflow.WorkflowExecution) (*workflowExecutionContext, *workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
+	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	key := execution.GetRunId()
+	contextFromCache, cacheHit := c.Get(key).(*workflowExecutionContext)
+	releaseFunc := func(error) {}
+	// If cache hit, we need to lock the cache to prevent race condition
+	if cacheHit {
+		if err := contextFromCache.locker.Lock(ctx); err != nil {
+			// ctx is done before lock can be acquired
+			c.Release(key)
+			return nil, nil, nil, false, err
+		}
+		releaseFunc = c.makeReleaseFunc(key, cacheNotReleased, contextFromCache)
+	}
+
+	// Note, the one loaded from DB is not put into cache and don't affect any behavior
+	contextFromDB := newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+	return contextFromCache, contextFromDB, releaseFunc, cacheHit, nil
+}
+
+func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
+	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+		return nil, nil, err
 	}
 
 	// Test hook for disabling the cache
@@ -123,8 +155,18 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 
 	// This will create a closure on every request.
 	// Consider revisiting this if it causes too much GC activity
-	status := cacheNotReleased
-	releaseFunc := func(err error) {
+	releaseFunc := c.makeReleaseFunc(key, cacheNotReleased, context)
+
+	if err := context.locker.Lock(ctx); err != nil {
+		// ctx is done before lock can be acquired
+		c.Release(key)
+		return nil, nil, err
+	}
+	return context, releaseFunc, nil
+}
+
+func (c *historyCache) makeReleaseFunc(key string, status int32, context *workflowExecutionContext) func(error) {
+	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if err != nil {
 				// TODO see issue #668, there are certain type or errors which can bypass the clear
@@ -134,13 +176,6 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 			c.Release(key)
 		}
 	}
-
-	if err := context.locker.Lock(ctx); err != nil {
-		// ctx is done before lock can be acquired
-		c.Release(key)
-		return nil, nil, err
-	}
-	return context, releaseFunc, nil
 }
 
 func (c *historyCache) getCurrentExecutionWithRetry(

@@ -31,6 +31,314 @@ import (
 	"strings"
 )
 
+type DescribeMutableStateRequest struct {
+	DomainUUID *string                   `json:"domainUUID,omitempty"`
+	Execution  *shared.WorkflowExecution `json:"execution,omitempty"`
+}
+
+// ToWire translates a DescribeMutableStateRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DescribeMutableStateRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.Execution != nil {
+		w, err = v.Execution.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _WorkflowExecution_Read(w wire.Value) (*shared.WorkflowExecution, error) {
+	var v shared.WorkflowExecution
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a DescribeMutableStateRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DescribeMutableStateRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DescribeMutableStateRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DescribeMutableStateRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TStruct {
+				v.Execution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DescribeMutableStateRequest
+// struct.
+func (v *DescribeMutableStateRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
+		i++
+	}
+	if v.Execution != nil {
+		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
+		i++
+	}
+
+	return fmt.Sprintf("DescribeMutableStateRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _String_EqualsPtr(lhs, rhs *string) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
+}
+
+// Equals returns true if all the fields of this DescribeMutableStateRequest match the
+// provided DescribeMutableStateRequest.
+//
+// This function performs a deep comparison.
+func (v *DescribeMutableStateRequest) Equals(rhs *DescribeMutableStateRequest) bool {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
+		return false
+	}
+	if !((v.Execution == nil && rhs.Execution == nil) || (v.Execution != nil && rhs.Execution != nil && v.Execution.Equals(rhs.Execution))) {
+		return false
+	}
+
+	return true
+}
+
+// GetDomainUUID returns the value of DomainUUID if it is set or its
+// zero value if it is unset.
+func (v *DescribeMutableStateRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
+	}
+
+	return
+}
+
+type DescribeMutableStateResponse struct {
+	MutableStateInCache    *string `json:"mutableStateInCache,omitempty"`
+	MutableStateInDatabase *string `json:"mutableStateInDatabase,omitempty"`
+}
+
+// ToWire translates a DescribeMutableStateResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DescribeMutableStateResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.MutableStateInCache != nil {
+		w, err = wire.NewValueString(*(v.MutableStateInCache)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.MutableStateInDatabase != nil {
+		w, err = wire.NewValueString(*(v.MutableStateInDatabase)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a DescribeMutableStateResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DescribeMutableStateResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DescribeMutableStateResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DescribeMutableStateResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.MutableStateInCache = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.MutableStateInDatabase = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DescribeMutableStateResponse
+// struct.
+func (v *DescribeMutableStateResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.MutableStateInCache != nil {
+		fields[i] = fmt.Sprintf("MutableStateInCache: %v", *(v.MutableStateInCache))
+		i++
+	}
+	if v.MutableStateInDatabase != nil {
+		fields[i] = fmt.Sprintf("MutableStateInDatabase: %v", *(v.MutableStateInDatabase))
+		i++
+	}
+
+	return fmt.Sprintf("DescribeMutableStateResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this DescribeMutableStateResponse match the
+// provided DescribeMutableStateResponse.
+//
+// This function performs a deep comparison.
+func (v *DescribeMutableStateResponse) Equals(rhs *DescribeMutableStateResponse) bool {
+	if !_String_EqualsPtr(v.MutableStateInCache, rhs.MutableStateInCache) {
+		return false
+	}
+	if !_String_EqualsPtr(v.MutableStateInDatabase, rhs.MutableStateInDatabase) {
+		return false
+	}
+
+	return true
+}
+
+// GetMutableStateInCache returns the value of MutableStateInCache if it is set or its
+// zero value if it is unset.
+func (v *DescribeMutableStateResponse) GetMutableStateInCache() (o string) {
+	if v.MutableStateInCache != nil {
+		return *v.MutableStateInCache
+	}
+
+	return
+}
+
+// GetMutableStateInDatabase returns the value of MutableStateInDatabase if it is set or its
+// zero value if it is unset.
+func (v *DescribeMutableStateResponse) GetMutableStateInDatabase() (o string) {
+	if v.MutableStateInDatabase != nil {
+		return *v.MutableStateInDatabase
+	}
+
+	return
+}
+
 type DescribeWorkflowExecutionRequest struct {
 	DomainUUID *string                                  `json:"domainUUID,omitempty"`
 	Request    *shared.DescribeWorkflowExecutionRequest `json:"request,omitempty"`
@@ -150,16 +458,6 @@ func (v *DescribeWorkflowExecutionRequest) String() string {
 	}
 
 	return fmt.Sprintf("DescribeWorkflowExecutionRequest{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _String_EqualsPtr(lhs, rhs *string) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return (x == y)
-	}
-	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this DescribeWorkflowExecutionRequest match the
@@ -352,12 +650,6 @@ func (v *GetMutableStateRequest) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _WorkflowExecution_Read(w wire.Value) (*shared.WorkflowExecution, error) {
-	var v shared.WorkflowExecution
-	err := v.FromWire(w)
-	return &v, err
 }
 
 // FromWire deserializes a GetMutableStateRequest struct from its Thrift-level

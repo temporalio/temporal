@@ -21,6 +21,7 @@
 package cli
 
 import (
+	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -36,8 +37,8 @@ func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {
 	return client
 }
 
-// InquiryWorkflow inquiries a new workflow execution
-func InquiryWorkflow(c *cli.Context) {
+// AdminDescribeWorkflow describe a new workflow execution for admin
+func AdminDescribeWorkflow(c *cli.Context) {
 	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
 	serviceClient := getAdminServiceClient(c)
 
@@ -48,7 +49,7 @@ func InquiryWorkflow(c *cli.Context) {
 	ctx, cancel := newContext()
 	defer cancel()
 
-	resp, err := serviceClient.InquiryWorkflowExecution(ctx, &s.DescribeWorkflowExecutionRequest{
+	resp, err := serviceClient.DescribeWorkflowExecution(ctx, &admin.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(domain),
 		Execution: &s.WorkflowExecution{
 			WorkflowId: common.StringPtr(wid),
@@ -56,7 +57,7 @@ func InquiryWorkflow(c *cli.Context) {
 		},
 	})
 	if err != nil {
-		ErrorAndExit("Inquiry workflow execution failed", err)
+		ErrorAndExit("Describe workflow execution failed", err)
 	}
 
 	prettyPrintJSONObject(resp)

@@ -26,7 +26,6 @@ package adminserviceclient
 import (
 	"context"
 	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
@@ -36,11 +35,11 @@ import (
 
 // Interface is a client for the AdminService service.
 type Interface interface {
-	InquiryWorkflowExecution(
+	DescribeWorkflowExecution(
 		ctx context.Context,
-		InquiryRequest *shared.DescribeWorkflowExecutionRequest,
+		Request *admin.DescribeWorkflowExecutionRequest,
 		opts ...yarpc.CallOption,
-	) (*admin.InquiryWorkflowExecutionResponse, error)
+	) (*admin.DescribeWorkflowExecutionResponse, error)
 }
 
 // New builds a new client for the AdminService service.
@@ -67,13 +66,13 @@ type client struct {
 	c thrift.Client
 }
 
-func (c client) InquiryWorkflowExecution(
+func (c client) DescribeWorkflowExecution(
 	ctx context.Context,
-	_InquiryRequest *shared.DescribeWorkflowExecutionRequest,
+	_Request *admin.DescribeWorkflowExecutionRequest,
 	opts ...yarpc.CallOption,
-) (success *admin.InquiryWorkflowExecutionResponse, err error) {
+) (success *admin.DescribeWorkflowExecutionResponse, err error) {
 
-	args := admin.AdminService_InquiryWorkflowExecution_Helper.Args(_InquiryRequest)
+	args := admin.AdminService_DescribeWorkflowExecution_Helper.Args(_Request)
 
 	var body wire.Value
 	body, err = c.c.Call(ctx, args, opts...)
@@ -81,11 +80,11 @@ func (c client) InquiryWorkflowExecution(
 		return
 	}
 
-	var result admin.AdminService_InquiryWorkflowExecution_Result
+	var result admin.AdminService_DescribeWorkflowExecution_Result
 	if err = result.FromWire(body); err != nil {
 		return
 	}
 
-	success, err = admin.AdminService_InquiryWorkflowExecution_Helper.UnwrapResponse(&result)
+	success, err = admin.AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse(&result)
 	return
 }
