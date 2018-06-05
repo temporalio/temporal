@@ -130,7 +130,7 @@ func (s *Service) Start() {
 	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, visibility, kafkaProducer)
 	wfHandler.Start()
 
-	adminHandler := NewAdminHandler(base, p.CassandraConfig.NumHistoryShards)
+	adminHandler := NewAdminHandler(base, p.CassandraConfig.NumHistoryShards, metadata)
 	adminHandler.Start()
 
 	log.Infof("%v started", common.FrontendServiceName)
