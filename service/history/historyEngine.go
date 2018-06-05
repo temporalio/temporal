@@ -1377,6 +1377,8 @@ Update_History_Loop:
 		if request.GetReturnNewDecisionTask() && createNewDecisionTask {
 			di, _ := msBuilder.GetPendingDecision(newDecisionTaskScheduledID)
 			response.StartedResponse = e.createRecordDecisionTaskStartedResponse(domainID, msBuilder, di, request.GetIdentity())
+			// sticky is always enabled when worker request for new decision task from RespondDecisionTaskCompleted
+			response.StartedResponse.StickyExecutionEnabled = common.BoolPtr(true)
 		}
 
 		return response, nil
