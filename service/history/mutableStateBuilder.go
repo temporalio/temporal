@@ -163,8 +163,11 @@ func newMutableStateBuilder(config *Config, logger bark.Logger) *mutableStateBui
 func newMutableStateBuilderWithReplicationState(config *Config, logger bark.Logger, version int64) *mutableStateBuilder {
 	s := newMutableStateBuilder(config, logger)
 	s.replicationState = &persistence.ReplicationState{
-		StartVersion:   version,
-		CurrentVersion: version,
+		StartVersion:        version,
+		CurrentVersion:      version,
+		LastWriteVersion:    common.EmptyVersion,
+		LastWriteEventID:    common.EmptyEventID,
+		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
 	}
 	return s
 }
@@ -331,14 +334,22 @@ func (e *mutableStateBuilder) GetCurrentVersion() int64 {
 	return e.replicationState.CurrentVersion
 }
 
+func (e *mutableStateBuilder) GetLastWriteVersion() int64 {
+	if e.replicationState == nil {
+		return common.EmptyVersion
+	}
+	return e.replicationState.LastWriteVersion
+}
+
 func (e *mutableStateBuilder) updateReplicationStateVersion(version int64) {
 	e.replicationState.CurrentVersion = version
 }
 
 // Assumption: It is expected CurrentVersion on replication state is updated at the start of transaction when
 // mutableState is loaded for this workflow execution.
-func (e *mutableStateBuilder) updateReplicationStateLastEventID(clusterName string, lastEventID int64) {
-	e.replicationState.LastWriteVersion = e.replicationState.CurrentVersion
+func (e *mutableStateBuilder) updateReplicationStateLastEventID(clusterName string, lastWriteVersion,
+	lastEventID int64) {
+	e.replicationState.LastWriteVersion = lastWriteVersion
 	// TODO: Rename this to NextEventID to stay consistent naming convention with rest of code base
 	e.replicationState.LastWriteEventID = lastEventID
 	if clusterName != "" {
@@ -1173,6 +1184,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(domainID st
 	e.executionInfo.CloseStatus = persistence.WorkflowCloseStatusNone
 	e.executionInfo.LastProcessedEvent = common.EmptyEventID
 	e.executionInfo.CreateRequestID = requestID
+	e.executionInfo.DecisionVersion = common.EmptyVersion
 	e.executionInfo.DecisionScheduleID = common.EmptyEventID
 	e.executionInfo.DecisionStartedID = common.EmptyEventID
 	e.executionInfo.DecisionRequestID = emptyUUID
@@ -2149,7 +2161,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 	}
 
 	if newStateBuilder.replicationState != nil {
-		newStateBuilder.updateReplicationStateLastEventID(sourceClusterName, di.ScheduleID)
+		newStateBuilder.updateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), di.ScheduleID)
 	}
 
 	newTransferTasks := []persistence.Task{&persistence.DecisionTask{

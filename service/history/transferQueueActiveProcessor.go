@@ -440,7 +440,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 		return nil
 	}
 
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, msBuilder.GetCurrentVersion(), task)
+	ok, err := verifyTransferTaskVersion(t.shard, domainID, msBuilder.GetLastWriteVersion(), task)
 	if err != nil {
 		return err
 	} else if !ok {

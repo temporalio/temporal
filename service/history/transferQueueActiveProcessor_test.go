@@ -524,6 +524,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	msBuilder.updateReplicationStateLastEventID("", version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    version,
@@ -582,6 +583,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	msBuilder.updateReplicationStateLastEventID("", version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    version,

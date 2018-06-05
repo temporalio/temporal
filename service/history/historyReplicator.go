@@ -59,7 +59,7 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 		historyMgr:        historyMgr,
 		historySerializer: persistence.NewJSONHistorySerializer(),
 		metadataMgr:       shard.GetService().GetClusterMetadata(),
-		logger:            logger,
+		logger:            logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryReplicatorComponent),
 	}
 
 	return replicator
@@ -84,6 +84,14 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	}
 	defer func() { release(retError) }()
 
+	logger := r.logger.WithFields(bark.Fields{
+		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+		logging.TagWorkflowRunID:       execution.GetRunId(),
+		logging.TagSourceCluster:       request.GetSourceCluster(),
+		logging.TagVersion:             request.GetVersion(),
+		logging.TagFirstEventID:        request.GetFirstEventId(),
+		logging.TagNextEventID:         request.GetNextEventId(),
+	})
 	var msBuilder *mutableStateBuilder
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
@@ -91,8 +99,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		msBuilder, err = context.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
-			r.logger.Infof("Dropping stale replication task for start event.  WorkflowID: %v, RunID: %v, Version: %v",
-				execution.GetWorkflowId(), execution.GetRunId(), request.GetVersion())
+			logger.Info("Dropping stale replication task for start event.")
 			return nil
 		}
 
@@ -115,19 +122,19 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		if rState.LastWriteVersion > request.GetVersion() {
 			// Replication state is already on a higher version, we can drop this event
 			// TODO: We need to replay external events like signal to the new version
-			r.logger.Warnf("Dropping stale replication task.  LastWriteV: %v, CurrentV: %v, TaskV: %v",
-				rState.LastWriteVersion, rState.CurrentVersion, request.GetVersion())
+			logger.Warnf("Dropping stale replication task.  CurrentV: %v, LastWriteV: %v, LastWriteEvent: %v",
+				rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID)
 			return nil
 		}
 
 		// Check if this is the first event after failover
 		if rState.LastWriteVersion < request.GetVersion() {
-			r.logger.Infof("First Event after replication.  WorkflowID: %v, RunID: %v, CurrentV: %v, LastWriteV: %v, LastWriteEvent: %v",
-				execution.GetWorkflowId(), execution.GetRunId(), rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID)
+			logger.Infof("First Event after replication.  CurrentV: %v, LastWriteV: %v, LastWriteEvent: %v",
+				rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID)
 			previousActiveCluster := r.metadataMgr.ClusterNameForFailoverVersion(rState.LastWriteVersion)
 			ri, ok := request.ReplicationInfo[previousActiveCluster]
 			if !ok {
-				r.logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Request: %v, ReplicationInfo: %v",
+				logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Request: %v, ReplicationInfo: %v",
 					previousActiveCluster, request.GetSourceCluster(), request.ReplicationInfo)
 
 				// TODO: Handle missing replication information
@@ -136,14 +143,13 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 			// Detect conflict
 			if ri.GetLastEventId() != rState.LastWriteEventID {
-				r.logger.Infof("Conflict detected.  State: {V: %v, LastWriteV: %v, LastWriteEvent: %v}, ReplicationInfo: {PrevC: %v, V: %v, LastEvent: %v}, Task: {SourceC: %v, V: %v, First: %v, Next: %v}",
+				logger.Infof("Conflict detected.  State: {V: %v, LastWriteV: %v, LastWriteEvent: %v}, ReplicationInfo: {PrevC: %v, V: %v, LastEvent: %v}",
 					rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID,
-					previousActiveCluster, ri.GetVersion(), ri.GetLastEventId(),
-					request.GetSourceCluster(), request.GetVersion(), request.GetFirstEventId(), request.GetNextEventId())
+					previousActiveCluster, ri.GetVersion(), ri.GetLastEventId())
 
 				resolver := newConflictResolver(r.shard, context, r.historyMgr, r.logger)
-				msBuilder, err = resolver.reset(ri.GetLastEventId(), msBuilder.executionInfo.StartTimestamp)
-				r.logger.Infof("Completed Resetting of workflow execution: Err: %v", err)
+				msBuilder, err = resolver.reset(uuid.New(), ri.GetLastEventId(), msBuilder.executionInfo.StartTimestamp)
+				logger.Infof("Completed Resetting of workflow execution.  NextEventID: %v. Err: %v", msBuilder.GetNextEventID(), err)
 				if err != nil {
 					return err
 				}
@@ -152,12 +158,19 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check for duplicate processing of replication task
 		if firstEvent.GetEventId() < msBuilder.GetNextEventID() {
+			logger.Warnf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
+				msBuilder.GetNextEventID(), msBuilder.replicationState.CurrentVersion,
+				msBuilder.replicationState.LastWriteVersion, msBuilder.replicationState.LastWriteEventID)
 			return nil
 		}
 
 		// Check for out of order replication task and store it in the buffer
 		if firstEvent.GetEventId() > msBuilder.GetNextEventID() {
+			logger.Infof("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
+				msBuilder.GetNextEventID(), firstEvent.GetEventId())
+
 			if err := msBuilder.BufferReplicationTask(request); err != nil {
+				logger.Errorf("Failed to buffer out of order replication task.  Err: %v", err)
 				return errors.New("failed to add buffered replication task")
 			}
 
@@ -168,17 +181,25 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	// First check if there are events which needs to be flushed before applying the update
 	err = r.FlushBuffer(context, msBuilder, request)
 	if err != nil {
+		logger.Errorf("Fail to flush buffer.  NextEvent: %v, FirstEvent: %v, Err: %v", msBuilder.GetNextEventID(),
+			firstEvent.GetEventId(), err)
 		return err
 	}
 
 	// Apply the replication task
 	err = r.ApplyReplicationTask(context, msBuilder, request)
 	if err != nil {
+		logger.Errorf("Fail to Apply Replication task.  NextEvent: %v, FirstEvent: %v, Err: %v", msBuilder.GetNextEventID(),
+			firstEvent.GetEventId(), err)
 		return err
 	}
 
 	// Flush buffered replication tasks after applying the update
 	err = r.FlushBuffer(context, msBuilder, request)
+	if err != nil {
+		logger.Errorf("Fail to flush buffer.  NextEvent: %v, FirstEvent: %v, Err: %v", msBuilder.GetNextEventID(),
+			firstEvent.GetEventId(), err)
+	}
 
 	return err
 }
@@ -198,8 +219,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	sBuilder := newStateBuilder(r.shard, msBuilder, r.logger)
-	lastEvent, di, newRunStateBuilder, err := sBuilder.applyEvents(request.GetVersion(), request.GetSourceCluster(),
-		domainID, requestID, execution, request.History, request.NewRunHistory)
+	lastEvent, di, newRunStateBuilder, err := sBuilder.applyEvents(domainID, requestID, execution, request.History, request.NewRunHistory)
 	if err != nil {
 		return err
 	}

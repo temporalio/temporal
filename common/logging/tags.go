@@ -50,6 +50,9 @@ const (
 	TagOffset               = "offset"
 	TagScope                = "scope"
 	TagFailover             = "failover"
+	TagVersion              = "version"
+	TagFirstEventID         = "first-event-id"
+	TagNextEventID          = "next-event-id"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values
@@ -63,6 +66,7 @@ const (
 	TagValueMatchingEngineComponent           = "matching-engine"
 	TagValueReplicatorComponent               = "replicator"
 	TagValueReplicationTaskProcessorComponent = "replication-task-processor"
+	TagValueHistoryReplicatorComponent        = "history-replicator"
 
 	// TagHistoryBuilderAction values
 	TagValueActionWorkflowStarted                 = "add-workflowexecution-started-event"

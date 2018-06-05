@@ -141,7 +141,8 @@ func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.Replica
 	c.msBuilder.executionInfo.NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
-	return c.updateHelper(builder, transferTasks, timerTasks, false, request.GetSourceCluster(), transactionID)
+	return c.updateHelper(builder, transferTasks, timerTasks, false, request.GetSourceCluster(), request.GetVersion(),
+		transactionID)
 }
 
 func (c *workflowExecutionContext) updateVersion() error {
@@ -166,11 +167,13 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 
 	// Only generate replication task if this is a global domain
 	createReplicationTask := c.msBuilder.replicationState != nil
-	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, "", transactionID)
+
+	lastWriteVersion := c.msBuilder.GetCurrentVersion()
+	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, "", lastWriteVersion, transactionID)
 }
 
 func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,
-	timerTasks []persistence.Task, createReplicationTask bool, sourceCluster string,
+	timerTasks []persistence.Task, createReplicationTask bool, sourceCluster string, lastWriteVersion int64,
 	transactionID int64) (errRet error) {
 
 	defer func() {
@@ -192,7 +195,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	crossDCEnabled := c.msBuilder.replicationState != nil
 	if crossDCEnabled {
 		lastEventID := c.msBuilder.GetNextEventID() - 1
-		c.msBuilder.updateReplicationStateLastEventID(sourceCluster, lastEventID)
+		c.msBuilder.updateReplicationStateLastEventID(sourceCluster, lastWriteVersion, lastEventID)
 	}
 
 	// Replicator passes in a custom builder as it already has the events

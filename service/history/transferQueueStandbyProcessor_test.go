@@ -446,6 +446,7 @@ func (s *transferQueueStandbyProcessorSuite) TestProcessCloseExecution() {
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
+	msBuilder.updateReplicationStateLastEventID("", version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    version,

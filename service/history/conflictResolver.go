@@ -23,16 +23,17 @@ package history
 import (
 	"time"
 
-	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/persistence"
 )
 
 type (
 	conflictResolver struct {
 		shard              ShardContext
+		clusterMetadata    cluster.Metadata
 		context            *workflowExecutionContext
 		historyMgr         persistence.HistoryManager
 		hSerializerFactory persistence.HistorySerializerFactory
@@ -45,6 +46,7 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 
 	return &conflictResolver{
 		shard:              shard,
+		clusterMetadata:    shard.GetService().GetClusterMetadata(),
 		context:            context,
 		historyMgr:         historyMgr,
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
@@ -52,7 +54,7 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	}
 }
 
-func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mutableStateBuilder, error) {
+func (r *conflictResolver) reset(requestID string, replayEventID int64, startTime time.Time) (*mutableStateBuilder, error) {
 	domainID := r.context.domainID
 	execution := r.context.workflowExecution
 	replayNextEventID := replayEventID + 1
@@ -62,8 +64,8 @@ func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mut
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder *stateBuilder
 	var lastFirstEventID int64
+	var lastEvent *shared.HistoryEvent
 	eventsToApply := replayNextEventID - common.FirstEventID
-	requestID := uuid.New()
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		history, nextPageToken, lastFirstEventID, err = r.getHistory(domainID, execution, common.FirstEventID,
 			replayNextEventID, nextPageToken)
@@ -80,13 +82,14 @@ func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mut
 			history.Events = history.Events[0:eventsToApply]
 		}
 
-		eventsToApply -= batchSize
+		eventsToApply -= int64(len(history.Events))
 
 		if len(history.Events) == 0 {
 			break
 		}
 
 		firstEvent := history.Events[0]
+		lastEvent = history.Events[len(history.Events)-1]
 		if firstEvent.GetEventId() == common.FirstEventID {
 			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(r.shard.GetConfig(), r.logger,
 				firstEvent.GetVersion())
@@ -94,7 +97,7 @@ func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mut
 			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 		}
 
-		_, _, _, err = sBuilder.applyEvents(common.EmptyVersion, "", domainID, requestID, execution, history, nil)
+		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -106,6 +109,9 @@ func (r *conflictResolver) reset(replayEventID int64, startTime time.Time) (*mut
 	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime
 	// the last updated time is not important here, since this should be updated with event time afterwards
 	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
+
+	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(resetMutableStateBuilder.GetCurrentVersion())
+	resetMutableStateBuilder.updateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
 	r.logger.Infof("All events applied for execution.  WorkflowID: %v, RunID: %v, NextEventID: %v",
 		execution.GetWorkflowId(), execution.GetRunId(), resetMutableStateBuilder.GetNextEventID())
@@ -146,5 +152,5 @@ func (r *conflictResolver) getHistory(domainID string, execution shared.Workflow
 
 	executionHistory := &shared.History{}
 	executionHistory.Events = historyEvents
-	return executionHistory, nextPageToken, lastFirstEventID, nil
+	return executionHistory, response.NextPageToken, lastFirstEventID, nil
 }

@@ -252,7 +252,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 	processTaskIfClosed := true
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
 
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, msBuilder.GetCurrentVersion(), transferTask)
+		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
