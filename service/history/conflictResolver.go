@@ -110,7 +110,7 @@ func (r *conflictResolver) reset(requestID string, replayEventID int64, startTim
 	// the last updated time is not important here, since this should be updated with event time afterwards
 	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
 
-	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(resetMutableStateBuilder.GetCurrentVersion())
+	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
 	resetMutableStateBuilder.updateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
 	r.logger.Infof("All events applied for execution.  WorkflowID: %v, RunID: %v, NextEventID: %v",

@@ -158,7 +158,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check for duplicate processing of replication task
 		if firstEvent.GetEventId() < msBuilder.GetNextEventID() {
-			logger.Warnf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
+			logger.Debugf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
 				msBuilder.GetNextEventID(), msBuilder.replicationState.CurrentVersion,
 				msBuilder.replicationState.LastWriteVersion, msBuilder.replicationState.LastWriteEventID)
 			return nil
@@ -166,7 +166,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check for out of order replication task and store it in the buffer
 		if firstEvent.GetEventId() > msBuilder.GetNextEventID() {
-			logger.Infof("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
+			logger.Debugf("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
 				msBuilder.GetNextEventID(), firstEvent.GetEventId())
 
 			if err := msBuilder.BufferReplicationTask(request); err != nil {
