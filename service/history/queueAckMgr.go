@@ -147,6 +147,12 @@ func (a *queueAckMgrImpl) getAckLevel() int64 {
 	return a.ackLevel
 }
 
+func (a *queueAckMgrImpl) getReadLevel() int64 {
+	a.Lock()
+	defer a.Unlock()
+	return a.readLevel
+}
+
 func (a *queueAckMgrImpl) getFinishedChan() <-chan struct{} {
 	return a.finishedChan
 }

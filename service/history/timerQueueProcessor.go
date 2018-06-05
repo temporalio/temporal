@@ -124,9 +124,23 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 	standbyTimerProcessor.retryTasks()
 }
 
-func (t *timerQueueProcessorImpl) FailoverDomain(domainID string, standbyClusterName string) {
+func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
+	// TODO we should consider make the failover idempotent, #646
+	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
+	standbyClusterName := t.currentClusterName
+	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
+		ackLevel := t.shard.GetTimerClusterAckLevel(cluster)
+		if ackLevel.Before(minLevel) {
+			minLevel = ackLevel
+			standbyClusterName = cluster
+		}
+	}
+
+	// the ack manager is exclusive, so just add a cassandra min presicition
+	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	// we should consider make the failover idempotent
-	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID, standbyClusterName, t.matchingClient, t.logger)
+	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
+		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
 	failoverTimerProcessor.Start()
 	failoverTimerProcessor.timerQueueProcessorBase.readAndFanoutTimerTasks()
 }

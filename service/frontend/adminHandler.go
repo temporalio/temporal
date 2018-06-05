@@ -62,6 +62,7 @@ func NewAdminHandler(
 
 // Start starts the handler
 func (adh *AdminHandler) Start() error {
+	adh.domainCache.Start()
 	adh.Service.GetDispatcher().Register(adminserviceserver.New(adh))
 	adh.Service.Start()
 	var err error
@@ -75,6 +76,7 @@ func (adh *AdminHandler) Start() error {
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
 	adh.Service.Stop()
+	adh.domainCache.Stop()
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.

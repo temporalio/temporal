@@ -46,8 +46,6 @@ type (
 		*require.Assertions
 		suite.Suite
 		persistence.TestBase
-		domainName          string
-		foreignDomainName   string
 		mockMessagingClient messaging.Client
 		mockProducer        messaging.Producer
 		host                Cadence
@@ -109,40 +107,12 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
-	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataProxy, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
 
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()
-	s.domainName = "integration-test-domain"
-	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
-			ID:          uuid.New(),
-			Name:        s.domainName,
-			Status:      persistence.DomainStatusRegistered,
-			Description: "Test domain for integration test",
-		},
-		Config: &persistence.DomainConfig{
-			Retention:  1,
-			EmitMetric: false,
-		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{},
-	})
-	s.foreignDomainName = "integration-foreign-test-domain"
-	s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
-		Info: &persistence.DomainInfo{
-			ID:          uuid.New(),
-			Name:        s.foreignDomainName,
-			Status:      persistence.DomainStatusRegistered,
-			Description: "Test foreign domain for integration test",
-		},
-		Config: &persistence.DomainConfig{
-			Retention:  1,
-			EmitMetric: false,
-		},
-		ReplicationConfig: &persistence.DomainReplicationConfig{},
-	})
 }
 
 func (s *integrationCrossDCSuite) setupShards() {
@@ -450,7 +420,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	domainName := "some random domain name"
 	// bypass to create a domain, since this cluster is not the master
 	// set all attr to default
-	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+	_, err := s.MetadataManagerV2.CreateDomain(&persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:          uuid.New(),
 			Name:        domainName,
@@ -638,7 +608,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	domainName := "some random domain name"
 	// bypass to create a domain, since this cluster is not the master
 	// set all attr to default
-	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+	_, err := s.MetadataManagerV2.CreateDomain(&persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:          uuid.New(),
 			Name:        domainName,
@@ -750,7 +720,7 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 		}
 
 		// create a domain which is not currently active
-		s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+		s.MetadataManagerV2.CreateDomain(&persistence.CreateDomainRequest{
 			Info: &persistence.DomainInfo{
 				ID:          uuid.New(),
 				Name:        domainName,

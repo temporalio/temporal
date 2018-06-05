@@ -28,6 +28,14 @@ import (
 	"github.com/uber/cadence/common"
 )
 
+// TODO remove this table version
+// this is a temp version indicating where is the domain resides
+// either V1 or V2
+const (
+	DomainTableVersionV1 = 1
+	DomainTableVersionV2 = 2
+)
+
 // Domain status
 const (
 	DomainStatusRegistered = iota
@@ -124,16 +132,17 @@ type (
 
 	// ShardInfo describes a shard
 	ShardInfo struct {
-		ShardID                 int
-		Owner                   string
-		RangeID                 int64
-		StolenSinceRenew        int
-		UpdatedAt               time.Time
-		ReplicationAckLevel     int64
-		TransferAckLevel        int64     // TO BE DEPRECATED IN FAVOR OF ClusterTransferAckLevel
-		TimerAckLevel           time.Time // TO BE DEPRECATED IN FAVOR OF ClusteerTimerAckLevel
-		ClusterTransferAckLevel map[string]int64
-		ClusterTimerAckLevel    map[string]time.Time
+		ShardID                   int
+		Owner                     string
+		RangeID                   int64
+		StolenSinceRenew          int
+		UpdatedAt                 time.Time
+		ReplicationAckLevel       int64
+		TransferAckLevel          int64     // TO BE DEPRECATED IN FAVOR OF ClusterTransferAckLevel
+		TimerAckLevel             time.Time // TO BE DEPRECATED IN FAVOR OF ClusteerTimerAckLevel
+		ClusterTransferAckLevel   map[string]int64
+		ClusterTimerAckLevel      map[string]time.Time
+		DomainNotificationVersion int64
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
@@ -823,23 +832,27 @@ type (
 
 	// GetDomainResponse is the response for GetDomain
 	GetDomainResponse struct {
-		Info              *DomainInfo
-		Config            *DomainConfig
-		ReplicationConfig *DomainReplicationConfig
-		IsGlobalDomain    bool
-		ConfigVersion     int64
-		FailoverVersion   int64
-		DBVersion         int64
+		Info                        *DomainInfo
+		Config                      *DomainConfig
+		ReplicationConfig           *DomainReplicationConfig
+		IsGlobalDomain              bool
+		ConfigVersion               int64
+		FailoverVersion             int64
+		FailoverNotificationVersion int64
+		NotificationVersion         int64
+		TableVersion                int
 	}
 
 	// UpdateDomainRequest is used to update domain
 	UpdateDomainRequest struct {
-		Info              *DomainInfo
-		Config            *DomainConfig
-		ReplicationConfig *DomainReplicationConfig
-		ConfigVersion     int64
-		FailoverVersion   int64
-		DBVersion         int64
+		Info                        *DomainInfo
+		Config                      *DomainConfig
+		ReplicationConfig           *DomainReplicationConfig
+		ConfigVersion               int64
+		FailoverVersion             int64
+		FailoverNotificationVersion int64
+		NotificationVersion         int64
+		TableVersion                int
 	}
 
 	// DeleteDomainRequest is used to delete domain entry from domains table
@@ -850,6 +863,23 @@ type (
 	// DeleteDomainByNameRequest is used to delete domain entry from domains_by_name table
 	DeleteDomainByNameRequest struct {
 		Name string
+	}
+
+	// ListDomainRequest is used to list domains
+	ListDomainRequest struct {
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	// ListDomainResponse is the response for GetDomain
+	ListDomainResponse struct {
+		Domains       []*GetDomainResponse
+		NextPageToken []byte
+	}
+
+	// GetMetadataResponse is the response for GetMetadata
+	GetMetadataResponse struct {
+		NotificationVersion int64
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -912,7 +942,7 @@ type (
 		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
 	}
 
-	// MetadataManager is used to manage metadata CRUD for various entities
+	// MetadataManager is used to manage metadata CRUD for domain entities
 	MetadataManager interface {
 		Closeable
 		CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error)
@@ -920,6 +950,8 @@ type (
 		UpdateDomain(request *UpdateDomainRequest) error
 		DeleteDomain(request *DeleteDomainRequest) error
 		DeleteDomainByName(request *DeleteDomainByNameRequest) error
+		ListDomain(request *ListDomainRequest) (*ListDomainResponse, error)
+		GetMetadata() (*GetMetadataResponse, error)
 	}
 )
 

@@ -34,6 +34,7 @@ import (
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -51,6 +52,7 @@ type (
 		visibilityMgr         persistence.VisibilityManager
 		historyMgr            persistence.HistoryManager
 		executionMgrFactory   persistence.ExecutionManagerFactory
+		domainCache           cache.DomainCache
 		historyServiceClient  hc.Client
 		matchingServiceClient matching.Client
 		hServiceResolver      membership.ServiceResolver
@@ -128,8 +130,10 @@ func (h *Handler) Start() error {
 		}
 	}
 
+	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetLogger())
+	h.domainCache.Start()
 	h.controller = newShardController(h.Service, h.GetHostInfo(), hServiceResolver, h.shardManager, h.historyMgr,
-		h.metadataMgr, h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
+		h.domainCache, h.executionMgrFactory, h, h.config, h.GetLogger(), h.GetMetricsClient())
 	h.metricsClient = h.GetMetricsClient()
 	h.historyEventNotifier = newHistoryEventNotifier(h.GetMetricsClient(), h.config.GetShardID)
 	// events notifier must starts before controller
@@ -141,6 +145,7 @@ func (h *Handler) Start() error {
 
 // Stop stops the handler
 func (h *Handler) Stop() {
+	h.domainCache.Stop()
 	h.controller.Stop()
 	h.shardManager.Close()
 	h.historyMgr.Close()

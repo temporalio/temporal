@@ -125,7 +125,7 @@ func (s *testCluster) setupCluster(no int) {
 	s.SetupWorkflowStoreWithOptions(options, metadata)
 	s.setupShards()
 	messagingClient := s.createMessagingClient()
-	s.host = host.NewCadence(s.ClusterMetadata, messagingClient, s.MetadataManager, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	s.host = host.NewCadence(s.ClusterMetadata, messagingClient, s.MetadataProxy, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, no, true)
 	s.host.Start()
 }

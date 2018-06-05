@@ -105,9 +105,10 @@ func (s *timerQueueProcessor2Suite) SetupTest() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
-	).Once()
+	)
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.shardClosedCh = make(chan int, 100)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

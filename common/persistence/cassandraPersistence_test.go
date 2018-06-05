@@ -2303,6 +2303,7 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 	alternativeClusterTransferAck := int64(32)
 	currentClusterTimerAck := timestampConvertor(time.Now().Add(-10 * time.Second))
 	alternativeClusterTimerAck := timestampConvertor(time.Now().Add(-20 * time.Second))
+	domainNotificationVersion := int64(8192)
 	shardInfo := &ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
@@ -2320,6 +2321,7 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
+		DomainNotificationVersion: domainNotificationVersion,
 	}
 	createRequest := &CreateShardRequest{
 		ShardInfo: shardInfo,
@@ -2341,6 +2343,7 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 	alternativeClusterTransferAck = int64(320)
 	currentClusterTimerAck = timestampConvertor(time.Now().Add(-100 * time.Second))
 	alternativeClusterTimerAck = timestampConvertor(time.Now().Add(-200 * time.Second))
+	domainNotificationVersion = int64(16384)
 	shardInfo = &ShardInfo{
 		ShardID:             shardID,
 		Owner:               "some random owner",
@@ -2358,6 +2361,7 @@ func (s *cassandraPersistenceSuite) TestCreateGetUpdateGetShard() {
 			cluster.TestCurrentClusterName:     currentClusterTimerAck,
 			cluster.TestAlternativeClusterName: alternativeClusterTimerAck,
 		},
+		DomainNotificationVersion: domainNotificationVersion,
 	}
 	updateRequest := &UpdateShardRequest{
 		ShardInfo:       shardInfo,

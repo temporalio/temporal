@@ -78,6 +78,8 @@ type (
 		domainID                 string
 		standbyClusterName       string
 		timerQueueFailoverAckMgr *timerQueueAckMgrImpl
+		minLevel                 time.Time
+		maxLevel                 time.Time
 	}
 )
 
@@ -587,7 +589,10 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 
 	s.domainID = "some random domain ID"
 	s.standbyClusterName = cluster.TestAlternativeClusterName
-	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(s.mockShard, s.metricsClient, s.standbyClusterName, s.logger)
+	s.minLevel = time.Now().Add(-10 * time.Minute)
+	s.maxLevel = time.Now().Add(10 * time.Minute)
+	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(s.mockShard, s.metricsClient,
+		s.standbyClusterName, s.minLevel, s.maxLevel, s.logger)
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
@@ -615,9 +620,9 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	macAckLevel := s.timerQueueFailoverAckMgr.maxAckLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.standbyClusterName), ackLevel)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.standbyClusterName), readLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName()), macAckLevel)
+	s.Equal(s.minLevel, ackLevel)
+	s.Equal(s.minLevel, readLevel.VisibilityTimestamp)
+	s.Equal(s.maxLevel, macAckLevel)
 
 	// make the batch size == return size to there will be a next page
 	s.mockShard.config.TimerTaskBatchSize = 1
@@ -671,9 +676,9 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	macAckLevel := s.timerQueueFailoverAckMgr.maxAckLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.standbyClusterName), ackLevel)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.standbyClusterName), readLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName()), macAckLevel)
+	s.Equal(s.minLevel, ackLevel)
+	s.Equal(s.minLevel, readLevel.VisibilityTimestamp)
+	s.Equal(s.maxLevel, macAckLevel)
 
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp: readLevel.VisibilityTimestamp,

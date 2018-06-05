@@ -106,6 +106,20 @@ func (_m *MockTimerQueueAckMgr) getAckLevel() TimerSequenceID {
 	return r0
 }
 
+func (_m *MockTimerQueueAckMgr) getReadLevel() TimerSequenceID {
+	ret := _m.Called()
+
+	var r0 TimerSequenceID
+	if rf, ok := ret.Get(0).(func() TimerSequenceID); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(TimerSequenceID)
+		}
+	}
+	return r0
+}
+
 func (_m *MockTimerQueueAckMgr) updateAckLevel() {
 	_m.Called()
 }

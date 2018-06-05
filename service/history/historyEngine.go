@@ -169,27 +169,13 @@ func (e *historyEngineImpl) Start() {
 	logging.LogHistoryEngineStartingEvent(e.logger)
 	defer logging.LogHistoryEngineStartedEvent(e.logger)
 
+	e.registerDomainFailoverCallback()
+
 	e.txProcessor.Start()
 	e.timerProcessor.Start()
 	if e.replicatorProcessor != nil {
 		e.replicatorProcessor.Start()
 	}
-
-	// set the failover callback
-	e.shard.GetDomainCache().RegisterDomainChangeCallback(
-		e.shard.GetShardID(),
-		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
-			if prevDomain.GetReplicationConfig() != nil && nextDomain.GetReplicationConfig() != nil {
-				prevActiveCluster := prevDomain.GetReplicationConfig().ActiveClusterName
-				nextActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
-				if prevActiveCluster != nextActiveCluster && nextActiveCluster == e.currentClusterName {
-					domainID := prevDomain.GetInfo().ID
-					e.txProcessor.FailoverDomain(domainID, prevActiveCluster)
-					e.timerProcessor.FailoverDomain(domainID, prevActiveCluster)
-				}
-			}
-		},
-	)
 }
 
 // Stop the service.
@@ -205,6 +191,25 @@ func (e *historyEngineImpl) Stop() {
 
 	// unset the failover callback
 	e.shard.GetDomainCache().UnregisterDomainChangeCallback(e.shard.GetShardID())
+}
+
+func (e *historyEngineImpl) registerDomainFailoverCallback() {
+	// first set the failover callback
+	e.shard.GetDomainCache().RegisterDomainChangeCallback(
+		e.shard.GetShardID(),
+		e.shard.GetDomainCache().GetDomainNotificationVersion(),
+		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
+			if nextDomain.IsGlobalDomain() &&
+				nextDomain.GetFailoverNotificationVersion() >= e.shard.GetDomainCache().GetDomainNotificationVersion() &&
+				nextDomain.GetReplicationConfig().ActiveClusterName == e.currentClusterName {
+				domainID := prevDomain.GetInfo().ID
+				e.txProcessor.FailoverDomain(domainID)
+				e.timerProcessor.FailoverDomain(domainID)
+			}
+
+			e.shard.UpdateDomainNotificationVersion(nextDomain.GetNotificationVersion() + 1)
+		},
+	)
 }
 
 // StartWorkflowExecution starts a workflow execution

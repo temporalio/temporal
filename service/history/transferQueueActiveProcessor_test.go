@@ -104,14 +104,15 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	// ack manager will use the domain information
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(&persistence.GetDomainResponse{
-		// only thing used is the replication config
+		Info:           &persistence.DomainInfo{ID: validDomainID},
 		Config:         &persistence.DomainConfig{Retention: 1},
 		IsGlobalDomain: true,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			// Clusters attr is not used.
 		},
-	}, nil).Once()
+		TableVersion: persistence.DomainTableVersionV1,
+	}, nil)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockProducer = &mocks.KafkaProducer{}
@@ -1052,8 +1053,18 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: domainName}}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: childDomainName}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: domainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: childDomainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.On("StartWorkflowExecution", nil, s.createChildWorkflowExecutionRequest(
 		transferTask,
@@ -1133,8 +1144,18 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: domainName}}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: childDomainName}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: domainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: childDomainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.On("StartWorkflowExecution", nil, s.createChildWorkflowExecutionRequest(
 		transferTask,
@@ -1211,8 +1232,18 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: domainName}}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: childDomainName}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: domainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: childDomainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.On("ScheduleDecisionTask", nil, &history.ScheduleDecisionTaskRequest{
 		DomainUUID: common.StringPtr(childDomainID),
@@ -1292,8 +1323,18 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: domainName}}, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{Info: &persistence.DomainInfo{Name: childDomainName}}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: domainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: childDomainID}).Return(&persistence.GetDomainResponse{
+		Info:              &persistence.DomainInfo{Name: childDomainName},
+		Config:            &persistence.DomainConfig{},
+		ReplicationConfig: &persistence.DomainReplicationConfig{},
+		TableVersion:      persistence.DomainTableVersionV1,
+	}, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockQueueAckMgr.On("completeTask", taskID).Return(nil).Once()
 

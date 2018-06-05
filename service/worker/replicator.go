@@ -47,7 +47,7 @@ type (
 )
 
 // NewReplicator creates a new replicator for processing replication tasks
-func NewReplicator(clusterMetadata cluster.Metadata, metadataManager persistence.MetadataManager,
+func NewReplicator(clusterMetadata cluster.Metadata, metadataManagerV2 persistence.MetadataManager,
 	historyClient history.Client, config *Config, client messaging.Client, logger bark.Logger,
 	metricsClient metrics.Client) *Replicator {
 	logger = logger.WithFields(bark.Fields{
@@ -55,7 +55,7 @@ func NewReplicator(clusterMetadata cluster.Metadata, metadataManager persistence
 	})
 	return &Replicator{
 		clusterMetadata:  clusterMetadata,
-		domainReplicator: NewDomainReplicator(metadataManager, logger),
+		domainReplicator: NewDomainReplicator(metadataManagerV2, logger),
 		historyClient:    historyClient,
 		config:           config,
 		client:           client,

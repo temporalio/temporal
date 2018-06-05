@@ -109,7 +109,8 @@ const (
 		`transfer_ack_level: ?, ` +
 		`timer_ack_level: ?, ` +
 		`cluster_transfer_ack_level: ?, ` +
-		`cluster_timer_ack_level: ?` +
+		`cluster_timer_ack_level: ?, ` +
+		`domain_notification_version: ? ` +
 		`}`
 
 	templateWorkflowExecutionType = `{` +
@@ -874,6 +875,7 @@ func (d *cassandraPersistence) CreateShard(request *CreateShardRequest) error {
 		shardInfo.TimerAckLevel,
 		shardInfo.ClusterTransferAckLevel,
 		shardInfo.ClusterTimerAckLevel,
+		shardInfo.DomainNotificationVersion,
 		shardInfo.RangeID)
 
 	previous := make(map[string]interface{})
@@ -948,6 +950,7 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 		shardInfo.TimerAckLevel,
 		shardInfo.ClusterTransferAckLevel,
 		shardInfo.ClusterTimerAckLevel,
+		shardInfo.DomainNotificationVersion,
 		shardInfo.RangeID,
 		shardInfo.ShardID,
 		rowTypeShard,
@@ -2989,6 +2992,8 @@ func createShardInfo(currentCluster string, result map[string]interface{}) *Shar
 			info.ClusterTransferAckLevel = v.(map[string]int64)
 		case "cluster_timer_ack_level":
 			info.ClusterTimerAckLevel = v.(map[string]time.Time)
+		case "domain_notification_version":
+			info.DomainNotificationVersion = v.(int64)
 		}
 	}
 

@@ -72,7 +72,8 @@ func (s *Service) Start() {
 
 	s.metricsClient = base.GetMetricsClient()
 
-	metadataManager, err := persistence.NewCassandraMetadataPersistence(p.CassandraConfig.Hosts,
+	// worker only use the v2
+	metadataManager, err := persistence.NewCassandraMetadataPersistenceV2(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,

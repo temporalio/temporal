@@ -43,8 +43,8 @@ func (_m *MockTransferQueueProcessor) Stop() {
 }
 
 // FailoverDomain is mock implementation for FailoverDomain of Processor
-func (_m *MockTransferQueueProcessor) FailoverDomain(domainID string, standbyClusterName string) {
-	_m.Called(domainID, standbyClusterName)
+func (_m *MockTransferQueueProcessor) FailoverDomain(domainID string) {
+	_m.Called(domainID)
 }
 
 // NotifyNewTask is mock implementation for NotifyNewTask of Processor

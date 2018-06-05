@@ -21,6 +21,7 @@
 package cache
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,16 +37,25 @@ import (
 )
 
 const (
-	domainCacheInitialSize     = 1024
+	domainCacheInitialSize     = 10 * 1024
 	domainCacheMaxSize         = 16 * 1024
 	domainCacheTTL             = time.Hour
-	domainEntryRefreshInterval = 10 * time.Second
+	domainCacheRefreshInterval = 10 * time.Second
+	domainCacheRefreshPageSize = 100
 
 	domainCacheLocked   int32 = 0
 	domainCacheReleased int32 = 1
+
+	domainCacheInitialized int32 = 0
+	domainCacheStarted     int32 = 1
+	domainCacheStopped     int32 = 2
 )
 
 type (
+	// function to be called when the domain cache is changed
+	// the callback function will be called within the domain cache entry lock
+	// make sure the callback function will not call domain cache again
+	// in case of deadlock
 	callbackFn func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry)
 
 	// DomainCache is used the cache domain information and configuration to avoid making too many calls to cassandra.
@@ -54,15 +64,20 @@ type (
 	// in updating the domain entry every 10 seconds but in the case of a cassandra failure we can still keep on serving
 	// requests using the stale entry from cache upto an hour
 	DomainCache interface {
-		RegisterDomainChangeCallback(shard int, fn callbackFn)
+		common.Daemon
+		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn callbackFn)
 		UnregisterDomainChangeCallback(shard int)
 		GetDomain(name string) (*DomainCacheEntry, error)
 		GetDomainByID(id string) (*DomainCacheEntry, error)
 		GetDomainID(name string) (string, error)
+		GetDomainNotificationVersion() int64
+		GetAllDomain() map[string]*DomainCacheEntry
 	}
 
 	domainCache struct {
-		cacheByName     Cache
+		status          int32
+		shutdownChan    chan struct{}
+		cacheNameToID   Cache
 		cacheByID       Cache
 		metadataMgr     persistence.MetadataManager
 		clusterMetadata cluster.Metadata
@@ -70,21 +85,27 @@ type (
 		logger          bark.Logger
 
 		sync.RWMutex
-		callbacks map[int]callbackFn
+		domainNotificationVersion int64
+		callbacks                 map[int]callbackFn
 	}
+
+	// DomainCacheEntries is DomainCacheEntry slice
+	DomainCacheEntries []*DomainCacheEntry
 
 	// DomainCacheEntry contains the info and config for a domain
 	DomainCacheEntry struct {
 		clusterMetadata cluster.Metadata
 
 		sync.RWMutex
-		info              *persistence.DomainInfo
-		config            *persistence.DomainConfig
-		replicationConfig *persistence.DomainReplicationConfig
-		configVersion     int64
-		failoverVersion   int64
-		isGlobalDomain    bool
-		expiry            time.Time
+		info                        *persistence.DomainInfo
+		config                      *persistence.DomainConfig
+		replicationConfig           *persistence.DomainReplicationConfig
+		configVersion               int64
+		failoverVersion             int64
+		isGlobalDomain              bool
+		failoverNotificationVersion int64
+		notificationVersion         int64
+		expiry                      time.Time
 	}
 )
 
@@ -95,7 +116,9 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 	opts.TTL = domainCacheTTL
 
 	return &domainCache{
-		cacheByName:     New(domainCacheMaxSize, opts),
+		status:          domainCacheInitialized,
+		shutdownChan:    make(chan struct{}),
+		cacheNameToID:   New(domainCacheMaxSize, opts),
 		cacheByID:       New(domainCacheMaxSize, opts),
 		metadataMgr:     metadataMgr,
 		clusterMetadata: clusterMetadata,
@@ -109,12 +132,69 @@ func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
 }
 
-// RegisterDomainChangeCallback set a domain failover callback, which will be when active domain for a domain changes
-func (c *domainCache) RegisterDomainChangeCallback(shard int, fn callbackFn) {
+// Start start the background refresh of domain
+func (c *domainCache) Start() {
+	if !atomic.CompareAndSwapInt32(&c.status, domainCacheInitialized, domainCacheStarted) {
+		return
+	}
+
+	// initialize the cache by initial scan
+	c.refreshDomains()
+	go c.refreshLoop()
+}
+
+// Start start the background refresh of domain
+func (c *domainCache) Stop() {
+	if !atomic.CompareAndSwapInt32(&c.status, domainCacheStarted, domainCacheStopped) {
+		return
+	}
+	close(c.shutdownChan)
+}
+
+func (c *domainCache) GetDomainNotificationVersion() int64 {
+	c.RLock()
+	defer c.RUnlock()
+	return c.domainNotificationVersion
+}
+
+func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
+	result := make(map[string]*DomainCacheEntry)
+	ite := c.cacheByID.Iterator()
+	defer ite.Close()
+
+	for ite.HasNext() {
+		entry := ite.Next()
+		id := entry.Key().(string)
+		domainCacheEntry := entry.Value().(*DomainCacheEntry).duplicate()
+		result[id] = domainCacheEntry
+	}
+	return result
+}
+
+// RegisterDomainChangeCallback set a domain change callback
+// WARN: the callback function will be triggered by domain cache when holding the domain cache lock,
+// make sure the callback function will not call domain cache again in case of dead lock
+func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn callbackFn) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.callbacks[shard] = fn
+
+	if c.domainNotificationVersion > initialNotificationVersion {
+		domains := DomainCacheEntries{}
+		for _, domain := range c.GetAllDomain() {
+			domains = append(domains, domain)
+		}
+		// we mush notify the change in a ordered fashion
+		// since history shard have to update the shard info
+		// with domain change version.
+		sort.Sort(domains)
+		for _, domain := range domains {
+			if domain.notificationVersion >= initialNotificationVersion {
+				fn(nil, domain)
+			}
+		}
+	}
 }
 
 // UnregisterDomainChangeCallback delete a domain failover callback
@@ -131,7 +211,7 @@ func (c *domainCache) GetDomain(name string) (*DomainCacheEntry, error) {
 	if name == "" {
 		return nil, &workflow.BadRequestError{Message: "Domain is empty."}
 	}
-	return c.getDomain(name, "", name, c.cacheByName)
+	return c.getDomain(name)
 }
 
 // GetDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -140,7 +220,7 @@ func (c *domainCache) GetDomainByID(id string) (*DomainCacheEntry, error) {
 	if id == "" {
 		return nil, &workflow.BadRequestError{Message: "DomainID is empty."}
 	}
-	return c.getDomain(id, id, "", c.cacheByID)
+	return c.getDomainByID(id)
 }
 
 // GetDomainID retrieves domainID by using GetDomain
@@ -152,13 +232,171 @@ func (c *domainCache) GetDomainID(name string) (string, error) {
 	return entry.info.ID, nil
 }
 
-// GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+func (c *domainCache) refreshLoop() {
+	timer := time.NewTimer(domainCacheRefreshInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-c.shutdownChan:
+			return
+		case <-timer.C:
+			timer.Reset(domainCacheRefreshInterval)
+			err := c.refreshDomains()
+			if err != nil {
+				c.logger.Errorf("Error refreshing domain cache: %v", err)
+			}
+		}
+	}
+}
+
+// this function only refresh the domains in the v2 table
+// the domains in the v1 table will be refreshed if cache is stale
+func (c *domainCache) refreshDomains() error {
+	// first load the metadata record, then load domains
+	// this can guarentee that domains in the cache is not
+	// more update to date then the metadata record
+	metadata, err := c.metadataMgr.GetMetadata()
+	if err != nil {
+		return err
+	}
+	domainNotificationVersion := metadata.NotificationVersion
+	c.Lock()
+	c.domainNotificationVersion = domainNotificationVersion
+	c.Unlock()
+
+	var token []byte
+	request := &persistence.ListDomainRequest{PageSize: domainCacheRefreshPageSize}
+	var domains DomainCacheEntries
+	continuePage := true
+
+	for continuePage {
+		request.NextPageToken = token
+		response, err := c.metadataMgr.ListDomain(request)
+		if err != nil {
+			return err
+		}
+		token = response.NextPageToken
+		for _, domain := range response.Domains {
+			domains = append(domains, c.buildEntryFromRecord(domain))
+		}
+		continuePage = len(token) != 0
+	}
+
+	// we mush apply the domain change by order
+	// since history shard have to update the shard info
+	// with domain change version.
+	sort.Sort(domains)
+	c.RLock()
+	domainNotificationVersion = c.domainNotificationVersion
+	c.RUnlock()
+
+UpdateLoop:
+	for _, domain := range domains {
+		if domain.notificationVersion >= domainNotificationVersion {
+			// this guarantee that domain change events before the
+			// domainNotificationVersion is loaded into the cache.
+
+			// the domain change events after the domainNotificationVersion
+			// will be loaded into cache in the next refresh
+			break UpdateLoop
+		}
+		c.updateIDToDomainCache(domain.info.ID, domain)
+		c.updateNameToIDCache(domain.info.Name, domain.info.ID)
+	}
+
+	return nil
+}
+
+func (c *domainCache) loadDomain(name string, id string) (*persistence.GetDomainResponse, error) {
+	resp, err := c.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: name, ID: id})
+	if err == nil {
+		if resp.TableVersion == persistence.DomainTableVersionV1 {
+			// if loaded from V1 table
+			// this means the FailoverNotificationVersion will be 0
+			// and NotificationVersion has complete different meaning
+			resp.FailoverNotificationVersion = 0
+			resp.NotificationVersion = 0
+		} else {
+			// the resule is from V2 table
+			// this should not happen since backgroud thread is refreshing.
+			// if this actually happen, just discard the result
+			// since we need to guarantee that domainNotificationVersion > all notification versions
+			// inside the cache
+			return nil, &workflow.EntityNotExistsError{}
+		}
+	}
+	return resp, err
+}
+
+func (c *domainCache) updateNameToIDCache(name string, id string) {
+	c.cacheNameToID.Put(name, id)
+}
+
+func (c *domainCache) updateIDToDomainCache(id string, record *DomainCacheEntry) (*DomainCacheEntry, error) {
+	elem, err := c.cacheByID.PutIfNotExist(id, newDomainCacheEntry(c.clusterMetadata))
+	if err != nil {
+		return nil, err
+	}
+	entry := elem.(*DomainCacheEntry)
+	entry.Lock()
+	defer entry.Unlock()
+
+	var prevDomain *DomainCacheEntry
+	triggerCallback := c.clusterMetadata.IsGlobalDomainEnabled() &&
+		// expiry will be non zero when the entry is initialized / valid
+		!entry.expiry.IsZero() &&
+		record.notificationVersion > entry.notificationVersion
+	// expiry will be non zero when the entry is initialized / valid
+	if triggerCallback {
+		prevDomain = entry.duplicate()
+	}
+
+	entry.info = record.info
+	entry.config = record.config
+	entry.replicationConfig = record.replicationConfig
+	entry.configVersion = record.configVersion
+	entry.failoverVersion = record.failoverVersion
+	entry.isGlobalDomain = record.isGlobalDomain
+	entry.failoverNotificationVersion = record.failoverNotificationVersion
+	entry.notificationVersion = record.notificationVersion
+	entry.expiry = c.timeSource.Now().Add(domainCacheRefreshInterval)
+
+	nextDomain := entry.duplicate()
+	if triggerCallback {
+		c.triggerDomainChangeCallback(prevDomain, nextDomain)
+	}
+
+	return nextDomain, nil
+}
+
+// getDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *domainCache) getDomain(key, id, name string, cache Cache) (*DomainCacheEntry, error) {
+func (c *domainCache) getDomain(name string) (*DomainCacheEntry, error) {
+	id, cacheHit := c.cacheNameToID.Get(name).(string)
+	if cacheHit {
+		return c.getDomainByID(id)
+	}
+
+	record, err := c.loadDomain(name, "")
+	if err != nil {
+		return nil, err
+	}
+	id = record.Info.ID
+	newEntry, err := c.updateIDToDomainCache(id, c.buildEntryFromRecord(record))
+	if err != nil {
+		return nil, err
+	}
+	c.updateNameToIDCache(name, id)
+	return newEntry, nil
+}
+
+// getDomainByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
+// store and writes it to the cache with an expiry before returning back
+func (c *domainCache) getDomainByID(id string) (*DomainCacheEntry, error) {
 	now := c.timeSource.Now()
 	var result *DomainCacheEntry
 
-	entry, cacheHit := cache.Get(key).(*DomainCacheEntry)
+	entry, cacheHit := c.cacheByID.Get(id).(*DomainCacheEntry)
 	if cacheHit {
 		// Found the information in the cache, lets check if it needs to be refreshed before returning back
 		entry.RLock()
@@ -171,66 +409,38 @@ func (c *domainCache) getDomain(key, id, name string, cache Cache) (*DomainCache
 		entry.RUnlock()
 	}
 
-	// Cache entry not found, Let's create an entry and add it to cache
-	if !cacheHit {
-		elem, _ := cache.PutIfNotExist(key, newDomainCacheEntry(c.clusterMetadata))
-		entry = elem.(*DomainCacheEntry)
-	}
-
-	// Now take a lock to update the entry
-	entry.Lock()
-	lockReleased := domainCacheLocked
-	release := func() {
-		if atomic.CompareAndSwapInt32(&lockReleased, domainCacheLocked, domainCacheReleased) {
-			entry.Unlock()
-		}
-	}
-	defer release()
-
-	// Check again under the lock to make sure someone else did not update the entry
-	if !entry.isExpired(now) {
-		return entry.duplicate(), nil
-	}
-
-	response, err := c.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: name, ID: id})
-	// Failed to get domain.  Return stale entry if we have one, otherwise just return error
+	record, err := c.loadDomain("", id)
 	if err != nil {
-		if !entry.expiry.IsZero() {
-			return entry.duplicate(), nil
+		// err updating, use the existing record if record is valid
+		// i.e. expiry is set
+		if cacheHit {
+			entry.RLock()
+			defer entry.RUnlock()
+			if !entry.expiry.IsZero() {
+				return entry.duplicate(), nil
+			}
 		}
-
 		return nil, err
 	}
 
-	var prevDomain *DomainCacheEntry
-	// expiry will be non zero when the entry is initialized / valid
-	if c.clusterMetadata.IsGlobalDomainEnabled() && !entry.expiry.IsZero() {
-		prevDomain = entry.duplicate()
+	newEntry, err := c.updateIDToDomainCache(id, c.buildEntryFromRecord(record))
+	if err != nil {
+		// err updating, use the existing record if record is valid
+		// i.e. expiry is set
+		if cacheHit {
+			entry.RLock()
+			defer entry.RUnlock()
+			if !entry.expiry.IsZero() {
+				return entry.duplicate(), nil
+			}
+		}
+		return nil, err
 	}
-
-	entry.info = response.Info
-	entry.config = response.Config
-	entry.replicationConfig = response.ReplicationConfig
-	entry.configVersion = response.ConfigVersion
-	entry.failoverVersion = response.FailoverVersion
-	entry.isGlobalDomain = response.IsGlobalDomain
-	entry.expiry = now.Add(domainEntryRefreshInterval)
-	nextDomain := entry.duplicate()
-
-	release()
-	if prevDomain != nil {
-		c.triggerDomainChangeCallback(prevDomain, nextDomain)
-	}
-
-	return nextDomain, nil
+	c.updateNameToIDCache(newEntry.GetInfo().Name, id)
+	return newEntry, nil
 }
 
 func (c *domainCache) triggerDomainChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-
-	if prevDomain.configVersion < nextDomain.configVersion {
-		return
-	}
-
 	c.RLock()
 	defer c.RUnlock()
 	for _, callback := range c.callbacks {
@@ -238,14 +448,37 @@ func (c *domainCache) triggerDomainChangeCallback(prevDomain *DomainCacheEntry, 
 	}
 }
 
+func (c *domainCache) buildEntryFromRecord(record *persistence.GetDomainResponse) *DomainCacheEntry {
+	// this is a shallow copy, but since the record is generated by persistence
+	// and only accessible here, it would be fine
+	newEntry := newDomainCacheEntry(c.clusterMetadata)
+	newEntry.info = record.Info
+	newEntry.config = record.Config
+	newEntry.replicationConfig = record.ReplicationConfig
+	newEntry.configVersion = record.ConfigVersion
+	newEntry.failoverVersion = record.FailoverVersion
+	newEntry.isGlobalDomain = record.IsGlobalDomain
+	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
+	newEntry.notificationVersion = record.NotificationVersion
+	return newEntry
+}
+
 func (entry *DomainCacheEntry) duplicate() *DomainCacheEntry {
+	// this is a deep copy
 	result := newDomainCacheEntry(entry.clusterMetadata)
-	result.info = entry.info
-	result.config = entry.config
-	result.replicationConfig = entry.replicationConfig
+	result.info = &*entry.info
+	result.config = &*entry.config
+	result.replicationConfig = &persistence.DomainReplicationConfig{
+		ActiveClusterName: entry.replicationConfig.ActiveClusterName,
+	}
+	for _, cluster := range entry.replicationConfig.Clusters {
+		result.replicationConfig.Clusters = append(result.replicationConfig.Clusters, &*cluster)
+	}
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
 	result.isGlobalDomain = entry.isGlobalDomain
+	result.failoverNotificationVersion = entry.failoverNotificationVersion
+	result.notificationVersion = entry.notificationVersion
 	return result
 }
 
@@ -283,6 +516,16 @@ func (entry *DomainCacheEntry) IsGlobalDomain() bool {
 	return entry.isGlobalDomain
 }
 
+// GetFailoverNotificationVersion return the global notification version of when failover happened
+func (entry *DomainCacheEntry) GetFailoverNotificationVersion() int64 {
+	return entry.failoverNotificationVersion
+}
+
+// GetNotificationVersion return the global notification version of when domain changed
+func (entry *DomainCacheEntry) GetNotificationVersion() int64 {
+	return entry.notificationVersion
+}
+
 // IsDomainActive return whether the domain is active, i.e. non global domain or global domain which active cluster is the current cluster
 func (entry *DomainCacheEntry) IsDomainActive() bool {
 	if !entry.isGlobalDomain {
@@ -307,4 +550,17 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 		return nil
 	}
 	return errors.NewDomainNotActiveError(entry.info.Name, entry.clusterMetadata.GetCurrentClusterName(), entry.replicationConfig.ActiveClusterName)
+}
+func (t DomainCacheEntries) Len() int {
+	return len(t)
+}
+
+// Swap implements sort.Interface.
+func (t DomainCacheEntries) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+}
+
+// Less implements sort.Interface
+func (t DomainCacheEntries) Less(i, j int) bool {
+	return t[i].notificationVersion < t[j].notificationVersion
 }

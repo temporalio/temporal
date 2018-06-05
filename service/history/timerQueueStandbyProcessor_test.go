@@ -103,6 +103,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 				},
 			},
 			IsGlobalDomain: true,
+			TableVersion:   persistence.DomainTableVersionV1,
 		},
 		nil,
 	)

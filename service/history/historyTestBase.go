@@ -88,7 +88,7 @@ var _ ShardContext = (*TestShardContext)(nil)
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
 	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager,
-	metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, config *Config,
+	metadataMgr persistence.MetadataManager, metadataMgrV2 persistence.MetadataManager, clusterMetadata cluster.Metadata, config *Config,
 	logger bark.Logger) *TestShardContext {
 	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, logger)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -246,6 +246,23 @@ func (s *TestShardContext) UpdateTimerClusterAckLevel(cluster string, ackLevel t
 	return nil
 }
 
+// GetDomainNotificationVersion test implementation
+func (s *TestShardContext) GetDomainNotificationVersion() int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.DomainNotificationVersion
+}
+
+// UpdateDomainNotificationVersion test implementation
+func (s *TestShardContext) UpdateDomainNotificationVersion(domainNotificationVersion int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.DomainNotificationVersion = domainNotificationVersion
+	return nil
+}
+
 // CreateWorkflowExecution test implementation
 func (s *TestShardContext) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 	*persistence.CreateWorkflowExecutionResponse, error) {
@@ -343,8 +360,8 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistence.TestBaseOpt
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, clusterMetadata,
-		config, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, s.MetadataManagerV2,
+		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 
@@ -354,8 +371,8 @@ func (s *TestBase) SetupWorkflowStore() {
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, clusterMetadata,
-		config, log)
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, s.MetadataManagerV2,
+		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
 

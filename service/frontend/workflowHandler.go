@@ -23,6 +23,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -112,8 +113,7 @@ var (
 )
 
 // NewWorkflowHandler creates a thrift handler for the cadence service
-func NewWorkflowHandler(
-	sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
+func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager,
 	kafkaProducer messaging.Producer) *WorkflowHandler {
 	handler := &WorkflowHandler{
@@ -138,6 +138,7 @@ func (wh *WorkflowHandler) Start() error {
 	wh.Service.GetDispatcher().Register(workflowserviceserver.New(wh))
 	wh.Service.GetDispatcher().Register(metaserver.New(wh))
 	wh.Service.Start()
+	wh.domainCache.Start()
 	var err error
 	wh.history, err = wh.Service.GetClientFactory().NewHistoryClient()
 	if err != nil {
@@ -154,6 +155,7 @@ func (wh *WorkflowHandler) Start() error {
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
+	wh.domainCache.Stop()
 	wh.metadataMgr.Close()
 	wh.visibitiltyMgr.Close()
 	wh.historyMgr.Close()
@@ -281,10 +283,8 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	resp, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
-		Name: describeRequest.GetName(),
-	})
-
+	// TODO, we should migrate the non global domain to new table, see #773
+	resp, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: describeRequest.GetName()})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -321,12 +321,18 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		return nil, wh.error(errDomainNotSet, scope)
 	}
 
-	getResponse, err0 := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
-		Name: updateRequest.GetName(),
-	})
-
-	if err0 != nil {
-		return nil, wh.error(err0, scope)
+	// must get the metadata (notificationVersion) first
+	// this version can be regarded as the lock on the v2 domain table
+	// and since we do not know which table will return the domain afterwards
+	// this call has to be made
+	metadata, err := wh.metadataMgr.GetMetadata()
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+	notificationVersion := metadata.NotificationVersion
+	getResponse, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: updateRequest.GetName()})
+	if err != nil {
+		return nil, wh.error(err, scope)
 	}
 
 	info := getResponse.Info
@@ -334,6 +340,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	replicationConfig := getResponse.ReplicationConfig
 	configVersion := getResponse.ConfigVersion
 	failoverVersion := getResponse.FailoverVersion
+	failoverNotificationVersion := getResponse.FailoverNotificationVersion
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -430,23 +437,37 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 
 		// set the versions
 		if configurationChanged {
-			configVersion = configVersion + 1
+			configVersion++
 		}
 		if activeClusterChanged {
 			failoverVersion = clusterMetadata.GetNextFailoverVersion(replicationConfig.ActiveClusterName, failoverVersion)
+			failoverNotificationVersion = notificationVersion
 		}
 
-		err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
-			Info:              info,
-			Config:            config,
-			ReplicationConfig: replicationConfig,
-			ConfigVersion:     configVersion,
-			FailoverVersion:   failoverVersion,
-			DBVersion:         getResponse.DBVersion,
-		})
+		updateReq := &persistence.UpdateDomainRequest{
+			Info:                        info,
+			Config:                      config,
+			ReplicationConfig:           replicationConfig,
+			ConfigVersion:               configVersion,
+			FailoverVersion:             failoverVersion,
+			FailoverNotificationVersion: failoverNotificationVersion,
+		}
+
+		switch getResponse.TableVersion {
+		case persistence.DomainTableVersionV1:
+			updateReq.NotificationVersion = getResponse.NotificationVersion
+			updateReq.TableVersion = persistence.DomainTableVersionV1
+		case persistence.DomainTableVersionV2:
+			updateReq.NotificationVersion = notificationVersion
+			updateReq.TableVersion = persistence.DomainTableVersionV2
+		default:
+			return nil, wh.error(errors.New("domain table version is not set"), scope)
+		}
+		err = wh.metadataMgr.UpdateDomain(updateReq)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
+
 		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
 		if clusterMetadata.IsGlobalDomainEnabled() {
 			err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
@@ -493,23 +514,45 @@ func (wh *WorkflowHandler) DeprecateDomain(ctx context.Context, deprecateRequest
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	getResponse, err0 := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{
-		Name: *deprecateRequest.Name,
-	})
-
-	if err0 != nil {
-		return wh.error(err0, scope)
+	// must get the metadata (notificationVersion) first
+	// this version can be regarded as the lock on the v2 domain table
+	// and since we do not know which table will return the domain afterwards
+	// this call has to be made
+	metadata, err := wh.metadataMgr.GetMetadata()
+	if err != nil {
+		return wh.error(err, scope)
+	}
+	notificationVersion := metadata.NotificationVersion
+	getResponse, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: deprecateRequest.GetName()})
+	if err != nil {
+		return wh.error(err, scope)
 	}
 
 	getResponse.ConfigVersion = getResponse.ConfigVersion + 1
 	getResponse.Info.Status = persistence.DomainStatusDeprecated
-	err := wh.metadataMgr.UpdateDomain(&persistence.UpdateDomainRequest{
+	updateReq := &persistence.UpdateDomainRequest{
 		Info:              getResponse.Info,
 		Config:            getResponse.Config,
 		ReplicationConfig: getResponse.ReplicationConfig,
+		ConfigVersion:     getResponse.ConfigVersion,
 		FailoverVersion:   getResponse.FailoverVersion,
-		DBVersion:         getResponse.DBVersion,
-	})
+	}
+
+	switch getResponse.TableVersion {
+	case persistence.DomainTableVersionV1:
+		updateReq.NotificationVersion = getResponse.NotificationVersion
+		updateReq.TableVersion = persistence.DomainTableVersionV1
+	case persistence.DomainTableVersionV2:
+		updateReq.FailoverNotificationVersion = getResponse.FailoverNotificationVersion
+		updateReq.NotificationVersion = notificationVersion
+		updateReq.TableVersion = persistence.DomainTableVersionV2
+	default:
+		return wh.error(errors.New("domain table version is not set"), scope)
+	}
+	err = wh.metadataMgr.UpdateDomain(updateReq)
+	if err != nil {
+		return wh.error(err, scope)
+	}
 
 	if err != nil {
 		return wh.error(errDomainNotSet, scope)

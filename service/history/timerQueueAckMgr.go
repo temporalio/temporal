@@ -114,10 +114,10 @@ func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, clust
 	return timerQueueAckMgrImpl
 }
 
-func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client, standbyClusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
+func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client, standbyClusterName string,
+	minLevel time.Time, maxLevel time.Time, logger bark.Logger) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
-	ackLevel := TimerSequenceID{VisibilityTimestamp: shard.GetTimerClusterAckLevel(standbyClusterName)}
-	maxAckLevel := shard.GetTimerClusterAckLevel(shard.GetService().GetClusterMetadata().GetCurrentClusterName())
+	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		isFailover:       true,
@@ -130,7 +130,7 @@ func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Clien
 		outstandingTasks: make(map[TimerSequenceID]bool),
 		readLevel:        ackLevel,
 		ackLevel:         ackLevel,
-		maxAckLevel:      maxAckLevel,
+		maxAckLevel:      maxLevel,
 		isReadFinished:   false,
 		finishedChan:     make(chan struct{}, 1),
 	}
@@ -155,7 +155,6 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 		if err != nil {
 			return nil, nil, false, err
 		}
-		t.logger.Debugf("readTimerTasks: ReadLevel: (%s) count: %v, more timer: %v", readLevel, len(tasks), morePage)
 	}
 
 	// We filter tasks so read only moves to desired timer tasks.
@@ -227,6 +226,12 @@ func (t *timerQueueAckMgrImpl) getAckLevel() TimerSequenceID {
 	t.Lock()
 	defer t.Unlock()
 	return t.ackLevel
+}
+
+func (t *timerQueueAckMgrImpl) getReadLevel() TimerSequenceID {
+	t.Lock()
+	defer t.Unlock()
+	return t.readLevel
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() {

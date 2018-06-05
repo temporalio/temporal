@@ -282,6 +282,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 					},
 				},
+				TableVersion: persistence.DomainTableVersionV1,
 			},
 			nil,
 		)
@@ -361,6 +362,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedInvalidToken() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -397,6 +399,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfNoExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -432,6 +435,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfGetExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -480,6 +484,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedUpdateExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -532,6 +537,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskCompleted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -579,6 +585,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedIfTaskNotStarted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -671,6 +678,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -769,6 +777,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -855,6 +864,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -952,6 +962,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1030,6 +1041,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1098,6 +1110,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1174,6 +1187,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowSuccess() 
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1241,6 +1255,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1311,6 +1326,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowSucc
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1373,6 +1389,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1403,6 +1420,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	})
 	identity := "testIdentity"
 	executionContext := []byte("context")
+	foreignDomain := "unknown domain"
 
 	msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
@@ -1412,7 +1430,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	decisions := []*workflow.Decision{{
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeSignalExternalWorkflowExecution),
 		SignalExternalWorkflowExecutionDecisionAttributes: &workflow.SignalExternalWorkflowExecutionDecisionAttributes{
-			Domain: common.StringPtr(domainID),
+			Domain: common.StringPtr(foreignDomain),
 			Execution: &workflow.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,
@@ -1426,7 +1444,7 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
 			Config: &persistence.DomainConfig{Retention: 1},
@@ -1436,10 +1454,11 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSignalExternalWorkflowFail
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	).Once()
-	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: foreignDomain}).Return(
 		nil, errors.New("get foreign domain error")).Once()
 
 	_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
@@ -1470,6 +1489,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1505,6 +1525,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1539,6 +1560,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1574,6 +1596,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1612,6 +1635,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1652,6 +1676,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAidFound() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1709,6 +1734,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1772,6 +1798,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1829,6 +1856,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1904,6 +1932,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1976,6 +2005,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2035,6 +2065,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2108,6 +2139,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2148,6 +2180,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2182,6 +2215,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2217,6 +2251,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2253,6 +2288,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2292,6 +2328,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2332,6 +2369,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdFound() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2393,6 +2431,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2451,6 +2490,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2508,6 +2548,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2588,6 +2629,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2660,6 +2702,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2719,6 +2762,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2794,6 +2838,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIDSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2865,6 +2910,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2925,6 +2971,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -2990,6 +3037,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3045,6 +3093,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3105,6 +3154,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3177,6 +3227,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledByID_Started() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3222,6 +3273,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3262,6 +3314,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3302,6 +3355,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAidFound() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3359,6 +3413,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NotSchedule
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3431,6 +3486,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Scheduled()
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3505,6 +3561,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3560,6 +3617,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_NoHeartBeat
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3633,6 +3691,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3688,6 +3747,7 @@ func (s *engineSuite) TestRequestCancel_RespondDecisionTaskCompleted_Success() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3754,6 +3814,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3871,6 +3932,7 @@ func (s *engineSuite) TestUserTimer_RespondDecisionTaskCompleted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -3937,6 +3999,7 @@ func (s *engineSuite) TestCancelTimer_RespondDecisionTaskCompleted_NoStartTimer(
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -4000,6 +4063,7 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -4054,6 +4118,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -4102,6 +4167,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -4142,6 +4208,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)

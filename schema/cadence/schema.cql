@@ -1,19 +1,20 @@
 CREATE TYPE shard (
-  shard_id                   int,
-  owner                      text, -- Host identifier processing the shard
+  shard_id                    int,
+  owner                       text, -- Host identifier processing the shard
   -- Range identifier used for generating ack ids for tasks within shard.
   -- Also used for optimistic concurrency and all writes to a shard are conditional on this value.
-  range_id                   bigint,
+  range_id                    bigint,
   -- This field keeps track of number of times owner for a shard changes before updating range_id or ack_levels
-  stolen_since_renew         int,
-  updated_at                 timestamp,
-  replication_ack_level      bigint,
-  transfer_ack_level         bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
-  timer_ack_level            timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
+  stolen_since_renew          int,
+  updated_at                  timestamp,
+  replication_ack_level       bigint,
+  transfer_ack_level          bigint, -- TO BE DEPRECATED, IN FAVOR OF cluster_transfer_ack_level
+  timer_ack_level             timestamp, -- TO BE DEPRECATED, IN FAVOR OF cluster_timer_ack_level
   -- Mapping of cluster to corresponding transfer ack level
-  cluster_transfer_ack_level map<text, bigint>,
+  cluster_transfer_ack_level  map<text, bigint>,
   -- Mapping of cluster to corresponding timer ack level
-  cluster_timer_ack_level    map<text, timestamp>,
+  cluster_timer_ack_level     map<text, timestamp>,
+  domain_notification_version bigint, -- the global domain change version this shard is aware of
 );
 
 --- Workflow execution and mutable state ---
@@ -314,6 +315,22 @@ CREATE TABLE domains_by_name (
   failover_version   bigint, -- indicating the version of active domain only, used for domain failover
   db_version         bigint, -- indicate the version of the record, used for update
   PRIMARY KEY (name)
+)  WITH COMPACTION = {
+     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+   };
+
+CREATE TABLE domains_by_name_v2 (
+  domains_partition             int,
+  name                          text,
+  domain                        frozen<domain>,
+  config                        frozen<domain_config>,
+  replication_config            frozen<domain_replication_config>, -- indicating active cluster and standby cluster used for replication
+  is_global_domain              boolean, -- indicating whether a domain is a global domain
+  config_version                bigint, -- indicating the version of domain config, excluding the failover / change of active cluster name
+  failover_version              bigint, -- indicating the version of active domain only, used for domain failover
+  failover_notification_version bigint, -- indicating the last change related to domain failover
+  notification_version          bigint,
+  PRIMARY KEY (domains_partition, name)
 )  WITH COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
    };

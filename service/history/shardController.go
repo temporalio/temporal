@@ -50,7 +50,6 @@ type (
 		membershipUpdateCh  chan *membership.ChangedEvent
 		shardMgr            persistence.ShardManager
 		historyMgr          persistence.HistoryManager
-		metadataMgr         persistence.MetadataManager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		domainCache         cache.DomainCache
 		engineFactory       EngineFactory
@@ -86,7 +85,7 @@ type (
 )
 
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
-	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, metadataMgr persistence.MetadataManager,
+	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
 	config *Config, logger bark.Logger, metricsClient metrics.Client) *shardController {
 	logger = logger.WithFields(bark.Fields{
@@ -99,9 +98,8 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
 		shardMgr:            shardMgr,
 		historyMgr:          historyMgr,
-		metadataMgr:         metadataMgr,
 		executionMgrFactory: executionMgrFactory,
-		domainCache:         cache.NewDomainCache(metadataMgr, svc.GetClusterMetadata(), logger),
+		domainCache:         domainCache,
 		engineFactory:       factory,
 		historyShards:       make(map[int]*historyShardsItem),
 		shardClosedCh:       make(chan int, config.NumberOfShards),

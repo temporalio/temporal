@@ -58,6 +58,8 @@ type (
 		UpdateTimerAckLevel(ackLevel time.Time) error
 		GetTimerClusterAckLevel(cluster string) time.Time
 		UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error
+		GetDomainNotificationVersion() int64
+		UpdateDomainNotificationVersion(domainNotificationVersion int64) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
@@ -219,6 +221,21 @@ func (s *shardContextImpl) UpdateTimerClusterAckLevel(cluster string, ackLevel t
 
 	s.shardInfo.ClusterTimerAckLevel[cluster] = ackLevel
 	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *shardContextImpl) GetDomainNotificationVersion() int64 {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.shardInfo.DomainNotificationVersion
+}
+
+func (s *shardContextImpl) UpdateDomainNotificationVersion(domainNotificationVersion int64) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.DomainNotificationVersion = domainNotificationVersion
 	return s.updateShardInfoLocked()
 }
 
@@ -696,15 +713,16 @@ func copyShardInfo(shardInfo *persistence.ShardInfo) *persistence.ShardInfo {
 		clusterTimerAckLevel[k] = v
 	}
 	shardInfoCopy := &persistence.ShardInfo{
-		ShardID:                 shardInfo.ShardID,
-		Owner:                   shardInfo.Owner,
-		RangeID:                 shardInfo.RangeID,
-		StolenSinceRenew:        shardInfo.StolenSinceRenew,
-		ReplicationAckLevel:     shardInfo.ReplicationAckLevel,
-		TransferAckLevel:        shardInfo.TransferAckLevel,
-		TimerAckLevel:           shardInfo.TimerAckLevel,
-		ClusterTransferAckLevel: clusterTransferAckLevel,
-		ClusterTimerAckLevel:    clusterTimerAckLevel,
+		ShardID:                   shardInfo.ShardID,
+		Owner:                     shardInfo.Owner,
+		RangeID:                   shardInfo.RangeID,
+		StolenSinceRenew:          shardInfo.StolenSinceRenew,
+		ReplicationAckLevel:       shardInfo.ReplicationAckLevel,
+		TransferAckLevel:          shardInfo.TransferAckLevel,
+		TimerAckLevel:             shardInfo.TimerAckLevel,
+		ClusterTransferAckLevel:   clusterTransferAckLevel,
+		ClusterTimerAckLevel:      clusterTimerAckLevel,
+		DomainNotificationVersion: shardInfo.DomainNotificationVersion,
 	}
 
 	return shardInfoCopy

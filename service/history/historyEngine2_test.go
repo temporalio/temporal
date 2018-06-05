@@ -183,6 +183,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -226,6 +227,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfGetExecutionFailed() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -272,6 +274,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyStarted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -322,6 +325,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedIfTaskAlreadyCompleted() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -380,6 +384,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedConflictOnUpdate() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -437,6 +442,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetrySameRequest() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -495,6 +501,7 @@ func (s *engine2Suite) TestRecordDecisionTaskRetryDifferentRequest() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -551,6 +558,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedMaxAttemptsExceeded() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -600,6 +608,7 @@ func (s *engine2Suite) TestRecordDecisionTaskSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -646,6 +655,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -706,6 +716,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -755,6 +766,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -801,6 +813,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -886,6 +899,7 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -926,6 +940,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -974,6 +989,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1022,6 +1038,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1082,6 +1099,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1169,6 +1187,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 					},
 				},
+				TableVersion: persistence.DomainTableVersionV1,
 			},
 			nil,
 		)
@@ -1253,6 +1272,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1304,6 +1324,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)
@@ -1361,6 +1382,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
 				},
 			},
+			TableVersion: persistence.DomainTableVersionV1,
 		},
 		nil,
 	)

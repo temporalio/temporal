@@ -96,7 +96,8 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	return processor
 }
 
-func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
+func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string,
+	minLevel time.Time, maxLevel time.Time, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing domain failover
@@ -113,7 +114,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		return false, nil
 	}
 
-	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, logger)
+	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel, maxLevel, logger)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
@@ -159,13 +160,10 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		return err
 	} else if !ok {
 		t.timerQueueAckMgr.completeTimerTask(timerTask)
+		t.logger.Debugf("Discarding timer: (%v, %v), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
+			timerTask.TaskID, timerTask.VisibilityTimestamp, timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType, timerTask.EventID, err)
 		return nil
 	}
-
-	taskID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
-	t.logger.Debugf("Processing timer: (%s), for WorkflowID: %v, RunID: %v, Type: %v, TimeoutType: %v, EventID: %v, Attempt: %v",
-		taskID, timerTask.WorkflowID, timerTask.RunID, t.timerQueueProcessorBase.getTimerTaskType(timerTask.TaskType),
-		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID, timerTask.ScheduleAttempt)
 
 	scope := metrics.TimerQueueProcessorScope
 	switch timerTask.TaskType {
@@ -193,6 +191,9 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		scope = metrics.TimerTaskDeleteHistoryEvent
 		err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 	}
+
+	t.logger.Debugf("Processing timer: (%v, %v), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
+		timerTask.TaskID, timerTask.VisibilityTimestamp, timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType, timerTask.EventID, err)
 
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {

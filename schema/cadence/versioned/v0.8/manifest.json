@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.8",
+  "MinCompatibleVersion": "0.8",
+  "Description": "Support reliable domain change notification.",
+  "SchemaUpdateCqlFiles": [
+    "domain_notification.cql"
+  ]
+}

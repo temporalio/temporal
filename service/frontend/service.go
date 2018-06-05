@@ -74,7 +74,7 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
-	metadata, err := persistence.NewCassandraMetadataPersistence(p.CassandraConfig.Hosts,
+	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,
