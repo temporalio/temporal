@@ -406,7 +406,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		}
 
 		if printVersion {
-			columns = append(columns, fmt.Sprintf("(Version: %v)", e.Version))
+			columns = append(columns, fmt.Sprintf("(Version: %v)", *e.Version))
 		}
 
 		columns = append(columns, ColorEvent(e), HistoryEventToString(e))
