@@ -41,6 +41,14 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "Print time stamp",
 				},
 				cli.BoolFlag{
+					Name:  FlagPrintEventVersionWithAlias,
+					Usage: "Print event version",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintFullyDetailWithAlias,
+					Usage: "Print fully event detail",
+				},
+				cli.BoolFlag{
 					Name:  FlagPrintRawTimeWithAlias,
 					Usage: "Print raw time stamp",
 				},

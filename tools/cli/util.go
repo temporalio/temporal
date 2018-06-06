@@ -218,7 +218,7 @@ func anyToString(d interface{}) string {
 				continue
 			}
 			if buf.Len() > 1 {
-				buf.WriteString(", ")
+				buf.WriteString(",")
 			}
 			fieldName := t.Field(i).Name
 			if fieldName == "Reason" || fieldName == "Details" || fieldName == "Cause" {

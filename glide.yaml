@@ -35,7 +35,7 @@ import:
   subpackages:
   - statsd
 - package: go.uber.org/cadence
-  version: ^0.6.1
+  version: ^0.7.0
 - package: go.uber.org/thriftrw
   version: ^1.6
 - package: go.uber.org/yarpc

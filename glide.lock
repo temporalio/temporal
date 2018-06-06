@@ -1,8 +1,8 @@
-hash: c7071c079fd1f8761f84a8fe7184fb1fc1fb0ff15737b1f5b8dab655235af7f8
-updated: 2018-04-25T16:52:55.238405-07:00
+hash: 7df821f65e371f25bc9854402b10c5f3d71b921eaf4e0d81c457882a3df5caf1
+updated: 2018-06-05T11:53:33.667446-07:00
 imports:
 - name: github.com/apache/thrift
-  version: b2a4d4ae21c789b689dd162deb819665567f481c
+  version: 9549b25c77587b29be4e0b5c258221a4ed85d37a
   subpackages:
   - lib/go/thrift
 - name: github.com/benbjohnson/clock
@@ -18,7 +18,7 @@ imports:
   subpackages:
   - statsd
 - name: github.com/davecgh/go-spew
-  version: 04cdfd42973bb9c8589fd6a731800cf222fde1a9
+  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
   subpackages:
   - spew
 - name: github.com/dgryski/go-farm
@@ -55,7 +55,7 @@ imports:
   subpackages:
   - gomock
 - name: github.com/golang/protobuf
-  version: 925541529c1fa6821df4e44ce2723319eb2be768
+  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - proto
 - name: github.com/golang/snappy
@@ -80,7 +80,7 @@ imports:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: e790cca94e6cc75c7064b1332e63811d4aae1a53
+  version: a97ce2ca70fa5a848076093f05e639a89ca34d06
 - name: github.com/pierrec/lz4
   version: 2fcda4cb7018ce05a25959d2fe08c83e3329f169
 - name: github.com/pierrec/xxHash
@@ -88,7 +88,7 @@ imports:
   subpackages:
   - xxHash32
 - name: github.com/pmezard/go-difflib
-  version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
+  version: 792786c7400a136282c1664665ae0a8db921c6c2
   subpackages:
   - difflib
 - name: github.com/prometheus/client_golang
@@ -97,17 +97,17 @@ imports:
   - prometheus
   - prometheus/promhttp
 - name: github.com/prometheus/client_model
-  version: 6f3806018612930941127f2a7c6c453ba2c527d2
+  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 49fee292b27bfff7f354ee0f64e1bc4850462edf
+  version: 2e54d0b93cba2fd133edc32211dcc32c06ef72ca
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: a1dba9ce8baed984a2495b658c82687f8157b98f
+  version: a6e9df898b1336106c743392c48ee0b71f5c4efa
   subpackages:
   - xfs
 - name: github.com/rcrowley/go-metrics
@@ -117,9 +117,9 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 3d4380f53a34dcdc95f0c1db702615992b38d9a4
 - name: github.com/stretchr/objx
-  version: cbeaeb16a013161a98496fad62933b1d21786672
+  version: 0ab728f62c7f6fcd754334f7931c2dd659dce1d1
 - name: github.com/stretchr/testify
-  version: 890a5c3458b43e6104ff5da8dfa139d013d77544
+  version: 12b6f73e6084dad08a7c6e575284b177ecafbc71
   subpackages:
   - assert
   - mock
@@ -128,11 +128,11 @@ imports:
 - name: github.com/uber-common/bark
   version: dbf558e8a7b65e2b54e1e01c14ee0e4207a865f5
 - name: github.com/uber-go/atomic
-  version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
+  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
   subpackages:
   - utils
 - name: github.com/uber-go/kafka-client
-  version: d3982364cc55cd78569fc58a587ff5ec0e06ab20
+  version: b2484cf77be08c7d522e86cea2013a5b05421ca0
   subpackages:
   - internal/consumer
   - internal/list
@@ -144,7 +144,7 @@ imports:
   subpackages:
   - internal/mapstructure
 - name: github.com/uber-go/tally
-  version: 522328b48efad0c6034dba92bf39228694e9d31f
+  version: 79f2a33b0e55b1255ffbbaf824dcafb09ff34dda
   subpackages:
   - m3
   - m3/customtransports
@@ -182,9 +182,9 @@ imports:
 - name: github.com/urfave/cli
   version: cf33a9befefdd6c6ea1a236ab6d546e797a62cbf
 - name: go.uber.org/atomic
-  version: 8474b86a5a6f79c443ce4b2992817ff32cf208b8
+  version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
 - name: go.uber.org/cadence
-  version: bc546f2a3620d372efe608c366a4b8603a65ccce
+  version: 8f3c241553281f11f7df2e088948aa065d8af458
   subpackages:
   - .gen/go/cadence
   - .gen/go/cadence/workflowserviceclient
@@ -218,7 +218,7 @@ imports:
   - version
   - wire
 - name: go.uber.org/yarpc
-  version: 4ac8938c1046d4db2dc26a1436699935a8c5bb35
+  version: f890b9f2fd812eb3f81efac46ccddf0e46d15210
   subpackages:
   - api/backoff
   - api/encoding
@@ -263,7 +263,7 @@ imports:
   - internal/exit
   - zapcore
 - name: golang.org/x/net
-  version: 5f9ae10d9af5b1c89ae6904293b14b064d4ada23
+  version: 1e491301e022f8f977054da4c2d852decd59571f
   repo: https://github.com/golang/net
   subpackages:
   - bpf
@@ -286,5 +286,5 @@ imports:
 - name: gopkg.in/validator.v2
   version: 07ffaad256c8e957050ad83d6472eb97d785013d
 - name: gopkg.in/yaml.v2
-  version: eb3733d160e74a9c7e442f435eb3bea458e1d19f
+  version: 287cf08546ab5e7e37d55a84f7ed3fd1db036de5
 testImports: []

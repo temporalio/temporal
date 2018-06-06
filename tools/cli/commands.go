@@ -85,6 +85,10 @@ const (
 	FlagEarliestTimeWithAlias      = FlagEarliestTime + ", et"
 	FlagLatestTime                 = "latest_time"
 	FlagLatestTimeWithAlias        = FlagLatestTime + ", lt"
+	FlagPrintEventVersion          = "print_event_version"
+	FlagPrintEventVersionWithAlias = FlagPrintEventVersion + ", pev"
+	FlagPrintFullyDetail           = "print_full"
+	FlagPrintFullyDetailWithAlias  = FlagPrintFullyDetail + ", pf"
 	FlagPrintRawTime               = "print_raw_time"
 	FlagPrintRawTimeWithAlias      = FlagPrintRawTime + ", prt"
 	FlagPrintDateTime              = "print_datetime"
@@ -370,6 +374,9 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 
 	printDateTime := c.Bool(FlagPrintDateTime)
 	printRawTime := c.Bool(FlagPrintRawTime)
+	printFully := c.Bool(FlagPrintFullyDetail)
+	printVersion := c.Bool(FlagPrintEventVersion)
+
 	outputFileName := c.String(FlagOutputFilename)
 
 	ctx, cancel := newContext()
@@ -383,13 +390,28 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	table.SetBorder(false)
 	table.SetColumnSeparator("")
 	for _, e := range history.Events {
-		if printRawTime {
-			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), strconv.FormatInt(e.GetTimestamp(), 10), ColorEvent(e), HistoryEventToString(e)})
-		} else if printDateTime {
-			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), convertTime(e.GetTimestamp(), false), ColorEvent(e), HistoryEventToString(e)})
-		} else { // default not show time
-			table.Append([]string{strconv.FormatInt(e.GetEventId(), 10), ColorEvent(e), HistoryEventToString(e)})
+		columns := []string{}
+		if printFully {
+			columns = append(columns, anyToString(e))
+			table.Append(columns)
+			continue
 		}
+
+		columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
+
+		if printRawTime {
+			columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
+		} else if printDateTime {
+			columns = append(columns, convertTime(e.GetTimestamp(), false))
+		}
+
+		if printVersion {
+			columns = append(columns, fmt.Sprintf("(Version: %v)", e.Version))
+		}
+
+		columns = append(columns, ColorEvent(e), HistoryEventToString(e))
+
+		table.Append(columns)
 	}
 	table.Render()
 
