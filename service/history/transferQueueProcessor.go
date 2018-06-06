@@ -147,8 +147,10 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 			standbyClusterName = cluster
 		}
 	}
+
 	// the ack manager is exclusive, so add 1
 	maxLevel := t.activeTaskProcessor.getReadLevel() + 1
+	t.logger.Infof("Transfer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
 	failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard, t.historyService, t.visibilityMgr, t.matchingClient, t.historyClient,
 		domainID, standbyClusterName, minLevel, maxLevel, t.logger,

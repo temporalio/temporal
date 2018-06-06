@@ -199,9 +199,16 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 		e.shard.GetShardID(),
 		e.shard.GetDomainCache().GetDomainNotificationVersion(),
 		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
+			domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
+			shardNotificationVersion := e.shard.GetDomainNotificationVersion()
+			domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
+
+			e.logger.Infof("Domain Failover Event: Shard: %v, Domain: %v, ID: %v, Failover Notification Version: %v, Active Cluster: %v, Shard Domain Notification Version: %v\n",
+				e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID, domainFailoverNotificationVersion, domainActiveCluster, shardNotificationVersion)
+
 			if nextDomain.IsGlobalDomain() &&
-				nextDomain.GetFailoverNotificationVersion() >= e.shard.GetDomainCache().GetDomainNotificationVersion() &&
-				nextDomain.GetReplicationConfig().ActiveClusterName == e.currentClusterName {
+				domainFailoverNotificationVersion >= shardNotificationVersion &&
+				domainActiveCluster == e.currentClusterName {
 				domainID := prevDomain.GetInfo().ID
 				e.txProcessor.FailoverDomain(domainID)
 				e.timerProcessor.FailoverDomain(domainID)
