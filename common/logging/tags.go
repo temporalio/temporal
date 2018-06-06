@@ -47,6 +47,7 @@ const (
 	TagTopicName            = "topic-name"
 	TagConsumerName         = "consumer-name"
 	TagPartition            = "partition"
+	TagPartitionKey         = "partition-key"
 	TagOffset               = "offset"
 	TagScope                = "scope"
 	TagFailover             = "failover"

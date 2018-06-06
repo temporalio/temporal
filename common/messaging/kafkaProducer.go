@@ -56,17 +56,21 @@ func (p *kafkaProducer) Publish(task *replicator.ReplicationTask) error {
 		return err
 	}
 
+	partitionKey := p.getKey(task)
+
 	msg := &sarama.ProducerMessage{
 		Topic: p.topic,
+		Key:   partitionKey,
 		Value: sarama.ByteEncoder(payload),
 	}
 
 	partition, offset, err := p.producer.SendMessage(msg)
 	if err != nil {
 		p.logger.WithFields(bark.Fields{
-			logging.TagPartition: partition,
-			logging.TagOffset:    offset,
-			logging.TagErr:       err,
+			logging.TagPartition:    partition,
+			logging.TagPartitionKey: partitionKey,
+			logging.TagOffset:       offset,
+			logging.TagErr:          err,
 		}).Warn("Failed to publish message to kafka")
 
 		return err
@@ -118,4 +122,21 @@ func (p *kafkaProducer) serializeTask(task *replicator.ReplicationTask) ([]byte,
 	}
 
 	return payload, nil
+}
+
+func (p *kafkaProducer) getKey(task *replicator.ReplicationTask) sarama.Encoder {
+	if task == nil {
+		return nil
+	}
+
+	switch task.GetTaskType() {
+	case replicator.ReplicationTaskTypeHistory:
+		// Use workflowID as the partition key so all replication tasks for a workflow are dispatched to the same
+		// Kafka partition.  This will give us some ordering guarantee for workflow replication tasks atleast at
+		// the messaging layer perspective
+		attributes := task.HistoryTaskAttributes
+		return sarama.StringEncoder(attributes.GetWorkflowId())
+	}
+
+	return nil
 }
