@@ -1109,7 +1109,7 @@ func parseTime(timeStr string, defaultValue int64) int64 {
 	}
 
 	// try to parse
-	parsedTime, err := time.Parse(defaultTimeFormat, timeStr)
+	parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
 	if err == nil {
 		return parsedTime.UnixNano()
 	}

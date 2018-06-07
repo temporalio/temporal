@@ -441,3 +441,9 @@ func (s *cliAppSuite) TestObserveWorkflowWithID() {
 	err = s.app.Run([]string{"", "--do", domainName, "workflow", "observeid", "wid", "-sd"})
 	s.Nil(err)
 }
+
+func (s *cliAppSuite) TestParseTime() {
+	s.Equal(int64(100), parseTime("", 100))
+	s.Equal(int64(1528383845000000000), parseTime("2018-06-07T15:04:05+00:00", 0))
+	s.Equal(int64(1528383845000000000), parseTime("1528383845000000000", 0))
+}
