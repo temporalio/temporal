@@ -418,26 +418,8 @@ func _DescribeMutableStateResponse_Read(w wire.Value) (*DescribeMutableStateResp
 	return &v, err
 }
 
-func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
-	var v shared.BadRequestError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
-	var v shared.InternalServiceError
-	err := v.FromWire(w)
-	return &v, err
-}
-
 func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
 	var v shared.EntityNotExistsError
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _AccessDeniedError_Read(w wire.Value) (*shared.AccessDeniedError, error) {
-	var v shared.AccessDeniedError
 	err := v.FromWire(w)
 	return &v, err
 }

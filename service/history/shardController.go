@@ -357,6 +357,17 @@ func (c *shardController) numShards() int {
 	return nShards
 }
 
+func (c *shardController) shardIDs() []int32 {
+	c.RLock()
+	ids := []int32{}
+	for id := range c.historyShards {
+		id32 := int32(id)
+		ids = append(ids, id32)
+	}
+	c.RUnlock()
+	return ids
+}
+
 func (i *historyShardsItem) getEngine() Engine {
 	i.RLock()
 	defer i.RUnlock()

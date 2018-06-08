@@ -527,6 +527,42 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 	return response, nil
 }
 
+// DescribeHistoryHost returns information about the internal states of a history host
+func (h *Handler) DescribeHistoryHost(ctx context.Context,
+	request *gen.DescribeHistoryHostRequest) (*gen.DescribeHistoryHostResponse, error) {
+	h.startWG.Wait()
+
+	numOfItemsInCacheByID, numOfItemsInCacheByName := h.domainCache.GetCacheSize()
+	status := ""
+	if h.controller.isStarted > 0 {
+		status += "started,"
+	} else {
+		status += "not started,"
+	}
+	if h.controller.isStopped > 0 {
+		status += "stopped,"
+	} else {
+		status += "not stopped,"
+	}
+	if h.controller.isStopping {
+		status += "stopping"
+	} else {
+		status += "not stopping"
+	}
+
+	resp := &gen.DescribeHistoryHostResponse{
+		NumberOfShards: common.Int32Ptr(int32(h.controller.numShards())),
+		ShardIDs:       h.controller.shardIDs(),
+		DomainCache: &gen.DomainCacheInfo{
+			NumOfItemsInCacheByID:   &numOfItemsInCacheByID,
+			NumOfItemsInCacheByName: &numOfItemsInCacheByName,
+		},
+		ShardControllerStatus: &status,
+		Address:               common.StringPtr(h.GetHostInfo().GetAddress()),
+	}
+	return resp, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context,
 	request *hist.DescribeMutableStateRequest) (*hist.DescribeMutableStateResponse, error) {

@@ -110,6 +110,47 @@ func (c *clientImpl) GetMutableState(
 	return response, nil
 }
 
+func (c *clientImpl) DescribeHistoryHost(
+	ctx context.Context,
+	request *workflow.DescribeHistoryHostRequest,
+	opts ...yarpc.CallOption) (*workflow.DescribeHistoryHostResponse, error) {
+
+	var hostAddr string
+	if request.HostAddress != nil {
+		hostAddr = *request.HostAddress
+	} else {
+		var shardID int
+		if request.ShardIdForHost != nil {
+			shardID = int(*request.ShardIdForHost)
+		} else {
+			shardID = common.WorkflowIDToHistoryShard(*request.ExecutionForHost.WorkflowId, c.numberOfShards)
+		}
+
+		host, err := c.resolver.Lookup(string(shardID))
+		if err != nil {
+			return nil, err
+		}
+		hostAddr = host.GetAddress()
+	}
+
+	client := c.getThriftClient(hostAddr)
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	var response *workflow.DescribeHistoryHostResponse
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DescribeHistoryHost(ctx, request, opts...)
+		return err
+	}
+	err := c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *h.DescribeMutableStateRequest,

@@ -34,6 +34,11 @@ import (
 
 // Interface is the server-side interface for the HistoryService service.
 type Interface interface {
+	DescribeHistoryHost(
+		ctx context.Context,
+		Request *shared.DescribeHistoryHostRequest,
+	) (*shared.DescribeHistoryHostResponse, error)
+
 	DescribeMutableState(
 		ctx context.Context,
 		Request *history.DescribeMutableStateRequest,
@@ -150,6 +155,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 	service := thrift.Service{
 		Name: "HistoryService",
 		Methods: []thrift.Method{
+
+			thrift.Method{
+				Name: "DescribeHistoryHost",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.DescribeHistoryHost),
+				},
+				Signature:    "DescribeHistoryHost(Request *shared.DescribeHistoryHostRequest) (*shared.DescribeHistoryHostResponse)",
+				ThriftModule: history.ThriftModule,
+			},
 
 			thrift.Method{
 				Name: "DescribeMutableState",
@@ -384,12 +400,31 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 21)
+	procedures := make([]transport.Procedure, 0, 22)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
 
 type handler struct{ impl Interface }
+
+func (h handler) DescribeHistoryHost(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_DescribeHistoryHost_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	success, err := h.impl.DescribeHistoryHost(ctx, args.Request)
+
+	hadError := err != nil
+	result, err := history.HistoryService_DescribeHistoryHost_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
 
 func (h handler) DescribeMutableState(ctx context.Context, body wire.Value) (thrift.Response, error) {
 	var args history.HistoryService_DescribeMutableState_Args

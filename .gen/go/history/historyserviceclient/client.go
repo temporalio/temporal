@@ -36,6 +36,12 @@ import (
 
 // Interface is a client for the HistoryService service.
 type Interface interface {
+	DescribeHistoryHost(
+		ctx context.Context,
+		Request *shared.DescribeHistoryHostRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeHistoryHostResponse, error)
+
 	DescribeMutableState(
 		ctx context.Context,
 		Request *history.DescribeMutableStateRequest,
@@ -185,6 +191,29 @@ func init() {
 
 type client struct {
 	c thrift.Client
+}
+
+func (c client) DescribeHistoryHost(
+	ctx context.Context,
+	_Request *shared.DescribeHistoryHostRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeHistoryHostResponse, err error) {
+
+	args := history.HistoryService_DescribeHistoryHost_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_DescribeHistoryHost_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = history.HistoryService_DescribeHistoryHost_Helper.UnwrapResponse(&result)
+	return
 }
 
 func (c client) DescribeMutableState(

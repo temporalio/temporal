@@ -62,3 +62,43 @@ func AdminDescribeWorkflow(c *cli.Context) {
 
 	prettyPrintJSONObject(resp)
 }
+
+// AdminDescribeHistoryHost describes history host
+func AdminDescribeHistoryHost(c *cli.Context) {
+	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
+	serviceClient := getAdminServiceClient(c)
+
+	wid := c.String(FlagWorkflowID)
+	sid := c.Int(FlagShardID)
+	addr := c.String(FlagHistoryAddress)
+	printFully := c.Bool(FlagPrintFullyDetail)
+
+	if len(wid) <= 0 && !c.IsSet(FlagShardID) && len(addr) <= 0 {
+		ErrorAndExit("at least one of them is required to provide to lookup host: workflowID, shardID and host address", nil)
+		return
+	}
+
+	ctx, cancel := newContext()
+	defer cancel()
+
+	req := &s.DescribeHistoryHostRequest{}
+	if len(wid) > 0 {
+		req.ExecutionForHost = &s.WorkflowExecution{WorkflowId: common.StringPtr(wid)}
+	}
+	if c.IsSet(FlagShardID) {
+		req.ShardIdForHost = common.Int32Ptr(int32(sid))
+	}
+	if len(addr) > 0 {
+		req.HostAddress = common.StringPtr(addr)
+	}
+
+	resp, err := serviceClient.DescribeHistoryHost(ctx, req)
+	if err != nil {
+		ErrorAndExit("Describe history host failed", err)
+	}
+
+	if !printFully {
+		resp.ShardIDs = nil
+	}
+	prettyPrintJSONObject(resp)
+}

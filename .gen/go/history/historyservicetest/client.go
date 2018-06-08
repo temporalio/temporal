@@ -63,6 +63,39 @@ func (m *MockClient) EXPECT() *_MockClientRecorder {
 	return m.recorder
 }
 
+// DescribeHistoryHost responds to a DescribeHistoryHost call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().DescribeHistoryHost(gomock.Any(), ...).Return(...)
+// 	... := client.DescribeHistoryHost(...)
+func (m *MockClient) DescribeHistoryHost(
+	ctx context.Context,
+	_Request *shared.DescribeHistoryHostRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeHistoryHostResponse, err error) {
+
+	args := []interface{}{ctx, _Request}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "DescribeHistoryHost", args...)
+	success, _ = ret[i].(*shared.DescribeHistoryHostResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) DescribeHistoryHost(
+	ctx interface{},
+	_Request interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _Request}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "DescribeHistoryHost", args...)
+}
+
 // DescribeMutableState responds to a DescribeMutableState call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

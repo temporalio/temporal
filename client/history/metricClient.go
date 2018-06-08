@@ -61,6 +61,15 @@ func (c *metricClient) StartWorkflowExecution(
 	return resp, err
 }
 
+func (c *metricClient) DescribeHistoryHost(
+	context context.Context,
+	request *shared.DescribeHistoryHostRequest,
+	opts ...yarpc.CallOption) (*shared.DescribeHistoryHostResponse, error) {
+	resp, err := c.client.DescribeHistoryHost(context, request, opts...)
+
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	context context.Context,
 	request *h.DescribeMutableStateRequest,

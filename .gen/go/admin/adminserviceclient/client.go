@@ -26,6 +26,7 @@ package adminserviceclient
 import (
 	"context"
 	"github.com/uber/cadence/.gen/go/admin"
+	"github.com/uber/cadence/.gen/go/shared"
 	"go.uber.org/thriftrw/wire"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/api/transport"
@@ -35,6 +36,12 @@ import (
 
 // Interface is a client for the AdminService service.
 type Interface interface {
+	DescribeHistoryHost(
+		ctx context.Context,
+		Request *shared.DescribeHistoryHostRequest,
+		opts ...yarpc.CallOption,
+	) (*shared.DescribeHistoryHostResponse, error)
+
 	DescribeWorkflowExecution(
 		ctx context.Context,
 		Request *admin.DescribeWorkflowExecutionRequest,
@@ -64,6 +71,29 @@ func init() {
 
 type client struct {
 	c thrift.Client
+}
+
+func (c client) DescribeHistoryHost(
+	ctx context.Context,
+	_Request *shared.DescribeHistoryHostRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.DescribeHistoryHostResponse, err error) {
+
+	args := admin.AdminService_DescribeHistoryHost_Helper.Args(_Request)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result admin.AdminService_DescribeHistoryHost_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	success, err = admin.AdminService_DescribeHistoryHost_Helper.UnwrapResponse(&result)
+	return
 }
 
 func (c client) DescribeWorkflowExecution(

@@ -77,6 +77,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on workflow",
 					Subcommands: newAdminWorkflowCommands(),
 				},
+				{
+					Name:        "history_host",
+					Aliases:     []string{"hist"},
+					Usage:       "Run admin operation on history host",
+					Subcommands: newAdminHistoryHostCommands(),
+				},
 			},
 		},
 	}

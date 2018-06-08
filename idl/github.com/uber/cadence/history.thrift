@@ -550,4 +550,14 @@ service HistoryService {
       5: ShardOwnershipLostError shardOwnershipLostError,
       6: shared.LimitExceededError limitExceededError,
     )
+
+  /**
+  * DescribeHistoryHost returns information about the internal states of a history host
+  **/
+  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.AccessDeniedError accessDeniedError,
+    )
 }

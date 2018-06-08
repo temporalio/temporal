@@ -42,7 +42,7 @@ type (
 	// QueryTaskToken identifies a query task
 	QueryTaskToken struct {
 		DomainID string `json:"domainId"`
-		TaskList string `jaon:"taskList"`
-		TaskID   string `jaon:"taskId"`
+		TaskList string `json:"taskList"`
+		TaskID   string `json:"taskId"`
 	}
 )

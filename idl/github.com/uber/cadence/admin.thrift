@@ -31,16 +31,26 @@ service AdminService {
   **/
   DescribeWorkflowExecutionResponse DescribeWorkflowExecution(1: DescribeWorkflowExecutionRequest request)
     throws (
-      1: shared.BadRequestError badRequestError,
-      2: shared.InternalServiceError internalServiceError,
-      3: shared.EntityNotExistsError entityNotExistError,
-      4: shared.AccessDeniedError accessDeniedError,
+      1: shared.BadRequestError         badRequestError,
+      2: shared.InternalServiceError    internalServiceError,
+      3: shared.EntityNotExistsError    entityNotExistError,
+      4: shared.AccessDeniedError       accessDeniedError,
     )
+
+  /**
+    * DescribeHistoryHost returns information about the internal states of a history host
+    **/
+    shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)
+      throws (
+        1: shared.BadRequestError       badRequestError,
+        2: shared.InternalServiceError  internalServiceError,
+        3: shared.AccessDeniedError     accessDeniedError,
+      )
 }
 
 struct DescribeWorkflowExecutionRequest {
-  10: optional string domain
-  20: optional shared.WorkflowExecution execution
+  10: optional string                       domain
+  20: optional shared.WorkflowExecution     execution
 }
 
 struct DescribeWorkflowExecutionResponse{

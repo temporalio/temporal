@@ -31,14 +31,14 @@ import (
 	"strings"
 )
 
-// AdminService_DescribeWorkflowExecution_Args represents the arguments for the AdminService.DescribeWorkflowExecution function.
+// AdminService_DescribeHistoryHost_Args represents the arguments for the AdminService.DescribeHistoryHost function.
 //
-// The arguments for DescribeWorkflowExecution are sent and received over the wire as this struct.
-type AdminService_DescribeWorkflowExecution_Args struct {
-	Request *DescribeWorkflowExecutionRequest `json:"request,omitempty"`
+// The arguments for DescribeHistoryHost are sent and received over the wire as this struct.
+type AdminService_DescribeHistoryHost_Args struct {
+	Request *shared.DescribeHistoryHostRequest `json:"request,omitempty"`
 }
 
-// ToWire translates a AdminService_DescribeWorkflowExecution_Args struct into a Thrift-level intermediate
+// ToWire translates a AdminService_DescribeHistoryHost_Args struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -53,7 +53,7 @@ type AdminService_DescribeWorkflowExecution_Args struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *AdminService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, error) {
+func (v *AdminService_DescribeHistoryHost_Args) ToWire() (wire.Value, error) {
 	var (
 		fields [1]wire.Field
 		i      int = 0
@@ -73,17 +73,17 @@ func (v *AdminService_DescribeWorkflowExecution_Args) ToWire() (wire.Value, erro
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*DescribeWorkflowExecutionRequest, error) {
-	var v DescribeWorkflowExecutionRequest
+func _DescribeHistoryHostRequest_Read(w wire.Value) (*shared.DescribeHistoryHostRequest, error) {
+	var v shared.DescribeHistoryHostRequest
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a AdminService_DescribeWorkflowExecution_Args struct from its Thrift-level
+// FromWire deserializes a AdminService_DescribeHistoryHost_Args struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a AdminService_DescribeWorkflowExecution_Args struct
+// An error is returned if we were unable to build a AdminService_DescribeHistoryHost_Args struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -91,19 +91,19 @@ func _DescribeWorkflowExecutionRequest_Read(w wire.Value) (*DescribeWorkflowExec
 //     return nil, err
 //   }
 //
-//   var v AdminService_DescribeWorkflowExecution_Args
+//   var v AdminService_DescribeHistoryHost_Args
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *AdminService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) error {
+func (v *AdminService_DescribeHistoryHost_Args) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 1:
 			if field.Value.Type() == wire.TStruct {
-				v.Request, err = _DescribeWorkflowExecutionRequest_Read(field.Value)
+				v.Request, err = _DescribeHistoryHostRequest_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -115,9 +115,9 @@ func (v *AdminService_DescribeWorkflowExecution_Args) FromWire(w wire.Value) err
 	return nil
 }
 
-// String returns a readable string representation of a AdminService_DescribeWorkflowExecution_Args
+// String returns a readable string representation of a AdminService_DescribeHistoryHost_Args
 // struct.
-func (v *AdminService_DescribeWorkflowExecution_Args) String() string {
+func (v *AdminService_DescribeHistoryHost_Args) String() string {
 	if v == nil {
 		return "<nil>"
 	}
@@ -129,14 +129,14 @@ func (v *AdminService_DescribeWorkflowExecution_Args) String() string {
 		i++
 	}
 
-	return fmt.Sprintf("AdminService_DescribeWorkflowExecution_Args{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("AdminService_DescribeHistoryHost_Args{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this AdminService_DescribeWorkflowExecution_Args match the
-// provided AdminService_DescribeWorkflowExecution_Args.
+// Equals returns true if all the fields of this AdminService_DescribeHistoryHost_Args match the
+// provided AdminService_DescribeHistoryHost_Args.
 //
 // This function performs a deep comparison.
-func (v *AdminService_DescribeWorkflowExecution_Args) Equals(rhs *AdminService_DescribeWorkflowExecution_Args) bool {
+func (v *AdminService_DescribeHistoryHost_Args) Equals(rhs *AdminService_DescribeHistoryHost_Args) bool {
 	if !((v.Request == nil && rhs.Request == nil) || (v.Request != nil && rhs.Request != nil && v.Request.Equals(rhs.Request))) {
 		return false
 	}
@@ -147,79 +147,77 @@ func (v *AdminService_DescribeWorkflowExecution_Args) Equals(rhs *AdminService_D
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the arguments.
 //
-// This will always be "DescribeWorkflowExecution" for this struct.
-func (v *AdminService_DescribeWorkflowExecution_Args) MethodName() string {
-	return "DescribeWorkflowExecution"
+// This will always be "DescribeHistoryHost" for this struct.
+func (v *AdminService_DescribeHistoryHost_Args) MethodName() string {
+	return "DescribeHistoryHost"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Call for this struct.
-func (v *AdminService_DescribeWorkflowExecution_Args) EnvelopeType() wire.EnvelopeType {
+func (v *AdminService_DescribeHistoryHost_Args) EnvelopeType() wire.EnvelopeType {
 	return wire.Call
 }
 
-// AdminService_DescribeWorkflowExecution_Helper provides functions that aid in handling the
-// parameters and return values of the AdminService.DescribeWorkflowExecution
+// AdminService_DescribeHistoryHost_Helper provides functions that aid in handling the
+// parameters and return values of the AdminService.DescribeHistoryHost
 // function.
-var AdminService_DescribeWorkflowExecution_Helper = struct {
-	// Args accepts the parameters of DescribeWorkflowExecution in-order and returns
+var AdminService_DescribeHistoryHost_Helper = struct {
+	// Args accepts the parameters of DescribeHistoryHost in-order and returns
 	// the arguments struct for the function.
 	Args func(
-		request *DescribeWorkflowExecutionRequest,
-	) *AdminService_DescribeWorkflowExecution_Args
+		request *shared.DescribeHistoryHostRequest,
+	) *AdminService_DescribeHistoryHost_Args
 
 	// IsException returns true if the given error can be thrown
-	// by DescribeWorkflowExecution.
+	// by DescribeHistoryHost.
 	//
-	// An error can be thrown by DescribeWorkflowExecution only if the
+	// An error can be thrown by DescribeHistoryHost only if the
 	// corresponding exception type was mentioned in the 'throws'
 	// section for it in the Thrift file.
 	IsException func(error) bool
 
-	// WrapResponse returns the result struct for DescribeWorkflowExecution
+	// WrapResponse returns the result struct for DescribeHistoryHost
 	// given its return value and error.
 	//
 	// This allows mapping values and errors returned by
-	// DescribeWorkflowExecution into a serializable result struct.
+	// DescribeHistoryHost into a serializable result struct.
 	// WrapResponse returns a non-nil error if the provided
-	// error cannot be thrown by DescribeWorkflowExecution
+	// error cannot be thrown by DescribeHistoryHost
 	//
-	//   value, err := DescribeWorkflowExecution(args)
-	//   result, err := AdminService_DescribeWorkflowExecution_Helper.WrapResponse(value, err)
+	//   value, err := DescribeHistoryHost(args)
+	//   result, err := AdminService_DescribeHistoryHost_Helper.WrapResponse(value, err)
 	//   if err != nil {
-	//     return fmt.Errorf("unexpected error from DescribeWorkflowExecution: %v", err)
+	//     return fmt.Errorf("unexpected error from DescribeHistoryHost: %v", err)
 	//   }
 	//   serialize(result)
-	WrapResponse func(*DescribeWorkflowExecutionResponse, error) (*AdminService_DescribeWorkflowExecution_Result, error)
+	WrapResponse func(*shared.DescribeHistoryHostResponse, error) (*AdminService_DescribeHistoryHost_Result, error)
 
-	// UnwrapResponse takes the result struct for DescribeWorkflowExecution
+	// UnwrapResponse takes the result struct for DescribeHistoryHost
 	// and returns the value or error returned by it.
 	//
-	// The error is non-nil only if DescribeWorkflowExecution threw an
+	// The error is non-nil only if DescribeHistoryHost threw an
 	// exception.
 	//
 	//   result := deserialize(bytes)
-	//   value, err := AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse(result)
-	UnwrapResponse func(*AdminService_DescribeWorkflowExecution_Result) (*DescribeWorkflowExecutionResponse, error)
+	//   value, err := AdminService_DescribeHistoryHost_Helper.UnwrapResponse(result)
+	UnwrapResponse func(*AdminService_DescribeHistoryHost_Result) (*shared.DescribeHistoryHostResponse, error)
 }{}
 
 func init() {
-	AdminService_DescribeWorkflowExecution_Helper.Args = func(
-		request *DescribeWorkflowExecutionRequest,
-	) *AdminService_DescribeWorkflowExecution_Args {
-		return &AdminService_DescribeWorkflowExecution_Args{
+	AdminService_DescribeHistoryHost_Helper.Args = func(
+		request *shared.DescribeHistoryHostRequest,
+	) *AdminService_DescribeHistoryHost_Args {
+		return &AdminService_DescribeHistoryHost_Args{
 			Request: request,
 		}
 	}
 
-	AdminService_DescribeWorkflowExecution_Helper.IsException = func(err error) bool {
+	AdminService_DescribeHistoryHost_Helper.IsException = func(err error) bool {
 		switch err.(type) {
 		case *shared.BadRequestError:
 			return true
 		case *shared.InternalServiceError:
-			return true
-		case *shared.EntityNotExistsError:
 			return true
 		case *shared.AccessDeniedError:
 			return true
@@ -228,47 +226,38 @@ func init() {
 		}
 	}
 
-	AdminService_DescribeWorkflowExecution_Helper.WrapResponse = func(success *DescribeWorkflowExecutionResponse, err error) (*AdminService_DescribeWorkflowExecution_Result, error) {
+	AdminService_DescribeHistoryHost_Helper.WrapResponse = func(success *shared.DescribeHistoryHostResponse, err error) (*AdminService_DescribeHistoryHost_Result, error) {
 		if err == nil {
-			return &AdminService_DescribeWorkflowExecution_Result{Success: success}, nil
+			return &AdminService_DescribeHistoryHost_Result{Success: success}, nil
 		}
 
 		switch e := err.(type) {
 		case *shared.BadRequestError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.BadRequestError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeHistoryHost_Result.BadRequestError")
 			}
-			return &AdminService_DescribeWorkflowExecution_Result{BadRequestError: e}, nil
+			return &AdminService_DescribeHistoryHost_Result{BadRequestError: e}, nil
 		case *shared.InternalServiceError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.InternalServiceError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeHistoryHost_Result.InternalServiceError")
 			}
-			return &AdminService_DescribeWorkflowExecution_Result{InternalServiceError: e}, nil
-		case *shared.EntityNotExistsError:
-			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.EntityNotExistError")
-			}
-			return &AdminService_DescribeWorkflowExecution_Result{EntityNotExistError: e}, nil
+			return &AdminService_DescribeHistoryHost_Result{InternalServiceError: e}, nil
 		case *shared.AccessDeniedError:
 			if e == nil {
-				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeWorkflowExecution_Result.AccessDeniedError")
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for AdminService_DescribeHistoryHost_Result.AccessDeniedError")
 			}
-			return &AdminService_DescribeWorkflowExecution_Result{AccessDeniedError: e}, nil
+			return &AdminService_DescribeHistoryHost_Result{AccessDeniedError: e}, nil
 		}
 
 		return nil, err
 	}
-	AdminService_DescribeWorkflowExecution_Helper.UnwrapResponse = func(result *AdminService_DescribeWorkflowExecution_Result) (success *DescribeWorkflowExecutionResponse, err error) {
+	AdminService_DescribeHistoryHost_Helper.UnwrapResponse = func(result *AdminService_DescribeHistoryHost_Result) (success *shared.DescribeHistoryHostResponse, err error) {
 		if result.BadRequestError != nil {
 			err = result.BadRequestError
 			return
 		}
 		if result.InternalServiceError != nil {
 			err = result.InternalServiceError
-			return
-		}
-		if result.EntityNotExistError != nil {
-			err = result.EntityNotExistError
 			return
 		}
 		if result.AccessDeniedError != nil {
@@ -287,21 +276,20 @@ func init() {
 
 }
 
-// AdminService_DescribeWorkflowExecution_Result represents the result of a AdminService.DescribeWorkflowExecution function call.
+// AdminService_DescribeHistoryHost_Result represents the result of a AdminService.DescribeHistoryHost function call.
 //
-// The result of a DescribeWorkflowExecution execution is sent and received over the wire as this struct.
+// The result of a DescribeHistoryHost execution is sent and received over the wire as this struct.
 //
 // Success is set only if the function did not throw an exception.
-type AdminService_DescribeWorkflowExecution_Result struct {
-	// Value returned by DescribeWorkflowExecution after a successful execution.
-	Success              *DescribeWorkflowExecutionResponse `json:"success,omitempty"`
-	BadRequestError      *shared.BadRequestError            `json:"badRequestError,omitempty"`
-	InternalServiceError *shared.InternalServiceError       `json:"internalServiceError,omitempty"`
-	EntityNotExistError  *shared.EntityNotExistsError       `json:"entityNotExistError,omitempty"`
-	AccessDeniedError    *shared.AccessDeniedError          `json:"accessDeniedError,omitempty"`
+type AdminService_DescribeHistoryHost_Result struct {
+	// Value returned by DescribeHistoryHost after a successful execution.
+	Success              *shared.DescribeHistoryHostResponse `json:"success,omitempty"`
+	BadRequestError      *shared.BadRequestError             `json:"badRequestError,omitempty"`
+	InternalServiceError *shared.InternalServiceError        `json:"internalServiceError,omitempty"`
+	AccessDeniedError    *shared.AccessDeniedError           `json:"accessDeniedError,omitempty"`
 }
 
-// ToWire translates a AdminService_DescribeWorkflowExecution_Result struct into a Thrift-level intermediate
+// ToWire translates a AdminService_DescribeHistoryHost_Result struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -316,9 +304,9 @@ type AdminService_DescribeWorkflowExecution_Result struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *AdminService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, error) {
+func (v *AdminService_DescribeHistoryHost_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -348,47 +336,51 @@ func (v *AdminService_DescribeWorkflowExecution_Result) ToWire() (wire.Value, er
 		fields[i] = wire.Field{ID: 2, Value: w}
 		i++
 	}
-	if v.EntityNotExistError != nil {
-		w, err = v.EntityNotExistError.ToWire()
+	if v.AccessDeniedError != nil {
+		w, err = v.AccessDeniedError.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
-	if v.AccessDeniedError != nil {
-		w, err = v.AccessDeniedError.ToWire()
-		if err != nil {
-			return w, err
-		}
-		fields[i] = wire.Field{ID: 4, Value: w}
-		i++
-	}
 
 	if i != 1 {
-		return wire.Value{}, fmt.Errorf("AdminService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", i)
+		return wire.Value{}, fmt.Errorf("AdminService_DescribeHistoryHost_Result should have exactly one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _DescribeWorkflowExecutionResponse_Read(w wire.Value) (*DescribeWorkflowExecutionResponse, error) {
-	var v DescribeWorkflowExecutionResponse
+func _DescribeHistoryHostResponse_Read(w wire.Value) (*shared.DescribeHistoryHostResponse, error) {
+	var v shared.DescribeHistoryHostResponse
 	err := v.FromWire(w)
 	return &v, err
 }
 
-func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, error) {
-	var v shared.EntityNotExistsError
+func _BadRequestError_Read(w wire.Value) (*shared.BadRequestError, error) {
+	var v shared.BadRequestError
 	err := v.FromWire(w)
 	return &v, err
 }
 
-// FromWire deserializes a AdminService_DescribeWorkflowExecution_Result struct from its Thrift-level
+func _InternalServiceError_Read(w wire.Value) (*shared.InternalServiceError, error) {
+	var v shared.InternalServiceError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _AccessDeniedError_Read(w wire.Value) (*shared.AccessDeniedError, error) {
+	var v shared.AccessDeniedError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a AdminService_DescribeHistoryHost_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a AdminService_DescribeWorkflowExecution_Result struct
+// An error is returned if we were unable to build a AdminService_DescribeHistoryHost_Result struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -396,19 +388,19 @@ func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, err
 //     return nil, err
 //   }
 //
-//   var v AdminService_DescribeWorkflowExecution_Result
+//   var v AdminService_DescribeHistoryHost_Result
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *AdminService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) error {
+func (v *AdminService_DescribeHistoryHost_Result) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 0:
 			if field.Value.Type() == wire.TStruct {
-				v.Success, err = _DescribeWorkflowExecutionResponse_Read(field.Value)
+				v.Success, err = _DescribeHistoryHostResponse_Read(field.Value)
 				if err != nil {
 					return err
 				}
@@ -432,14 +424,6 @@ func (v *AdminService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) e
 			}
 		case 3:
 			if field.Value.Type() == wire.TStruct {
-				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
-				if err != nil {
-					return err
-				}
-
-			}
-		case 4:
-			if field.Value.Type() == wire.TStruct {
 				v.AccessDeniedError, err = _AccessDeniedError_Read(field.Value)
 				if err != nil {
 					return err
@@ -459,27 +443,24 @@ func (v *AdminService_DescribeWorkflowExecution_Result) FromWire(w wire.Value) e
 	if v.InternalServiceError != nil {
 		count++
 	}
-	if v.EntityNotExistError != nil {
-		count++
-	}
 	if v.AccessDeniedError != nil {
 		count++
 	}
 	if count != 1 {
-		return fmt.Errorf("AdminService_DescribeWorkflowExecution_Result should have exactly one field: got %v fields", count)
+		return fmt.Errorf("AdminService_DescribeHistoryHost_Result should have exactly one field: got %v fields", count)
 	}
 
 	return nil
 }
 
-// String returns a readable string representation of a AdminService_DescribeWorkflowExecution_Result
+// String returns a readable string representation of a AdminService_DescribeHistoryHost_Result
 // struct.
-func (v *AdminService_DescribeWorkflowExecution_Result) String() string {
+func (v *AdminService_DescribeHistoryHost_Result) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [4]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -493,23 +474,19 @@ func (v *AdminService_DescribeWorkflowExecution_Result) String() string {
 		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
 		i++
 	}
-	if v.EntityNotExistError != nil {
-		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
-		i++
-	}
 	if v.AccessDeniedError != nil {
 		fields[i] = fmt.Sprintf("AccessDeniedError: %v", v.AccessDeniedError)
 		i++
 	}
 
-	return fmt.Sprintf("AdminService_DescribeWorkflowExecution_Result{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("AdminService_DescribeHistoryHost_Result{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this AdminService_DescribeWorkflowExecution_Result match the
-// provided AdminService_DescribeWorkflowExecution_Result.
+// Equals returns true if all the fields of this AdminService_DescribeHistoryHost_Result match the
+// provided AdminService_DescribeHistoryHost_Result.
 //
 // This function performs a deep comparison.
-func (v *AdminService_DescribeWorkflowExecution_Result) Equals(rhs *AdminService_DescribeWorkflowExecution_Result) bool {
+func (v *AdminService_DescribeHistoryHost_Result) Equals(rhs *AdminService_DescribeHistoryHost_Result) bool {
 	if !((v.Success == nil && rhs.Success == nil) || (v.Success != nil && rhs.Success != nil && v.Success.Equals(rhs.Success))) {
 		return false
 	}
@@ -517,9 +494,6 @@ func (v *AdminService_DescribeWorkflowExecution_Result) Equals(rhs *AdminService
 		return false
 	}
 	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
-		return false
-	}
-	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
 		return false
 	}
 	if !((v.AccessDeniedError == nil && rhs.AccessDeniedError == nil) || (v.AccessDeniedError != nil && rhs.AccessDeniedError != nil && v.AccessDeniedError.Equals(rhs.AccessDeniedError))) {
@@ -532,14 +506,14 @@ func (v *AdminService_DescribeWorkflowExecution_Result) Equals(rhs *AdminService
 // MethodName returns the name of the Thrift function as specified in
 // the IDL, for which this struct represent the result.
 //
-// This will always be "DescribeWorkflowExecution" for this struct.
-func (v *AdminService_DescribeWorkflowExecution_Result) MethodName() string {
-	return "DescribeWorkflowExecution"
+// This will always be "DescribeHistoryHost" for this struct.
+func (v *AdminService_DescribeHistoryHost_Result) MethodName() string {
+	return "DescribeHistoryHost"
 }
 
 // EnvelopeType returns the kind of value inside this struct.
 //
 // This will always be Reply for this struct.
-func (v *AdminService_DescribeWorkflowExecution_Result) EnvelopeType() wire.EnvelopeType {
+func (v *AdminService_DescribeHistoryHost_Result) EnvelopeType() wire.EnvelopeType {
 	return wire.Reply
 }

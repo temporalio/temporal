@@ -72,6 +72,7 @@ type (
 		GetDomainID(name string) (string, error)
 		GetDomainNotificationVersion() int64
 		GetAllDomain() map[string]*DomainCacheEntry
+		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 	}
 
 	domainCache struct {
@@ -130,6 +131,10 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 
 func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
+}
+
+func (c *domainCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
+	return int64(c.cacheByID.Size()), int64(c.cacheNameToID.Size())
 }
 
 // Start start the background refresh of domain

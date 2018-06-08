@@ -7578,6 +7578,483 @@ func (v *DescribeDomainResponse) GetIsGlobalDomain() (o bool) {
 	return
 }
 
+type DescribeHistoryHostRequest struct {
+	HostAddress      *string            `json:"hostAddress,omitempty"`
+	ShardIdForHost   *int32             `json:"shardIdForHost,omitempty"`
+	ExecutionForHost *WorkflowExecution `json:"executionForHost,omitempty"`
+}
+
+// ToWire translates a DescribeHistoryHostRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DescribeHistoryHostRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.HostAddress != nil {
+		w, err = wire.NewValueString(*(v.HostAddress)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardIdForHost != nil {
+		w, err = wire.NewValueI32(*(v.ShardIdForHost)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.ExecutionForHost != nil {
+		w, err = v.ExecutionForHost.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a DescribeHistoryHostRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DescribeHistoryHostRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DescribeHistoryHostRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DescribeHistoryHostRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.HostAddress = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ShardIdForHost = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.ExecutionForHost, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DescribeHistoryHostRequest
+// struct.
+func (v *DescribeHistoryHostRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.HostAddress != nil {
+		fields[i] = fmt.Sprintf("HostAddress: %v", *(v.HostAddress))
+		i++
+	}
+	if v.ShardIdForHost != nil {
+		fields[i] = fmt.Sprintf("ShardIdForHost: %v", *(v.ShardIdForHost))
+		i++
+	}
+	if v.ExecutionForHost != nil {
+		fields[i] = fmt.Sprintf("ExecutionForHost: %v", v.ExecutionForHost)
+		i++
+	}
+
+	return fmt.Sprintf("DescribeHistoryHostRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this DescribeHistoryHostRequest match the
+// provided DescribeHistoryHostRequest.
+//
+// This function performs a deep comparison.
+func (v *DescribeHistoryHostRequest) Equals(rhs *DescribeHistoryHostRequest) bool {
+	if !_String_EqualsPtr(v.HostAddress, rhs.HostAddress) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ShardIdForHost, rhs.ShardIdForHost) {
+		return false
+	}
+	if !((v.ExecutionForHost == nil && rhs.ExecutionForHost == nil) || (v.ExecutionForHost != nil && rhs.ExecutionForHost != nil && v.ExecutionForHost.Equals(rhs.ExecutionForHost))) {
+		return false
+	}
+
+	return true
+}
+
+// GetHostAddress returns the value of HostAddress if it is set or its
+// zero value if it is unset.
+func (v *DescribeHistoryHostRequest) GetHostAddress() (o string) {
+	if v.HostAddress != nil {
+		return *v.HostAddress
+	}
+
+	return
+}
+
+// GetShardIdForHost returns the value of ShardIdForHost if it is set or its
+// zero value if it is unset.
+func (v *DescribeHistoryHostRequest) GetShardIdForHost() (o int32) {
+	if v.ShardIdForHost != nil {
+		return *v.ShardIdForHost
+	}
+
+	return
+}
+
+type DescribeHistoryHostResponse struct {
+	NumberOfShards        *int32           `json:"numberOfShards,omitempty"`
+	ShardIDs              []int32          `json:"shardIDs,omitempty"`
+	DomainCache           *DomainCacheInfo `json:"domainCache,omitempty"`
+	ShardControllerStatus *string          `json:"shardControllerStatus,omitempty"`
+	Address               *string          `json:"address,omitempty"`
+}
+
+type _List_I32_ValueList []int32
+
+func (v _List_I32_ValueList) ForEach(f func(wire.Value) error) error {
+	for _, x := range v {
+		w, err := wire.NewValueI32(x), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_I32_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_I32_ValueList) ValueType() wire.Type {
+	return wire.TI32
+}
+
+func (_List_I32_ValueList) Close() {}
+
+// ToWire translates a DescribeHistoryHostResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DescribeHistoryHostResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [5]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.NumberOfShards != nil {
+		w, err = wire.NewValueI32(*(v.NumberOfShards)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardIDs != nil {
+		w, err = wire.NewValueList(_List_I32_ValueList(v.ShardIDs)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.DomainCache != nil {
+		w, err = v.DomainCache.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ShardControllerStatus != nil {
+		w, err = wire.NewValueString(*(v.ShardControllerStatus)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.Address != nil {
+		w, err = wire.NewValueString(*(v.Address)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _List_I32_Read(l wire.ValueList) ([]int32, error) {
+	if l.ValueType() != wire.TI32 {
+		return nil, nil
+	}
+
+	o := make([]int32, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := x.GetI32(), error(nil)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+func _DomainCacheInfo_Read(w wire.Value) (*DomainCacheInfo, error) {
+	var v DomainCacheInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a DescribeHistoryHostResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DescribeHistoryHostResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DescribeHistoryHostResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DescribeHistoryHostResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.NumberOfShards = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TList {
+				v.ShardIDs, err = _List_I32_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainCache, err = _DomainCacheInfo_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ShardControllerStatus = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.Address = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DescribeHistoryHostResponse
+// struct.
+func (v *DescribeHistoryHostResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [5]string
+	i := 0
+	if v.NumberOfShards != nil {
+		fields[i] = fmt.Sprintf("NumberOfShards: %v", *(v.NumberOfShards))
+		i++
+	}
+	if v.ShardIDs != nil {
+		fields[i] = fmt.Sprintf("ShardIDs: %v", v.ShardIDs)
+		i++
+	}
+	if v.DomainCache != nil {
+		fields[i] = fmt.Sprintf("DomainCache: %v", v.DomainCache)
+		i++
+	}
+	if v.ShardControllerStatus != nil {
+		fields[i] = fmt.Sprintf("ShardControllerStatus: %v", *(v.ShardControllerStatus))
+		i++
+	}
+	if v.Address != nil {
+		fields[i] = fmt.Sprintf("Address: %v", *(v.Address))
+		i++
+	}
+
+	return fmt.Sprintf("DescribeHistoryHostResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_I32_Equals(lhs, rhs []int32) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !(lv == rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this DescribeHistoryHostResponse match the
+// provided DescribeHistoryHostResponse.
+//
+// This function performs a deep comparison.
+func (v *DescribeHistoryHostResponse) Equals(rhs *DescribeHistoryHostResponse) bool {
+	if !_I32_EqualsPtr(v.NumberOfShards, rhs.NumberOfShards) {
+		return false
+	}
+	if !((v.ShardIDs == nil && rhs.ShardIDs == nil) || (v.ShardIDs != nil && rhs.ShardIDs != nil && _List_I32_Equals(v.ShardIDs, rhs.ShardIDs))) {
+		return false
+	}
+	if !((v.DomainCache == nil && rhs.DomainCache == nil) || (v.DomainCache != nil && rhs.DomainCache != nil && v.DomainCache.Equals(rhs.DomainCache))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ShardControllerStatus, rhs.ShardControllerStatus) {
+		return false
+	}
+	if !_String_EqualsPtr(v.Address, rhs.Address) {
+		return false
+	}
+
+	return true
+}
+
+// GetNumberOfShards returns the value of NumberOfShards if it is set or its
+// zero value if it is unset.
+func (v *DescribeHistoryHostResponse) GetNumberOfShards() (o int32) {
+	if v.NumberOfShards != nil {
+		return *v.NumberOfShards
+	}
+
+	return
+}
+
+// GetShardControllerStatus returns the value of ShardControllerStatus if it is set or its
+// zero value if it is unset.
+func (v *DescribeHistoryHostResponse) GetShardControllerStatus() (o string) {
+	if v.ShardControllerStatus != nil {
+		return *v.ShardControllerStatus
+	}
+
+	return
+}
+
+// GetAddress returns the value of Address if it is set or its
+// zero value if it is unset.
+func (v *DescribeHistoryHostResponse) GetAddress() (o string) {
+	if v.Address != nil {
+		return *v.Address
+	}
+
+	return
+}
+
 type DescribeTaskListRequest struct {
 	Domain       *string       `json:"domain,omitempty"`
 	TaskList     *TaskList     `json:"taskList,omitempty"`
@@ -8422,6 +8899,158 @@ func (v *DomainAlreadyExistsError) Equals(rhs *DomainAlreadyExistsError) bool {
 
 func (v *DomainAlreadyExistsError) Error() string {
 	return v.String()
+}
+
+type DomainCacheInfo struct {
+	NumOfItemsInCacheByID   *int64 `json:"numOfItemsInCacheByID,omitempty"`
+	NumOfItemsInCacheByName *int64 `json:"numOfItemsInCacheByName,omitempty"`
+}
+
+// ToWire translates a DomainCacheInfo struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *DomainCacheInfo) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.NumOfItemsInCacheByID != nil {
+		w, err = wire.NewValueI64(*(v.NumOfItemsInCacheByID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.NumOfItemsInCacheByName != nil {
+		w, err = wire.NewValueI64(*(v.NumOfItemsInCacheByName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a DomainCacheInfo struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a DomainCacheInfo struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v DomainCacheInfo
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *DomainCacheInfo) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NumOfItemsInCacheByID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.NumOfItemsInCacheByName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a DomainCacheInfo
+// struct.
+func (v *DomainCacheInfo) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.NumOfItemsInCacheByID != nil {
+		fields[i] = fmt.Sprintf("NumOfItemsInCacheByID: %v", *(v.NumOfItemsInCacheByID))
+		i++
+	}
+	if v.NumOfItemsInCacheByName != nil {
+		fields[i] = fmt.Sprintf("NumOfItemsInCacheByName: %v", *(v.NumOfItemsInCacheByName))
+		i++
+	}
+
+	return fmt.Sprintf("DomainCacheInfo{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this DomainCacheInfo match the
+// provided DomainCacheInfo.
+//
+// This function performs a deep comparison.
+func (v *DomainCacheInfo) Equals(rhs *DomainCacheInfo) bool {
+	if !_I64_EqualsPtr(v.NumOfItemsInCacheByID, rhs.NumOfItemsInCacheByID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.NumOfItemsInCacheByName, rhs.NumOfItemsInCacheByName) {
+		return false
+	}
+
+	return true
+}
+
+// GetNumOfItemsInCacheByID returns the value of NumOfItemsInCacheByID if it is set or its
+// zero value if it is unset.
+func (v *DomainCacheInfo) GetNumOfItemsInCacheByID() (o int64) {
+	if v.NumOfItemsInCacheByID != nil {
+		return *v.NumOfItemsInCacheByID
+	}
+
+	return
+}
+
+// GetNumOfItemsInCacheByName returns the value of NumOfItemsInCacheByName if it is set or its
+// zero value if it is unset.
+func (v *DomainCacheInfo) GetNumOfItemsInCacheByName() (o int64) {
+	if v.NumOfItemsInCacheByName != nil {
+		return *v.NumOfItemsInCacheByName
+	}
+
+	return
 }
 
 type DomainConfiguration struct {

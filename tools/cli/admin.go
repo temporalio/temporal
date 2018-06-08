@@ -44,3 +44,34 @@ func newAdminWorkflowCommands() []cli.Command {
 		},
 	}
 }
+
+func newAdminHistoryHostCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "Describe internal information of history host",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagHistoryAddressWithAlias,
+					Usage: "History Host address(IP:PORT)",
+				},
+				cli.IntFlag{
+					Name:  FlagShardIDWithAlias,
+					Usage: "ShardID",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintFullyDetailWithAlias,
+					Usage: "Print fully detail",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDescribeHistoryHost(c)
+			},
+		},
+	}
+}
