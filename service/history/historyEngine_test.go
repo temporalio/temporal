@@ -1058,6 +1058,130 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
 	s.IsType(&workflow.BadRequestError{}, err)
 }
 
+// This test unit tests the activity schedule timeout validation logic of HistoryEngine's RespondDecisionTaskComplete function.
+// An scheduled activity decision has 3 timeouts: ScheduleToClose, ScheduleToStart and StartToClose.
+// This test verifies that when either ScheduleToClose or ScheduleToStart and StartToClose are specified,
+// HistoryEngine's validateActivityScheduleAttribute will deduce the missing timeout and fill it in
+// instead of returning a BadRequest error and only when all three are missing should a BadRequest be returned.
+func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAttribute() {
+	testIterationVariables := []struct {
+		scheduleToClose         *int32
+		scheduleToStart         *int32
+		startToClose            *int32
+		heartbeat               *int32
+		expectedScheduleToClose int32
+		expectedScheduleToStart int32
+		expectedStartToClose    int32
+		expectError             bool
+	}{
+		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose
+		{nil, common.Int32Ptr(3), common.Int32Ptr(7), nil,
+			3 + 7, 3, 7, false},
+		// Has ScheduleToClose timeout but not ScheduleToStart or StartToClose,
+		// will use ScheduleToClose for ScheduleToStart and StartToClose
+		{common.Int32Ptr(7), nil, nil, nil,
+			7, 7, 7, false},
+		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
+		{nil, nil, nil, nil,
+			0, 0, 0, true},
+		// Negative ScheduleToClose, expect error return
+		{common.Int32Ptr(-1), nil, nil, nil,
+			0, 0, 0, true},
+		// Negative ScheduleToStart, expect error return
+		{nil, common.Int32Ptr(-1), nil, nil,
+			0, 0, 0, true},
+		// Negative StartToClose, expect error return
+		{nil, nil, common.Int32Ptr(-1), nil,
+			0, 0, 0, true},
+		// Negative HeartBeat, expect error return
+		{nil, nil, nil, common.Int32Ptr(-1),
+			0, 0, 0, true},
+	}
+
+	for _, iVar := range testIterationVariables {
+		domainID := validDomainID
+		we := workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr("wId"),
+			RunId:      common.StringPtr(validRunID),
+		}
+		tl := "testTaskList"
+		taskToken, _ := json.Marshal(&common.TaskToken{
+			WorkflowID: "wId",
+			RunID:      we.GetRunId(),
+			ScheduleID: 2,
+		})
+		identity := "testIdentity"
+		executionContext := []byte("context")
+		input := []byte("input")
+
+		msBuilder := newMutableStateBuilder(s.config, bark.NewLoggerFromLogrus(log.New()))
+		addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+		di := addDecisionTaskScheduledEvent(msBuilder)
+		addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+		decisions := []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+			ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+				ActivityId:   common.StringPtr("activity1"),
+				ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+				TaskList:     &workflow.TaskList{Name: &tl},
+				Input:        input,
+				ScheduleToCloseTimeoutSeconds: iVar.scheduleToClose,
+				ScheduleToStartTimeoutSeconds: iVar.scheduleToStart,
+				StartToCloseTimeoutSeconds:    iVar.startToClose,
+				HeartbeatTimeoutSeconds:       iVar.heartbeat,
+			},
+		}}
+
+		ms := createMutableState(msBuilder)
+		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+		s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+
+		if !iVar.expectError {
+			s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+			s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+		}
+
+		s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+			&persistence.GetDomainResponse{
+				Info:   &persistence.DomainInfo{ID: domainID},
+				Config: &persistence.DomainConfig{Retention: 1},
+				ReplicationConfig: &persistence.DomainReplicationConfig{
+					ActiveClusterName: cluster.TestCurrentClusterName,
+					Clusters: []*persistence.ClusterReplicationConfig{
+						&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+					},
+				},
+				TableVersion: persistence.DomainTableVersionV1,
+			},
+			nil,
+		)
+		_, err := s.mockHistoryEngine.RespondDecisionTaskCompleted(context.Background(), &history.RespondDecisionTaskCompletedRequest{
+			DomainUUID: common.StringPtr(domainID),
+			CompleteRequest: &workflow.RespondDecisionTaskCompletedRequest{
+				TaskToken:        taskToken,
+				Decisions:        decisions,
+				ExecutionContext: executionContext,
+				Identity:         &identity,
+			},
+		})
+
+		if !iVar.expectError {
+			s.Nil(err, s.printHistory(msBuilder))
+			executionBuilder := s.getBuilder(domainID, we)
+			activity1Attributes := s.getActivityScheduledEvent(executionBuilder, int64(5)).ActivityTaskScheduledEventAttributes
+			s.Equal(iVar.expectedScheduleToClose, activity1Attributes.GetScheduleToCloseTimeoutSeconds())
+			s.Equal(iVar.expectedScheduleToStart, activity1Attributes.GetScheduleToStartTimeoutSeconds())
+			s.Equal(iVar.expectedStartToClose, activity1Attributes.GetStartToCloseTimeoutSeconds())
+		} else {
+			s.NotNil(err)
+		}
+		s.TearDownTest()
+		s.SetupTest()
+	}
+}
+
 func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDecision() {
 	domainID := validDomainID
 	we := workflow.WorkflowExecution{

@@ -2373,18 +2373,6 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		return &workflow.BadRequestError{Message: "ActivityType is not set on decision."}
 	}
 
-	if attributes.StartToCloseTimeoutSeconds == nil || *attributes.StartToCloseTimeoutSeconds <= 0 {
-		return &workflow.BadRequestError{Message: "A valid StartToCloseTimeoutSeconds is not set on decision."}
-	}
-	if attributes.ScheduleToStartTimeoutSeconds == nil || *attributes.ScheduleToStartTimeoutSeconds <= 0 {
-		return &workflow.BadRequestError{Message: "A valid ScheduleToStartTimeoutSeconds is not set on decision."}
-	}
-	if attributes.ScheduleToCloseTimeoutSeconds == nil || *attributes.ScheduleToCloseTimeoutSeconds <= 0 {
-		return &workflow.BadRequestError{Message: "A valid ScheduleToCloseTimeoutSeconds is not set on decision."}
-	}
-	if attributes.HeartbeatTimeoutSeconds == nil || *attributes.HeartbeatTimeoutSeconds < 0 {
-		return &workflow.BadRequestError{Message: "A valid HeartbeatTimeoutSeconds is not set on decision."}
-	}
 	if policy := attributes.RetryPolicy; policy != nil {
 		if policy.GetInitialIntervalInSeconds() <= 0 {
 			return &workflow.BadRequestError{Message: "A valid InitialIntervalInSeconds is not set on retry policy."}
@@ -2395,6 +2383,30 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		if policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
 			return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy."}
 		}
+	}
+
+	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
+	if attributes.GetScheduleToCloseTimeoutSeconds() < 0 || attributes.GetScheduleToStartTimeoutSeconds() < 0 ||
+		attributes.GetStartToCloseTimeoutSeconds() < 0 || attributes.GetHeartbeatTimeoutSeconds() < 0 {
+		return &workflow.BadRequestError{Message: "A valid timeout may not be negative."}
+	}
+
+	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
+	validScheduleToStart := attributes.GetScheduleToStartTimeoutSeconds() > 0
+	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
+
+	if validScheduleToClose {
+		if !validScheduleToStart {
+			attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
+		}
+		if !validStartToClose {
+			attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToCloseTimeoutSeconds())
+		}
+	} else if validScheduleToStart && validStartToClose {
+		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds())
+	} else {
+		// Deduction failed as there's not enough information to fill in missing timeouts.
+		return &workflow.BadRequestError{Message: "A valid ScheduleToCloseTimeout is not set on decision."}
 	}
 
 	return nil
