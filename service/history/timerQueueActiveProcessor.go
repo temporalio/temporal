@@ -259,7 +259,7 @@ Update_History_Loop:
 					timerTasks = []persistence.Task{nextTask}
 
 					// Update the task ID tracking the corresponding timer task.
-					ti.TaskID = nextTask.GetTaskID()
+					ti.TaskID = TimerTaskStatusCreated
 					msBuilder.UpdateUserTimer(ti.TimerID, ti)
 					defer t.notifyNewTimers(timerTasks)
 				}

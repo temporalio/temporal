@@ -202,7 +202,7 @@ func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder *mutableStateBuilder)
 	if timerTask != nil {
 		// Update the task ID tracking if it has created timer task or not.
 		ti := tb.pendingUserTimers[tb.userTimers[0].TimerID]
-		ti.TaskID = 1
+		ti.TaskID = TimerTaskStatusCreated
 		// TODO: We append updates to timer tasks twice.  Why?
 		msBuilder.UpdateUserTimer(ti.TimerID, ti)
 	}
@@ -370,16 +370,6 @@ func (tb *timerBuilder) createActivityTimeoutTask(fireTimeOut int32, timeoutType
 		TimeoutType:         int(timeoutType),
 		EventID:             eventID,
 	}
-}
-
-func (tb *timerBuilder) loadUserTimer(expires time.Time, timerID string, taskCreated bool) (*timerDetails, bool) {
-	seqNum := tb.localSeqNumGen.NextSeq()
-	timer := &timerDetails{
-		TimerSequenceID: TimerSequenceID{VisibilityTimestamp: expires, TaskID: seqNum},
-		TimerID:         timerID,
-		TaskCreated:     taskCreated}
-	isFirst := tb.insertTimer(timer)
-	return timer, isFirst
 }
 
 func (tb *timerBuilder) insertTimer(td *timerDetails) bool {
