@@ -158,7 +158,7 @@ processorPumpLoop:
 			p.processBatch(tasksCh)
 			pollTimer.Reset(p.options.MaxPollInterval)
 		case <-updateAckTimer.C:
-			p.ackMgr.updateAckLevel()
+			p.ackMgr.updateQueueAckLevel()
 			updateAckTimer = time.NewTimer(p.options.UpdateAckInterval)
 		}
 	}

@@ -74,13 +74,22 @@ func (_m *MockQueueAckMgr) readQueueTasks() ([]queueTaskInfo, bool, error) {
 	return r0, r1, r2
 }
 
-// completeTask is mock implementation for completeTask of QueueAckMgr
-func (_m *MockQueueAckMgr) completeTask(taskID int64) {
-	_m.Called(taskID)
+// completeQueueTask is mock implementation for completeQueueTask of QueueAckMgr
+func (_m *MockQueueAckMgr) completeQueueTask(taskID int64) error {
+	ret := _m.Called(taskID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(taskID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
-// getAckLevel is mock implementation for getAckLevel of QueueAckMgr
-func (_m *MockQueueAckMgr) getAckLevel() int64 {
+// getQueueAckLevel is mock implementation for getQueueAckLevel of QueueAckMgr
+func (_m *MockQueueAckMgr) getQueueAckLevel() int64 {
 	ret := _m.Called()
 
 	var r0 int64
@@ -94,8 +103,8 @@ func (_m *MockQueueAckMgr) getAckLevel() int64 {
 	return r0
 }
 
-// getReadLevel is mock implementation for getReadLevel of QueueAckMgr
-func (_m *MockQueueAckMgr) getReadLevel() int64 {
+// getQueueReadLevel is mock implementation for getReadLevel of QueueAckMgr
+func (_m *MockQueueAckMgr) getQueueReadLevel() int64 {
 	ret := _m.Called()
 
 	var r0 int64
@@ -109,7 +118,7 @@ func (_m *MockQueueAckMgr) getReadLevel() int64 {
 	return r0
 }
 
-// updateAckLevel is mock implementation for updateAckLevel of QueueAckMgr
-func (_m *MockQueueAckMgr) updateAckLevel() {
+// updateQueueAckLevel is mock implementation for updateQueueAckLevel of QueueAckMgr
+func (_m *MockQueueAckMgr) updateQueueAckLevel() {
 	_m.Called()
 }

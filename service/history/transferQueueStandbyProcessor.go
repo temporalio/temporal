@@ -41,6 +41,7 @@ type (
 		transferTaskFilter transferTaskFilter
 		logger             bark.Logger
 		metricsClient      metrics.Client
+		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
 	}
@@ -77,17 +78,25 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		}
 		return true, nil
 	}
+	maxReadAckLevel := func() int64 {
+		return shard.GetTransferMaxReadLevel()
+	}
+	updateClusterAckLevel := func(ackLevel int64) error {
+		return shard.UpdateTransferClusterAckLevel(clusterName, ackLevel)
+	}
+
 	processor := &transferQueueStandbyProcessorImpl{
-		clusterName:        clusterName,
-		shard:              shard,
-		historyService:     historyService,
-		options:            options,
-		executionManager:   shard.GetExecutionManager(),
-		visibilityMgr:      visibilityMgr,
-		cache:              historyService.historyCache,
-		transferTaskFilter: transferTaskFilter,
-		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		clusterName:                clusterName,
+		shard:                      shard,
+		historyService:             historyService,
+		options:                    options,
+		executionManager:           shard.GetExecutionManager(),
+		visibilityMgr:              visibilityMgr,
+		cache:                      historyService.historyCache,
+		transferTaskFilter:         transferTaskFilter,
+		logger:                     logger,
+		metricsClient:              historyService.metricsClient,
+		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel),
 	}
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
 	queueProcessorBase := newQueueProcessorBase(shard, options, processor, queueAckMgr, logger)
@@ -101,35 +110,6 @@ func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueStandbyProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
-	batchSize := t.options.BatchSize
-	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ReadLevel:    readLevel,
-		MaxReadLevel: t.shard.GetTransferMaxReadLevel(),
-		BatchSize:    batchSize,
-	})
-
-	if err != nil {
-		return nil, false, err
-	}
-
-	tasks := make([]queueTaskInfo, len(response.Tasks))
-	for i := range response.Tasks {
-		tasks[i] = response.Tasks[i]
-	}
-
-	return tasks, len(tasks) >= batchSize, nil
-}
-
-func (t *transferQueueStandbyProcessorImpl) completeTask(taskID int64) error {
-	// this is a no op on the for transfer queue active / standby processor
-	return nil
-}
-
-func (t *transferQueueStandbyProcessorImpl) updateAckLevel(ackLevel int64) error {
-	return t.shard.UpdateTransferClusterAckLevel(t.clusterName, ackLevel)
-}
-
 func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 	task, ok := qTask.(*persistence.TransferTaskInfo)
 	if !ok {
@@ -139,7 +119,7 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 	if err != nil {
 		return err
 	} else if !ok {
-		t.queueAckMgr.completeTask(task.TaskID)
+		t.queueAckMgr.completeQueueTask(task.TaskID)
 		return nil
 	}
 
@@ -171,14 +151,14 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// Transfer task could fire after the execution is deleted.
 			// In which case just ignore the error so we can complete the timer task.
-			t.queueAckMgr.completeTask(task.TaskID)
+			t.queueAckMgr.completeQueueTask(task.TaskID)
 			err = nil
 		}
 		if err != nil {
 			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 		}
 	} else {
-		t.queueAckMgr.completeTask(task.TaskID)
+		t.queueAckMgr.completeQueueTask(task.TaskID)
 	}
 
 	return err

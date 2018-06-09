@@ -782,41 +782,65 @@ func (s *TestBase) DeleteWorkflowExecution(info *WorkflowExecutionInfo) error {
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(batchSize int) ([]*TransferTaskInfo, error) {
-	response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
-		ReadLevel:    s.GetTransferReadLevel(),
-		MaxReadLevel: int64(math.MaxInt64),
-		BatchSize:    batchSize,
-	})
+func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*TransferTaskInfo, error) {
+	result := []*TransferTaskInfo{}
+	var token []byte
 
-	if err != nil {
-		return nil, err
+Loop:
+	for {
+		response, err := s.WorkflowMgr.GetTransferTasks(&GetTransferTasksRequest{
+			ReadLevel:     s.GetTransferReadLevel(),
+			MaxReadLevel:  int64(math.MaxInt64),
+			BatchSize:     batchSize,
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		token = response.NextPageToken
+		result = append(result, response.Tasks...)
+		if len(token) == 0 || !getAll {
+			break Loop
+		}
 	}
 
-	for _, task := range response.Tasks {
+	for _, task := range result {
 		atomic.StoreInt64(&s.readLevel, task.TaskID)
 	}
 
-	return response.Tasks, nil
+	return result, nil
 }
 
 // GetReplicationTasks is a utility method to get tasks from replication task queue
-func (s *TestBase) GetReplicationTasks(batchSize int) ([]*ReplicationTaskInfo, error) {
-	response, err := s.WorkflowMgr.GetReplicationTasks(&GetReplicationTasksRequest{
-		ReadLevel:    s.GetReplicationReadLevel(),
-		MaxReadLevel: int64(math.MaxInt64),
-		BatchSize:    batchSize,
-	})
+func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*ReplicationTaskInfo, error) {
+	result := []*ReplicationTaskInfo{}
+	var token []byte
 
-	if err != nil {
-		return nil, err
+Loop:
+	for {
+		response, err := s.WorkflowMgr.GetReplicationTasks(&GetReplicationTasksRequest{
+			ReadLevel:     s.GetReplicationReadLevel(),
+			MaxReadLevel:  int64(math.MaxInt64),
+			BatchSize:     batchSize,
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		token = response.NextPageToken
+		result = append(result, response.Tasks...)
+		if len(token) == 0 || !getAll {
+			break Loop
+		}
 	}
 
-	for _, task := range response.Tasks {
+	for _, task := range result {
 		atomic.StoreInt64(&s.replicationReadLevel, task.TaskID)
 	}
 
-	return response.Tasks, nil
+	return result, nil
 }
 
 // CompleteTransferTask is a utility method to complete a transfer task
@@ -836,17 +860,30 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 }
 
 // GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks() ([]*TimerTaskInfo, error) {
-	response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
-		MinTimestamp: time.Time{},
-		MaxTimestamp: time.Unix(0, math.MaxInt64),
-		BatchSize:    10})
+func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*TimerTaskInfo, error) {
+	result := []*TimerTaskInfo{}
+	var token []byte
 
-	if err != nil {
-		return nil, err
+Loop:
+	for {
+		response, err := s.WorkflowMgr.GetTimerIndexTasks(&GetTimerIndexTasksRequest{
+			MinTimestamp:  time.Time{},
+			MaxTimestamp:  time.Unix(0, math.MaxInt64),
+			BatchSize:     batchSize,
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		token = response.NextPageToken
+		result = append(result, response.Timers...)
+		if len(token) == 0 || !getAll {
+			break Loop
+		}
 	}
 
-	return response.Timers, nil
+	return result, nil
 }
 
 // CompleteTimerTask is a utility method to complete a timer task
@@ -1033,7 +1070,7 @@ func (s *TestBase) ClearTasks() {
 func (s *TestBase) ClearTransferQueue() {
 	log.Infof("Clearing transfer tasks (RangeID: %v, ReadLevel: %v)",
 		s.ShardInfo.RangeID, s.GetTransferReadLevel())
-	tasks, err := s.GetTransferTasks(100)
+	tasks, err := s.GetTransferTasks(100, true)
 	if err != nil {
 		log.Fatalf("Error during cleanup: %v", err)
 	}
@@ -1053,7 +1090,7 @@ func (s *TestBase) ClearTransferQueue() {
 func (s *TestBase) ClearReplicationQueue() {
 	log.Infof("Clearing replication tasks (RangeID: %v, ReadLevel: %v)",
 		s.ShardInfo.RangeID, s.GetReplicationReadLevel())
-	tasks, err := s.GetReplicationTasks(100)
+	tasks, err := s.GetReplicationTasks(100, true)
 	if err != nil {
 		log.Fatalf("Error during cleanup: %v", err)
 	}

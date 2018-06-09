@@ -405,7 +405,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasks1, err1 := s.GetTransferTasks(1)
+	tasks1, err1 := s.GetTransferTasks(1, false)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
@@ -429,7 +429,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	tasks2, err1 := s.GetTransferTasks(1)
+	tasks2, err1 := s.GetTransferTasks(1, false)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 decision task.")
@@ -461,7 +461,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Nil(err6)
 	s.Equal(*workflowExecution.RunId, runID6)
 
-	tasks3, err7 := s.GetTransferTasks(1)
+	tasks3, err7 := s.GetTransferTasks(1, false)
 	s.Nil(err7, "No error expected.")
 	s.NotNil(tasks3, "expected valid list of tasks.")
 	s.Equal(1, len(tasks3), "Expected 1 decision task.")
@@ -493,7 +493,7 @@ func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	taskD, err := s.GetTransferTasks(1)
+	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.Nil(err)
@@ -519,7 +519,7 @@ func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
 	s.Nil(err, "No error expected.")
 
-	tasks1, err := s.GetTransferTasks(1)
+	tasks1, err := s.GetTransferTasks(1, false)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
@@ -558,7 +558,7 @@ func (s *cassandraPersistenceSuite) TestCancelTransferTaskTasks() {
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
 	s.Nil(err, "No error expected.")
 
-	tasks2, err := s.GetTransferTasks(1)
+	tasks2, err := s.GetTransferTasks(1, false)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
@@ -587,7 +587,7 @@ func (s *cassandraPersistenceSuite) TestSignalTransferTaskTasks() {
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	taskD, err := s.GetTransferTasks(1)
+	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.Nil(err)
@@ -613,7 +613,7 @@ func (s *cassandraPersistenceSuite) TestSignalTransferTaskTasks() {
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
 	s.Nil(err, "No error expected.")
 
-	tasks1, err := s.GetTransferTasks(1)
+	tasks1, err := s.GetTransferTasks(1, false)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
@@ -652,7 +652,7 @@ func (s *cassandraPersistenceSuite) TestSignalTransferTaskTasks() {
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
 	s.Nil(err, "No error expected.")
 
-	tasks2, err := s.GetTransferTasks(1)
+	tasks2, err := s.GetTransferTasks(1, false)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
@@ -826,6 +826,70 @@ func (s *cassandraPersistenceSuite) TestLeaseAndUpdateTaskList_Sticky() {
 	s.NoError(err) // because update with ttl doesn't check rangeID
 }
 
+func (s *cassandraPersistenceSuite) TestReplicationTasks() {
+	domainID := "2466d7de-6602-4ad8-b939-fb8f8c36c711"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-replication-tasks-test"),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+	}
+
+	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err, "No error expected.")
+	s.NotEmpty(task0, "Expected non empty task identifier.")
+	taskD, err := s.GetTransferTasks(1, false)
+	s.Equal(1, len(taskD), "Expected 1 decision task.")
+	err = s.CompleteTransferTask(taskD[0].TaskID)
+	s.Nil(err)
+
+	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err, "No error expected.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	updatedInfo1 := copyWorkflowExecutionInfo(info1)
+
+	replicationTasks := []Task{
+		&HistoryReplicationTask{
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      123,
+			LastReplicationInfo: map[string]*ReplicationInfo{
+				"dc1": &ReplicationInfo{
+					Version:     int64(3),
+					LastEventID: int64(1),
+				},
+			},
+		},
+		&HistoryReplicationTask{
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      456,
+			LastReplicationInfo: map[string]*ReplicationInfo{
+				"dc1": &ReplicationInfo{
+					Version:     int64(3),
+					LastEventID: int64(1),
+				},
+			},
+		},
+	}
+	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
+	s.Nil(err, "No error expected.")
+
+	repTasks, err := s.GetReplicationTasks(1, true)
+	s.Nil(err)
+	s.Equal(len(replicationTasks), len(repTasks))
+
+	for index := range replicationTasks {
+		s.Equal(replicationTasks[index].GetTaskID(), repTasks[index].GetTaskID())
+		s.Equal(replicationTasks[index].GetType(), repTasks[index].GetTaskType())
+		s.Equal(replicationTasks[index].GetVersion(), repTasks[index].GetVersion())
+
+		err = s.CompleteReplicationTask(repTasks[index].GetTaskID())
+		s.Nil(err, "No error expected.")
+	}
+}
+
 func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	domainID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d7"
 	workflowExecution := gen.WorkflowExecution{
@@ -838,7 +902,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	tasks1, err1 := s.GetTransferTasks(1)
+	tasks1, err1 := s.GetTransferTasks(1, false)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
@@ -878,7 +942,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
 	s.Nil(err2, "No error expected.")
 
-	txTasks, err1 := s.GetTransferTasks(100)
+	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
 	s.Nil(err1, "No error expected.")
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
@@ -913,7 +977,7 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	err2 = s.CompleteTransferTask(txTasks[5].TaskID)
 	s.Nil(err2, "No error expected.")
 
-	txTasks, err2 = s.GetTransferTasks(100)
+	txTasks, err2 = s.GetTransferTasks(100, false)
 	s.Nil(err2, "No error expected.")
 	s.Empty(txTasks, "expected empty task list.")
 }
@@ -947,7 +1011,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks, err1 := s.GetTimerIndexTasks()
+	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
 	s.Nil(err1, "No error expected.")
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(timerTasks))
@@ -978,7 +1042,7 @@ func (s *cassandraPersistenceSuite) TestTimerTasks() {
 	err2 = s.CompleteTimerTask(timerTasks[4].VisibilityTimestamp, timerTasks[4].TaskID)
 	s.Nil(err2, "No error expected.")
 
-	timerTasks2, err2 := s.GetTimerIndexTasks()
+	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
 	s.Nil(err2, "No error expected.")
 	s.Empty(timerTasks2, "expected empty task list.")
 }
@@ -1590,7 +1654,7 @@ func (s *cassandraPersistenceSuite) TestReplicationTransferTaskTasks() {
 	s.Nil(err, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	taskD, err := s.GetTransferTasks(1)
+	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.Nil(err)
@@ -1620,7 +1684,7 @@ func (s *cassandraPersistenceSuite) TestReplicationTransferTaskTasks() {
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
 	s.Nil(err, "No error expected.")
 
-	tasks1, err := s.GetReplicationTasks(1)
+	tasks1, err := s.GetReplicationTasks(1, false)
 	s.Nil(err, "No error expected.")
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
@@ -1696,13 +1760,13 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	s.Nil(err0, "No error expected.")
 	s.NotEmpty(task0, "Expected non empty task identifier.")
 
-	taskD, err := s.GetTransferTasks(2)
+	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	s.Equal(TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
 	s.Nil(err)
 
-	taskR, err := s.GetReplicationTasks(1)
+	taskR, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
 	tsk := taskR[0]
 	s.Equal(ReplicationTaskTypeHistory, tsk.TaskType)
@@ -1791,7 +1855,7 @@ func (s *cassandraPersistenceSuite) TestWorkflowReplicationState() {
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, nil, nil, int64(3), replicationTasks1)
 	s.Nil(err2, "No error expected.")
 
-	taskR1, err := s.GetReplicationTasks(1)
+	taskR1, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
 	tsk1 := taskR1[0]
 	s.Equal(ReplicationTaskTypeHistory, tsk1.TaskType)

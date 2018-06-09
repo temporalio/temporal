@@ -617,26 +617,30 @@ type (
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
-		ReadLevel    int64
-		MaxReadLevel int64
-		BatchSize    int
+		ReadLevel     int64
+		MaxReadLevel  int64
+		BatchSize     int
+		NextPageToken []byte
 	}
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks []*TransferTaskInfo
+		Tasks         []*TransferTaskInfo
+		NextPageToken []byte
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
-		ReadLevel    int64
-		MaxReadLevel int64
-		BatchSize    int
+		ReadLevel     int64
+		MaxReadLevel  int64
+		BatchSize     int
+		NextPageToken []byte
 	}
 
 	// GetReplicationTasksResponse is the response to GetReplicationTask
 	GetReplicationTasksResponse struct {
-		Tasks []*ReplicationTaskInfo
+		Tasks         []*ReplicationTaskInfo
+		NextPageToken []byte
 	}
 
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
@@ -719,14 +723,16 @@ type (
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
 	// TODO: replace this with an iterator that can configure min and max index.
 	GetTimerIndexTasksRequest struct {
-		MinTimestamp time.Time
-		MaxTimestamp time.Time
-		BatchSize    int
+		MinTimestamp  time.Time
+		MaxTimestamp  time.Time
+		BatchSize     int
+		NextPageToken []byte
 	}
 
 	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
 	GetTimerIndexTasksResponse struct {
-		Timers []*TimerTaskInfo
+		Timers        []*TimerTaskInfo
+		NextPageToken []byte
 	}
 
 	// SerializedHistoryEventBatch represents a serialized batch of history events

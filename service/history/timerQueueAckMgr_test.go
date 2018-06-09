@@ -75,7 +75,6 @@ type (
 		mockClusterMetadata      *mocks.ClusterMetadata
 		metricsClient            metrics.Client
 		logger                   bark.Logger
-		domainID                 string
 		standbyClusterName       string
 		timerQueueFailoverAckMgr *timerQueueAckMgrImpl
 		minLevel                 time.Time
@@ -89,7 +88,7 @@ func TestTimerQueueAckMgrSuite(t *testing.T) {
 }
 
 func TestTimerQueueFailoverAckMgrSuite(t *testing.T) {
-	s := new(timerQueueAckMgrSuite)
+	s := new(timerQueueFailoverAckMgrSuite)
 	suite.Run(t, s)
 }
 
@@ -168,12 +167,13 @@ func (s *timerQueueAckMgrSuite) TestIsProcessNow() {
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	minTimestamp := time.Now().Add(-10 * time.Second)
 	maxTimestamp := time.Now().Add(10 * time.Second)
-	batchSize := 1
+	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: minTimestamp,
-		MaxTimestamp: maxTimestamp,
-		BatchSize:    batchSize,
+		MinTimestamp:  minTimestamp,
+		MaxTimestamp:  maxTimestamp,
+		BatchSize:     batchSize,
+		NextPageToken: []byte("some random input next page token"),
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -190,14 +190,15 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 				ScheduleAttempt:     0,
 			},
 		},
+		NextPageToken: []byte("some random output next page token"),
 	}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
 
-	timers, more, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize)
+	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
 	s.Equal(response.Timers, timers)
-	s.True(more)
+	s.Equal(response.NextPageToken, token)
 }
 
 func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
@@ -206,9 +207,10 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: minTimestamp,
-		MaxTimestamp: maxTimestamp,
-		BatchSize:    batchSize,
+		MinTimestamp:  minTimestamp,
+		MaxTimestamp:  maxTimestamp,
+		BatchSize:     batchSize,
+		NextPageToken: nil,
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -225,26 +227,31 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 				ScheduleAttempt:     0,
 			},
 		},
+		NextPageToken: nil,
 	}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
 
-	timers, more, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize)
+	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
 	s.Equal(response.Timers, timers)
-	s.False(more)
+	s.Empty(token)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
+	token := s.timerQueueAckMgr.pageToken
+	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
-	s.Equal(timerQueueAckMgrMaxTimestamp, macAckLevel)
+	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Empty(token)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, maxQueryLevel)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -258,12 +265,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		ScheduleAttempt:     0,
 	}
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistence.TimerTaskInfo{timer},
+		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -272,22 +281,30 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Equal([]*persistence.TimerTaskInfo{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
+
 	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
 	s.Equal(map[TimerSequenceID]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
-	s.Equal(timerSequenceID, s.timerQueueAckMgr.readLevel)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
+	s.Equal(timerSequenceID, s.timerQueueAckMgr.readLevel)
+	s.Equal(s.timerQueueAckMgr.readLevel.VisibilityTimestamp, s.timerQueueAckMgr.minQueryLevel)
+	s.Empty(s.timerQueueAckMgr.pageToken)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
+	token := s.timerQueueAckMgr.pageToken
+	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
-	s.Equal(timerQueueAckMgrMaxTimestamp, macAckLevel)
+	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Empty(token)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, maxQueryLevel)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -301,15 +318,16 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		ScheduleAttempt:     0,
 		Version:             int64(79),
 	}
-	// make the batch size == return size to there will be a next page
-	s.mockShard.config.TimerTaskBatchSize = 1
+
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistence.TimerTaskInfo{timer},
+		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -320,20 +338,27 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.True(moreTasks)
 	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
 	s.Equal(map[TimerSequenceID]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
-	s.Equal(timerSequenceID, s.timerQueueAckMgr.readLevel)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
+	s.Equal(timerSequenceID, s.timerQueueAckMgr.readLevel)
+	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
+	s.Equal(response.NextPageToken, s.timerQueueAckMgr.pageToken)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
+	token := s.timerQueueAckMgr.pageToken
+	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
-	s.Equal(timerQueueAckMgrMaxTimestamp, macAckLevel)
+	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Empty(token)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, maxQueryLevel)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -348,12 +373,14 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	}
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistence.TimerTaskInfo{timer},
+		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -364,20 +391,27 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.False(moreTasks)
 
 	s.Equal(map[TimerSequenceID]bool{}, s.timerQueueAckMgr.outstandingTasks)
-	s.Equal(readLevel, s.timerQueueAckMgr.readLevel)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
+	s.Equal(readLevel, s.timerQueueAckMgr.readLevel)
+	s.Equal(readLevel.VisibilityTimestamp, s.timerQueueAckMgr.minQueryLevel)
+	s.Empty(s.timerQueueAckMgr.pageToken)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	domainID := "some random domain ID"
 	ackLevel := s.timerQueueAckMgr.ackLevel
 	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
+	token := s.timerQueueAckMgr.pageToken
+	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
 	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
-	s.Equal(timerQueueAckMgrMaxTimestamp, macAckLevel)
+	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Empty(token)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, maxQueryLevel)
 
 	timer := &persistence.TimerTaskInfo{
 		DomainID:            domainID,
@@ -391,15 +425,16 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		ScheduleAttempt:     0,
 		Version:             int64(79),
 	}
-	// make the batch size == return size to there will be a next page
-	s.mockShard.config.TimerTaskBatchSize = 1
+
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer},
+		Timers:        []*persistence.TimerTaskInfo{timer},
+		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -410,60 +445,18 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.False(moreTasks)
 
 	s.Equal(map[TimerSequenceID]bool{}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(readLevel, s.timerQueueAckMgr.readLevel)
-	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
-}
-
-func (s *timerQueueAckMgrSuite) TestReadTimerTasks_AnyTask_ReadLevel() {
-	domainID := "some random domain ID"
-	ackLevel := s.timerQueueAckMgr.ackLevel
-	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
-
-	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), readLevel.VisibilityTimestamp)
-	s.Equal(timerQueueAckMgrMaxTimestamp, macAckLevel)
-
-	timer := &persistence.TimerTaskInfo{
-		DomainID:            domainID,
-		WorkflowID:          "some random workflow ID",
-		RunID:               uuid.New(),
-		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
-		TaskID:              int64(59),
-		TaskType:            1,
-		TimeoutType:         2,
-		EventID:             int64(28),
-		ScheduleAttempt:     0,
-		Version:             int64(79),
-	}
-	// make the batch size == return size to there will be a next page
-	s.mockShard.config.TimerTaskBatchSize = 1
-	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
-	}
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer},
-	}
-	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
-	s.Nil(err)
-	s.Equal(1, len(filteredTasks))
-	s.Nil(lookAheadTask)
-	s.True(moreTasks)
-	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
-	s.Equal(1, len(s.timerQueueAckMgr.outstandingTasks))
-	s.Equal(timerSequenceID, s.timerQueueAckMgr.readLevel)
-	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
+	s.Equal(readLevel.VisibilityTimestamp, s.timerQueueAckMgr.minQueryLevel)
+	s.Empty(s.timerQueueAckMgr.pageToken)
+	s.Equal(timerQueueAckMgrMaxQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	domainID := "some random domain ID"
-	readLevel := s.timerQueueAckMgr.readLevel
-	macAckLevel := s.timerQueueAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueAckMgr.minQueryLevel
+	token := s.timerQueueAckMgr.pageToken
+	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &persistence.TimerTaskInfo{
@@ -500,12 +493,14 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		ScheduleAttempt:     0,
 	}
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer1, timer2, timer3},
+		Timers:        []*persistence.TimerTaskInfo{timer1, timer2, timer3},
+		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -587,10 +582,10 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.mockShard.config.TimerProcessorUpdateShardTaskCount = 1
 	s.mockShard.config.ShardUpdateMinInterval = 0 * time.Second
 
-	s.domainID = "some random domain ID"
 	s.standbyClusterName = cluster.TestAlternativeClusterName
 	s.minLevel = time.Now().Add(-10 * time.Minute)
 	s.maxLevel = time.Now().Add(10 * time.Minute)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(s.mockShard, s.metricsClient,
 		s.standbyClusterName, s.minLevel, s.maxLevel, s.logger)
 }
@@ -601,7 +596,6 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
 	s.mockMetadataMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
-	s.mockClusterMetadata.AssertExpectations(s.T())
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {
@@ -617,23 +611,26 @@ func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {
 func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	ackLevel := s.timerQueueFailoverAckMgr.ackLevel
 	readLevel := s.timerQueueFailoverAckMgr.readLevel
-	macAckLevel := s.timerQueueFailoverAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueFailoverAckMgr.minQueryLevel
+	token := s.timerQueueFailoverAckMgr.pageToken
+	maxQueryLevel := s.timerQueueFailoverAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.minLevel, ackLevel)
+	s.Equal(s.minLevel, ackLevel.VisibilityTimestamp)
 	s.Equal(s.minLevel, readLevel.VisibilityTimestamp)
-	s.Equal(s.maxLevel, macAckLevel)
+	s.Equal(s.minLevel, minQueryLevel)
+	s.Empty(token)
+	s.Equal(s.maxLevel, maxQueryLevel)
 
-	// make the batch size == return size to there will be a next page
-	s.mockShard.config.TimerTaskBatchSize = 1
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 
 	timer1 := &persistence.TimerTaskInfo{
-		DomainID:            s.domainID,
+		DomainID:            "some random domain ID",
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
 		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
@@ -649,7 +646,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
 		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
-		TaskID:              int64(59),
+		TaskID:              int64(60),
 		TaskType:            1,
 		TimeoutType:         2,
 		EventID:             int64(28),
@@ -657,37 +654,48 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer1, timer2},
+		Timers:        []*persistence.TimerTaskInfo{timer1, timer2},
+		NextPageToken: []byte("some random next page token"),
 	}
 
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer1}, timers)
+	s.Equal([]*persistence.TimerTaskInfo{timer1, timer2}, timers)
 	s.Nil(lookAheadTimer)
 	s.True(more)
-	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer1.VisibilityTimestamp, TaskID: timer1.TaskID}
+	timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
+	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
 	s.Equal(timerSequenceID, s.timerQueueFailoverAckMgr.readLevel)
+	s.Equal(minQueryLevel, s.timerQueueFailoverAckMgr.minQueryLevel)
+	s.Equal(response.NextPageToken, s.timerQueueFailoverAckMgr.pageToken)
+	s.Equal(maxQueryLevel, s.timerQueueFailoverAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	ackLevel := s.timerQueueFailoverAckMgr.ackLevel
 	readLevel := s.timerQueueFailoverAckMgr.readLevel
-	macAckLevel := s.timerQueueFailoverAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueFailoverAckMgr.minQueryLevel
+	token := s.timerQueueFailoverAckMgr.pageToken
+	maxQueryLevel := s.timerQueueFailoverAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.minLevel, ackLevel)
+	s.Equal(s.minLevel, ackLevel.VisibilityTimestamp)
 	s.Equal(s.minLevel, readLevel.VisibilityTimestamp)
-	s.Equal(s.maxLevel, macAckLevel)
+	s.Equal(s.minLevel, minQueryLevel)
+	s.Empty(token)
+	s.Equal(s.maxLevel, maxQueryLevel)
 
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{},
+		Timers:        []*persistence.TimerTaskInfo{},
+		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
@@ -697,34 +705,52 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.Equal([]*persistence.TimerTaskInfo{}, timers)
 	s.Nil(lookAheadTimer)
 	s.False(more)
-	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.readLevel)
+
+	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
+	s.Equal(readLevel, s.timerQueueFailoverAckMgr.readLevel)
+	s.Equal(maxQueryLevel, s.timerQueueFailoverAckMgr.minQueryLevel)
+	s.Empty(s.timerQueueFailoverAckMgr.pageToken)
+	s.Equal(maxQueryLevel, s.timerQueueFailoverAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_InTheFuture() {
+	ackLevel := s.timerQueueFailoverAckMgr.ackLevel
+	readLevel := s.timerQueueFailoverAckMgr.readLevel
+
 	// when domain failover happen, it is possible that remote cluster's time is after
 	// current cluster's time
-	now := time.Now()
-	s.timerQueueFailoverAckMgr.readLevel.VisibilityTimestamp = now.Add(1 * time.Second)
-	s.timerQueueFailoverAckMgr.maxAckLevel = now
+	maxQueryLevel := time.Now()
+	s.timerQueueFailoverAckMgr.minQueryLevel = maxQueryLevel.Add(1 * time.Second)
+	s.timerQueueFailoverAckMgr.maxQueryLevel = maxQueryLevel
 
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal(0, len(timers))
 	s.Nil(lookAheadTimer)
 	s.False(more)
+
+	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
+	s.Equal(readLevel, s.timerQueueFailoverAckMgr.readLevel)
+	s.Equal(maxQueryLevel, s.timerQueueFailoverAckMgr.minQueryLevel)
+	s.Empty(s.timerQueueFailoverAckMgr.pageToken)
+	s.Equal(maxQueryLevel, s.timerQueueFailoverAckMgr.maxQueryLevel)
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
-	now := time.Now()
-	s.timerQueueFailoverAckMgr.readLevel.VisibilityTimestamp = now.Add(-10 * time.Second)
-	s.timerQueueFailoverAckMgr.maxAckLevel = now
+	to := time.Now()
+	from := to.Add(-10 * time.Second)
+	s.timerQueueFailoverAckMgr.minQueryLevel = from
+	s.timerQueueFailoverAckMgr.maxQueryLevel = to
+	s.timerQueueFailoverAckMgr.ackLevel = TimerSequenceID{VisibilityTimestamp: from}
+	s.timerQueueFailoverAckMgr.readLevel = TimerSequenceID{VisibilityTimestamp: from}
 
-	readLevel := s.timerQueueFailoverAckMgr.readLevel
-	macAckLevel := s.timerQueueFailoverAckMgr.maxAckLevel
+	minQueryLevel := s.timerQueueFailoverAckMgr.minQueryLevel
+	maxQueryLevel := s.timerQueueFailoverAckMgr.maxQueryLevel
+	token := s.timerQueueFailoverAckMgr.pageToken
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &persistence.TimerTaskInfo{
-		DomainID:            s.domainID,
+		DomainID:            "some random domain ID",
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
 		VisibilityTimestamp: time.Now().Add(-5 * time.Second),
@@ -734,7 +760,6 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventID:             int64(28),
 		ScheduleAttempt:     0,
 	}
-	// this timer task does not belonw to failover processing
 	timer2 := &persistence.TimerTaskInfo{
 		DomainID:            "some other random domain ID",
 		WorkflowID:          "some random workflow ID",
@@ -747,7 +772,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		ScheduleAttempt:     0,
 	}
 	timer3 := &persistence.TimerTaskInfo{
-		DomainID:            s.domainID,
+		DomainID:            "some random domain ID",
 		WorkflowID:          "some random workflow ID",
 		RunID:               uuid.New(),
 		VisibilityTimestamp: timer1.VisibilityTimestamp.Add(1 * time.Second),
@@ -758,20 +783,33 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		ScheduleAttempt:     0,
 	}
 	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: readLevel.VisibilityTimestamp,
-		MaxTimestamp: macAckLevel,
-		BatchSize:    s.mockShard.GetConfig().TimerTaskBatchSize,
+		MinTimestamp:  minQueryLevel,
+		MaxTimestamp:  maxQueryLevel,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistence.TimerTaskInfo{timer1, timer3},
+		Timers:        []*persistence.TimerTaskInfo{timer1, timer2, timer3},
+		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockExecutionMgr.On("GetTimerIndexTasks", request).Return(response, nil).Once()
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistence.TimerTaskInfo{timer1, timer3}, filteredTasks)
+	s.Equal([]*persistence.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
+
+	// there will be no call to update shard
+	timerSequenceID2 := TimerSequenceID{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
+	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
+	s.timerQueueFailoverAckMgr.updateAckLevel()
+	select {
+	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
+		s.Fail("timer queue ack mgr finished chan should not be fired")
+	default:
+	}
 
 	// there will be no call to update shard
 	timerSequenceID3 := TimerSequenceID{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
