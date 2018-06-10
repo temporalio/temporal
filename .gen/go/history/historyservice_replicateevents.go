@@ -226,6 +226,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.RetryTaskError:
+			return true
 		default:
 			return false
 		}
@@ -262,6 +264,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEvents_Result.LimitExceededError")
 			}
 			return &HistoryService_ReplicateEvents_Result{LimitExceededError: e}, nil
+		case *shared.RetryTaskError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_ReplicateEvents_Result.RetryTaskError")
+			}
+			return &HistoryService_ReplicateEvents_Result{RetryTaskError: e}, nil
 		}
 
 		return nil, err
@@ -287,6 +294,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.RetryTaskError != nil {
+			err = result.RetryTaskError
+			return
+		}
 		return
 	}
 
@@ -301,6 +312,7 @@ type HistoryService_ReplicateEvents_Result struct {
 	EntityNotExistError     *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 	ShardOwnershipLostError *ShardOwnershipLostError     `json:"shardOwnershipLostError,omitempty"`
 	LimitExceededError      *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
+	RetryTaskError          *shared.RetryTaskError       `json:"retryTaskError,omitempty"`
 }
 
 // ToWire translates a HistoryService_ReplicateEvents_Result struct into a Thrift-level intermediate
@@ -320,7 +332,7 @@ type HistoryService_ReplicateEvents_Result struct {
 //   }
 func (v *HistoryService_ReplicateEvents_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -366,12 +378,26 @@ func (v *HistoryService_ReplicateEvents_Result) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
+	if v.RetryTaskError != nil {
+		w, err = v.RetryTaskError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
 
 	if i > 1 {
 		return wire.Value{}, fmt.Errorf("HistoryService_ReplicateEvents_Result should have at most one field: got %v fields", i)
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _RetryTaskError_Read(w wire.Value) (*shared.RetryTaskError, error) {
+	var v shared.RetryTaskError
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a HistoryService_ReplicateEvents_Result struct from its Thrift-level
@@ -436,6 +462,14 @@ func (v *HistoryService_ReplicateEvents_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.RetryTaskError, err = _RetryTaskError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -455,6 +489,9 @@ func (v *HistoryService_ReplicateEvents_Result) FromWire(w wire.Value) error {
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.RetryTaskError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("HistoryService_ReplicateEvents_Result should have at most one field: got %v fields", count)
 	}
@@ -469,7 +506,7 @@ func (v *HistoryService_ReplicateEvents_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [6]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -489,6 +526,10 @@ func (v *HistoryService_ReplicateEvents_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.RetryTaskError != nil {
+		fields[i] = fmt.Sprintf("RetryTaskError: %v", v.RetryTaskError)
 		i++
 	}
 
@@ -513,6 +554,9 @@ func (v *HistoryService_ReplicateEvents_Result) Equals(rhs *HistoryService_Repli
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.RetryTaskError == nil && rhs.RetryTaskError == nil) || (v.RetryTaskError != nil && rhs.RetryTaskError != nil && v.RetryTaskError.Equals(rhs.RetryTaskError))) {
 		return false
 	}
 

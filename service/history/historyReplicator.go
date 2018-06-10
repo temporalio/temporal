@@ -33,6 +33,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -45,8 +46,17 @@ type (
 		historyMgr        persistence.HistoryManager
 		historySerializer persistence.HistorySerializer
 		metadataMgr       cluster.Metadata
+		metricsClient     metrics.Client
 		logger            bark.Logger
 	}
+)
+
+var (
+	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
+	// try this task again after a small delay.
+	ErrRetryEntityNotExists = &shared.RetryTaskError{Message: "workflow execution not found"}
+	// ErrMissingReplicationInfo is returned when replication task is missing replication information from source cluster
+	ErrMissingReplicationInfo = &shared.BadRequestError{Message: "replication task is missing cluster replication info"}
 )
 
 func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, historyCache *historyCache, domainCache cache.DomainCache,
@@ -59,6 +69,7 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 		historyMgr:        historyMgr,
 		historySerializer: persistence.NewJSONHistorySerializer(),
 		metadataMgr:       shard.GetService().GetClusterMetadata(),
+		metricsClient:     shard.GetMetricsClient(),
 		logger:            logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryReplicatorComponent),
 	}
 
@@ -114,6 +125,13 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	default:
 		msBuilder, err = context.loadWorkflowExecution()
 		if err != nil {
+			// Check to see if this is workflow execution not exist error.  This means task is delivered out of order
+			// and since we cannot process any other task for workflow execution before processing workflow execution
+			// started event, so let's return RetryTaskErr to let replicator know to retry the task after sometime
+			if _, ok := err.(*shared.EntityNotExistsError); ok {
+				return ErrRetryEntityNotExists
+			}
+
 			return err
 		}
 
@@ -122,6 +140,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		if rState.LastWriteVersion > request.GetVersion() {
 			// Replication state is already on a higher version, we can drop this event
 			// TODO: We need to replay external events like signal to the new version
+			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 			logger.Warnf("Dropping stale replication task.  CurrentV: %v, LastWriteV: %v, LastWriteEvent: %v",
 				rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID)
 			return nil
@@ -137,12 +156,14 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 				logger.Errorf("No replication information found for previous active cluster.  Previous: %v, Request: %v, ReplicationInfo: %v",
 					previousActiveCluster, request.GetSourceCluster(), request.ReplicationInfo)
 
-				// TODO: Handle missing replication information
-				return nil
+				// TODO: Handle missing replication information.
+				// Returning BadRequestError to force the message to land into DLQ
+				return ErrMissingReplicationInfo
 			}
 
 			// Detect conflict
 			if ri.GetLastEventId() != rState.LastWriteEventID {
+				r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.HistoryConflictsCounter)
 				logger.Infof("Conflict detected.  State: {V: %v, LastWriteV: %v, LastWriteEvent: %v}, ReplicationInfo: {PrevC: %v, V: %v, LastEvent: %v}",
 					rState.CurrentVersion, rState.LastWriteVersion, rState.LastWriteEventID,
 					previousActiveCluster, ri.GetVersion(), ri.GetLastEventId())
@@ -158,6 +179,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check for duplicate processing of replication task
 		if firstEvent.GetEventId() < msBuilder.GetNextEventID() {
+			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 			logger.Debugf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
 				msBuilder.GetNextEventID(), msBuilder.replicationState.CurrentVersion,
 				msBuilder.replicationState.LastWriteVersion, msBuilder.replicationState.LastWriteEventID)
@@ -168,6 +190,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		if firstEvent.GetEventId() > msBuilder.GetNextEventID() {
 			logger.Debugf("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
 				msBuilder.GetNextEventID(), firstEvent.GetEventId())
+			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.BufferedReplicationTaskCounter)
 
 			if err := msBuilder.BufferReplicationTask(request); err != nil {
 				logger.Errorf("Failed to buffer out of order replication task.  Err: %v", err)

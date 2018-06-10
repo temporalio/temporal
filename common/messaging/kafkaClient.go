@@ -41,7 +41,6 @@ func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName st
 	sourceTopics := c.config.getTopicsForCadenceCluster(sourceCluster)
 
 	topicKafkaCluster := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
-	retryTopicKafkaCluster := c.config.getKafkaClusterForTopic(currentTopics.RetryTopic)
 	dqlTopicKafkaCluster := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
 	topicList := kafka.ConsumerTopicList{
 		kafka.ConsumerTopic{
@@ -49,11 +48,6 @@ func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName st
 				Name:       sourceTopics.Topic,
 				Cluster:    topicKafkaCluster,
 				BrokerList: c.config.getBrokersForKafkaCluster(topicKafkaCluster),
-			},
-			RetryQ: kafka.Topic{
-				Name:       currentTopics.RetryTopic,
-				Cluster:    retryTopicKafkaCluster,
-				BrokerList: c.config.getBrokersForKafkaCluster(retryTopicKafkaCluster),
 			},
 			DLQ: kafka.Topic{
 				Name:       currentTopics.DLQTopic,

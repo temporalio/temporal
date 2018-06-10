@@ -69,6 +69,10 @@ exception AccessDeniedError {
   1: required string message
 }
 
+exception RetryTaskError {
+  1: required string message
+}
+
 enum WorkflowIdReusePolicy {
   /*
    * allow start a workflow execution using the same workflow ID,

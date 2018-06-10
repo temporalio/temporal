@@ -394,6 +394,8 @@ const (
 	ReplicatorQueueProcessorScope
 	// ReplicatorTaskHistoryScope is the scope used for history task processing by replicator queue processor
 	ReplicatorTaskHistoryScope
+	// ReplicateHistoryEventsScope is the scope used by historyReplicator API for applying events
+	ReplicateHistoryEventsScope
 
 	NumHistoryScopes
 )
@@ -426,6 +428,10 @@ const (
 const (
 	// ReplicationScope is the scope used by all metric emitted by replicator
 	ReplicatorScope = iota + NumCommonScopes
+	// DomainReplicationTaskScope is the scope used by domain task replication processing
+	DomainReplicationTaskScope
+	// HistoryReplicationTaskScope is the scope used by history task replication processing
+	HistoryReplicationTaskScope
 
 	NumWorkerScopes
 )
@@ -575,6 +581,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryEventNotificationScope:                {operation: "HistoryEventNotification"},
 		ReplicatorQueueProcessorScope:                {operation: "ReplicatorQueueProcessor"},
 		ReplicatorTaskHistoryScope:                   {operation: "ReplicatorTaskHistory"},
+		ReplicateHistoryEventsScope:                  {operation: "ReplicateHistoryEvents"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -590,7 +597,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Worker Scope Names
 	Worker: {
-		ReplicatorScope: {operation: "Replicator"},
+		ReplicatorScope:             {operation: "Replicator"},
+		DomainReplicationTaskScope:  {operation: "DomainReplicationTask"},
+		HistoryReplicationTaskScope: {operation: "HistoryReplicationTask"},
 	},
 }
 
@@ -609,6 +618,7 @@ const (
 	CadenceErrQueryFailedCounter
 	CadenceErrLimitExceededCounter
 	CadenceErrContextTimeoutCounter
+	CadenceErrRetryTaskCounter
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -672,6 +682,9 @@ const (
 	HistoryEventNotificationFanoutLatency
 	HistoryEventNotificationInFlightMessageGauge
 	HistoryEventNotificationFailDeliveryCount
+	StaleReplicationEventsCounter
+	BufferedReplicationTaskCounter
+	HistoryConflictsCounter
 )
 
 // Matching metrics enum
@@ -710,6 +723,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrQueryFailedCounter:                  {metricName: "cadence.errors.query-failed", metricType: Counter},
 		CadenceErrLimitExceededCounter:                {metricName: "cadence.errors.limit-exceeded", metricType: Counter},
 		CadenceErrContextTimeoutCounter:               {metricName: "cadence.errors.context-timeout", metricType: Counter},
+		CadenceErrRetryTaskCounter:                    {metricName: "cadence.errors.retry-task", metricType: Counter},
 		PersistenceRequests:                           {metricName: "persistence.requests", metricType: Counter},
 		PersistenceFailures:                           {metricName: "persistence.errors", metricType: Counter},
 		PersistenceLatency:                            {metricName: "persistence.latency", metricType: Timer},
@@ -768,6 +782,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryEventNotificationFanoutLatency:        {metricName: "history-event-notification-fanout-latency", metricType: Timer},
 		HistoryEventNotificationInFlightMessageGauge: {metricName: "history-event-notification-inflight-message-gauge", metricType: Gauge},
 		HistoryEventNotificationFailDeliveryCount:    {metricName: "history-event-notification-fail-delivery-count", metricType: Counter},
+		StaleReplicationEventsCounter:                {metricName: "stale-replication-events", metricType: Counter},
+		BufferedReplicationTaskCounter:               {metricName: "buffered-replication-tasks", metricType: Counter},
+		HistoryConflictsCounter:                      {metricName: "history-conflicts", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

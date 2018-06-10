@@ -21,8 +21,6 @@
 package worker
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,9 +36,11 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"go.uber.org/yarpc/yarpcerrors"
 )
 
 type (
@@ -68,11 +68,18 @@ type (
 	}
 )
 
+const (
+	replicationTaskInitialRetryInterval = 50 * time.Millisecond
+	replicationTaskMaxRetryInterval     = 10 * time.Second
+	replicationTaskExpirationInterval   = 30 * time.Second
+)
+
 var (
 	// ErrEmptyReplicationTask is the error to indicate empty replication task
-	ErrEmptyReplicationTask = errors.New("empty replication task")
+	ErrEmptyReplicationTask = &shared.BadRequestError{Message: "empty replication task"}
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = errors.New("unknown replication task")
+	ErrUnknownReplicationTask  = &shared.BadRequestError{Message: "unknown replication task"}
+	replicationTaskRetryPolicy = createReplicatorRetryPolicy()
 )
 
 func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
@@ -170,76 +177,164 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 				return // channel closed
 			}
 
-			p.metricsClient.IncCounter(metrics.ReplicatorScope, metrics.ReplicatorMessages)
-			sw := p.metricsClient.StartTimer(metrics.ReplicatorScope, metrics.ReplicatorLatency)
-
-			// TODO: We skip over any messages which cannot be deserialized.  Figure out DLQ story for corrupted messages.
-			task, err := deserialize(msg.Value())
-			if err != nil {
-				err = fmt.Errorf("Deserialize Error. Value: %v, Error: %v", string(msg.Value()), err)
-			} else {
-
-				// TODO: We need to figure out DLQ story for corrupted payload
-				if task.TaskType == nil {
-					err = ErrEmptyReplicationTask
-				} else {
-					switch task.GetTaskType() {
-					case replicator.ReplicationTaskTypeDomain:
-						p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
-						err = p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
-					case replicator.ReplicationTaskTypeHistory:
-					ApplyLoop:
-						for {
-							err = p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
-								SourceCluster: common.StringPtr(p.sourceCluster),
-								DomainUUID:    task.HistoryTaskAttributes.DomainId,
-								WorkflowExecution: &shared.WorkflowExecution{
-									WorkflowId: task.HistoryTaskAttributes.WorkflowId,
-									RunId:      task.HistoryTaskAttributes.RunId,
-								},
-								FirstEventId:    task.HistoryTaskAttributes.FirstEventId,
-								NextEventId:     task.HistoryTaskAttributes.NextEventId,
-								Version:         task.HistoryTaskAttributes.Version,
-								ReplicationInfo: task.HistoryTaskAttributes.ReplicationInfo,
-								History:         task.HistoryTaskAttributes.History,
-								NewRunHistory:   task.HistoryTaskAttributes.NewRunHistory,
-							})
-
-							// ReplicateEvents succeeded, break out of the loop and complete task
-							if err == nil {
-								break ApplyLoop
-							}
-
-							// ReplicateEvents failed with some error other than workflow execution not exist
-							// break out of the loop and nack the task to move to DLQ
-							if _, ok := err.(*shared.EntityNotExistsError); !ok {
-								break ApplyLoop
-							}
-
-							// TODO: If failed with EntityNotExistsError, then move the task to retry queue
-							// Let's wait for create execution task to be replicated and try again
-							time.Sleep(20 * time.Millisecond)
+			var err error
+		ProcessRetryLoop:
+			for retryCount := 1; retryCount <= p.config.ReplicatorMaxRetryCount; {
+				select {
+				case <-p.shutdownCh:
+					return
+				default:
+					op := func() error {
+						return p.process(msg)
+					}
+					err = backoff.Retry(op, replicationTaskRetryPolicy, p.isTransientRetryableError)
+					if err != nil {
+						// Check if this is an explicit ask to retry the task by handler
+						if _, ok := err.(*shared.RetryTaskError); ok {
+							// Increment the retryCount as we will retry the error upto ReplicatorMaxRetryCount before moving
+							// it to DLQ
+							retryCount++
+							time.Sleep(p.config.ReplicatorRetryDelay)
+							continue ProcessRetryLoop
 						}
 
-					default:
-						err = ErrUnknownReplicationTask
+						// Keep on retrying transient errors for ever
+						if p.isTransientRetryableError(err) {
+							continue ProcessRetryLoop
+						}
 					}
 				}
+
+				break ProcessRetryLoop
 			}
 
-			if err != nil {
-				p.logger.WithField(logging.TagErr, err).Error("Error processing replication task.")
-				p.metricsClient.IncCounter(metrics.ReplicatorScope, metrics.ReplicatorFailures)
-				msg.Nack()
-			} else {
+			if err == nil {
+				// Successfully processed replication task.  Ack message to move the cursor forward.
 				msg.Ack()
+			} else {
+				// Task still failed after all retries.  This is most probably due to a bug in replication code.
+				// Nack the task to move it to DLQ to not block replication for other workflow executions.
+				p.logger.WithFields(bark.Fields{
+					logging.TagErr:          err,
+					logging.TagPartitionKey: msg.Partition(),
+					logging.TagOffset:       msg.Offset(),
+				}).Error("Error processing replication task.")
+				p.logger.WithField(logging.TagErr, err).Error("Error processing replication task.")
+				msg.Nack()
 			}
-			sw.Stop()
 		case <-p.consumer.Closed():
 			p.logger.Info("Consumer closed. Processor shutting down.")
 			return
 		}
 	}
+}
+
+func (p *replicationTaskProcessor) process(msg kafka.Message) error {
+	scope := metrics.ReplicatorScope
+	task, err := deserialize(msg.Value())
+	if err != nil {
+		p.updateFailureMetric(scope, err)
+		p.logger.WithFields(bark.Fields{
+			logging.TagErr:          err,
+			logging.TagPartitionKey: msg.Partition(),
+			logging.TagOffset:       msg.Offset(),
+		}).Error("Failed to deserialize replication task.")
+		return err
+	}
+
+	if task.TaskType == nil {
+		p.updateFailureMetric(scope, ErrEmptyReplicationTask)
+		return ErrEmptyReplicationTask
+	}
+
+	switch task.GetTaskType() {
+	case replicator.ReplicationTaskTypeDomain:
+		scope = metrics.DomainReplicationTaskScope
+		err = p.handleDomainReplicationTask(task)
+	case replicator.ReplicationTaskTypeHistory:
+		scope = metrics.HistoryReplicationTaskScope
+		err = p.handleHistoryReplicationTask(task)
+	default:
+		err = ErrUnknownReplicationTask
+	}
+
+	if err != nil {
+		p.updateFailureMetric(scope, err)
+	}
+
+	return err
+}
+
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask) error {
+	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
+	defer sw.Stop()
+
+	p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
+	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+}
+
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask) error {
+	p.metricsClient.IncCounter(metrics.HistoryReplicationTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ReplicatorLatency)
+	defer sw.Stop()
+
+	return p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
+		SourceCluster: common.StringPtr(p.sourceCluster),
+		DomainUUID:    task.HistoryTaskAttributes.DomainId,
+		WorkflowExecution: &shared.WorkflowExecution{
+			WorkflowId: task.HistoryTaskAttributes.WorkflowId,
+			RunId:      task.HistoryTaskAttributes.RunId,
+		},
+		FirstEventId:    task.HistoryTaskAttributes.FirstEventId,
+		NextEventId:     task.HistoryTaskAttributes.NextEventId,
+		Version:         task.HistoryTaskAttributes.Version,
+		ReplicationInfo: task.HistoryTaskAttributes.ReplicationInfo,
+		History:         task.HistoryTaskAttributes.History,
+		NewRunHistory:   task.HistoryTaskAttributes.NewRunHistory,
+	})
+}
+
+func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
+	// Always update failure counter for all replicator errors
+	p.metricsClient.IncCounter(scope, metrics.ReplicatorFailures)
+
+	// Also update counter to distinguish between type of failures
+	switch err := err.(type) {
+	case *h.ShardOwnershipLostError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrShardOwnershipLostCounter)
+	case *shared.BadRequestError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+	case *shared.DomainNotActiveError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
+	case *shared.WorkflowExecutionAlreadyStartedError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrExecutionAlreadyStartedCounter)
+	case *shared.EntityNotExistsError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
+	case *shared.LimitExceededError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
+	case *shared.RetryTaskError:
+		p.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
+	case *yarpcerrors.Status:
+		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
+			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
+		}
+	}
+}
+
+func (p *replicationTaskProcessor) isTransientRetryableError(err error) bool {
+	switch err.(type) {
+	case *h.ShardOwnershipLostError:
+		return true
+	case *shared.ServiceBusyError:
+		return true
+	case *shared.LimitExceededError:
+		return true
+	case *shared.InternalServiceError:
+		return true
+	}
+
+	return false
 }
 
 func deserialize(payload []byte) (*replicator.ReplicationTask, error) {
@@ -249,4 +344,12 @@ func deserialize(payload []byte) (*replicator.ReplicationTask, error) {
 	}
 
 	return &task, nil
+}
+
+func createReplicatorRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(replicationTaskInitialRetryInterval)
+	policy.SetMaximumInterval(replicationTaskMaxRetryInterval)
+	policy.SetExpirationInterval(replicationTaskExpirationInterval)
+
+	return policy
 }

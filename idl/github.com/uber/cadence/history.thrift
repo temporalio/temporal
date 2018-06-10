@@ -536,6 +536,7 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.RetryTaskError retryTaskError,
     )
 
   /**
