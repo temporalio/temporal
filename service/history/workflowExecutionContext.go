@@ -29,6 +29,8 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -42,6 +44,7 @@ type (
 		domainID          string
 		workflowExecution workflow.WorkflowExecution
 		shard             ShardContext
+		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		logger            bark.Logger
 
@@ -67,6 +70,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		domainID:          domainID,
 		workflowExecution: execution,
 		shard:             shard,
+		clusterMetadata:   shard.GetService().GetClusterMetadata(),
 		executionManager:  executionManager,
 		logger:            lg,
 		locker:            common.NewMutex(),
@@ -168,8 +172,16 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 	// Only generate replication task if this is a global domain
 	createReplicationTask := c.msBuilder.replicationState != nil
 
-	lastWriteVersion := c.msBuilder.GetCurrentVersion()
-	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, "", lastWriteVersion, transactionID)
+	currentVersion := c.msBuilder.GetCurrentVersion()
+	if createReplicationTask {
+		activeCluster := c.clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
+		currentCluster := c.clusterMetadata.GetCurrentClusterName()
+		if activeCluster != currentCluster {
+			return errors.NewDomainNotActiveError(c.msBuilder.executionInfo.DomainID, currentCluster, activeCluster)
+		}
+	}
+
+	return c.updateHelper(nil, transferTasks, timerTasks, createReplicationTask, "", currentVersion, transactionID)
 }
 
 func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,

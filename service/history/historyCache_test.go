@@ -36,9 +36,11 @@ import (
 	"github.com/uber-go/tally"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -48,10 +50,14 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		logger           bark.Logger
-		mockExecutionMgr *mocks.ExecutionManager
-		mockShard        *shardContextImpl
-		cache            *historyCache
+		logger              bark.Logger
+		mockExecutionMgr    *mocks.ExecutionManager
+		mockClusterMetadata *mocks.ClusterMetadata
+		mockProducer        *mocks.KafkaProducer
+		mockMessagingClient messaging.Client
+		mockService         service.Service
+		mockShard           *shardContextImpl
+		cache               *historyCache
 	}
 )
 
@@ -75,7 +81,13 @@ func (s *historyCacheSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
+	s.mockClusterMetadata = &mocks.ClusterMetadata{}
+	s.mockProducer = &mocks.KafkaProducer{}
+	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
+		service:                   s.mockService,
 		shardInfo:                 &persistence.ShardInfo{ShardID: 0, RangeID: 1, TransferAckLevel: 0},
 		transferSequenceNumber:    1,
 		executionManager:          s.mockExecutionMgr,
@@ -87,6 +99,8 @@ func (s *historyCacheSuite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.cache = newHistoryCache(s.mockShard, s.logger)
+
+	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 }
 
 func (s *historyCacheSuite) TearDownTest() {

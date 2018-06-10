@@ -443,8 +443,9 @@ func (b *stateBuilder) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			return nil, err
 		}
+	} else {
+		retentionInDays = domainEntry.GetConfig().Retention
 	}
-	retentionInDays = domainEntry.GetConfig().Retention
 	return b.getTimerBuilder(event).createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24), nil
 }
 

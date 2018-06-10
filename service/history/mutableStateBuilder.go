@@ -342,7 +342,9 @@ func (e *mutableStateBuilder) GetLastWriteVersion() int64 {
 }
 
 func (e *mutableStateBuilder) updateReplicationStateVersion(version int64) {
-	e.replicationState.CurrentVersion = version
+	if version > e.replicationState.CurrentVersion {
+		e.replicationState.CurrentVersion = version
+	}
 }
 
 // Assumption: It is expected CurrentVersion on replication state is updated at the start of transaction when
