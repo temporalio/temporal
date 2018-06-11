@@ -110,7 +110,7 @@ func (b *WorkflowClientBuilder) build() error {
 	}
 
 	ch, err := tchannel.NewChannelTransport(
-		tchannel.ServiceName(_cadenceClientName))
+		tchannel.ServiceName(_cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
 	if err != nil {
 		b.logger.Fatal("Failed to create transport channel", zap.Error(err))
 	}
