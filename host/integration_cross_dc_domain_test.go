@@ -31,10 +31,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
-	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -45,12 +43,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
-		persistence.TestBase
-		mockMessagingClient messaging.Client
-		mockProducer        messaging.Producer
-		host                Cadence
-		engine              wsc.Interface
-		logger              bark.Logger
+		IntegrationBase
 	}
 )
 
@@ -113,16 +106,6 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()
-}
-
-func (s *integrationCrossDCSuite) setupShards() {
-	// shard 0 is always created, we create additional shards if needed
-	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
-		err := s.CreateShard(shardID, "", 0)
-		if err != nil {
-			s.logger.WithField("error", err).Fatal("Failed to create shard")
-		}
-	}
 }
 
 // Note: if the global domain is not enabled, active clusters and clusters

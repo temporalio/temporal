@@ -57,15 +57,10 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
-		persistence.TestBase
-		domainName          string
-		domainID            string
-		foreignDomainName   string
-		mockMessagingClient messaging.Client
-		mockProducer        messaging.Producer
-		host                Cadence
-		engine              wsc.Interface
-		logger              bark.Logger
+		IntegrationBase
+		domainName        string
+		domainID          string
+		foreignDomainName string
 	}
 
 	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
@@ -88,7 +83,26 @@ type (
 		logger                              bark.Logger
 		suite                               *integrationSuite
 	}
+
+	IntegrationBase struct {
+		persistence.TestBase
+		mockMessagingClient messaging.Client
+		mockProducer        messaging.Producer
+		host                Cadence
+		engine              wsc.Interface
+		logger              bark.Logger
+	}
 )
+
+func (s *IntegrationBase) setupShards() {
+	// shard 0 is always created, we create additional shards if needed
+	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
+		err := s.CreateShard(shardID, "", 0)
+		if err != nil {
+			s.logger.WithField("error", err).Fatal("Failed to create shard")
+		}
+	}
+}
 
 func TestIntegrationSuite(t *testing.T) {
 	flag.Parse()
@@ -6130,16 +6144,6 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
 	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
 	s.Equal(identity, *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
-}
-
-func (s *integrationSuite) setupShards() {
-	// shard 0 is always created, we create additional shards if needed
-	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
-		err := s.CreateShard(shardID, "", 0)
-		if err != nil {
-			s.logger.WithField("error", err).Fatal("Failed to create shard")
-		}
-	}
 }
 
 func (s *integrationSuite) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {
