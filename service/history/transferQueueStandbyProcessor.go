@@ -170,7 +170,7 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 	defer sw.Stop()
 
 	processTaskIfClosed := false
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		activityInfo, isPending := msBuilder.GetActivityInfo(transferTask.ScheduleID)
 
 		if !isPending {
@@ -196,7 +196,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 	defer sw.Stop()
 
 	processTaskIfClosed := false
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
 
 		if !isPending {
@@ -230,7 +230,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 	defer sw.Stop()
 
 	processTaskIfClosed := true
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 
 		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask)
 		if err != nil {
@@ -265,7 +265,7 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 	defer sw.Stop()
 
 	processTaskIfClosed := false
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		requestCancelInfo, isPending := msBuilder.GetRequestCancelInfo(transferTask.ScheduleID)
 
 		if !isPending {
@@ -288,7 +288,7 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 	defer sw.Stop()
 
 	processTaskIfClosed := false
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		signalInfo, isPending := msBuilder.GetSignalInfo(transferTask.ScheduleID)
 
 		if !isPending {
@@ -311,7 +311,7 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 	defer sw.Stop()
 
 	processTaskIfClosed := false
-	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		childWorkflowInfo, isPending := msBuilder.GetChildExecutionInfo(transferTask.ScheduleID)
 
 		if !isPending {
@@ -331,7 +331,7 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 	})
 }
 
-func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo, fn func(*mutableStateBuilder) error) (retError error) {
+func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo, fn func(mutableState) error) (retError error) {
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(transferTask))
 	if err != nil {
 		return err
@@ -351,7 +351,7 @@ func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed 
 		return nil
 	}
 
-	if !processTaskIfClosed && !msBuilder.isWorkflowExecutionRunning() {
+	if !processTaskIfClosed && !msBuilder.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process the timer
 		return nil
 	}
@@ -366,30 +366,32 @@ func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(tran
 	}
 }
 
-func (t *transferQueueStandbyProcessorImpl) recordWorkflowStarted(msBuilder *mutableStateBuilder) error {
+func (t *transferQueueStandbyProcessorImpl) recordWorkflowStarted(msBuilder mutableState) error {
+	executionInfo := msBuilder.GetExecutionInfo()
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID: msBuilder.executionInfo.DomainID,
+		DomainUUID: executionInfo.DomainID,
 		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
-			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
 		},
-		WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
-		StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(msBuilder.executionInfo.WorkflowTimeout),
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 	})
 }
 
-func (t *transferQueueStandbyProcessorImpl) recordWorkflowClosed(msBuilder *mutableStateBuilder, retentionSeconds int64) error {
+func (t *transferQueueStandbyProcessorImpl) recordWorkflowClosed(msBuilder mutableState, retentionSeconds int64) error {
+	executionInfo := msBuilder.GetExecutionInfo()
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-		DomainUUID: msBuilder.executionInfo.DomainID,
+		DomainUUID: executionInfo.DomainID,
 		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
-			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
 		},
-		WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
-		StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
-		CloseTimestamp:   msBuilder.getLastUpdatedTimestamp(),
-		Status:           getWorkflowExecutionCloseStatus(msBuilder.executionInfo.CloseStatus),
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		CloseTimestamp:   msBuilder.GetLastUpdatedTimestamp(),
+		Status:           getWorkflowExecutionCloseStatus(executionInfo.CloseStatus),
 		HistoryLength:    msBuilder.GetNextEventID(),
 		RetentionSeconds: retentionSeconds,
 	})

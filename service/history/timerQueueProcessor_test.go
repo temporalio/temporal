@@ -383,7 +383,7 @@ func (s *timerQueueProcessorSuite) checkTimedOutEventForUserTimer(domainID strin
 	return isRunning
 }
 
-func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms *mutableStateBuilder, timerTasks []persistence.Task, condition int64) {
+func (s *timerQueueProcessorSuite) updateHistoryAndTimers(ms mutableState, timerTasks []persistence.Task, condition int64) {
 	updatedState := createMutableState(ms)
 
 	actInfos := []*persistence.ActivityInfo{}
@@ -950,8 +950,8 @@ func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 	s.Equal(state0.ExecutionInfo.NextEventID, state1.ExecutionInfo.NextEventID)
 }
 
-func (s *timerQueueProcessorSuite) printHistory(builder *mutableStateBuilder) string {
-	history, err := builder.hBuilder.Serialize()
+func (s *timerQueueProcessorSuite) printHistory(builder mutableState) string {
+	history, err := builder.GetHistoryBuilder().Serialize()
 	if err != nil {
 		s.logger.Errorf("Error serializing history: %v", err)
 		return ""

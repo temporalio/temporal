@@ -183,10 +183,11 @@ func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(timerTask *pers
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskUserTimerScope, metrics.TaskLatency)
 	defer sw.Stop()
 
-	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTimer(timerTask, func(msBuilder mutableState) error {
+		executionInfo := msBuilder.GetExecutionInfo()
 		tBuilder := t.historyService.getTimerBuilder(&workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
-			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
 		})
 
 	ExpireUserTimers:
@@ -223,10 +224,11 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskActivityTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
-	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTimer(timerTask, func(msBuilder mutableState) error {
+		executionInfo := msBuilder.GetExecutionInfo()
 		tBuilder := t.historyService.getTimerBuilder(&workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(msBuilder.executionInfo.WorkflowID),
-			RunId:      common.StringPtr(msBuilder.executionInfo.RunID),
+			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
+			RunId:      common.StringPtr(executionInfo.RunID),
 		})
 
 	ExpireActivityTimers:
@@ -263,7 +265,7 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
-	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		di, isPending := msBuilder.GetPendingDecision(timerTask.EventID)
 
 		if !isPending {
@@ -292,7 +294,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persi
 	sw := t.metricsClient.StartTimer(metrics.TimerTaskWorkflowTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
-	return t.processTimer(timerTask, func(msBuilder *mutableStateBuilder) error {
+	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		// we do not need to notity new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
 
@@ -307,7 +309,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persi
 	})
 }
 
-func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo, fn func(*mutableStateBuilder) error) (retError error) {
+func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.TimerTaskInfo, fn func(mutableState) error) (retError error) {
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
 	if err != nil {
 		return err
@@ -327,7 +329,7 @@ func (t *timerQueueStandbyProcessorImpl) processTimer(timerTask *persistence.Tim
 		return nil
 	}
 
-	if !msBuilder.isWorkflowExecutionRunning() {
+	if !msBuilder.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process the timer
 		return nil
 	}

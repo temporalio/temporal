@@ -180,7 +180,7 @@ func (tb *timerBuilder) AddActivityTimeoutTask(scheduleID int64,
 }
 
 // AddUserTimer - Adds an user timeout request.
-func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder *mutableStateBuilder) {
+func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder mutableState) {
 	if !tb.isLoadedUserTimers {
 		tb.loadUserTimers(msBuilder)
 	}
@@ -194,7 +194,7 @@ func (tb *timerBuilder) AddUserTimer(ti *persistence.TimerInfo, msBuilder *mutab
 }
 
 // GetUserTimerTaskIfNeeded - if we need create a timer task for the user timers
-func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder *mutableStateBuilder) persistence.Task {
+func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder mutableState) persistence.Task {
 	if !tb.isLoadedUserTimers {
 		return nil
 	}
@@ -210,7 +210,7 @@ func (tb *timerBuilder) GetUserTimerTaskIfNeeded(msBuilder *mutableStateBuilder)
 }
 
 // GetUserTimers - Get all user timers.
-func (tb *timerBuilder) GetUserTimers(msBuilder *mutableStateBuilder) timers {
+func (tb *timerBuilder) GetUserTimers(msBuilder mutableState) timers {
 	tb.loadUserTimers(msBuilder)
 	return tb.userTimers
 }
@@ -228,13 +228,13 @@ func (tb *timerBuilder) IsTimerExpired(td *timerDetails, referenceTime time.Time
 	return expiry <= referenceTime.Unix()
 }
 
-func (tb *timerBuilder) GetActivityTimers(msBuilder *mutableStateBuilder) timers {
+func (tb *timerBuilder) GetActivityTimers(msBuilder mutableState) timers {
 	tb.loadActivityTimers(msBuilder)
 	return tb.activityTimers
 }
 
 // GetActivityTimerTaskIfNeeded - if we need create a activity timer task for the activities
-func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder *mutableStateBuilder) persistence.Task {
+func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder mutableState) persistence.Task {
 	if !tb.isLoadedActivityTimers {
 		tb.loadActivityTimers(msBuilder)
 	}
@@ -255,10 +255,10 @@ func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder *mutableStateBuil
 }
 
 // loadUserTimers - Load all user timers from mutable state.
-func (tb *timerBuilder) loadUserTimers(msBuilder *mutableStateBuilder) {
-	tb.pendingUserTimers = msBuilder.pendingTimerInfoIDs
-	tb.userTimers = make(timers, 0, len(msBuilder.pendingTimerInfoIDs))
-	for _, v := range msBuilder.pendingTimerInfoIDs {
+func (tb *timerBuilder) loadUserTimers(msBuilder mutableState) {
+	tb.pendingUserTimers = msBuilder.GetPendingTimerInfos()
+	tb.userTimers = make(timers, 0, len(tb.pendingUserTimers))
+	for _, v := range tb.pendingUserTimers {
 		seqNum := tb.localSeqNumGen.NextSeq()
 		td := &timerDetails{
 			TimerSequenceID: TimerSequenceID{VisibilityTimestamp: v.ExpiryTime, TaskID: seqNum},
@@ -270,10 +270,10 @@ func (tb *timerBuilder) loadUserTimers(msBuilder *mutableStateBuilder) {
 	tb.isLoadedUserTimers = true
 }
 
-func (tb *timerBuilder) loadActivityTimers(msBuilder *mutableStateBuilder) {
-	tb.pendingActivityTimers = msBuilder.pendingActivityInfoIDs
-	tb.activityTimers = make(timers, 0, len(msBuilder.pendingActivityInfoIDs))
-	for _, v := range msBuilder.pendingActivityInfoIDs {
+func (tb *timerBuilder) loadActivityTimers(msBuilder mutableState) {
+	tb.pendingActivityTimers = msBuilder.GetPendingActivityInfos()
+	tb.activityTimers = make(timers, 0, len(tb.pendingActivityTimers))
+	for _, v := range tb.pendingActivityTimers {
 		if v.ScheduleID != common.EmptyEventID {
 			scheduleToCloseExpiry := v.ExpirationTime
 			if scheduleToCloseExpiry.IsZero() {

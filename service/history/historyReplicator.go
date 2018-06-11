@@ -95,6 +95,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	}
 	defer func() { release(retError) }()
 
+	var msBuilder mutableState
 	logger := r.logger.WithFields(bark.Fields{
 		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
 		logging.TagWorkflowRunID:       execution.GetRunId(),
@@ -103,7 +104,6 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		logging.TagFirstEventID:        request.GetFirstEventId(),
 		logging.TagNextEventID:         request.GetNextEventId(),
 	})
-	var msBuilder *mutableStateBuilder
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {
 	case shared.EventTypeWorkflowExecutionStarted:
@@ -134,8 +134,8 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 			return err
 		}
+		rState := msBuilder.GetReplicationState()
 
-		rState := msBuilder.replicationState
 		// Check if this is a stale event
 		if rState.LastWriteVersion > request.GetVersion() {
 			// Replication state is already on a higher version, we can drop this event
@@ -169,7 +169,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 					previousActiveCluster, ri.GetVersion(), ri.GetLastEventId())
 
 				resolver := newConflictResolver(r.shard, context, r.historyMgr, r.logger)
-				msBuilder, err = resolver.reset(uuid.New(), ri.GetLastEventId(), msBuilder.executionInfo.StartTimestamp)
+				msBuilder, err = resolver.reset(uuid.New(), ri.GetLastEventId(), msBuilder.GetExecutionInfo().StartTimestamp)
 				logger.Infof("Completed Resetting of workflow execution.  NextEventID: %v. Err: %v", msBuilder.GetNextEventID(), err)
 				if err != nil {
 					return err
@@ -179,10 +179,11 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 
 		// Check for duplicate processing of replication task
 		if firstEvent.GetEventId() < msBuilder.GetNextEventID() {
+			replicationState := msBuilder.GetReplicationState()
 			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 			logger.Debugf("Dropping replication task.  State: {NextEvent: %v, Version: %v, LastWriteV: %v, LastWriteEvent: %v}",
-				msBuilder.GetNextEventID(), msBuilder.replicationState.CurrentVersion,
-				msBuilder.replicationState.LastWriteVersion, msBuilder.replicationState.LastWriteEventID)
+				msBuilder.GetNextEventID(), replicationState.CurrentVersion,
+				replicationState.LastWriteVersion, replicationState.LastWriteEventID)
 			return nil
 		}
 
@@ -227,8 +228,7 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	return err
 }
 
-func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionContext, msBuilder *mutableStateBuilder,
-	request *h.ReplicateEventsRequest) error {
+func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionContext, msBuilder mutableState, request *h.ReplicateEventsRequest) error {
 
 	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {
@@ -239,6 +239,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 	}
 
 	execution := *request.WorkflowExecution
+	executionInfo := msBuilder.GetExecutionInfo()
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	sBuilder := newStateBuilder(r.shard, msBuilder, r.logger)
@@ -267,12 +268,12 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		var parentExecution *shared.WorkflowExecution
 		initiatedID := common.EmptyEventID
 		parentDomainID := ""
-		if msBuilder.executionInfo.ParentDomainID != "" {
-			initiatedID = msBuilder.executionInfo.InitiatedID
-			parentDomainID = msBuilder.executionInfo.ParentDomainID
+		if executionInfo.ParentDomainID != "" {
+			initiatedID = executionInfo.InitiatedID
+			parentDomainID = executionInfo.ParentDomainID
 			parentExecution = &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(msBuilder.executionInfo.ParentWorkflowID),
-				RunId:      common.StringPtr(msBuilder.executionInfo.ParentRunID),
+				WorkflowId: common.StringPtr(executionInfo.ParentWorkflowID),
+				RunId:      common.StringPtr(executionInfo.ParentRunID),
 			}
 		}
 
@@ -303,8 +304,8 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 		}
 
 		nextEventID := lastEvent.GetEventId() + 1
-		msBuilder.executionInfo.NextEventID = nextEventID
-		msBuilder.executionInfo.LastFirstEventID = firstEvent.GetEventId()
+		executionInfo.NextEventID = nextEventID
+		executionInfo.LastFirstEventID = firstEvent.GetEventId()
 
 		failoverVersion := request.GetVersion()
 		replicationState := &persistence.ReplicationState{
@@ -335,10 +336,10 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 				ParentDomainID:              parentDomainID,
 				ParentExecution:             parentExecution,
 				InitiatedID:                 initiatedID,
-				TaskList:                    msBuilder.executionInfo.TaskList,
-				WorkflowTypeName:            msBuilder.executionInfo.WorkflowTypeName,
-				WorkflowTimeout:             msBuilder.executionInfo.WorkflowTimeout,
-				DecisionTimeoutValue:        msBuilder.executionInfo.DecisionTimeoutValue,
+				TaskList:                    executionInfo.TaskList,
+				WorkflowTypeName:            executionInfo.WorkflowTypeName,
+				WorkflowTimeout:             executionInfo.WorkflowTimeout,
+				DecisionTimeoutValue:        executionInfo.DecisionTimeoutValue,
 				ExecutionContext:            nil,
 				NextEventID:                 msBuilder.GetNextEventID(),
 				LastProcessedEvent:          common.EmptyEventID,
@@ -412,8 +413,7 @@ func (r *historyReplicator) ApplyReplicationTask(context *workflowExecutionConte
 	return err
 }
 
-func (r *historyReplicator) FlushBuffer(context *workflowExecutionContext, msBuilder *mutableStateBuilder,
-	request *h.ReplicateEventsRequest) error {
+func (r *historyReplicator) FlushBuffer(context *workflowExecutionContext, msBuilder mutableState, request *h.ReplicateEventsRequest) error {
 
 	// Keep on applying on applying buffered replication tasks in a loop
 	for msBuilder.HasBufferedReplicationTasks() {

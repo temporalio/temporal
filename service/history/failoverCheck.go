@@ -67,7 +67,7 @@ func verifyTimerTaskVersion(shard ShardContext, domainID string, version int64, 
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTransferTask(context *workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (*mutableStateBuilder, error) {
+func loadMutableStateForTransferTask(context *workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -76,13 +76,14 @@ func loadMutableStateForTransferTask(context *workflowExecutionContext, transfer
 		}
 		return nil, err
 	}
+	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := transferTask.TaskType == persistence.TransferTaskTypeDecisionTask &&
-		msBuilder.executionInfo.DecisionScheduleID == transferTask.ScheduleID &&
-		msBuilder.executionInfo.DecisionAttempt > 0
+		executionInfo.DecisionScheduleID == transferTask.ScheduleID &&
+		executionInfo.DecisionAttempt > 0
 
 	if transferTask.ScheduleID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
@@ -104,7 +105,7 @@ func loadMutableStateForTransferTask(context *workflowExecutionContext, transfer
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (*mutableStateBuilder, error) {
+func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
@@ -113,13 +114,14 @@ func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *
 		}
 		return nil, err
 	}
+	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is decision consistently fail
 	// there will be no event generated, thus making the decision schedule ID == next event ID
 	isDecisionRetry := timerTask.TaskType == persistence.TaskTypeDecisionTimeout &&
-		msBuilder.executionInfo.DecisionScheduleID == timerTask.EventID &&
-		msBuilder.executionInfo.DecisionAttempt > 0
+		executionInfo.DecisionScheduleID == timerTask.EventID &&
+		executionInfo.DecisionAttempt > 0
 
 	if timerTask.EventID >= msBuilder.GetNextEventID() && !isDecisionRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)

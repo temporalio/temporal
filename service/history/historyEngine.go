@@ -203,7 +203,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 			shardNotificationVersion := e.shard.GetDomainNotificationVersion()
 			domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
 
-			e.logger.Infof("Domain Failover Event: Shard: %v, Domain: %v, ID: %v, Failover Notification Version: %v, Active Cluster: %v, Shard Domain Notification Version: %v\n",
+			e.logger.Infof("Domain Change Event: Shard: %v, Domain: %v, ID: %v, Failover Notification Version: %v, Active Cluster: %v, Shard Domain Notification Version: %v\n",
 				e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID, domainFailoverNotificationVersion, domainActiveCluster, shardNotificationVersion)
 
 			if nextDomain.IsGlobalDomain() &&
@@ -253,7 +253,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// TODO when the workflow is going to be replicated, use the
-	var msBuilder *mutableStateBuilder
+	var msBuilder mutableState
 	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
@@ -292,7 +292,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
 	}}
 	// Serialize the history
-	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
+	serializedHistory, serializedError := msBuilder.GetHistoryBuilder().Serialize()
 	if serializedError != nil {
 		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
 			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
@@ -312,7 +312,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	if err != nil {
 		return nil, err
 	}
-	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
 
 	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
 	var replicationState *persistence.ReplicationState
@@ -526,19 +526,20 @@ func (e *historyEngineImpl) getMutableState(ctx context.Context,
 		return
 	}
 
+	executionInfo := msBuilder.GetExecutionInfo()
 	execution.RunId = context.workflowExecution.RunId
 	retResp = &h.GetMutableStateResponse{
 		Execution:                            &execution,
-		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(msBuilder.executionInfo.WorkflowTypeName)},
+		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
 		LastFirstEventId:                     common.Int64Ptr(msBuilder.GetLastFirstEventID()),
 		NextEventId:                          common.Int64Ptr(msBuilder.GetNextEventID()),
-		TaskList:                             &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.TaskList)},
-		StickyTaskList:                       &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.StickyTaskList)},
-		ClientLibraryVersion:                 common.StringPtr(msBuilder.executionInfo.ClientLibraryVersion),
-		ClientFeatureVersion:                 common.StringPtr(msBuilder.executionInfo.ClientFeatureVersion),
-		ClientImpl:                           common.StringPtr(msBuilder.executionInfo.ClientImpl),
-		IsWorkflowRunning:                    common.BoolPtr(msBuilder.isWorkflowExecutionRunning()),
-		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(msBuilder.executionInfo.StickyScheduleToStartTimeout),
+		TaskList:                             &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
+		StickyTaskList:                       &workflow.TaskList{Name: common.StringPtr(executionInfo.StickyTaskList)},
+		ClientLibraryVersion:                 common.StringPtr(executionInfo.ClientLibraryVersion),
+		ClientFeatureVersion:                 common.StringPtr(executionInfo.ClientFeatureVersion),
+		ClientImpl:                           common.StringPtr(executionInfo.ClientImpl),
+		IsWorkflowRunning:                    common.BoolPtr(msBuilder.IsWorkflowExecutionRunning()),
+		StickyTaskListScheduleToStartTimeout: common.Int32Ptr(executionInfo.StickyScheduleToStartTimeout),
 	}
 
 	return
@@ -575,8 +576,8 @@ func (e *historyEngineImpl) DescribeMutableState(ctx context.Context,
 	return
 }
 
-func (e *historyEngineImpl) toMutableStateJSON(msb *mutableStateBuilder) (*string, error) {
-	ms := msb.CopyTo()
+func (e *historyEngineImpl) toMutableStateJSON(msb mutableState) (*string, error) {
+	ms := msb.CopyToPersistence()
 
 	jsonBytes, err := json.Marshal(ms)
 	if err != nil {
@@ -599,11 +600,11 @@ func (e *historyEngineImpl) ResetStickyTaskList(ctx context.Context, resetReques
 	}
 
 	err = e.updateWorkflowExecution(ctx, domainID, *resetRequest.Execution, false, false,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, nil
 			}
-			msBuilder.clearStickyness()
+			msBuilder.ClearStickyness()
 			return nil, nil
 		},
 	)
@@ -634,30 +635,31 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 	if err1 != nil {
 		return nil, err1
 	}
+	executionInfo := msBuilder.GetExecutionInfo()
 
 	result := &workflow.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &workflow.WorkflowExecutionConfiguration{
-			TaskList: &workflow.TaskList{Name: common.StringPtr(msBuilder.executionInfo.TaskList)},
-			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(msBuilder.executionInfo.WorkflowTimeout),
-			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(msBuilder.executionInfo.DecisionTimeoutValue),
+			TaskList: &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionInfo.WorkflowTimeout),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(executionInfo.DecisionTimeoutValue),
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
 		},
 		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
 			Execution:     request.Request.Execution,
-			Type:          &workflow.WorkflowType{Name: common.StringPtr(msBuilder.executionInfo.WorkflowTypeName)},
-			StartTime:     common.Int64Ptr(msBuilder.executionInfo.StartTimestamp.UnixNano()),
+			Type:          &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
+			StartTime:     common.Int64Ptr(executionInfo.StartTimestamp.UnixNano()),
 			HistoryLength: common.Int64Ptr(msBuilder.GetNextEventID() - common.FirstEventID),
 		},
 	}
-	if msBuilder.executionInfo.State == persistence.WorkflowStateCompleted {
+	if executionInfo.State == persistence.WorkflowStateCompleted {
 		// for closed workflow
-		closeStatus := getWorkflowExecutionCloseStatus(msBuilder.executionInfo.CloseStatus)
+		closeStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
 		result.WorkflowExecutionInfo.CloseStatus = &closeStatus
-		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(msBuilder.getLastUpdatedTimestamp())
+		result.WorkflowExecutionInfo.CloseTime = common.Int64Ptr(msBuilder.GetLastUpdatedTimestamp())
 	}
 
-	if len(msBuilder.pendingActivityInfoIDs) > 0 {
-		for _, pi := range msBuilder.pendingActivityInfoIDs {
+	if len(msBuilder.GetPendingActivityInfos()) > 0 {
+		for _, pi := range msBuilder.GetPendingActivityInfos() {
 			ai := &workflow.PendingActivityInfo{
 				ActivityID: common.StringPtr(pi.ActivityID),
 			}
@@ -673,7 +675,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 				ai.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
 				ai.HeartbeatDetails = pi.Details
 			}
-			if scheduledEvent, ok := msBuilder.getHistoryEvent(pi.ScheduledEvent); ok {
+			if scheduledEvent, ok := msBuilder.GetHistoryEvent(pi.ScheduledEvent); ok {
 				ai.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
 			}
 			result.PendingActivities = append(result.PendingActivities, ai)
@@ -722,7 +724,7 @@ Update_History_Loop:
 
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
-		if !msBuilder.isWorkflowExecutionRunning() || !isRunning {
+		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning {
 			// Looks like DecisionTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
 			logging.LogDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeDecisionTask, common.Int64Default(request.TaskId), requestID,
@@ -795,8 +797,8 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 
 	response := &h.RecordActivityTaskStartedResponse{}
 	err = e.updateWorkflowExecution(ctx, domainID, execution, false, false,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -903,6 +905,7 @@ Update_History_Loop:
 		if err1 != nil {
 			return nil, err1
 		}
+		executionInfo := msBuilder.GetExecutionInfo()
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
 		scheduleID := token.ScheduleID
@@ -917,7 +920,7 @@ Update_History_Loop:
 			continue Update_History_Loop
 		}
 
-		if !msBuilder.isWorkflowExecutionRunning() || !isRunning || di.Attempt != token.ScheduleAttempt ||
+		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || di.Attempt != token.ScheduleAttempt ||
 			di.StartedID == common.EmptyEventID {
 			return nil, &workflow.EntityNotExistsError{Message: "Decision task not found."}
 		}
@@ -936,22 +939,22 @@ Update_History_Loop:
 		isComplete := false
 		transferTasks := []persistence.Task{}
 		timerTasks := []persistence.Task{}
-		var continueAsNewBuilder *mutableStateBuilder
+		var continueAsNewBuilder mutableState
 		var continueAsNewTimerTasks []persistence.Task
 		hasDecisionScheduleActivityTask := false
 
 		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskList == nil {
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyDisabledCounter)
-			msBuilder.executionInfo.StickyTaskList = ""
-			msBuilder.executionInfo.StickyScheduleToStartTimeout = 0
+			executionInfo.StickyTaskList = ""
+			executionInfo.StickyScheduleToStartTimeout = 0
 		} else {
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CompleteDecisionWithStickyEnabledCounter)
-			msBuilder.executionInfo.StickyTaskList = request.StickyAttributes.WorkerTaskList.GetName()
-			msBuilder.executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeoutSeconds()
+			executionInfo.StickyTaskList = request.StickyAttributes.WorkerTaskList.GetName()
+			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeoutSeconds()
 		}
-		msBuilder.executionInfo.ClientLibraryVersion = clientLibVersion
-		msBuilder.executionInfo.ClientFeatureVersion = clientFeatureVersion
-		msBuilder.executionInfo.ClientImpl = clientImpl
+		executionInfo.ClientLibraryVersion = clientLibVersion
+		executionInfo.ClientFeatureVersion = clientFeatureVersion
+		executionInfo.ClientImpl = clientImpl
 
 	Process_Decision_Loop:
 		for _, d := range request.Decisions {
@@ -1141,7 +1144,7 @@ Update_History_Loop:
 
 				foreignDomainID := ""
 				if attributes.GetDomain() == "" {
-					foreignDomainID = msBuilder.executionInfo.DomainID
+					foreignDomainID = executionInfo.DomainID
 				} else {
 					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
@@ -1179,7 +1182,7 @@ Update_History_Loop:
 
 				foreignDomainID := ""
 				if attributes.GetDomain() == "" {
-					foreignDomainID = msBuilder.executionInfo.DomainID
+					foreignDomainID = executionInfo.DomainID
 				} else {
 					foreignDomainEntry, err := e.shard.GetDomainCache().GetDomain(attributes.GetDomain())
 					if err != nil {
@@ -1221,7 +1224,7 @@ Update_History_Loop:
 					continue Process_Decision_Loop
 				}
 				attributes := d.ContinueAsNewWorkflowExecutionDecisionAttributes
-				if err = validateContinueAsNewWorkflowExecutionAttributes(msBuilder.executionInfo, attributes); err != nil {
+				if err = validateContinueAsNewWorkflowExecutionAttributes(executionInfo, attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadContinueAsNewAttributes
 					break Process_Decision_Loop
@@ -1229,8 +1232,8 @@ Update_History_Loop:
 
 				// Extract parentDomainName so it can be passed down to next run of workflow execution
 				var parentDomainName string
-				if msBuilder.hasParentExecution() {
-					parentDomainID := msBuilder.executionInfo.ParentDomainID
+				if msBuilder.HasParentExecution() {
+					parentDomainID := executionInfo.ParentDomainID
 					parentDomainEntry, err := e.shard.GetDomainCache().GetDomainByID(parentDomainID)
 					if err != nil {
 						return nil, err
@@ -1249,7 +1252,7 @@ Update_History_Loop:
 				continueAsNewTimerTasks = []persistence.Task{&persistence.WorkflowTimeoutTask{
 					VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
 				}}
-				msBuilder.continueAsNew.TimerTasks = continueAsNewTimerTasks
+				msBuilder.GetContinueAsNew().TimerTasks = continueAsNewTimerTasks
 
 				isComplete = true
 				continueAsNewBuilder = newStateBuilder
@@ -1259,7 +1262,7 @@ Update_History_Loop:
 					metrics.DecisionTypeChildWorkflowCounter)
 				targetDomainID := domainID
 				attributes := d.StartChildWorkflowExecutionDecisionAttributes
-				if err = validateStartChildExecutionAttributes(msBuilder.executionInfo, attributes); err != nil {
+				if err = validateStartChildExecutionAttributes(executionInfo, attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadStartChildExecutionAttributes
 					break Process_Decision_Loop
@@ -1328,10 +1331,10 @@ Update_History_Loop:
 					TaskList:   di.TaskList,
 					ScheduleID: di.ScheduleID,
 				})
-				if msBuilder.isStickyTaskListEnabled() {
+				if msBuilder.IsStickyTaskListEnabled() {
 					tBuilder := e.getTimerBuilder(&context.workflowExecution)
 					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-						msBuilder.executionInfo.StickyScheduleToStartTimeout)
+						executionInfo.StickyScheduleToStartTimeout)
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			} else {
@@ -1419,8 +1422,8 @@ func (e *historyEngineImpl) RespondDecisionTaskFailed(ctx context.Context, req *
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -1458,8 +1461,8 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(ctx context.Context, re
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -1514,8 +1517,8 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(ctx context.Context, req *
 	}
 
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, workflowExecution,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -1578,8 +1581,8 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(ctx context.Context, req
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, workflowExecution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -1641,8 +1644,8 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(ctx context.Context,
 
 	var cancelRequested bool
 	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, false, false,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				e.logger.Errorf("Heartbeat failed ")
 				return nil, ErrWorkflowCompleted
 			}
@@ -1676,7 +1679,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(ctx context.Context,
 				scheduleID, ai, cancelRequested)
 
 			// Save progress and last HB reported time.
-			msBuilder.updateActivityProgress(ai, request)
+			msBuilder.UpdateActivityProgress(ai, request)
 
 			return nil, nil
 		})
@@ -1707,21 +1710,22 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(ctx context.Context,
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
+			executionInfo := msBuilder.GetExecutionInfo()
 			if childWorkflowOnly {
-				parentWorkflowID := msBuilder.executionInfo.ParentWorkflowID
-				parentRunID := msBuilder.executionInfo.ParentRunID
+				parentWorkflowID := executionInfo.ParentWorkflowID
+				parentRunID := executionInfo.ParentRunID
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
 					return nil, ErrWorkflowParent
 				}
 			}
 
-			isCancelRequested, cancelRequestID := msBuilder.isCancelRequested()
+			isCancelRequested, cancelRequestID := msBuilder.IsCancelRequested()
 			if isCancelRequested {
 				cancelRequest := req.CancelRequest
 				if cancelRequest.RequestId != nil {
@@ -1760,14 +1764,15 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
+			executionInfo := msBuilder.GetExecutionInfo()
 			if childWorkflowOnly {
-				parentWorkflowID := msBuilder.executionInfo.ParentWorkflowID
-				parentRunID := msBuilder.executionInfo.ParentRunID
+				parentWorkflowID := executionInfo.ParentWorkflowID
+				parentRunID := executionInfo.ParentRunID
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
 					return nil, ErrWorkflowParent
@@ -1776,10 +1781,10 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 
 			// deduplicate by request id for signal decision
 			if requestID := request.GetRequestId(); requestID != "" {
-				if msBuilder.isSignalRequested(requestID) {
+				if msBuilder.IsSignalRequested(requestID) {
 					return nil, nil
 				}
-				msBuilder.addSignalRequested(requestID)
+				msBuilder.AddSignalRequested(requestID)
 			}
 
 			if msBuilder.AddWorkflowExecutionSignaled(request) == nil {
@@ -1822,10 +1827,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 				}
 				return nil, err1
 			}
-			if !msBuilder.isWorkflowExecutionRunning() {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				prevRunID = context.workflowExecution.GetRunId()
 				break
 			}
+			executionInfo := msBuilder.GetExecutionInfo()
 
 			if msBuilder.AddWorkflowExecutionSignaled(getSignalRequest(sRequest)) == nil {
 				return nil, &workflow.InternalServiceError{Message: "Unable to signal workflow execution."}
@@ -1841,10 +1847,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 					TaskList:   di.TaskList,
 					ScheduleID: di.ScheduleID,
 				})
-				if msBuilder.isStickyTaskListEnabled() {
+				if msBuilder.IsStickyTaskListEnabled() {
 					tBuilder := e.getTimerBuilder(&context.workflowExecution)
 					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-						msBuilder.executionInfo.StickyScheduleToStartTimeout)
+						executionInfo.StickyScheduleToStartTimeout)
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			}
@@ -1892,7 +1898,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// TODO when the workflow is going to be replicated, use the
-	var msBuilder *mutableStateBuilder
+	var msBuilder mutableState
 	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
@@ -1928,7 +1934,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
 	}}
 	// Serialize the history
-	serializedHistory, serializedError := msBuilder.hBuilder.Serialize()
+	serializedHistory, serializedError := msBuilder.GetHistoryBuilder().Serialize()
 	if serializedError != nil {
 		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
 			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
@@ -1948,7 +1954,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	msBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
 	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
@@ -2016,12 +2022,12 @@ func (e *historyEngineImpl) RemoveSignalMutableState(ctx context.Context, reques
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, false,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
-			msBuilder.deleteSignalRequested(request.GetRequestId())
+			msBuilder.DeleteSignalRequested(request.GetRequestId())
 
 			return nil, nil
 		})
@@ -2042,8 +2048,8 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(ctx context.Context, term
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, true, false,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -2070,8 +2076,8 @@ func (e *historyEngineImpl) ScheduleDecisionTask(ctx context.Context, scheduleRe
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -2096,8 +2102,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(ctx context.Context, c
 	}
 
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
-		func(msBuilder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error) {
-			if !msBuilder.isWorkflowExecutionRunning() {
+		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
+			if !msBuilder.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -2145,7 +2151,7 @@ type updateWorkflowAction struct {
 }
 
 func (e *historyEngineImpl) updateWorkflowExecutionWithAction(ctx context.Context, domainID string, execution workflow.WorkflowExecution,
-	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error)) (retError error) {
+	action func(builder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error)) (retError error) {
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
 	if err0 != nil {
 		return err0
@@ -2193,10 +2199,10 @@ Update_History_Loop:
 					TaskList:   di.TaskList,
 					ScheduleID: di.ScheduleID,
 				})
-				if msBuilder.isStickyTaskListEnabled() {
+				if msBuilder.IsStickyTaskListEnabled() {
 					tBuilder := e.getTimerBuilder(&context.workflowExecution)
 					stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-						msBuilder.executionInfo.StickyScheduleToStartTimeout)
+						msBuilder.GetExecutionInfo().StickyScheduleToStartTimeout)
 					timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 				}
 			}
@@ -2224,9 +2230,9 @@ Update_History_Loop:
 
 func (e *historyEngineImpl) updateWorkflowExecution(ctx context.Context, domainID string, execution workflow.WorkflowExecution,
 	createDeletionTask, createDecisionTask bool,
-	action func(builder *mutableStateBuilder, tBuilder *timerBuilder) ([]persistence.Task, error)) error {
+	action func(builder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error)) error {
 	return e.updateWorkflowExecutionWithAction(ctx, domainID, execution,
-		func(builder *mutableStateBuilder, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
+		func(builder mutableState, tBuilder *timerBuilder) (*updateWorkflowAction, error) {
 			timerTasks, err := action(builder, tBuilder)
 			if err != nil {
 				return nil, err
@@ -2263,25 +2269,26 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 	return closeTask, cleanupTask, nil
 }
 
-func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder *mutableStateBuilder,
+func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID string, msBuilder mutableState,
 	di *decisionInfo, identity string) *h.RecordDecisionTaskStartedResponse {
 	response := &h.RecordDecisionTaskStartedResponse{}
-	response.WorkflowType = msBuilder.getWorkflowType()
-	if msBuilder.previousDecisionStartedEvent() != common.EmptyEventID {
-		response.PreviousStartedEventId = common.Int64Ptr(msBuilder.previousDecisionStartedEvent())
+	response.WorkflowType = msBuilder.GetWorkflowType()
+	executionInfo := msBuilder.GetExecutionInfo()
+	if executionInfo.LastProcessedEvent != common.EmptyEventID {
+		response.PreviousStartedEventId = common.Int64Ptr(executionInfo.LastProcessedEvent)
 	}
 
 	// Starting decision could result in different scheduleID if decision was transient and new new events came in
 	// before it was started.
 	response.ScheduledEventId = common.Int64Ptr(di.ScheduleID)
 	response.StartedEventId = common.Int64Ptr(di.StartedID)
-	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.isStickyTaskListEnabled())
+	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.IsStickyTaskListEnabled())
 	response.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID())
 	response.Attempt = common.Int64Ptr(di.Attempt)
 	if di.Attempt > 0 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet
-		scheduledEvent, startedEvent := msBuilder.createTransientDecisionEvents(di, identity)
+		scheduledEvent, startedEvent := msBuilder.CreateTransientDecisionEvents(di, identity)
 		response.DecisionInfo = &workflow.TransientDecisionInfo{}
 		response.DecisionInfo.ScheduledEvent = scheduledEvent
 		response.DecisionInfo.StartedEvent = startedEvent
@@ -2302,7 +2309,7 @@ func (e *historyEngineImpl) deleteEvents(domainID string, execution workflow.Wor
 }
 
 func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, scheduleID, startedID int64,
-	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) (*mutableStateBuilder,
+	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) (mutableState,
 	error) {
 	// Clear any updates we have accumulated so far
 	context.clear()
@@ -2621,7 +2628,7 @@ func (e *historyEngineImpl) getActiveDomainEntry(domainUUID *string) (*cache.Dom
 	return domainEntry, nil
 }
 
-func getScheduleID(activityID string, msBuilder *mutableStateBuilder) (int64, error) {
+func getScheduleID(activityID string, msBuilder mutableState) (int64, error) {
 	if activityID == "" {
 		return 0, &workflow.BadRequestError{Message: "Neither ActivityID nor ScheduleID is provided"}
 	}

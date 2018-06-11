@@ -798,7 +798,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 	tl := "testTaskList"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	msBuilder.executionInfo.State = persistence.WorkflowStateCompleted
+	msBuilder.GetExecutionInfo().State = persistence.WorkflowStateCompleted
 	ms1 := createMutableState(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
@@ -833,7 +833,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecutionFail() {
 }
 
 func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution, tl, identity string,
-	startDecision bool) *mutableStateBuilder {
+	startDecision bool) mutableState {
 	msBuilder := newMutableStateBuilder(s.config, s.logger)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
 	di := addDecisionTaskScheduledEvent(msBuilder)
@@ -844,8 +844,8 @@ func (s *engine2Suite) createExecutionStartedState(we workflow.WorkflowExecution
 	return msBuilder
 }
 
-func (s *engine2Suite) printHistory(builder *mutableStateBuilder) string {
-	history, err := builder.hBuilder.Serialize()
+func (s *engine2Suite) printHistory(builder mutableState) string {
+	history, err := builder.GetHistoryBuilder().Serialize()
 	if err != nil {
 		s.logger.Errorf("Error serializing history: %v", err)
 		return ""
@@ -915,9 +915,9 @@ func (s *engine2Suite) TestRespondDecisionTaskCompletedRecordMarkerDecision() {
 	})
 	s.Nil(err)
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(6), executionBuilder.executionInfo.NextEventID)
-	s.Equal(int64(3), executionBuilder.executionInfo.LastProcessedEvent)
-	s.Equal(persistence.WorkflowStateRunning, executionBuilder.executionInfo.State)
+	s.Equal(int64(6), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 	s.False(executionBuilder.HasPendingDecisionTask())
 }
 
@@ -1393,7 +1393,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.NotEqual(runID, resp.GetRunId())
 }
 
-func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) *mutableStateBuilder {
+func (s *engine2Suite) getBuilder(domainID string, we workflow.WorkflowExecution) mutableState {
 	context, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(domainID, we)
 	if err != nil {
 		return nil

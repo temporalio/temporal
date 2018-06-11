@@ -44,7 +44,7 @@ type (
 		// not merely log an error
 		*require.Assertions
 		domainID  string
-		msBuilder *mutableStateBuilder
+		msBuilder mutableState
 		builder   *historyBuilder
 		logger    bark.Logger
 	}
@@ -470,11 +470,11 @@ func (s *historyBuilderSuite) TestHistoryBuilderFlushBufferedEvents() {
 	// flush buffered events. 12: Activity2Started, 13: Activity2Failed
 	s.msBuilder.FlushBufferedEvents()
 	s.Equal(int64(14), s.getNextEventID())
-	activity2StartedEvent2 := s.msBuilder.hBuilder.history[11]
+	activity2StartedEvent2 := s.msBuilder.GetHistoryBuilder().history[11]
 	s.Equal(int64(12), activity2StartedEvent2.GetEventId())
 	s.Equal(workflow.EventTypeActivityTaskStarted, activity2StartedEvent2.GetEventType())
 
-	activity2FailedEvent2 := s.msBuilder.hBuilder.history[12]
+	activity2FailedEvent2 := s.msBuilder.GetHistoryBuilder().history[12]
 	s.Equal(int64(13), activity2FailedEvent2.GetEventId())
 	s.Equal(workflow.EventTypeActivityTaskFailed, activity2FailedEvent2.GetEventType())
 	s.Equal(int64(12), activity2FailedEvent2.ActivityTaskFailedEventAttributes.GetStartedEventId())
@@ -630,11 +630,11 @@ func (s *historyBuilderSuite) TestHistoryBuilderWorkflowCancellationFailed() {
 }
 
 func (s *historyBuilderSuite) getNextEventID() int64 {
-	return s.msBuilder.executionInfo.NextEventID
+	return s.msBuilder.GetExecutionInfo().NextEventID
 }
 
 func (s *historyBuilderSuite) getPreviousDecisionStartedEventID() int64 {
-	return s.msBuilder.executionInfo.LastProcessedEvent
+	return s.msBuilder.GetExecutionInfo().LastProcessedEvent
 }
 
 func (s *historyBuilderSuite) addWorkflowExecutionStartedEvent(we workflow.WorkflowExecution, workflowType,

@@ -229,7 +229,7 @@ Update_History_Loop:
 		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
 			return nil
 		}
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
@@ -298,7 +298,7 @@ Update_History_Loop:
 		msBuilder, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
 			return nil
 		}
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
@@ -455,7 +455,7 @@ Update_History_Loop:
 		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
 			return nil
 		}
 
@@ -485,7 +485,7 @@ Update_History_Loop:
 			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
-			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID && msBuilder.isStickyTaskListEnabled() {
+			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID && msBuilder.IsStickyTaskListEnabled() {
 				timeoutEvent := msBuilder.AddDecisionTaskScheduleToStartTimeoutEvent(scheduleID)
 				if timeoutEvent == nil {
 					// Unable to add DecisionTaskTimedout event to history
@@ -529,7 +529,7 @@ func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.Time
 		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
 			return nil
 		}
 
@@ -606,13 +606,13 @@ Update_History_Loop:
 		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
-		} else if msBuilder == nil || !msBuilder.isWorkflowExecutionRunning() {
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
 			return nil
 		}
 
 		// do version check for global domain task
-		if msBuilder.replicationState != nil {
-			ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.replicationState.StartVersion, task)
+		if msBuilder.GetReplicationState() != nil {
+			ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.GetReplicationState().StartVersion, task)
 			if err != nil {
 				return err
 			} else if !ok {
@@ -641,32 +641,33 @@ Update_History_Loop:
 
 func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 	context *workflowExecutionContext,
-	msBuilder *mutableStateBuilder,
+	msBuilder mutableState,
 	scheduleNewDecision bool,
 	createDeletionTask bool,
 	timerTasks []persistence.Task,
 	clearTimerTask persistence.Task,
 ) error {
+	executionInfo := msBuilder.GetExecutionInfo()
 	var transferTasks []persistence.Task
 	if scheduleNewDecision {
 		// Schedule a new decision.
 		di := msBuilder.AddDecisionTaskScheduledEvent()
 		transferTasks = []persistence.Task{&persistence.DecisionTask{
-			DomainID:   msBuilder.executionInfo.DomainID,
+			DomainID:   executionInfo.DomainID,
 			TaskList:   di.TaskList,
 			ScheduleID: di.ScheduleID,
 		}}
-		if msBuilder.isStickyTaskListEnabled() {
+		if msBuilder.IsStickyTaskListEnabled() {
 			tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-				msBuilder.executionInfo.StickyScheduleToStartTimeout)
+				executionInfo.StickyScheduleToStartTimeout)
 			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
 		}
 	}
 
 	if createDeletionTask {
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
-		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(msBuilder.executionInfo.DomainID, tBuilder)
+		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(executionInfo.DomainID, tBuilder)
 		if err != nil {
 			return nil
 		}

@@ -36,7 +36,7 @@ type (
 	stateBuilder struct {
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
-		msBuilder       *mutableStateBuilder
+		msBuilder       mutableState
 		domainCache     cache.DomainCache
 		logger          bark.Logger
 
@@ -47,7 +47,7 @@ type (
 	}
 )
 
-func newStateBuilder(shard ShardContext, msBuilder *mutableStateBuilder, logger bark.Logger) *stateBuilder {
+func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Logger) *stateBuilder {
 
 	return &stateBuilder{
 		shard:           shard,
@@ -58,14 +58,16 @@ func newStateBuilder(shard ShardContext, msBuilder *mutableStateBuilder, logger 
 	}
 }
 
-func (b *stateBuilder) applyEvents(domainID, requestID string,
-	execution shared.WorkflowExecution, history *shared.History, newRunHistory *shared.History) (*shared.HistoryEvent,
-	*decisionInfo, *mutableStateBuilder, error) {
+func (b *stateBuilder) applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
+	history *shared.History, newRunHistory *shared.History) (*shared.HistoryEvent,
+	*decisionInfo, mutableState, error) {
 	var lastEvent *shared.HistoryEvent
 	var lastDecision *decisionInfo
-	var newRunStateBuilder *mutableStateBuilder
+	var newRunStateBuilder mutableState
 	for _, event := range history.Events {
 		lastEvent = event
+		// must set the current version, since this is standby here, not active
+		b.msBuilder.UpdateReplicationStateVersion(event.GetVersion())
 		switch event.GetEventType() {
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes
@@ -324,7 +326,7 @@ func (b *stateBuilder) applyEvents(domainID, requestID string,
 			}
 
 			// Create mutable state updates for the new run
-			newRunStateBuilder = newMutableStateBuilderWithReplicationState(b.shard.GetConfig(), b.logger, event.GetVersion())
+			newRunStateBuilder = newMutableStateBuilderWithReplicationState(b.shard.GetConfig(), b.logger, startedEvent.GetVersion())
 			newRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, newExecution, uuid.New(),
 				startedAttributes)
 			di := newRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
@@ -333,17 +335,19 @@ func (b *stateBuilder) applyEvents(domainID, requestID string,
 				dtScheduledEvent.DecisionTaskScheduledEventAttributes.TaskList.GetName(),
 				dtScheduledEvent.DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds(),
 			)
+			newRunExecutionInfo := newRunStateBuilder.GetExecutionInfo()
 			nextEventID := di.ScheduleID + 1
-			newRunStateBuilder.executionInfo.NextEventID = nextEventID
-			newRunStateBuilder.executionInfo.LastFirstEventID = startedEvent.GetEventId()
+			newRunExecutionInfo.NextEventID = nextEventID
+			newRunExecutionInfo.LastFirstEventID = startedEvent.GetEventId()
 			// Set the history from replication task on the newStateBuilder
-			newRunStateBuilder.hBuilder = newHistoryBuilderFromEvents(newRunHistory.Events, b.logger)
+			newRunStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory.Events, b.logger))
+			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(startedEvent.GetVersion())
+			newRunStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), nextEventID-1)
 
 			b.newRunTransferTasks = append(b.newRunTransferTasks, b.scheduleDecisionTransferTask(domainID,
 				b.getTaskList(newRunStateBuilder), di.ScheduleID))
 			b.newRunTimerTasks = append(b.newRunTimerTasks, b.scheduleWorkflowTimerTask(event, newRunStateBuilder))
 
-			sourceClusterName := b.clusterMetadata.ClusterNameForFailoverVersion(event.GetVersion())
 			b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName, domainID, event,
 				startedEvent, di, newRunStateBuilder)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
@@ -418,21 +422,21 @@ func (b *stateBuilder) scheduleDecisionTimerTask(event *shared.HistoryEvent, sch
 }
 
 func (b *stateBuilder) scheduleUserTimerTask(event *shared.HistoryEvent,
-	ti *persistence.TimerInfo, msBuilder *mutableStateBuilder) persistence.Task {
+	ti *persistence.TimerInfo, msBuilder mutableState) persistence.Task {
 	timerBuilder := b.getTimerBuilder(event)
 	timerBuilder.AddUserTimer(ti, msBuilder)
 	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
 }
 
 func (b *stateBuilder) scheduleActivityTimerTask(event *shared.HistoryEvent,
-	msBuilder *mutableStateBuilder) persistence.Task {
+	msBuilder mutableState) persistence.Task {
 	return b.getTimerBuilder(event).GetActivityTimerTaskIfNeeded(msBuilder)
 }
 
 func (b *stateBuilder) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
-	msBuilder *mutableStateBuilder) persistence.Task {
+	msBuilder mutableState) persistence.Task {
 	now := time.Unix(0, event.GetTimestamp())
-	timeout := now.Add(time.Duration(msBuilder.executionInfo.WorkflowTimeout) * time.Second)
+	timeout := now.Add(time.Duration(msBuilder.GetExecutionInfo().WorkflowTimeout) * time.Second)
 	return &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout}
 }
 
@@ -449,9 +453,9 @@ func (b *stateBuilder) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent
 	return b.getTimerBuilder(event).createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24), nil
 }
 
-func (b *stateBuilder) getTaskList(msBuilder *mutableStateBuilder) string {
+func (b *stateBuilder) getTaskList(msBuilder mutableState) string {
 	// on the standby side, sticky tasklist is meaningless, so always use the normal tasklist
-	return msBuilder.executionInfo.TaskList
+	return msBuilder.GetExecutionInfo().TaskList
 }
 
 func (b *stateBuilder) getTimerBuilder(event *shared.HistoryEvent) *timerBuilder {

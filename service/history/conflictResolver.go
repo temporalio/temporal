@@ -54,7 +54,7 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	}
 }
 
-func (r *conflictResolver) reset(requestID string, replayEventID int64, startTime time.Time) (*mutableStateBuilder, error) {
+func (r *conflictResolver) reset(requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
 	domainID := r.context.domainID
 	execution := r.context.workflowExecution
 	replayNextEventID := replayEventID + 1
@@ -111,7 +111,7 @@ func (r *conflictResolver) reset(requestID string, replayEventID int64, startTim
 	resetMutableStateBuilder.executionInfo.LastUpdatedTimestamp = startTime
 
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
-	resetMutableStateBuilder.updateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
+	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
 	r.logger.Infof("All events applied for execution.  WorkflowID: %v, RunID: %v, NextEventID: %v",
 		execution.GetWorkflowId(), execution.GetRunId(), resetMutableStateBuilder.GetNextEventID())

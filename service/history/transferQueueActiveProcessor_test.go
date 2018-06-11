@@ -205,7 +205,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Success() {
 	activityID := "activity-1"
 	activityType := "some random activity type"
 	event, ai := addActivityTaskScheduledEvent(msBuilder, event.GetEventId(), activityID, activityType, taskListName, []byte{}, 1, 1, 1)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:        s.version,
@@ -275,7 +275,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessActivityTask_Duplication(
 	event = addActivityTaskStartedEvent(msBuilder, event.GetEventId(), taskListName, "")
 	ai.StartedID = event.GetEventId()
 	event = addActivityTaskCompletedEvent(msBuilder, ai.ScheduleID, ai.StartedID, nil, "")
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -308,7 +308,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_FirstDecisio
 
 	taskID := int64(59)
 	di := addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.updateReplicationStateLastEventID("", s.version, di.ScheduleID)
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -360,7 +360,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_NonFirstDeci
 	// make another round of decision
 	taskID := int64(59)
 	di = addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.updateReplicationStateLastEventID("", s.version, di.ScheduleID)
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -410,13 +410,14 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Sticky_NonFi
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
 	// set the sticky tasklist attr
-	msBuilder.executionInfo.StickyTaskList = stickyTaskListName
-	msBuilder.executionInfo.StickyScheduleToStartTimeout = stickyTaskListTimeout
+	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.StickyTaskList = stickyTaskListName
+	executionInfo.StickyScheduleToStartTimeout = stickyTaskListTimeout
 
 	// make another round of decision
 	taskID := int64(59)
 	di = addDecisionTaskScheduledEvent(msBuilder)
-	msBuilder.updateReplicationStateLastEventID("", s.version, di.ScheduleID)
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, di.ScheduleID)
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -464,7 +465,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessDecisionTask_Duplication(
 	event := addDecisionTaskStartedEvent(msBuilder, di.ScheduleID, taskListName, uuid.New())
 	di.StartedID = event.GetEventId()
 	event = addDecisionTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, nil, "some random identity")
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -527,7 +528,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_HasParent(
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -585,7 +586,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCloseExecution_NoParent()
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(msBuilder, event.GetEventId(), nil)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:    s.version,
@@ -704,7 +705,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Failure()
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
@@ -783,7 +784,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessCancelExecution_Duplicati
 	}
 
 	event = addCancelRequestedEvent(msBuilder, event.GetEventId(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -831,7 +832,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Success()
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
@@ -906,7 +907,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Failure()
 	taskID := int64(59)
 	event, si := addRequestSignalInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput, signalControl)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
@@ -989,7 +990,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessSignalExecution_Duplicati
 	}
 
 	event = addSignaledEvent(msBuilder, event.GetEventId(), targetDomainID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), nil)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -1036,7 +1037,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 	taskID := int64(59)
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		childDomainID, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
@@ -1129,7 +1130,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Failu
 	taskID := int64(59)
 	event, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, event.GetEventId(), uuid.New(),
 		childDomainID, childWorkflowID, childWorkflowType, childTaskListName, nil, 1, 1)
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	transferTask := &persistence.TransferTaskInfo{
 		Version:          s.version,
@@ -1233,7 +1234,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Succe
 
 	event = addChildWorkflowExecutionStartedEvent(msBuilder, event.GetEventId(), childDomainID, childWorkflowID, childRunID, childWorkflowType)
 	ci.StartedID = event.GetEventId()
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
@@ -1325,7 +1326,7 @@ func (s *transferQueueActiveProcessorSuite) TestProcessStartChildExecution_Dupli
 		Result: []byte("some random child workflow execution result"),
 		DecisionTaskCompletedEventId: common.Int64Ptr(transferTask.ScheduleID),
 	})
-	msBuilder.updateReplicationStateLastEventID("", s.version, event.GetEventId())
+	msBuilder.UpdateReplicationStateLastEventID("", s.version, event.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockMetadataMgr.ExpectedCalls = nil
@@ -1367,16 +1368,17 @@ func (s *transferQueueActiveProcessorSuite) createAddActivityTaskRequest(task *p
 }
 
 func (s *transferQueueActiveProcessorSuite) createAddDecisionTaskRequest(task *persistence.TransferTaskInfo,
-	msBuilder *mutableStateBuilder) *matching.AddDecisionTaskRequest {
+	msBuilder mutableState) *matching.AddDecisionTaskRequest {
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
 	taskList := &workflow.TaskList{Name: &task.TaskList}
-	timeout := msBuilder.executionInfo.WorkflowTimeout
-	if msBuilder.isStickyTaskListEnabled() {
+	executionInfo := msBuilder.GetExecutionInfo()
+	timeout := executionInfo.WorkflowTimeout
+	if msBuilder.IsStickyTaskListEnabled() {
 		taskList.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
-		timeout = msBuilder.executionInfo.StickyScheduleToStartTimeout
+		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	return &matching.AddDecisionTaskRequest{
@@ -1389,18 +1391,18 @@ func (s *transferQueueActiveProcessorSuite) createAddDecisionTaskRequest(task *p
 }
 
 func (s *transferQueueActiveProcessorSuite) createRecordWorkflowExecutionStartedRequest(task *persistence.TransferTaskInfo,
-	msBuilder *mutableStateBuilder) *persistence.RecordWorkflowExecutionStartedRequest {
+	msBuilder mutableState) *persistence.RecordWorkflowExecutionStartedRequest {
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
-
+	executionInfo := msBuilder.GetExecutionInfo()
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID:       task.DomainID,
 		Execution:        execution,
-		WorkflowTypeName: msBuilder.executionInfo.WorkflowTypeName,
-		StartTimestamp:   msBuilder.executionInfo.StartTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(msBuilder.executionInfo.WorkflowTimeout),
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
+		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
 	}
 }
 
@@ -1459,7 +1461,7 @@ func (s *transferQueueActiveProcessorSuite) createSignallWorkflowExecutionReques
 }
 
 func (s *transferQueueActiveProcessorSuite) createChildWorkflowExecutionRequest(task *persistence.TransferTaskInfo,
-	msBuilder *mutableStateBuilder, ci *persistence.ChildExecutionInfo, domainName string, targetDomainName string) *history.StartWorkflowExecutionRequest {
+	msBuilder mutableState, ci *persistence.ChildExecutionInfo, domainName string, targetDomainName string) *history.StartWorkflowExecutionRequest {
 
 	event, ok := msBuilder.GetChildExecutionInitiatedEvent(task.ScheduleID)
 	if !ok {
