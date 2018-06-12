@@ -259,6 +259,7 @@ func UpdateDomain(c *cli.Context) {
 			} else {
 				fmt.Printf("Domain %s does not exist.\n", domain)
 			}
+			return
 		}
 
 		description := resp.DomainInfo.GetDescription()

@@ -156,6 +156,12 @@ func (s *cliAppSuite) TestDomainUpdate_DomainNotExist() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestDomainUpdate_ActiveClusterFlagNotSet_DomainNotExist() {
+	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(nil, &shared.EntityNotExistsError{})
+	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
+	s.Nil(err)
+}
+
 func (s *cliAppSuite) TestDomainUpdate_Failed() {
 	resp := describeDomainResponse
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
