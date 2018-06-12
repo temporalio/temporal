@@ -12,7 +12,7 @@ services:
       - "8125:8125"
       - "8126:8126"
   cadence:
-    image: ubercadence/server:0.3.11
+    image: ubercadence/server:0.3.13
     ports:
      - "7933:7933"
      - "7934:7934"
@@ -24,7 +24,7 @@ services:
       - cassandra
       - statsd
   cadence-web:
-    image: ubercadence/web:2.2.0
+    image: ubercadence/web:2.4.0
     environment:
       - "CADENCE_TCHANNEL_PEERS=cadence:7933"
     ports:
