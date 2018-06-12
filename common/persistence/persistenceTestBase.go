@@ -275,8 +275,7 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 // CreateWorkflowExecutionWithReplication is a utility method to create workflow executions
 func (s *TestBase) CreateWorkflowExecutionWithReplication(domainID string, workflowExecution workflow.WorkflowExecution,
 	taskList, wType string, wTimeout int32, decisionTimeout int32, nextEventID int64,
-	lastProcessedEventID int64, decisionScheduleID int64, state *ReplicationState, txTasks []Task) (
-	*CreateWorkflowExecutionResponse, error) {
+	lastProcessedEventID int64, decisionScheduleID int64, state *ReplicationState, txTasks []Task) (*CreateWorkflowExecutionResponse, error) {
 	var transferTasks []Task
 	var replicationTasks []Task
 	for _, task := range txTasks {

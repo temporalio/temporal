@@ -31,7 +31,11 @@ import (
 )
 
 type (
-	conflictResolver struct {
+	conflictResolver interface {
+		reset(requestID string, replayEventID int64, startTime time.Time) (mutableState, error)
+	}
+
+	conflictResolverImpl struct {
 		shard              ShardContext
 		clusterMetadata    cluster.Metadata
 		context            *workflowExecutionContext
@@ -42,9 +46,9 @@ type (
 )
 
 func newConflictResolver(shard ShardContext, context *workflowExecutionContext, historyMgr persistence.HistoryManager,
-	logger bark.Logger) *conflictResolver {
+	logger bark.Logger) *conflictResolverImpl {
 
-	return &conflictResolver{
+	return &conflictResolverImpl{
 		shard:              shard,
 		clusterMetadata:    shard.GetService().GetClusterMetadata(),
 		context:            context,
@@ -54,7 +58,7 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	}
 }
 
-func (r *conflictResolver) reset(requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
+func (r *conflictResolverImpl) reset(requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
 	domainID := r.context.domainID
 	execution := r.context.workflowExecution
 	replayNextEventID := replayEventID + 1
@@ -62,7 +66,7 @@ func (r *conflictResolver) reset(requestID string, replayEventID int64, startTim
 	var history *shared.History
 	var err error
 	var resetMutableStateBuilder *mutableStateBuilder
-	var sBuilder *stateBuilder
+	var sBuilder stateBuilder
 	var lastFirstEventID int64
 	var lastEvent *shared.HistoryEvent
 	eventsToApply := replayNextEventID - common.FirstEventID
@@ -119,7 +123,7 @@ func (r *conflictResolver) reset(requestID string, replayEventID int64, startTim
 	return r.context.resetWorkflowExecution(resetMutableStateBuilder)
 }
 
-func (r *conflictResolver) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
+func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
 	nextEventID int64, nextPageToken []byte) (*shared.History, []byte, int64, error) {
 
 	response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{

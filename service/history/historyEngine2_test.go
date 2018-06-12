@@ -27,8 +27,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pborman/uuid"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -929,7 +927,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	identity := "testIdentity"
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
@@ -1109,7 +1107,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			s.mockExecutionMgr.On(
 				"CreateWorkflowExecution",
 				mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
-			).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+			).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 		} else {
 			s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 		}
@@ -1198,7 +1196,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				s.mockExecutionMgr.On(
 					"CreateWorkflowExecution",
 					mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
-				).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+				).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 			} else {
 				s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 			}
@@ -1313,7 +1311,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(nil, notExistErr).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},
@@ -1371,7 +1369,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.mockExecutionMgr.On("GetCurrentExecution", mock.Anything).Return(gceResponse, nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
-	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{TaskID: uuid.New()}, nil).Once()
+	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&persistence.GetDomainResponse{
 			Info:   &persistence.DomainInfo{ID: domainID},

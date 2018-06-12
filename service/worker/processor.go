@@ -219,7 +219,6 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 					logging.TagPartitionKey: msg.Partition(),
 					logging.TagOffset:       msg.Offset(),
 				}).Error("Error processing replication task.")
-				p.logger.WithField(logging.TagErr, err).Error("Error processing replication task.")
 				msg.Nack()
 			}
 		case <-p.consumer.Closed():

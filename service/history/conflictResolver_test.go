@@ -58,7 +58,7 @@ type (
 		mockShard           *shardContextImpl
 		mockContext         *workflowExecutionContext
 
-		conflictResolver *conflictResolver
+		conflictResolver *conflictResolverImpl
 	}
 )
 

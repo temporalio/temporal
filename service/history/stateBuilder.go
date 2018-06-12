@@ -33,7 +33,17 @@ import (
 )
 
 type (
-	stateBuilder struct {
+	stateBuilder interface {
+		applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
+			history *shared.History, newRunHistory *shared.History) (*shared.HistoryEvent,
+			*decisionInfo, mutableState, error)
+		getTransferTasks() []persistence.Task
+		getTimerTasks() []persistence.Task
+		getNewRunTransferTasks() []persistence.Task
+		getNewRunTimerTasks() []persistence.Task
+	}
+
+	stateBuilderImpl struct {
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
 		msBuilder       mutableState
@@ -47,9 +57,9 @@ type (
 	}
 )
 
-func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Logger) *stateBuilder {
+func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Logger) *stateBuilderImpl {
 
-	return &stateBuilder{
+	return &stateBuilderImpl{
 		shard:           shard,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		msBuilder:       msBuilder,
@@ -58,7 +68,23 @@ func newStateBuilder(shard ShardContext, msBuilder mutableState, logger bark.Log
 	}
 }
 
-func (b *stateBuilder) applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
+func (b *stateBuilderImpl) getTransferTasks() []persistence.Task {
+	return b.transferTasks
+}
+
+func (b *stateBuilderImpl) getTimerTasks() []persistence.Task {
+	return b.timerTasks
+}
+
+func (b *stateBuilderImpl) getNewRunTransferTasks() []persistence.Task {
+	return b.newRunTransferTasks
+}
+
+func (b *stateBuilderImpl) getNewRunTimerTasks() []persistence.Task {
+	return b.newRunTimerTasks
+}
+
+func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution shared.WorkflowExecution,
 	history *shared.History, newRunHistory *shared.History) (*shared.HistoryEvent,
 	*decisionInfo, mutableState, error) {
 	var lastEvent *shared.HistoryEvent
@@ -363,7 +389,7 @@ func (b *stateBuilder) applyEvents(domainID, requestID string, execution shared.
 	return lastEvent, lastDecision, newRunStateBuilder, nil
 }
 
-func (b *stateBuilder) scheduleDecisionTransferTask(domainID string, tasklist string,
+func (b *stateBuilderImpl) scheduleDecisionTransferTask(domainID string, tasklist string,
 	scheduleID int64) persistence.Task {
 	return &persistence.DecisionTask{
 		DomainID:   domainID,
@@ -372,7 +398,7 @@ func (b *stateBuilder) scheduleDecisionTransferTask(domainID string, tasklist st
 	}
 }
 
-func (b *stateBuilder) scheduleActivityTransferTask(domainID string, tasklist string,
+func (b *stateBuilderImpl) scheduleActivityTransferTask(domainID string, tasklist string,
 	scheduleID int64) persistence.Task {
 	return &persistence.ActivityTask{
 		DomainID:   domainID,
@@ -381,7 +407,7 @@ func (b *stateBuilder) scheduleActivityTransferTask(domainID string, tasklist st
 	}
 }
 
-func (b *stateBuilder) scheduleStartChildWorkflowTransferTask(domainID string, workflowID string,
+func (b *stateBuilderImpl) scheduleStartChildWorkflowTransferTask(domainID string, workflowID string,
 	initiatedID int64) persistence.Task {
 	return &persistence.StartChildExecutionTask{
 		TargetDomainID:   domainID,
@@ -390,7 +416,7 @@ func (b *stateBuilder) scheduleStartChildWorkflowTransferTask(domainID string, w
 	}
 }
 
-func (b *stateBuilder) scheduleCancelExternalWorkflowTransferTask(domainID string, workflowID string,
+func (b *stateBuilderImpl) scheduleCancelExternalWorkflowTransferTask(domainID string, workflowID string,
 	runID string, childWorkflowOnly bool, initiatedID int64) persistence.Task {
 	return &persistence.CancelExecutionTask{
 		TargetDomainID:          domainID,
@@ -401,7 +427,7 @@ func (b *stateBuilder) scheduleCancelExternalWorkflowTransferTask(domainID strin
 	}
 }
 
-func (b *stateBuilder) scheduleSignalWorkflowTransferTask(domainID string, workflowID string,
+func (b *stateBuilderImpl) scheduleSignalWorkflowTransferTask(domainID string, workflowID string,
 	runID string, childWorkflowOnly bool, initiatedID int64) persistence.Task {
 	return &persistence.SignalExecutionTask{
 		TargetDomainID:          domainID,
@@ -412,35 +438,35 @@ func (b *stateBuilder) scheduleSignalWorkflowTransferTask(domainID string, workf
 	}
 }
 
-func (b *stateBuilder) scheduleDeleteHistoryTransferTask() persistence.Task {
+func (b *stateBuilderImpl) scheduleDeleteHistoryTransferTask() persistence.Task {
 	return &persistence.CloseExecutionTask{}
 }
 
-func (b *stateBuilder) scheduleDecisionTimerTask(event *shared.HistoryEvent, scheduleID int64, attempt int64,
+func (b *stateBuilderImpl) scheduleDecisionTimerTask(event *shared.HistoryEvent, scheduleID int64, attempt int64,
 	timeoutSecond int32) persistence.Task {
 	return b.getTimerBuilder(event).AddStartToCloseDecisionTimoutTask(scheduleID, attempt, timeoutSecond)
 }
 
-func (b *stateBuilder) scheduleUserTimerTask(event *shared.HistoryEvent,
+func (b *stateBuilderImpl) scheduleUserTimerTask(event *shared.HistoryEvent,
 	ti *persistence.TimerInfo, msBuilder mutableState) persistence.Task {
 	timerBuilder := b.getTimerBuilder(event)
 	timerBuilder.AddUserTimer(ti, msBuilder)
 	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
 }
 
-func (b *stateBuilder) scheduleActivityTimerTask(event *shared.HistoryEvent,
+func (b *stateBuilderImpl) scheduleActivityTimerTask(event *shared.HistoryEvent,
 	msBuilder mutableState) persistence.Task {
 	return b.getTimerBuilder(event).GetActivityTimerTaskIfNeeded(msBuilder)
 }
 
-func (b *stateBuilder) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
+func (b *stateBuilderImpl) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
 	msBuilder mutableState) persistence.Task {
 	now := time.Unix(0, event.GetTimestamp())
 	timeout := now.Add(time.Duration(msBuilder.GetExecutionInfo().WorkflowTimeout) * time.Second)
 	return &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout}
 }
 
-func (b *stateBuilder) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID string) (persistence.Task, error) {
+func (b *stateBuilderImpl) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID string) (persistence.Task, error) {
 	var retentionInDays int32
 	domainEntry, err := b.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
@@ -453,12 +479,12 @@ func (b *stateBuilder) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent
 	return b.getTimerBuilder(event).createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24), nil
 }
 
-func (b *stateBuilder) getTaskList(msBuilder mutableState) string {
+func (b *stateBuilderImpl) getTaskList(msBuilder mutableState) string {
 	// on the standby side, sticky tasklist is meaningless, so always use the normal tasklist
 	return msBuilder.GetExecutionInfo().TaskList
 }
 
-func (b *stateBuilder) getTimerBuilder(event *shared.HistoryEvent) *timerBuilder {
+func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBuilder {
 	timeSource := common.NewFakeTimeSource()
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)

@@ -123,6 +123,7 @@ type (
 		RunID          string
 		State          int
 		CloseStatus    int
+		StartVersion   int64
 	}
 
 	// TimeoutError is returned when a write operation fails due to a timeout
@@ -531,7 +532,6 @@ type (
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
-		TaskID string
 	}
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution

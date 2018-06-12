@@ -151,13 +151,12 @@ func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.Replica
 
 func (c *workflowExecutionContext) updateVersion() error {
 	if c.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && c.msBuilder.GetReplicationState() != nil {
-
 		if !c.msBuilder.IsWorkflowExecutionRunning() {
 			// we should not update the version on mutable state when the workflow is finished
 			return nil
 		}
 		// Support for global domains is enabled and we are performing an update for global domain
-		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.msBuilder.GetExecutionInfo().DomainID)
+		domainEntry, err := c.shard.GetDomainCache().GetDomainByID(c.domainID)
 		if err != nil {
 			return err
 		}

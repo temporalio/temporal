@@ -59,7 +59,7 @@ type (
 		mockShard           *shardContextImpl
 		mockMutableState    *mockMutableState
 
-		stateBuilder *stateBuilder
+		stateBuilder *stateBuilderImpl
 	}
 )
 

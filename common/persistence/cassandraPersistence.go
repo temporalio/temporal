@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -324,7 +323,7 @@ const (
 		`IF range_id = ?`
 
 	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions USING TTL 0 ` +
-		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}` +
+		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, replication_state = {start_version: ?}` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -334,11 +333,11 @@ const (
 		`and task_id = ? ` +
 		`IF current_run_id = ? `
 
-	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
-		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}) IF NOT EXISTS USING TTL 0 `
+	templateCreateCurrentWorkflowExecutionQuery = `INSERT INTO executions (` +
+		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution, replication_state) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?}) IF NOT EXISTS USING TTL 0 `
 
-	templateCreateWorkflowExecutionQuery2 = `INSERT INTO executions (` +
+	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ` + templateWorkflowExecutionType + `, ?, ?, ?) `
 
@@ -992,7 +991,6 @@ func (d *cassandraPersistence) UpdateShard(request *UpdateShardRequest) error {
 
 func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (
 	*CreateWorkflowExecutionResponse, error) {
-	transferTaskID := uuid.New()
 	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
@@ -1062,7 +1060,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 					}
 				}
 
-			} else {
+			} else if rowType == rowTypeExecution {
 				var columns []string
 				for k, v := range previous {
 					columns = append(columns, fmt.Sprintf("%s=%v", k, v))
@@ -1071,6 +1069,13 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 				if execution, ok := previous["execution"].(map[string]interface{}); ok {
 					// CreateWorkflowExecution failed because it already exists
 					executionInfo := createWorkflowExecutionInfo(execution)
+
+					startVersion := common.EmptyVersion
+					replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
+					if replicationState != nil {
+						startVersion = replicationState.StartVersion
+					}
+
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						request.Execution.GetWorkflowId(), executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
 					return nil, &WorkflowExecutionAlreadyStartedError{
@@ -1079,6 +1084,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 						RunID:          executionInfo.RunID,
 						State:          executionInfo.State,
 						CloseStatus:    executionInfo.CloseStatus,
+						StartVersion:   startVersion,
 					}
 				}
 			}
@@ -1103,7 +1109,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		}
 	}
 
-	return &CreateWorkflowExecutionResponse{TaskID: transferTaskID}, nil
+	return &CreateWorkflowExecutionResponse{}, nil
 }
 
 func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *CreateWorkflowExecutionRequest,
@@ -1123,6 +1129,10 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 		state = WorkflowStateCreated
 	}
 
+	startVersion := common.EmptyVersion
+	if request.ReplicationState != nil {
+		startVersion = request.ReplicationState.StartVersion
+	}
 	if request.ContinueAsNew {
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 			*request.Execution.RunId,
@@ -1130,6 +1140,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			request.RequestID,
 			state,
 			closeStatus,
+			startVersion,
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
@@ -1140,7 +1151,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			request.PreviousRunID,
 		)
 	} else {
-		batch.Query(templateCreateWorkflowExecutionQuery,
+		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
@@ -1153,12 +1164,13 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			request.RequestID,
 			state,
 			closeStatus,
+			startVersion,
 		)
 	}
 
 	if request.ReplicationState == nil {
 		// Cross DC feature is currently disabled so we will be creating workflow executions without replication state
-		batch.Query(templateCreateWorkflowExecutionQuery2,
+		batch.Query(templateCreateWorkflowExecutionQuery,
 			d.shardID,
 			request.DomainID,
 			*request.Execution.WorkflowId,
