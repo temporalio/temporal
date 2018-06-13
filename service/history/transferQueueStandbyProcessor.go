@@ -65,18 +65,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	})
 
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		domainEntry, err := shard.GetDomainCache().GetDomainByID(task.DomainID)
-		if err != nil {
-			return false, err
-		}
-		if !domainEntry.IsGlobalDomain() {
-			// non global domain, timer task does not belong here
-			return false, nil
-		} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != clusterName {
-			// timer task does not belong here
-			return false, nil
-		}
-		return true, nil
+		return verifyStandbyTask(shard, logger, clusterName, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -176,7 +165,7 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 		if !isPending {
 			return nil
 		}
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, activityInfo.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -205,7 +194,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 			}
 			return nil
 		}
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, decisionInfo.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -232,7 +221,7 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 	processTaskIfClosed := true
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -271,7 +260,7 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 		if !isPending {
 			return nil
 		}
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, requestCancelInfo.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, requestCancelInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -294,7 +283,7 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 		if !isPending {
 			return nil
 		}
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, signalInfo.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, signalInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -317,7 +306,7 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 		if !isPending {
 			return nil
 		}
-		ok, err := verifyTransferTaskVersion(t.shard, transferTask.DomainID, childWorkflowInfo.Version, transferTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, childWorkflowInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
 		} else if !ok {

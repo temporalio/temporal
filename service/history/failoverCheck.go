@@ -27,27 +27,67 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-// verifyTimerTaskVersion, when not encounter, will return false if true if failover version check is successful
-func verifyTransferTaskVersion(shard ShardContext, domainID string, version int64, task *persistence.TransferTaskInfo) (bool, error) {
-	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
-		return true, nil
-	}
-
-	// the first return value is whether this task is valid for further processing
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
+// verifyActiveTask, will return true if task activeness check is successful
+func verifyActiveTask(shard ShardContext, logger bark.Logger, taskDomainID string, task interface{}) (bool, error) {
+	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	domainEntry, err := shard.GetDomainCache().GetDomainByID(taskDomainID)
 	if err != nil {
-		return false, err
-	}
-	if !domainEntry.IsGlobalDomain() {
+		// it is possible that the domain is deleted
+		// we should treat that domain as active
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			logger.Warnf("Cannot find domainID: %v, err: %v.", taskDomainID)
+			return false, err
+		}
+		logger.Warnf("Cannot find domainID: %v, default to process task: %v.", taskDomainID, task)
 		return true, nil
-	} else if version != task.GetVersion() {
+	}
+	if domainEntry.IsGlobalDomain() && currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
+		// timer task does not belong to cluster name
+		logger.Debugf("DomainID: %v is not active, skip task: %v.", taskDomainID, task)
 		return false, nil
 	}
+	logger.Debugf("DomainID: %v is active, process task: %v.", taskDomainID, task)
 	return true, nil
 }
 
-// verifyTimerTaskVersion, when not encounter, will return false if true if failover version check is successful
-func verifyTimerTaskVersion(shard ShardContext, domainID string, version int64, task *persistence.TimerTaskInfo) (bool, error) {
+// verifyFailoverActiveTask, will return true if task activeness check is successful
+func verifyFailoverActiveTask(logger bark.Logger, targetDomainID string, taskDomainID string, task interface{}) (bool, error) {
+	if targetDomainID == taskDomainID {
+		logger.Debugf("Failover DomainID: %v is active, process task: %v.", taskDomainID, task)
+		return true, nil
+	}
+	logger.Debugf("Failover DomainID: %v is not active, skip task: %v.", taskDomainID, task)
+	return false, nil
+}
+
+// verifyStandbyTask, will return true if task standbyness check is successful
+func verifyStandbyTask(shard ShardContext, logger bark.Logger, standbyCluster string, taskDomainID string, task interface{}) (bool, error) {
+	domainEntry, err := shard.GetDomainCache().GetDomainByID(taskDomainID)
+	if err != nil {
+		// it is possible that the domain is deleted
+		// we should treat that domain as not active
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			logger.Warnf("Cannot find domainID: %v, err: %v.", taskDomainID)
+			return false, err
+		}
+		logger.Warnf("Cannot find domainID: %v, default to not process task: %v.", taskDomainID, task)
+		return false, nil
+	}
+	if !domainEntry.IsGlobalDomain() {
+		// non global domain, timer task does not belong here
+		logger.Debugf("DomainID: %v is not global, skip task: %v.", taskDomainID, task)
+		return false, nil
+	} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
+		// timer task does not belong here
+		logger.Debugf("DomainID: %v is not standby, skip task: %v.", taskDomainID, task)
+		return false, nil
+	}
+	logger.Debugf("DomainID: %v is standby, process task: %v.", taskDomainID, task)
+	return true, nil
+}
+
+// verifyTaskVersion, will return true if failover version check is successful
+func verifyTaskVersion(shard ShardContext, logger bark.Logger, domainID string, version int64, taskVersion int64, task interface{}) (bool, error) {
 	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {
 		return true, nil
 	}
@@ -55,13 +95,17 @@ func verifyTimerTaskVersion(shard ShardContext, domainID string, version int64, 
 	// the first return value is whether this task is valid for further processing
 	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
+		logger.Debugf("Cannot find domainID: %v, err: %v.", domainID, task)
 		return false, err
 	}
 	if !domainEntry.IsGlobalDomain() {
+		logger.Debugf("DomainID: %v is not active, task: %v version check pass", domainID, task)
 		return true, nil
-	} else if version != task.GetVersion() {
+	} else if version != taskVersion {
+		logger.Debugf("DomainID: %v is active, task: %v version != target version: %v.", domainID, task, version)
 		return false, nil
 	}
+	logger.Debugf("DomainID: %v is active, task: %v version == target version: %v.", domainID, task, version)
 	return true, nil
 }
 
@@ -72,6 +116,8 @@ func loadMutableStateForTransferTask(context *workflowExecutionContext, transfer
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			logger.Debugf("Cannot find execution: domainID: %v, workflowID: %v, runID: %v when processing transfer taskID: %v, eventID: %v",
+				context.domainID, context.workflowExecution.GetWorkflowId(), context.workflowExecution.GetRunId(), transferTask.TaskID, transferTask.ScheduleID)
 			return nil, nil
 		}
 		return nil, err
@@ -110,6 +156,8 @@ func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
+			logger.Debugf("Cannot find execution: domainID: %v, workflowID: %v, runID: %v when processing timer timestamp %v, taskID: %v, eventID: %v",
+				context.domainID, context.workflowExecution.GetWorkflowId(), context.workflowExecution.GetRunId(), timerTask.VisibilityTimestamp, timerTask.TaskID, timerTask.EventID)
 			return nil, nil
 		}
 		return nil, err

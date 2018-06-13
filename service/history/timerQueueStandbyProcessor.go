@@ -55,18 +55,7 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 		logging.TagWorkflowCluster: clusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
-		domainEntry, err := shard.GetDomainCache().GetDomainByID(timer.DomainID)
-		if err != nil {
-			return false, err
-		}
-		if !domainEntry.IsGlobalDomain() {
-			// non global domain, timer task does not belong here
-			return false, nil
-		} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != clusterName {
-			// timer task does not belong here
-			return false, nil
-		}
-		return true, nil
+		return verifyStandbyTask(shard, logger, clusterName, timer.DomainID, timer)
 	}
 
 	timerGate := NewRemoteTimerGate()
@@ -272,7 +261,7 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 			return nil
 		}
 
-		ok, err := verifyTimerTaskVersion(t.shard, timerTask.DomainID, di.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, di.Version, timerTask.Version, timerTask)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -298,7 +287,7 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persi
 		// we do not need to notity new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
 
-		ok, err := verifyTimerTaskVersion(t.shard, timerTask.DomainID, msBuilder.GetStartVersion(), timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, msBuilder.GetStartVersion(), timerTask.Version, timerTask)
 		if err != nil {
 			return err
 		} else if !ok {

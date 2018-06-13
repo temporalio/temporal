@@ -1371,6 +1371,14 @@ func (t *TransferTaskInfo) GetTaskType() int {
 	return t.TaskType
 }
 
+// String returns string
+func (t *TransferTaskInfo) String() string {
+	return fmt.Sprintf(
+		"{DomainID: %v, WorkflowID: %v, RunID: %v, TaskID: %v, TargetDomainID: %v, TargetWorkflowID %v, TargetRunID: %v, TargetChildWorkflowOnly: %v, TaskList: %v, TaskType: %v, ScheduleID: %v, Version: %v.}",
+		t.DomainID, t.WorkflowID, t.RunID, t.TaskID, t.TargetDomainID, t.TargetWorkflowID, t.TargetRunID, t.TargetChildWorkflowOnly, t.TaskList, t.TaskType, t.ScheduleID, t.Version,
+	)
+}
+
 // GetTaskID returns the task ID for replication task
 func (t *ReplicationTaskInfo) GetTaskID() int64 {
 	return t.TaskID
@@ -1399,6 +1407,14 @@ func (t *TimerTaskInfo) GetVersion() int64 {
 // GetTaskType returns the task type for timer task
 func (t *TimerTaskInfo) GetTaskType() int {
 	return t.TaskType
+}
+
+// GetTaskType returns the task type for timer task
+func (t *TimerTaskInfo) String() string {
+	return fmt.Sprintf(
+		"{DomainID: %v, WorkflowID: %v, RunID: %v, VisibilityTimestamp: %v, TaskID: %v, TaskType: %v, TimeoutType: %v, EventID: %v, ScheduleAttempt: %v, Version: %v.}",
+		t.DomainID, t.WorkflowID, t.RunID, t.VisibilityTimestamp, t.TaskID, t.TaskType, t.TimeoutType, t.EventID, t.ScheduleAttempt, t.Version,
+	)
 }
 
 // NewHistoryEventBatch returns a new instance of HistoryEventBatch

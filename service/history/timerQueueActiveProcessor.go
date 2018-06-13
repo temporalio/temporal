@@ -51,34 +51,21 @@ type (
 )
 
 func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
-	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
-		return shard.GetCurrentTime(clusterName)
+		return shard.GetCurrentTime(currentClusterName)
 	}
 	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowCluster: clusterName,
+		logging.TagWorkflowCluster: currentClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
-		domainEntry, err := shard.GetDomainCache().GetDomainByID(timer.DomainID)
-		if err != nil {
-			// it is possible that domain is deleted,
-			// we should treat that domain being active
-			if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-				return false, err
-			}
-			return true, nil
-		}
-		if domainEntry.IsGlobalDomain() && clusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
-			// timer task does not belong to cluster name
-			return false, nil
-		}
-		return true, nil
+		return verifyActiveTask(shard, logger, timer.DomainID, timer)
 	}
 
 	timerGate := NewLocalTimerGate()
 	// this will trigger a timer gate fire event immediately
 	timerGate.Update(time.Time{})
-	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, clusterName, logger)
+	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, currentClusterName, logger)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
@@ -87,7 +74,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		logger:                  logger,
 		matchingClient:          matchingClient,
 		metricsClient:           historyService.metricsClient,
-		currentClusterName:      clusterName,
+		currentClusterName:      currentClusterName,
 		timerGate:               timerGate,
 		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
@@ -109,10 +96,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
-		if timer.DomainID == domainID {
-			return true, nil
-		}
-		return false, nil
+		return verifyFailoverActiveTask(logger, domainID, timer.DomainID, timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel, maxLevel, logger)
@@ -465,7 +449,7 @@ Update_History_Loop:
 			logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TaskTypeDecisionTimeout, task.TaskID, scheduleID)
 			return nil
 		}
-		ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, di.Version, task)
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, di.Version, task.Version, task)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -539,7 +523,7 @@ func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.Time
 		if !running || task.ScheduleAttempt < int64(ai.Attempt) {
 			return nil
 		}
-		ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, ai.Version, task)
+		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -612,7 +596,7 @@ Update_History_Loop:
 
 		// do version check for global domain task
 		if msBuilder.GetReplicationState() != nil {
-			ok, err := verifyTimerTaskVersion(t.shard, task.DomainID, msBuilder.GetReplicationState().StartVersion, task)
+			ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, msBuilder.GetReplicationState().StartVersion, task.Version, task)
 			if err != nil {
 				return err
 			} else if !ok {

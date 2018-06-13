@@ -84,20 +84,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		logging.TagWorkflowCluster: currentClusterName,
 	})
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		domainEntry, err := shard.GetDomainCache().GetDomainByID(task.DomainID)
-		if err != nil {
-			// it is possible that the domain is deleted
-			// we should treat that domain as active
-			if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-				return false, err
-			}
-			return true, nil
-		}
-		if domainEntry.IsGlobalDomain() && currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
-			// timer task does not belong to cluster name
-			return false, nil
-		}
-		return true, nil
+		return verifyActiveTask(shard, logger, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -150,10 +137,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		if task.DomainID == domainID {
-			return true, nil
-		}
-		return false, nil
+		return verifyFailoverActiveTask(logger, domainID, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
@@ -282,7 +266,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeActivityTask, task.TaskID, task.ScheduleID)
 		return
 	}
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, ai.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, ai.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -340,7 +324,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TaskTypeDecisionTimeout, task.TaskID, task.ScheduleID)
 		return nil
 	}
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, di.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, di.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -411,7 +395,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 		return nil
 	}
 
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, msBuilder.GetLastWriteVersion(), task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, msBuilder.GetLastWriteVersion(), task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -525,7 +509,7 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persiste
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeCancelExecution, task.TaskID, task.ScheduleID)
 		return nil
 	}
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, ri.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, ri.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -648,7 +632,7 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeCancelExecution, task.TaskID, task.ScheduleID)
 		return nil
 	}
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, si.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, si.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -802,7 +786,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeStartChildExecution, task.TaskID, task.ScheduleID)
 		return nil
 	}
-	ok, err := verifyTransferTaskVersion(t.shard, domainID, ci.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, ci.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
