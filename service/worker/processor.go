@@ -179,7 +179,7 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 
 			var err error
 		ProcessRetryLoop:
-			for retryCount := 1; retryCount <= p.config.ReplicatorMaxRetryCount; {
+			for {
 				select {
 				case <-p.shutdownCh:
 					return
@@ -188,20 +188,9 @@ func (p *replicationTaskProcessor) worker(workerWG *sync.WaitGroup) {
 						return p.process(msg)
 					}
 					err = backoff.Retry(op, replicationTaskRetryPolicy, p.isTransientRetryableError)
-					if err != nil {
-						// Check if this is an explicit ask to retry the task by handler
-						if _, ok := err.(*shared.RetryTaskError); ok {
-							// Increment the retryCount as we will retry the error upto ReplicatorMaxRetryCount before moving
-							// it to DLQ
-							retryCount++
-							time.Sleep(p.config.ReplicatorRetryDelay)
-							continue ProcessRetryLoop
-						}
-
+					if err != nil && p.isTransientRetryableError(err) {
 						// Keep on retrying transient errors for ever
-						if p.isTransientRetryableError(err) {
-							continue ProcessRetryLoop
-						}
+						continue ProcessRetryLoop
 					}
 				}
 
@@ -330,6 +319,8 @@ func (p *replicationTaskProcessor) isTransientRetryableError(err error) bool {
 	case *shared.LimitExceededError:
 		return true
 	case *shared.InternalServiceError:
+		return true
+	case *shared.RetryTaskError:
 		return true
 	}
 
