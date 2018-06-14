@@ -38,8 +38,9 @@ import (
 
 const (
 	domainCacheInitialSize     = 10 * 1024
-	domainCacheMaxSize         = 16 * 1024
-	domainCacheTTL             = time.Hour
+	domainCacheMaxSize         = 64 * 1024
+	domainCacheTTL             = 0 // 0 means infinity
+	domainCacheEntryTTL        = 20 * time.Second
 	domainCacheRefreshInterval = 10 * time.Second
 	domainCacheRefreshPageSize = 100
 
@@ -364,7 +365,7 @@ func (c *domainCache) updateIDToDomainCache(id string, record *DomainCacheEntry)
 	entry.isGlobalDomain = record.isGlobalDomain
 	entry.failoverNotificationVersion = record.failoverNotificationVersion
 	entry.notificationVersion = record.notificationVersion
-	entry.expiry = c.timeSource.Now().Add(domainCacheRefreshInterval)
+	entry.expiry = c.timeSource.Now().Add(domainCacheEntryTTL)
 
 	nextDomain := entry.duplicate()
 	if triggerCallback {
