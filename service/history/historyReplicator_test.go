@@ -309,6 +309,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 		LastWriteEventID: currentLastEventID,
 	})
 	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
 	mockConflictResolver := &mockConflictResolver{}
@@ -321,6 +322,10 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_ResolveConflict_OtherCase() {
+	// other cases will be tested in TestConflictResolutionTerminateContinueAsNew
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_NoOp() {
@@ -1488,4 +1493,151 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.Equal(version, transferTasks[0].GetVersion())
 	s.Equal(1, len(timerTasks))
 	s.Equal(version, timerTasks[0].GetVersion())
+}
+
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_TargetRunning() {
+	msBuilderTarget := &mockMutableState{}
+	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(true)
+	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_TargetClosed_NotContinueAsNew() {
+	msBuilderTarget := &mockMutableState{}
+	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(false)
+	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{CloseStatus: persistence.WorkflowCloseStatusCompleted})
+
+	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_TargetClosed_ContinueAsNew_CurrentClosed() {
+	domainID := validDomainID
+	workflowID := "some random target workflow ID"
+	targetRunID := uuid.New()
+
+	msBuilderTarget := &mockMutableState{}
+	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(false)
+	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+		DomainID:    domainID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
+		CloseStatus: persistence.WorkflowCloseStatusContinuedAsNew,
+	})
+
+	currentRunID := uuid.New()
+	contextCurrent, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(currentRunID),
+	})
+	s.Nil(err)
+	msBuilderCurrent := &mockMutableState{}
+	msBuilderCurrent.On("GetLastWriteVersion").Return(int64(999))                      // this is not actually used, but will be called
+	msBuilderCurrent.On("GetReplicationState").Return(&persistence.ReplicationState{}) // this is used to update the version on mutable state
+	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(false)                    // this is used to update the version on mutable state
+	msBuilderCurrent.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{RunID: currentRunID, CloseStatus: persistence.WorkflowCloseStatusTerminated})
+	contextCurrent.msBuilder = msBuilderCurrent
+	release(nil)
+
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currentRunID,
+		// other attributes are not used
+	}, nil)
+
+	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_TargetClosed_ContinueAsNew_CurrentRunning() {
+	version := int64(4801) // this does nothing in this test
+	domainName := "some random domain name"
+	domainID := validDomainID
+	workflowID := "some random target workflow ID"
+	targetRunID := uuid.New()
+
+	msBuilderTarget := &mockMutableState{}
+	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(false)
+	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{
+		DomainID:    domainID,
+		WorkflowID:  workflowID,
+		RunID:       targetRunID,
+		CloseStatus: persistence.WorkflowCloseStatusContinuedAsNew,
+	})
+
+	// this mocks are for the terminate current workflow operation
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			FailoverVersion: version,
+			IsGlobalDomain:  true,
+			TableVersion:    persistence.DomainTableVersionV1,
+		}, nil,
+	).Once()
+
+	currentRunID := uuid.New()
+	contextCurrent, release, err := s.historyReplicator.historyCache.getOrCreateWorkflowExecution(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(currentRunID),
+	})
+	s.Nil(err)
+	msBuilderCurrent := &mockMutableState{}
+	msBuilderCurrent.On("GetLastWriteVersion").Return(int64(999))                      // this is not actually used, but will be called
+	msBuilderCurrent.On("GetReplicationState").Return(&persistence.ReplicationState{}) // this is used to update the version on mutable state
+	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)                     // this is used to update the version on mutable state
+	msBuilderCurrent.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{RunID: currentRunID, CloseStatus: persistence.WorkflowCloseStatusNone})
+	msBuilderCurrent.On("UpdateReplicationStateVersion", version)
+	contextCurrent.msBuilder = msBuilderCurrent
+	release(nil)
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currentRunID,
+		// other attributes are not used
+	}, nil)
+
+	currentStartEvent := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(common.FirstEventID),
+		EventType: shared.EventTypeWorkflowExecutionStarted.Ptr(),
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			ContinuedExecutionRunId: common.StringPtr(targetRunID),
+			// other attributes are not used
+		},
+	}
+	currentStartEventBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{currentStartEvent})
+	serializedStartEventBatch, err := persistence.NewJSONHistorySerializer().Serialize(currentStartEventBatch)
+	s.Nil(err)
+	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(currentRunID),
+		},
+		FirstEventID:  common.FirstEventID,
+		NextEventID:   common.FirstEventID + 1,
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
+		Events:        []persistence.SerializedHistoryEventBatch{*serializedStartEventBatch},
+		NextPageToken: nil,
+	}, nil)
+
+	// return nil, to trigger the history engine to return err, so we can assert on it
+	// this is to save a lot of meaningless mock, since we are not testing functionality of history engine
+	msBuilderCurrent.On("AddWorkflowExecutionTerminatedEvent", mock.Anything).Return(nil)
+
+	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	s.NotNil(err)
+	_, ok := err.(*shared.InternalServiceError)
+	s.True(ok)
 }
