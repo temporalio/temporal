@@ -62,30 +62,54 @@ func (mc *inMemoryClient) GetValueWithFilters(
 }
 
 func (mc *inMemoryClient) GetIntValue(name Key, filters map[Filter]interface{}, defaultValue int) (int, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(int), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetFloatValue(name Key, filters map[Filter]interface{}, defaultValue float64) (float64, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(float64), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(bool), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetStringValue(name Key, filters map[Filter]interface{}, defaultValue string) (string, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(string), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetMapValue(
 	name Key, filters map[Filter]interface{}, defaultValue map[string]interface{},
 ) (map[string]interface{}, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(map[string]interface{}), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
 func (mc *inMemoryClient) GetDurationValue(
 	name Key, filters map[Filter]interface{}, defaultValue time.Duration,
 ) (time.Duration, error) {
+	v := mc.globalValues.Load().(map[Key]interface{})
+	if val, ok := v[name]; ok {
+		return val.(time.Duration), nil
+	}
 	return defaultValue, errors.New("unable to find key")
 }
 
@@ -105,16 +129,60 @@ func (s *configSuite) SetupSuite() {
 	s.cln = NewCollection(s.client, bark.NewLoggerFromLogrus(logrus.New()))
 }
 
-func (s *configSuite) TestGetPropertyInt() {
-	key := MatchingMaxTaskBatchSize
-	size := s.cln.GetProperty(key, 10)
-	s.Equal(10, size())
+func (s *configSuite) TestGetProperty() {
+	key := testGetPropertyKey
+	value := s.cln.GetProperty(key, "a")
+	s.Equal("a", value())
+	s.client.SetValue(key, "b")
+	s.Equal("b", value())
+}
+
+func (s *configSuite) TestGetIntProperty() {
+	key := testGetIntPropertyKey
+	value := s.cln.GetIntProperty(key, 10)
+	s.Equal(10, value())
 	s.client.SetValue(key, 50)
-	s.Equal(50, size().(int))
+	s.Equal(50, value())
+}
+
+func (s *configSuite) TestGetFloat64Property() {
+	key := testGetFloat64PropertyKey
+	value := s.cln.GetFloat64Property(key, 0.1)
+	s.Equal(0.1, value())
+	s.client.SetValue(key, 0.01)
+	s.Equal(0.01, value())
+}
+
+func (s *configSuite) TestGetBoolProperty() {
+	key := testGetBoolPropertyKey
+	value := s.cln.GetBoolProperty(key, true)
+	s.Equal(true, value())
+	s.client.SetValue(key, false)
+	s.Equal(false, value())
 }
 
 func (s *configSuite) TestGetDurationProperty() {
-	key := MatchingLongPollExpirationInterval
-	interval := s.cln.GetDurationProperty(key, time.Second)
-	s.Equal(time.Second, interval())
+	key := testGetDurationPropertyKey
+	value := s.cln.GetDurationProperty(key, time.Second)
+	s.Equal(time.Second, value())
+	s.client.SetValue(key, time.Minute)
+	s.Equal(time.Minute, value())
+}
+
+func (s *configSuite) TestGetIntPropertyFilteredByDomain() {
+	key := testGetIntPropertyFilteredByDomainKey
+	domain := "testDomain"
+	value := s.cln.GetIntPropertyFilteredByDomain(key, 10)
+	s.Equal(10, value(domain))
+	s.client.SetValue(key, 50)
+	s.Equal(50, value(domain))
+}
+
+func (s *configSuite) TestGetDurationPropertyFilteredByDomain() {
+	key := testGetDurationPropertyFilteredByDomainKey
+	domain := "testDomain"
+	value := s.cln.GetDurationPropertyFilteredByDomain(key, time.Second)
+	s.Equal(time.Second, value(domain))
+	s.client.SetValue(key, time.Minute)
+	s.Equal(time.Minute, value(domain))
 }

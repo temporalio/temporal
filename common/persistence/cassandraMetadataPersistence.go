@@ -337,7 +337,7 @@ func (m *cassandraMetadataPersistence) ListDomain(request *ListDomainRequest) (*
 }
 
 func (m *cassandraMetadataPersistence) GetMetadata() (*GetMetadataResponse, error) {
-	panic("cassandraMetadataPersistence do not supporgetsmetadatain operation.")
+	panic("cassandraMetadataPersistence do not support get metadata operation.")
 }
 
 func (m *cassandraMetadataPersistence) deleteDomain(name, ID string) error {

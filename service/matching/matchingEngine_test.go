@@ -196,7 +196,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = func(...dynamicconfig.FilterOption) time.Duration { return 10 * time.Millisecond }
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -355,7 +355,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	s.matchingEngine.config.LongPollExpirationInterval = func(...dynamicconfig.FilterOption) time.Duration { return 10 * time.Millisecond }
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -467,7 +467,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = func(...dynamicconfig.FilterOption) time.Duration { return 50 * time.Millisecond }
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(50 * time.Millisecond)
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -609,7 +609,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = func(...dynamicconfig.FilterOption) time.Duration { return 20 * time.Millisecond }
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(20 * time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
 			return 0
@@ -1640,6 +1640,6 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 
 func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNopCollection())
-	config.LongPollExpirationInterval = func(...dynamicconfig.FilterOption) time.Duration { return 100 * time.Millisecond }
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
 	return config
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -71,14 +72,14 @@ func (s *timerQueueProcessorSuite) SetupSuite() {
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
 	// override config for testing
-	s.ShardContext.config.ShardUpdateMinInterval = 0 * time.Second
-	s.ShardContext.config.TransferProcessorUpdateShardTaskCount = 1
-	s.ShardContext.config.TimerProcessorUpdateShardTaskCount = 1
-	s.ShardContext.config.ReplicatorProcessorUpdateShardTaskCount = 1
-	s.ShardContext.config.TransferProcessorCompleteTransferInterval = 100 * time.Millisecond
-	s.ShardContext.config.TimerProcessorCompleteTimerInterval = 100 * time.Millisecond
-	s.ShardContext.config.TransferProcessorUpdateAckInterval = 100 * time.Millisecond
-	s.ShardContext.config.TimerProcessorUpdateAckInterval = 100 * time.Millisecond
+	s.ShardContext.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
+	s.ShardContext.config.TransferProcessorUpdateShardTaskCount = dynamicconfig.GetIntPropertyFn(1)
+	s.ShardContext.config.TimerProcessorUpdateShardTaskCount = dynamicconfig.GetIntPropertyFn(1)
+	s.ShardContext.config.ReplicatorProcessorUpdateShardTaskCount = dynamicconfig.GetIntPropertyFn(1)
+	s.ShardContext.config.TransferProcessorCompleteTransferInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
+	s.ShardContext.config.TimerProcessorCompleteTimerInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
+	s.ShardContext.config.TransferProcessorUpdateAckInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
+	s.ShardContext.config.TimerProcessorUpdateAckInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
 
 	historyCache := newHistoryCache(s.ShardContext, s.logger)
 	historyCache.disabled = true
@@ -511,6 +512,7 @@ func (s *timerQueueProcessorSuite) TestTimerActivityTaskScheduleToStart_MoreThan
 			ActivityId:                    common.StringPtr("testID"),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(2),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(1),
+			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(3),
 			TaskList:                      &workflow.TaskList{Name: common.StringPtr("task-list")},
 		})
 	s.NotNil(activityScheduledEvent)

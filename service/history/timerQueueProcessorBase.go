@@ -65,6 +65,8 @@ type (
 
 		// worker coroutines notification
 		workerNotificationChans []chan struct{}
+		// duplicate numOfWorker from config.TimerTaskWorkerCount for dynamic config works correctly
+		numOfWorker int
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -79,7 +81,8 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 	})
 
 	workerNotificationChans := []chan struct{}{}
-	for index := 0; index < shard.GetConfig().TimerTaskWorkerCount; index++ {
+	numOfWorker := shard.GetConfig().TimerTaskWorkerCount()
+	for index := 0; index < numOfWorker; index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
 
@@ -90,12 +93,13 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 		executionManager:        shard.GetExecutionManager(),
 		status:                  common.DaemonStatusInitialized,
 		shutdownCh:              make(chan struct{}),
-		tasksCh:                 make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize),
+		tasksCh:                 make(chan *persistence.TimerTaskInfo, 10*shard.GetConfig().TimerTaskBatchSize()),
 		config:                  shard.GetConfig(),
 		logger:                  log,
 		metricsClient:           historyService.metricsClient,
 		now:                     timeNow,
 		timerQueueAckMgr:        timerQueueAckMgr,
+		numOfWorker:             numOfWorker,
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
 	}
@@ -132,7 +136,7 @@ func (t *timerQueueProcessorBase) processorPump() {
 	defer t.shutdownWG.Done()
 
 	var workerWG sync.WaitGroup
-	for i := 0; i < t.config.TimerTaskWorkerCount; i++ {
+	for i := 0; i < t.numOfWorker; i++ {
 		workerWG.Add(1)
 		notificationChan := t.workerNotificationChans[i]
 		go t.taskWorker(&workerWG, notificationChan)
@@ -179,7 +183,7 @@ func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificat
 func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
 	t.logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 ProcessRetryLoop:
-	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount; {
+	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount(); {
 		select {
 		case <-t.shutdownCh:
 			return
@@ -258,10 +262,10 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task,
 
 func (t *timerQueueProcessorBase) internalProcessor() error {
 	timerGate := t.timerProcessor.getTimerGate()
-	pollTimer := time.NewTimer(t.config.TimerProcessorMaxPollInterval)
+	pollTimer := time.NewTimer(t.config.TimerProcessorMaxPollInterval())
 	defer pollTimer.Stop()
 
-	updateAckChan := time.NewTicker(t.shard.GetConfig().TimerProcessorUpdateAckInterval).C
+	updateAckChan := time.NewTicker(t.shard.GetConfig().TimerProcessorUpdateAckInterval()).C
 	var nextKeyTask *persistence.TimerTaskInfo
 
 continueProcessor:
@@ -288,7 +292,7 @@ continueProcessor:
 				// Timer Fired.
 			case <-pollTimer.C:
 				// forced timer scan
-				pollTimer.Reset(t.config.TimerProcessorMaxPollInterval)
+				pollTimer.Reset(t.config.TimerProcessorMaxPollInterval())
 			case <-updateAckChan:
 				t.timerQueueAckMgr.updateAckLevel()
 				continue continueProcessor

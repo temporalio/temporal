@@ -43,34 +43,22 @@ type Config struct {
 	MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFn
 
 	// taskWriter configuration
-	OutstandingTaskAppendsThreshold int
-	MaxTaskBatchSize                int
+	OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFn
+	MaxTaskBatchSize                dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		EnableSyncMatch: dc.GetBoolProperty(
-			dynamicconfig.MatchingEnableSyncMatch, true,
-		),
-		RangeSize: 100000,
-		GetTasksBatchSize: dc.GetIntProperty(
-			dynamicconfig.MatchingMaxTaskBatchSize, 1000,
-		),
-		UpdateAckInterval: dc.GetDurationProperty(
-			dynamicconfig.MatchingUpdateAckInterval, 10*time.Second,
-		),
-		IdleTasklistCheckInterval: dc.GetDurationProperty(
-			dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute,
-		),
-		LongPollExpirationInterval: dc.GetDurationProperty(
-			dynamicconfig.MatchingLongPollExpirationInterval, time.Minute,
-		),
-		MinTaskThrottlingBurstSize: dc.GetIntProperty(
-			dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1,
-		),
-		OutstandingTaskAppendsThreshold: 250,
-		MaxTaskBatchSize:                100,
+		EnableSyncMatch:                 dc.GetBoolProperty(dynamicconfig.MatchingEnableSyncMatch, true),
+		RangeSize:                       100000,
+		GetTasksBatchSize:               dc.GetIntProperty(dynamicconfig.MatchingGetTasksBatchSize, 1000),
+		UpdateAckInterval:               dc.GetDurationProperty(dynamicconfig.MatchingUpdateAckInterval, 10*time.Second),
+		IdleTasklistCheckInterval:       dc.GetDurationProperty(dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute),
+		LongPollExpirationInterval:      dc.GetDurationProperty(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
+		MinTaskThrottlingBurstSize:      dc.GetIntProperty(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
+		OutstandingTaskAppendsThreshold: dc.GetIntProperty(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
+		MaxTaskBatchSize:                dc.GetIntProperty(dynamicconfig.MatchingMaxTaskBatchSize, 100),
 	}
 }
 

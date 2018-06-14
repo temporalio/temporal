@@ -486,7 +486,11 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 			return response, nil
 		}
 
-		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval())
+		domainCache, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+		if err != nil {
+			return nil, err
+		}
+		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(domainCache.GetInfo().Name))
 		defer timer.Stop()
 		for {
 			select {

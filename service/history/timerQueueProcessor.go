@@ -119,7 +119,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 	if !ok {
 		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
-	standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay))
+	standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay()))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
 	standbyTimerProcessor.retryTasks()
 }
@@ -158,7 +158,7 @@ func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 
 }
 
 func (t *timerQueueProcessorImpl) completeTimersLoop() {
-	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval)
+	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval())
 	defer timer.Stop()
 	for {
 		select {
@@ -168,7 +168,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 			return
 		case <-timer.C:
 		CompleteLoop:
-			for attempt := 0; attempt < t.config.TimerProcessorCompleteTimerFailureRetryCount; attempt++ {
+			for attempt := 0; attempt < t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Infof("Failed to complete timers: %v.", err)
@@ -178,7 +178,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 					break CompleteLoop
 				}
 			}
-			timer.Reset(t.config.TimerProcessorCompleteTimerInterval)
+			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
 		}
 	}
 }
@@ -205,7 +205,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	minTimestamp := lowerAckLevel.VisibilityTimestamp
 	// releax the upper limit for scan since the query is [minTimestamp, minTimestamp)
 	maxTimestamp := upperAckLevel.VisibilityTimestamp.Add(1 * time.Second)
-	batchSize := t.config.TimerTaskBatchSize
+	batchSize := t.config.TimerTaskBatchSize()
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp: minTimestamp,
 		MaxTimestamp: maxTimestamp,
@@ -240,7 +240,7 @@ LoadCompleteLoop:
 	}
 	t.ackLevel = upperAckLevel
 
-	if t.finishedTaskCounter >= t.config.TimerProcessorUpdateShardTaskCount {
+	if t.finishedTaskCounter >= t.config.TimerProcessorUpdateShardTaskCount() {
 		t.finishedTaskCounter = 0
 		t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
 	}

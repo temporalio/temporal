@@ -160,7 +160,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 	morePage := false
 	var err error
 	if minQueryLevel.Before(maxQueryLevel) {
-		tasks, pageToken, err = t.getTimerTasks(minQueryLevel, maxQueryLevel, t.config.TimerTaskBatchSize, pageToken)
+		tasks, pageToken, err = t.getTimerTasks(minQueryLevel, maxQueryLevel, t.config.TimerTaskBatchSize(), pageToken)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -273,7 +273,7 @@ MoveAckLevelLoop:
 		// are processed and we are free to shundown
 		t.finishedChan <- struct{}{}
 	}
-	if t.finishedTaskCounter < t.config.TimerProcessorUpdateShardTaskCount {
+	if t.finishedTaskCounter < t.config.TimerProcessorUpdateShardTaskCount() {
 		t.Unlock()
 	} else {
 		t.finishedTaskCounter = 0
@@ -292,7 +292,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		NextPageToken: pageToken,
 	}
 
-	retryCount := t.config.TimerProcessorGetFailureRetryCount
+	retryCount := t.config.TimerProcessorGetFailureRetryCount()
 	for attempt := 0; attempt < retryCount; attempt++ {
 		response, err := t.executionMgr.GetTimerIndexTasks(request)
 		if err == nil {

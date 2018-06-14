@@ -125,7 +125,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
 		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetLogger()),
-		rateLimiter:        common.NewTokenBucket(config.RPS, common.NewRealTimeSource()),
+		rateLimiter:        common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
 		domainReplicator:   NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
@@ -1337,8 +1337,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, err
 	}
 
-	if getRequest.GetMaximumPageSize() == 0 {
-		getRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultHistoryMaxPageSize)
+	if getRequest.GetMaximumPageSize() <= 0 {
+		getRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.HistoryMaxPageSize(getRequest.GetDomain())))
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(getRequest.GetDomain())
@@ -1700,8 +1700,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 			Message: "Only one of ExecutionFilter or TypeFilter is allowed"}, scope)
 	}
 
-	if listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultVisibilityMaxPageSize)
+	if listRequest.GetMaximumPageSize() <= 0 {
+		listRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(listRequest.GetDomain())
@@ -1791,8 +1791,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 			Message: "Only one of ExecutionFilter, TypeFilter or StatusFilter is allowed"}, scope)
 	}
 
-	if listRequest.GetMaximumPageSize() == 0 {
-		listRequest.MaximumPageSize = common.Int32Ptr(wh.config.DefaultVisibilityMaxPageSize)
+	if listRequest.GetMaximumPageSize() <= 0 {
+		listRequest.MaximumPageSize = common.Int32Ptr(int32(wh.config.VisibilityMaxPageSize(listRequest.GetDomain())))
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(listRequest.GetDomain())
@@ -2280,12 +2280,16 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context
 		if matchingResp.GetStickyExecutionEnabled() {
 			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
 		}
+		domain, dErr := wh.domainCache.GetDomainByID(domainID)
+		if dErr != nil {
+			return nil, dErr
+		}
 		history, persistenceToken, err = wh.getHistory(
 			domainID,
 			*matchingResp.WorkflowExecution,
 			firstEventID,
 			nextEventID,
-			wh.config.DefaultHistoryMaxPageSize,
+			int32(wh.config.HistoryMaxPageSize(domain.GetInfo().Name)),
 			nil,
 			matchingResp.DecisionInfo)
 		if err != nil {

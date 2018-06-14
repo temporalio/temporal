@@ -26,25 +26,26 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
-	DefaultVisibilityMaxPageSize int32
-	DefaultHistoryMaxPageSize    int32
-	RPS                          int
+	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithDomainFilter
+	HistoryMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
+	RPS                   dynamicconfig.IntPropertyFn
 
 	// Persistence settings
-	HistoryMgrNumConns int
+	HistoryMgrNumConns dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
-func NewConfig() *Config {
+func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		DefaultVisibilityMaxPageSize: 1000,
-		DefaultHistoryMaxPageSize:    1000,
-		RPS:                1200, // This limit is based on experimental runs.
-		HistoryMgrNumConns: 10,
+		VisibilityMaxPageSize: dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		HistoryMaxPageSize:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, 1000),
+		RPS:                   dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
+		HistoryMgrNumConns:    dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 	}
 }
 
@@ -59,7 +60,7 @@ type Service struct {
 func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
-		config: NewConfig(),
+		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
 		stopC:  make(chan struct{}),
 	}
 }
@@ -107,7 +108,7 @@ func (s *Service) Start() {
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
-		s.config.HistoryMgrNumConns,
+		s.config.HistoryMgrNumConns(),
 		p.Logger)
 
 	if err != nil {

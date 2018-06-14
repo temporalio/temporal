@@ -289,7 +289,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 
 	c.frontEndService = service.New(params)
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontend.NewConfig(), c.metadataMgr, c.historyMgr, c.visibilityMgr, kafkaProducer)
+		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection()), c.metadataMgr, c.historyMgr, c.visibilityMgr, kafkaProducer)
 	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
@@ -315,8 +315,8 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup) {
 		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 		service := service.New(params)
 		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards)
-		historyConfig.HistoryMgrNumConns = c.numberOfHistoryShards
-		historyConfig.ExecutionMgrNumConns = c.numberOfHistoryShards
+		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
+		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
 			c.visibilityMgr, c.historyMgr, c.executionMgrFactory)
 		handler.Start()

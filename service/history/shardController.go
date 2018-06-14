@@ -264,7 +264,7 @@ func (c *shardController) shardManagementPump() {
 
 	defer c.shutdownWG.Done()
 
-	acquireTicker := time.NewTicker(c.config.AcquireShardInterval)
+	acquireTicker := time.NewTicker(c.config.AcquireShardInterval())
 	defer acquireTicker.Stop()
 
 	for {

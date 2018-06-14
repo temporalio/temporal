@@ -70,14 +70,14 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 	matchingClient matching.Client, historyClient history.Client, logger bark.Logger) *transferQueueActiveProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:            config.TransferTaskBatchSize,
-		WorkerCount:          config.TransferTaskWorkerCount,
-		MaxPollRPS:           config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:      config.TransferProcessorMaxPollInterval,
-		UpdateAckInterval:    config.TransferProcessorUpdateAckInterval,
-		MaxRetryCount:        config.TransferTaskMaxRetryCount,
+		BatchSize:            config.TransferTaskBatchSize(),
+		WorkerCount:          config.TransferTaskWorkerCount(),
+		MaxPollRPS:           config.TransferProcessorMaxPollRPS(),
+		MaxPollInterval:      config.TransferProcessorMaxPollInterval(),
+		UpdateAckInterval:    config.TransferProcessorUpdateAckInterval(),
+		MaxRetryCount:        config.TransferTaskMaxRetryCount(),
 		MetricScope:          metrics.TransferQueueProcessorScope,
-		UpdateShardTaskCount: config.TransferProcessorUpdateShardTaskCount,
+		UpdateShardTaskCount: config.TransferProcessorUpdateShardTaskCount(),
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{
@@ -121,14 +121,14 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	minLevel int64, maxLevel int64, logger bark.Logger) *transferQueueActiveProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:            config.TransferTaskBatchSize,
-		WorkerCount:          config.TransferTaskWorkerCount,
-		MaxPollRPS:           config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:      config.TransferProcessorMaxPollInterval,
-		UpdateAckInterval:    config.TransferProcessorUpdateAckInterval,
-		MaxRetryCount:        config.TransferTaskMaxRetryCount,
+		BatchSize:            config.TransferTaskBatchSize(),
+		WorkerCount:          config.TransferTaskWorkerCount(),
+		MaxPollRPS:           config.TransferProcessorMaxPollRPS(),
+		MaxPollInterval:      config.TransferProcessorMaxPollInterval(),
+		UpdateAckInterval:    config.TransferProcessorUpdateAckInterval(),
+		MaxRetryCount:        config.TransferTaskMaxRetryCount(),
 		MetricScope:          metrics.TransferQueueProcessorScope,
-		UpdateShardTaskCount: config.TransferProcessorUpdateShardTaskCount,
+		UpdateShardTaskCount: config.TransferProcessorUpdateShardTaskCount(),
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{

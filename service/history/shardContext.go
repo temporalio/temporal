@@ -580,7 +580,7 @@ func (s *shardContextImpl) updateMaxReadLevelLocked(rl int64) {
 
 func (s *shardContextImpl) updateShardInfoLocked() error {
 	now := time.Now()
-	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval).After(now) {
+	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
 	updatedShardInfo := copyShardInfo(s.shardInfo)

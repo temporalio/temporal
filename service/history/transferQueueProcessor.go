@@ -130,7 +130,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, currentTi
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
 	currentClusterTime := t.shard.GetCurrentTime(t.currentClusterName)
-	if currentClusterTime.Sub(currentTime) >= t.config.TransferProcessorStandbyTaskDelay && len(transferTasks) != 0 {
+	if currentClusterTime.Sub(currentTime) >= t.config.TransferProcessorStandbyTaskDelay() && len(transferTasks) != 0 {
 		standbyTaskProcessor.notifyNewTask()
 	}
 	standbyTaskProcessor.retryTasks()
@@ -160,7 +160,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 }
 
 func (t *transferQueueProcessorImpl) completeTransferLoop() {
-	timer := time.NewTimer(t.config.TransferProcessorCompleteTransferInterval)
+	timer := time.NewTimer(t.config.TransferProcessorCompleteTransferInterval())
 	defer timer.Stop()
 
 	for {
@@ -171,7 +171,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 			return
 		case <-timer.C:
 		CompleteLoop:
-			for attempt := 0; attempt < t.config.TransferProcessorCompleteTransferFailureRetryCount; attempt++ {
+			for attempt := 0; attempt < t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Infof("Failed to complete transfer task: %v.", err)
@@ -181,7 +181,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 					break CompleteLoop
 				}
 			}
-			timer.Reset(t.config.TransferProcessorCompleteTransferInterval)
+			timer.Reset(t.config.TransferProcessorCompleteTransferInterval())
 		}
 	}
 }
@@ -206,7 +206,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	executionMgr := t.shard.GetExecutionManager()
 	maxLevel := upperAckLevel + 1
-	batchSize := t.config.TransferTaskBatchSize
+	batchSize := t.config.TransferTaskBatchSize()
 	request := &persistence.GetTransferTasksRequest{
 		ReadLevel:    lowerAckLevel,
 		MaxReadLevel: maxLevel,
@@ -238,7 +238,7 @@ LoadCompleteLoop:
 	}
 	t.ackLevel = upperAckLevel
 
-	if t.finishedTaskCounter >= t.config.TransferProcessorUpdateShardTaskCount {
+	if t.finishedTaskCounter >= t.config.TransferProcessorUpdateShardTaskCount() {
 		t.finishedTaskCounter = 0
 		t.shard.UpdateTransferAckLevel(upperAckLevel)
 	}

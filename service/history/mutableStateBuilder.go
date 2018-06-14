@@ -586,7 +586,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 		e.bufferedEvents = append(e.bufferedEvents, e.updateBufferedEvents)
 		e.updateBufferedEvents = nil
 	}
-	if len(e.bufferedEvents) > e.config.MaximumBufferedEventsBatch {
+	if len(e.bufferedEvents) > e.config.MaximumBufferedEventsBatch() {
 		return nil, ErrBufferedEventsLimitExceeded
 	}
 	e.updateBufferedReplicationTasks = nil
@@ -1635,32 +1635,8 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		return nil
 	}
 
-	scheduleEventID := *event.EventId
-	var scheduleToStartTimeout int32
-	if attributes.ScheduleToStartTimeoutSeconds == nil || attributes.GetScheduleToStartTimeoutSeconds() <= 0 {
-		scheduleToStartTimeout = e.config.DefaultScheduleToStartActivityTimeoutInSecs
-	} else {
-		scheduleToStartTimeout = attributes.GetScheduleToStartTimeoutSeconds()
-	}
-
-	var scheduleToCloseTimeout int32
-	if attributes.ScheduleToCloseTimeoutSeconds == nil || attributes.GetScheduleToCloseTimeoutSeconds() <= 0 {
-		scheduleToCloseTimeout = e.config.DefaultScheduleToCloseActivityTimeoutInSecs
-	} else {
-		scheduleToCloseTimeout = attributes.GetScheduleToCloseTimeoutSeconds()
-	}
-
-	var startToCloseTimeout int32
-	if attributes.StartToCloseTimeoutSeconds == nil || attributes.GetStartToCloseTimeoutSeconds() <= 0 {
-		startToCloseTimeout = e.config.DefaultStartToCloseActivityTimeoutInSecs
-	} else {
-		startToCloseTimeout = attributes.GetStartToCloseTimeoutSeconds()
-	}
-
-	var heartbeatTimeout int32
-	if attributes.HeartbeatTimeoutSeconds != nil {
-		heartbeatTimeout = attributes.GetHeartbeatTimeoutSeconds()
-	}
+	scheduleEventID := event.GetEventId()
+	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
 
 	ai := &persistence.ActivityInfo{
 		Version:                  event.GetVersion(),
@@ -1670,10 +1646,10 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		StartedID:                common.EmptyEventID,
 		StartedTime:              time.Time{},
 		ActivityID:               common.StringDefault(attributes.ActivityId),
-		ScheduleToStartTimeout:   scheduleToStartTimeout,
+		ScheduleToStartTimeout:   attributes.GetScheduleToStartTimeoutSeconds(),
 		ScheduleToCloseTimeout:   scheduleToCloseTimeout,
-		StartToCloseTimeout:      startToCloseTimeout,
-		HeartbeatTimeout:         heartbeatTimeout,
+		StartToCloseTimeout:      attributes.GetStartToCloseTimeoutSeconds(),
+		HeartbeatTimeout:         attributes.GetHeartbeatTimeoutSeconds(),
 		CancelRequested:          false,
 		CancelRequestID:          common.EmptyEventID,
 		LastHeartBeatUpdatedTime: time.Time{},

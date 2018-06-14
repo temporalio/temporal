@@ -31,9 +31,7 @@ type (
 		CreateTokenBucket(rps int, timeSource TimeSource) TokenBucket
 	}
 
-	// TokenBucket is the interface for
-	// any implememtation of a token bucket
-	// rate limiter
+	// TokenBucket is the interface for any implementation of a token bucket rate limiter
 	TokenBucket interface {
 		// TryConsume attempts to take count tokens from the
 		// bucket. Returns true on success, false
@@ -73,7 +71,7 @@ const (
 
 // NewTokenBucket creates and returns a
 // new token bucket rate limiter that
-// repelenishes the bucket every 100
+// replenishes the bucket every 100
 // milliseconds. Thread safe.
 //
 // @param rps

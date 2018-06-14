@@ -104,8 +104,8 @@ func newTaskListConfig(id *taskListID, config *Config) *taskListConfig {
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(tlOpt)
 		},
-		OutstandingTaskAppendsThreshold: config.OutstandingTaskAppendsThreshold,
-		MaxTaskBatchSize:                config.MaxTaskBatchSize,
+		OutstandingTaskAppendsThreshold: config.OutstandingTaskAppendsThreshold(),
+		MaxTaskBatchSize:                config.MaxTaskBatchSize(),
 	}
 }
 

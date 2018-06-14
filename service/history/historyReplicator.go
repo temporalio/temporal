@@ -103,29 +103,6 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 }
 
 func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retError error) {
-	defer func() {
-		if retError != nil {
-			switch retError.(type) {
-			case *shared.EntityNotExistsError:
-				r.logger.Warnf("Encounter EntityNotExistsError: %v", retError)
-				retError = ErrRetryEntityNotExists
-			case *shared.WorkflowExecutionAlreadyStartedError:
-				r.logger.Warnf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError)
-				retError = ErrRetryExecutionAlreadyStarted
-			}
-		}
-	}()
-
-	if request == nil || request.History == nil || len(request.History.Events) == 0 {
-		r.logger.Warn("Dropping empty replication task")
-		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
-		return nil
-	}
-	domainID, err := validateDomainUUID(request.DomainUUID)
-	if err != nil {
-		return err
-	}
-
 	logger := r.logger.WithFields(bark.Fields{
 		logging.TagWorkflowExecutionID: request.WorkflowExecution.GetWorkflowId(),
 		logging.TagWorkflowRunID:       request.WorkflowExecution.GetRunId(),
@@ -134,6 +111,29 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		logging.TagFirstEventID:        request.GetFirstEventId(),
 		logging.TagNextEventID:         request.GetNextEventId(),
 	})
+
+	defer func() {
+		if retError != nil {
+			switch retError.(type) {
+			case *shared.EntityNotExistsError:
+				logger.Debugf("Encounter EntityNotExistsError: %v", retError)
+				retError = ErrRetryEntityNotExists
+			case *shared.WorkflowExecutionAlreadyStartedError:
+				logger.Debugf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError)
+				retError = ErrRetryExecutionAlreadyStarted
+			}
+		}
+	}()
+
+	if request == nil || request.History == nil || len(request.History.Events) == 0 {
+		logger.Warn("Dropping empty replication task")
+		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
+		return nil
+	}
+	domainID, err := validateDomainUUID(request.DomainUUID)
+	if err != nil {
+		return err
+	}
 
 	execution := *request.WorkflowExecution
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(domainID, execution)

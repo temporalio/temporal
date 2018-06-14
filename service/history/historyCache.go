@@ -62,12 +62,12 @@ var (
 func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
-	opts.InitialCapacity = config.HistoryCacheInitialSize
-	opts.TTL = config.HistoryCacheTTL
+	opts.InitialCapacity = config.HistoryCacheInitialSize()
+	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &historyCache{
-		Cache:            cache.New(config.HistoryCacheMaxSize, opts),
+		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
 		logger: logger.WithFields(bark.Fields{

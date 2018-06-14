@@ -135,8 +135,8 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
 		metricsClient:             s.metricsClient,
 	}
-	s.mockShard.config.TimerProcessorUpdateShardTaskCount = 1
-	s.mockShard.config.ShardUpdateMinInterval = 0 * time.Second
+	s.mockShard.config.TimerProcessorUpdateShardTaskCount = dynamicconfig.GetIntPropertyFn(1)
+	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.clusterName = cluster.TestCurrentClusterName
@@ -267,7 +267,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -322,7 +322,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -375,7 +375,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -429,7 +429,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -495,7 +495,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{
@@ -579,8 +579,8 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
 		metricsClient:             s.metricsClient,
 	}
-	s.mockShard.config.TimerProcessorUpdateShardTaskCount = 1
-	s.mockShard.config.ShardUpdateMinInterval = 0 * time.Second
+	s.mockShard.config.TimerProcessorUpdateShardTaskCount = dynamicconfig.GetIntPropertyFn(1)
+	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.standbyClusterName = cluster.TestAlternativeClusterName
 	s.minLevel = time.Now().Add(-10 * time.Minute)
@@ -625,7 +625,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 
@@ -689,7 +689,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 
@@ -785,7 +785,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	request := &persistence.GetTimerIndexTasksRequest{
 		MinTimestamp:  minQueryLevel,
 		MaxTimestamp:  maxQueryLevel,
-		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize,
+		BatchSize:     s.mockShard.GetConfig().TimerTaskBatchSize(),
 		NextPageToken: token,
 	}
 	response := &persistence.GetTimerIndexTasksResponse{

@@ -49,11 +49,17 @@ type PropertyFn func() interface{}
 // IntPropertyFn is a wrapper to get int property from dynamic config
 type IntPropertyFn func(opts ...FilterOption) int
 
+// IntPropertyFn is a wrapper to get int property from dynamic config with domainName as filter
+type IntPropertyFnWithDomainFilter func(domain string) int
+
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
 
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
+
+// DurationPropertyFnWithDomainFilter is a wrapper to get duration property from dynamic config with domainName as filter
+type DurationPropertyFnWithDomainFilter func(domain string) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
@@ -115,6 +121,28 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
 	return func(opts ...FilterOption) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
+// GetIntPropertyFilteredByDomain gets property with domain filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) IntPropertyFnWithDomainFilter {
+	return func(domain string) int {
+		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByDomain gets property with domain filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainFilter {
+	return func(domain string) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
 			c.logNoValue(key, err)
 		}
