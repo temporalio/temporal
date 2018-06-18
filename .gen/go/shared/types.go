@@ -11519,6 +11519,193 @@ func (v *GetWorkflowExecutionHistoryResponse) Equals(rhs *GetWorkflowExecutionHi
 	return true
 }
 
+type Header struct {
+	Fields map[string][]byte `json:"fields,omitempty"`
+}
+
+type _Map_String_Binary_MapItemList map[string][]byte
+
+func (m _Map_String_Binary_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		if v == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", k)
+		}
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := wire.NewValueBinary(v), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_Binary_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_Binary_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_Binary_MapItemList) ValueType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_Binary_MapItemList) Close() {}
+
+// ToWire translates a Header struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *Header) ToWire() (wire.Value, error) {
+	var (
+		fields [1]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Fields != nil {
+		w, err = wire.NewValueMap(_Map_String_Binary_MapItemList(v.Fields)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _Map_String_Binary_Read(m wire.MapItemList) (map[string][]byte, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make(map[string][]byte, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := x.Value.GetBinary(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
+}
+
+// FromWire deserializes a Header struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a Header struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v Header
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *Header) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TMap {
+				v.Fields, err = _Map_String_Binary_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a Header
+// struct.
+func (v *Header) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [1]string
+	i := 0
+	if v.Fields != nil {
+		fields[i] = fmt.Sprintf("Fields: %v", v.Fields)
+		i++
+	}
+
+	return fmt.Sprintf("Header{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _Map_String_Binary_Equals(lhs, rhs map[string][]byte) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !bytes.Equal(lv, rv) {
+			return false
+		}
+	}
+	return true
+}
+
+// Equals returns true if all the fields of this Header match the
+// provided Header.
+//
+// This function performs a deep comparison.
+func (v *Header) Equals(rhs *Header) bool {
+	if !((v.Fields == nil && rhs.Fields == nil) || (v.Fields != nil && rhs.Fields != nil && _Map_String_Binary_Equals(v.Fields, rhs.Fields))) {
+		return false
+	}
+
+	return true
+}
+
 type History struct {
 	Events []*HistoryEvent `json:"events,omitempty"`
 }
@@ -14404,6 +14591,7 @@ type MarkerRecordedEventAttributes struct {
 	MarkerName                   *string `json:"markerName,omitempty"`
 	Details                      []byte  `json:"details,omitempty"`
 	DecisionTaskCompletedEventId *int64  `json:"decisionTaskCompletedEventId,omitempty"`
+	Header                       *Header `json:"header,omitempty"`
 }
 
 // ToWire translates a MarkerRecordedEventAttributes struct into a Thrift-level intermediate
@@ -14423,7 +14611,7 @@ type MarkerRecordedEventAttributes struct {
 //   }
 func (v *MarkerRecordedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -14453,8 +14641,22 @@ func (v *MarkerRecordedEventAttributes) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _Header_Read(w wire.Value) (*Header, error) {
+	var v Header
+	err := v.FromWire(w)
+	return &v, err
 }
 
 // FromWire deserializes a MarkerRecordedEventAttributes struct from its Thrift-level
@@ -14507,6 +14709,14 @@ func (v *MarkerRecordedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -14520,7 +14730,7 @@ func (v *MarkerRecordedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.MarkerName != nil {
 		fields[i] = fmt.Sprintf("MarkerName: %v", *(v.MarkerName))
@@ -14532,6 +14742,10 @@ func (v *MarkerRecordedEventAttributes) String() string {
 	}
 	if v.DecisionTaskCompletedEventId != nil {
 		fields[i] = fmt.Sprintf("DecisionTaskCompletedEventId: %v", *(v.DecisionTaskCompletedEventId))
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -14550,6 +14764,9 @@ func (v *MarkerRecordedEventAttributes) Equals(rhs *MarkerRecordedEventAttribute
 		return false
 	}
 	if !_I64_EqualsPtr(v.DecisionTaskCompletedEventId, rhs.DecisionTaskCompletedEventId) {
+		return false
+	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
 		return false
 	}
 
@@ -17424,6 +17641,7 @@ func (v *RecordActivityTaskHeartbeatResponse) GetCancelRequested() (o bool) {
 type RecordMarkerDecisionAttributes struct {
 	MarkerName *string `json:"markerName,omitempty"`
 	Details    []byte  `json:"details,omitempty"`
+	Header     *Header `json:"header,omitempty"`
 }
 
 // ToWire translates a RecordMarkerDecisionAttributes struct into a Thrift-level intermediate
@@ -17443,7 +17661,7 @@ type RecordMarkerDecisionAttributes struct {
 //   }
 func (v *RecordMarkerDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -17463,6 +17681,14 @@ func (v *RecordMarkerDecisionAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Header != nil {
+		w, err = v.Header.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
 
@@ -17509,6 +17735,14 @@ func (v *RecordMarkerDecisionAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TStruct {
+				v.Header, err = _Header_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -17522,7 +17756,7 @@ func (v *RecordMarkerDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.MarkerName != nil {
 		fields[i] = fmt.Sprintf("MarkerName: %v", *(v.MarkerName))
@@ -17530,6 +17764,10 @@ func (v *RecordMarkerDecisionAttributes) String() string {
 	}
 	if v.Details != nil {
 		fields[i] = fmt.Sprintf("Details: %v", v.Details)
+		i++
+	}
+	if v.Header != nil {
+		fields[i] = fmt.Sprintf("Header: %v", v.Header)
 		i++
 	}
 
@@ -17545,6 +17783,9 @@ func (v *RecordMarkerDecisionAttributes) Equals(rhs *RecordMarkerDecisionAttribu
 		return false
 	}
 	if !((v.Details == nil && rhs.Details == nil) || (v.Details != nil && rhs.Details != nil && bytes.Equal(v.Details, rhs.Details))) {
+		return false
+	}
+	if !((v.Header == nil && rhs.Header == nil) || (v.Header != nil && rhs.Header != nil && v.Header.Equals(rhs.Header))) {
 		return false
 	}
 

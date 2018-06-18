@@ -689,6 +689,7 @@ func (b *historyBuilder) newMarkerRecordedEventAttributes(decisionTaskCompletedE
 	attributes.MarkerName = common.StringPtr(common.StringDefault(request.MarkerName))
 	attributes.Details = request.Details
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
+	attributes.Header = request.Header
 	historyEvent.MarkerRecordedEventAttributes = attributes
 
 	return historyEvent

@@ -234,6 +234,10 @@ enum TaskListKind {
   STICKY,
 }
 
+struct Header {
+    10: optional map<string, binary> fields
+}
+
 struct WorkflowType {
   10: optional string name
 }
@@ -336,6 +340,7 @@ struct SignalExternalWorkflowExecutionDecisionAttributes {
 struct RecordMarkerDecisionAttributes {
   10: optional string markerName
   20: optional binary details
+  30: optional Header header
 }
 
 struct ContinueAsNewWorkflowExecutionDecisionAttributes {
@@ -550,6 +555,7 @@ struct MarkerRecordedEventAttributes {
   10: optional string markerName
   20: optional binary details
   30: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  40: optional Header header
 }
 
 struct WorkflowExecutionSignaledEventAttributes {
