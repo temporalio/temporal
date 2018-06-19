@@ -496,6 +496,7 @@ func (r *historyReplicator) replicateWorkflowStarted(context *workflowExecutionC
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) error {
 		_, err = r.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+			// NOTE: should not set the replication task, since we are in the standby
 			RequestID:                   executionInfo.CreateRequestID,
 			DomainID:                    domainID,
 			Execution:                   execution,

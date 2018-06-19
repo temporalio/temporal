@@ -2330,6 +2330,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 	setTaskVersion(newStateBuilder.GetCurrentVersion(), newTransferTasks, nil)
 
 	e.continueAsNew = &persistence.CreateWorkflowExecutionRequest{
+		// NOTE: there is no replication task for the start / decision scheduled event,
+		// the above 2 events will be replicated along with previous continue as new event.
 		RequestID:                   uuid.New(),
 		DomainID:                    domainID,
 		Execution:                   newExecution,

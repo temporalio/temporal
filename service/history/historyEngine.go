@@ -313,14 +313,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, err
 	}
 	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
-	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
-	}
-
-	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	createReplicationTask := msBuilder.GetReplicationState() != nil
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
 	if createReplicationTask {
+		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
 		replicationState = msBuilder.GetReplicationState()
 		replicationTask := &persistence.HistoryReplicationTask{
 			FirstEventID:        common.FirstEventID,
@@ -1955,14 +1952,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return nil, err
 	}
 	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
-	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
-	}
-
-	createReplicationTask := e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled()
+	createReplicationTask := msBuilder.GetReplicationState() != nil
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
 	if createReplicationTask {
+		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
 		replicationState = msBuilder.GetReplicationState()
 		replicationTask := &persistence.HistoryReplicationTask{
 			FirstEventID:        common.FirstEventID,
@@ -1988,6 +1982,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          common.EmptyEventID,
 			TransferTasks:               transferTasks,
+			ReplicationTasks:            replicationTasks,
 			DecisionVersion:             decisionVersion,
 			DecisionScheduleID:          decisionScheduleID,
 			DecisionStartedID:           decisionStartID,
