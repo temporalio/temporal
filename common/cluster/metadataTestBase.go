@@ -20,6 +20,8 @@
 
 package cluster
 
+import "github.com/uber/cadence/common/service/dynamicconfig"
+
 const (
 	// TestCurrentClusterInitialFailoverVersion is initial failover version for current cluster
 	TestCurrentClusterInitialFailoverVersion = int64(0)
@@ -50,7 +52,7 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 		masterClusterName = TestAlternativeClusterName
 	}
 	return NewMetadata(
-		enableGlobalDomain,
+		dynamicconfig.GetBoolPropertyFn(enableGlobalDomain),
 		TestFailoverVersionIncrement,
 		masterClusterName,
 		TestCurrentClusterName,

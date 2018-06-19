@@ -105,12 +105,16 @@ func (s *server) startService() common.Daemon {
 		log.Fatalf("error creating ringpop factory: %v", err)
 	}
 
+	params.DynamicConfig = dynamicconfig.NewNopClient()
+	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
+
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope()
 	params.RPCFactory = svcCfg.RPC.NewFactory(params.Name, params.Logger)
 	params.PProfInitializer = svcCfg.PProf.NewInitializer(params.Logger)
+	enableGlobalDomain := dc.GetBoolProperty(dynamicconfig.EnableGlobalDomain, s.cfg.ClustersInfo.EnableGlobalDomain)
 	params.ClusterMetadata = cluster.NewMetadata(
-		s.cfg.ClustersInfo.EnableGlobalDomain,
+		enableGlobalDomain,
 		s.cfg.ClustersInfo.FailoverVersionIncrement,
 		s.cfg.ClustersInfo.MasterClusterName,
 		s.cfg.ClustersInfo.CurrentClusterName,
@@ -122,8 +126,6 @@ func (s *server) startService() common.Daemon {
 	} else {
 		params.MessagingClient = nil
 	}
-
-	params.DynamicConfig = dynamicconfig.NewNopClient()
 
 	var daemon common.Daemon
 

@@ -43,6 +43,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/host"
 	"go.uber.org/zap"
 )
@@ -116,7 +117,7 @@ func (s *testCluster) setupCluster(no int) {
 	options.SchemaDir = ".."
 	clusterInfo := clustersInfo[no]
 	metadata := cluster.NewMetadata(
-		clusterInfo.EnableGlobalDomain,
+		dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
 		clusterInfo.FailoverVersionIncrement,
 		clusterInfo.MasterClusterName,
 		clusterInfo.CurrentClusterName,

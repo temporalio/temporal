@@ -20,7 +20,10 @@
 
 package cluster
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/uber/cadence/common/service/dynamicconfig"
+)
 
 type (
 	// Metadata provides information about clusters
@@ -45,7 +48,7 @@ type (
 	metadataImpl struct {
 		// EnableGlobalDomain whether the global domain is enabled,
 		// this attr should be discarded when cross DC is made public
-		enableGlobalDomain bool
+		enableGlobalDomain dynamicconfig.BoolPropertyFn
 		// failoverVersionIncrement is the increment of each cluster failover version
 		failoverVersionIncrement int64
 		// masterClusterName is the name of the master cluster, only the master cluster can register / update domain
@@ -61,7 +64,7 @@ type (
 )
 
 // NewMetadata create a new instance of Metadata
-func NewMetadata(enableGlobalDomain bool, failoverVersionIncrement int64,
+func NewMetadata(enableGlobalDomain dynamicconfig.BoolPropertyFn, failoverVersionIncrement int64,
 	masterClusterName string, currentClusterName string, clusterInitialFailoverVersions map[string]int64) Metadata {
 
 	if len(clusterInitialFailoverVersions) < 0 {
@@ -109,7 +112,7 @@ func NewMetadata(enableGlobalDomain bool, failoverVersionIncrement int64,
 // IsGlobalDomainEnabled whether the global domain is enabled,
 // this attr should be discarded when cross DC is made public
 func (metadata *metadataImpl) IsGlobalDomainEnabled() bool {
-	return metadata.enableGlobalDomain
+	return metadata.enableGlobalDomain()
 }
 
 // GetNextFailoverVersion return the next failover version based on input
