@@ -38,6 +38,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/cache"
 )
 
 // Implements matching.Engine
@@ -57,6 +58,7 @@ type matchingEngineImpl struct {
 	// will block and wait for. The RespondQueryTaskCompleted() call will send the data through that channel which will
 	// unblock QueryWorkflow() call.
 	queryTaskMap map[string]chan *workflow.RespondQueryTaskCompletedRequest
+	domainCache  cache.DomainCache
 }
 
 type taskListID struct {
@@ -105,6 +107,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	config *Config,
 	logger bark.Logger,
 	metricsClient metrics.Client,
+	domainCache cache.DomainCache,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -118,6 +121,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		metricsClient: metricsClient,
 		config:        config,
 		queryTaskMap:  make(map[string]chan *workflow.RespondQueryTaskCompletedRequest),
+		domainCache:   domainCache,
 	}
 }
 
@@ -175,11 +179,14 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID,
 		e.taskListsLock.Unlock()
 		return result, nil
 	}
-	mgr := newTaskListManager(e, taskList, taskListKind, e.config)
+	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
+	if err != nil {
+		return nil, err
+	}
 	e.taskLists[*taskList] = mgr
 	e.taskListsLock.Unlock()
 	logging.LogTaskListLoadingEvent(e.logger, taskList.taskListName, taskList.taskType)
-	err := mgr.Start()
+	err = mgr.Start()
 	if err != nil {
 		logging.LogTaskListLoadingFailedEvent(e.logger, taskList.taskListName, taskList.taskType, err)
 		return nil, err

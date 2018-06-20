@@ -31,34 +31,34 @@ import (
 
 // Config represents configuration for cadence-matching service
 type Config struct {
-	EnableSyncMatch dynamicconfig.BoolPropertyFn
+	EnableSyncMatch dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
 
 	// taskListManager configuration
 	RangeSize                 int64
-	GetTasksBatchSize         dynamicconfig.IntPropertyFn
-	UpdateAckInterval         dynamicconfig.DurationPropertyFn
-	IdleTasklistCheckInterval dynamicconfig.DurationPropertyFn
+	GetTasksBatchSize         dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+	UpdateAckInterval         dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+	IdleTasklistCheckInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
 	// Time to hold a poll request before returning an empty response if there are no tasks
-	LongPollExpirationInterval dynamicconfig.DurationPropertyFn
-	MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFn
+	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+	MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskListInfoFilters
 
 	// taskWriter configuration
-	OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFn
-	MaxTaskBatchSize                dynamicconfig.IntPropertyFn
+	OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskListInfoFilters
+	MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskListInfoFilters
 }
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		EnableSyncMatch:                 dc.GetBoolProperty(dynamicconfig.MatchingEnableSyncMatch, true),
+		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskListInfo(dynamicconfig.MatchingEnableSyncMatch, true),
 		RangeSize:                       100000,
-		GetTasksBatchSize:               dc.GetIntProperty(dynamicconfig.MatchingGetTasksBatchSize, 1000),
-		UpdateAckInterval:               dc.GetDurationProperty(dynamicconfig.MatchingUpdateAckInterval, 10*time.Second),
-		IdleTasklistCheckInterval:       dc.GetDurationProperty(dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute),
-		LongPollExpirationInterval:      dc.GetDurationProperty(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
-		MinTaskThrottlingBurstSize:      dc.GetIntProperty(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
-		OutstandingTaskAppendsThreshold: dc.GetIntProperty(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
-		MaxTaskBatchSize:                dc.GetIntProperty(dynamicconfig.MatchingMaxTaskBatchSize, 100),
+		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
+		UpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
+		IdleTasklistCheckInterval:       dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute),
+		LongPollExpirationInterval:      dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
+		MinTaskThrottlingBurstSize:      dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
+		OutstandingTaskAppendsThreshold: dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
+		MaxTaskBatchSize:                dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
 	}
 }
 
@@ -94,15 +94,27 @@ func (s *Service) Start() {
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
-		base.GetLogger())
-
+		log)
 	if err != nil {
 		log.Fatalf("failed to create task persistence: %v", err)
 	}
-
 	taskPersistence = persistence.NewTaskPersistenceClient(taskPersistence, base.GetMetricsClient(), log)
 
-	handler := NewHandler(base, s.config, taskPersistence)
+	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
+		p.CassandraConfig.Port,
+		p.CassandraConfig.User,
+		p.CassandraConfig.Password,
+		p.CassandraConfig.Datacenter,
+		p.CassandraConfig.Keyspace,
+		p.ClusterMetadata.GetCurrentClusterName(),
+		log)
+
+	if err != nil {
+		log.Fatalf("failed to create metadata manager: %v", err)
+	}
+	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient(), log)
+
+	handler := NewHandler(base, s.config, taskPersistence, metadata)
 	handler.Start()
 
 	log.Infof("%v started", common.MatchingServiceName)

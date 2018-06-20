@@ -53,11 +53,11 @@ const (
 )
 
 type (
-	// function to be called when the domain cache is changed
+	// CallbackFn is function to be called when the domain cache is changed
 	// the callback function will be called within the domain cache entry lock
 	// make sure the callback function will not call domain cache again
 	// in case of deadlock
-	callbackFn func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry)
+	CallbackFn func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry)
 
 	// DomainCache is used the cache domain information and configuration to avoid making too many calls to cassandra.
 	// This cache is mainly used by frontend for resolving domain names to domain uuids which are used throughout the
@@ -66,7 +66,7 @@ type (
 	// requests using the stale entry from cache upto an hour
 	DomainCache interface {
 		common.Daemon
-		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn callbackFn)
+		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn CallbackFn)
 		UnregisterDomainChangeCallback(shard int)
 		GetDomain(name string) (*DomainCacheEntry, error)
 		GetDomainByID(id string) (*DomainCacheEntry, error)
@@ -88,7 +88,7 @@ type (
 
 		sync.RWMutex
 		domainNotificationVersion int64
-		callbacks                 map[int]callbackFn
+		callbacks                 map[int]CallbackFn
 	}
 
 	// DomainCacheEntries is DomainCacheEntry slice
@@ -97,7 +97,6 @@ type (
 	// DomainCacheEntry contains the info and config for a domain
 	DomainCacheEntry struct {
 		clusterMetadata cluster.Metadata
-
 		sync.RWMutex
 		info                        *persistence.DomainInfo
 		config                      *persistence.DomainConfig
@@ -126,7 +125,7 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 		clusterMetadata: clusterMetadata,
 		timeSource:      common.NewRealTimeSource(),
 		logger:          logger,
-		callbacks:       make(map[int]callbackFn),
+		callbacks:       make(map[int]CallbackFn),
 	}
 }
 
@@ -180,7 +179,7 @@ func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
 // RegisterDomainChangeCallback set a domain change callback
 // WARN: the callback function will be triggered by domain cache when holding the domain cache lock,
 // make sure the callback function will not call domain cache again in case of dead lock
-func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn callbackFn) {
+func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn CallbackFn) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -259,8 +258,7 @@ func (c *domainCache) refreshLoop() {
 // the domains in the v1 table will be refreshed if cache is stale
 func (c *domainCache) refreshDomains() error {
 	// first load the metadata record, then load domains
-	// this can guarentee that domains in the cache is not
-	// more update to date then the metadata record
+	// this can guarantee that domains in the cache are not updated more than metadata record
 	metadata, err := c.metadataMgr.GetMetadata()
 	if err != nil {
 		return err
@@ -323,8 +321,8 @@ func (c *domainCache) loadDomain(name string, id string) (*persistence.GetDomain
 			resp.FailoverNotificationVersion = 0
 			resp.NotificationVersion = 0
 		} else {
-			// the resule is from V2 table
-			// this should not happen since backgroud thread is refreshing.
+			// the result is from V2 table
+			// this should not happen since background thread is refreshing.
 			// if this actually happen, just discard the result
 			// since we need to guarantee that domainNotificationVersion > all notification versions
 			// inside the cache
@@ -569,4 +567,9 @@ func (t DomainCacheEntries) Swap(i, j int) {
 // Less implements sort.Interface
 func (t DomainCacheEntries) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
+}
+
+// CreateDomainCacheEntry create a cache entry with domainName
+func CreateDomainCacheEntry(domainName string) *DomainCacheEntry {
+	return &DomainCacheEntry{info: &persistence.DomainInfo{Name: domainName}}
 }

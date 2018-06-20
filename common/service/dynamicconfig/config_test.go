@@ -145,6 +145,26 @@ func (s *configSuite) TestGetIntProperty() {
 	s.Equal(50, value())
 }
 
+func (s *configSuite) TestGetIntPropertyFilteredByDomain() {
+	key := testGetIntPropertyFilteredByDomainKey
+	domain := "testDomain"
+	value := s.cln.GetIntPropertyFilteredByDomain(key, 10)
+	s.Equal(10, value(domain))
+	s.client.SetValue(key, 50)
+	s.Equal(50, value(domain))
+}
+
+func (s *configSuite) TestGetIntPropertyFilteredByTaskListInfo() {
+	key := testGetIntPropertyFilteredByTaskListInfoKey
+	domain := "testDomain"
+	taskList := "testTaskList"
+	taskType := 0
+	value := s.cln.GetIntPropertyFilteredByTaskListInfo(key, 10)
+	s.Equal(10, value(domain, taskList, taskType))
+	s.client.SetValue(key, 50)
+	s.Equal(50, value(domain, taskList, taskType))
+}
+
 func (s *configSuite) TestGetFloat64Property() {
 	key := testGetFloat64PropertyKey
 	value := s.cln.GetFloat64Property(key, 0.1)
@@ -161,21 +181,23 @@ func (s *configSuite) TestGetBoolProperty() {
 	s.Equal(false, value())
 }
 
+func (s *configSuite) TestGetBoolPropertyFilteredByTaskListInfo() {
+	key := testGetBoolPropertyFilteredByTaskListInfoKey
+	domain := "testDomain"
+	taskList := "testTaskList"
+	taskType := 0
+	value := s.cln.GetBoolPropertyFilteredByTaskListInfo(key, false)
+	s.Equal(false, value(domain, taskList, taskType))
+	s.client.SetValue(key, true)
+	s.Equal(true, value(domain, taskList, taskType))
+}
+
 func (s *configSuite) TestGetDurationProperty() {
 	key := testGetDurationPropertyKey
 	value := s.cln.GetDurationProperty(key, time.Second)
 	s.Equal(time.Second, value())
 	s.client.SetValue(key, time.Minute)
 	s.Equal(time.Minute, value())
-}
-
-func (s *configSuite) TestGetIntPropertyFilteredByDomain() {
-	key := testGetIntPropertyFilteredByDomainKey
-	domain := "testDomain"
-	value := s.cln.GetIntPropertyFilteredByDomain(key, 10)
-	s.Equal(10, value(domain))
-	s.client.SetValue(key, 50)
-	s.Equal(50, value(domain))
 }
 
 func (s *configSuite) TestGetDurationPropertyFilteredByDomain() {
@@ -185,4 +207,15 @@ func (s *configSuite) TestGetDurationPropertyFilteredByDomain() {
 	s.Equal(time.Second, value(domain))
 	s.client.SetValue(key, time.Minute)
 	s.Equal(time.Minute, value(domain))
+}
+
+func (s *configSuite) TestGetDurationPropertyFilteredByTaskListInfo() {
+	key := testGetDurationPropertyFilteredByTaskListInfoKey
+	domain := "testDomain"
+	taskList := "testTaskList"
+	taskType := 0
+	value := s.cln.GetDurationPropertyFilteredByTaskListInfo(key, time.Second)
+	s.Equal(time.Second, value(domain, taskList, taskType))
+	s.client.SetValue(key, time.Minute)
+	s.Equal(time.Minute, value(domain, taskList, taskType))
 }

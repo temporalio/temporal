@@ -29,6 +29,11 @@ func GetIntPropertyFn(value int) func(opts ...FilterOption) int {
 	return func(...FilterOption) int { return value }
 }
 
+// GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
+func GetIntPropertyFilteredByTaskListInfo(value int) func(domain string, taskList string, taskType int) int {
+	return func(domain string, taskList string, taskType int) int { return value }
+}
+
 // GetFloatPropertyFn returns value as FloatPropertyFn
 func GetFloatPropertyFn(value float64) func(opts ...FilterOption) float64 {
 	return func(...FilterOption) float64 { return value }
@@ -42,4 +47,9 @@ func GetBoolPropertyFn(value bool) func(opts ...FilterOption) bool {
 // GetDurationPropertyFn returns value as DurationPropertyFn
 func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.Duration {
 	return func(...FilterOption) time.Duration { return value }
+}
+
+// GetDurationPropertyFnFilteredByTaskListInfo returns value as DurationPropertyFnWithTaskListInfoFilters
+func GetDurationPropertyFnFilteredByTaskListInfo(value time.Duration) func(domain string, taskList string, taskType int) time.Duration {
+	return func(domain string, taskList string, taskType int) time.Duration { return value }
 }

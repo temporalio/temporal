@@ -68,7 +68,7 @@ func newTaskWriter(tlMgr *taskListManagerImpl) *taskWriter {
 		taskListID:  tlMgr.taskListID,
 		taskManager: tlMgr.engine.taskManager,
 		stopCh:      make(chan struct{}),
-		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold),
+		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
 		logger:      tlMgr.logger,
 	}
 }
@@ -198,7 +198,7 @@ writerLoop:
 
 func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
 readLoop:
-	for i := 0; i < w.config.MaxTaskBatchSize; i++ {
+	for i := 0; i < w.config.MaxTaskBatchSize(); i++ {
 		select {
 		case req := <-w.appendCh:
 			reqs = append(reqs, req)

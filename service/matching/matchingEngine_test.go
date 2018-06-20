@@ -48,6 +48,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/cache"
 )
 
 type (
@@ -59,6 +60,7 @@ type (
 		mockExecutionManager *mocks.ExecutionManager
 		logger               bark.Logger
 		callContext          context.Context
+		domainCache          *cache.DomainCacheMock
 		sync.Mutex
 	}
 )
@@ -104,6 +106,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockExecutionManager = &mocks.ExecutionManager{}
 	s.historyClient = &mocks.HistoryClient{}
 	s.taskManager = newTestTaskManager(s.logger)
+	s.domainCache = &cache.DomainCacheMock{}
+	s.domainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -112,12 +116,12 @@ func (s *matchingEngineSuite) SetupTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.historyClient, s.logger)
+	return newMatchingEngine(config, taskMgr, s.historyClient, s.logger, s.domainCache)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, historyClient history.Client,
-	logger bark.Logger,
+	logger bark.Logger, domainCache cache.DomainCache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
@@ -127,6 +131,7 @@ func newMatchingEngine(
 		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		config:          config,
+		domainCache:     domainCache,
 	}
 }
 
@@ -196,7 +201,7 @@ func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
 
 	domainID := "domainId"
 	tl := "makeToast"
@@ -355,7 +360,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -467,7 +472,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(50 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(50 * time.Millisecond)
 
 	runID := "run1"
 	workflowID := "workflow1"
@@ -489,8 +494,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	dispatchTTL := time.Nanosecond
 	dPtr := _defaultTaskDispatchRPS
+	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
+	s.NoError(err)
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, newTaskListConfig(tlID, s.matchingEngine.config),
+		s.matchingEngine, tlID, tlKind, tlConfig,
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
@@ -609,7 +616,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(20 * time.Millisecond)
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(20 * time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
 			return 0
@@ -644,8 +651,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchTTL := time.Nanosecond
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	dPtr := _defaultTaskDispatchRPS
+	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
+	s.NoError(err)
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, newTaskListConfig(tlID, s.matchingEngine.config),
+		s.matchingEngine, tlID, tlKind, tlConfig,
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
@@ -1640,6 +1649,6 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 
 func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNopCollection())
-	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(100 * time.Millisecond)
 	return config
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceserver"
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -40,18 +41,21 @@ var _ matchingserviceserver.Interface = (*Handler)(nil)
 // Handler - Thrift handler inteface for history service
 type Handler struct {
 	taskPersistence persistence.TaskManager
+	metadataMgr     persistence.MetadataManager
 	engine          Engine
 	config          *Config
 	metricsClient   metrics.Client
 	startWG         sync.WaitGroup
+	domainCache     cache.DomainCache
 	service.Service
 }
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager) *Handler {
+func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager, metadataMgr persistence.MetadataManager) *Handler {
 	handler := &Handler{
 		Service:         sVice,
 		taskPersistence: taskPersistence,
+		metadataMgr:     metadataMgr,
 		config:          config,
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
@@ -67,9 +71,11 @@ func (h *Handler) Start() error {
 	if err != nil {
 		return err
 	}
+	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetLogger())
+	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(
-		h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(),
+		h.taskPersistence, history, h.config, h.Service.GetLogger(), h.Service.GetMetricsClient(), h.domainCache,
 	)
 	h.startWG.Done()
 	return nil
@@ -78,7 +84,9 @@ func (h *Handler) Start() error {
 // Stop stops the handler
 func (h *Handler) Stop() {
 	h.engine.Stop()
+	h.domainCache.Stop()
 	h.taskPersistence.Close()
+	h.metadataMgr.Close()
 	h.Service.Stop()
 }
 

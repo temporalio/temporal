@@ -340,7 +340,7 @@ func (c *cadenceImpl) startMatching(rpHosts []string, startWG *sync.WaitGroup) {
 	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
 	service := service.New(params)
 	c.matchingHandler = matching.NewHandler(
-		service, matching.NewConfig(dynamicconfig.NewNopCollection()), c.taskMgr,
+		service, matching.NewConfig(dynamicconfig.NewNopCollection()), c.taskMgr, c.metadataMgr,
 	)
 	c.matchingHandler.Start()
 	startWG.Done()

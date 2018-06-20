@@ -31,9 +31,11 @@ import (
 	"github.com/uber/cadence/common/mocks"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -70,12 +72,18 @@ func createTestTaskListManager() *taskListManagerImpl {
 	logger := bark.NewLoggerFromLogrus(log.New())
 	tm := newTestTaskManager(logger)
 	cfg := defaultTestConfig()
+	mockDomainCache := &cache.DomainCacheMock{}
+	mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
 	me := newMatchingEngine(
-		cfg, tm, &mocks.HistoryClient{}, logger,
+		cfg, tm, &mocks.HistoryClient{}, logger, mockDomainCache,
 	)
 	tl := "tl"
 	dID := "domain"
 	tlID := &taskListID{domainID: dID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
 	tlKind := common.TaskListKindPtr(workflow.TaskListKindNormal)
-	return newTaskListManager(me, tlID, tlKind, cfg).(*taskListManagerImpl)
+	tlMgr, err := newTaskListManager(me, tlID, tlKind, cfg)
+	if err != nil {
+		logger.Fatalf("error when createTestTaskListManager: %v", err)
+	}
+	return tlMgr.(*taskListManagerImpl)
 }

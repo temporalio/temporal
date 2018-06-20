@@ -29,8 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/service/dynamicconfig"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	s "github.com/uber/cadence/.gen/go/shared"
@@ -41,6 +39,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/cache"
 	"golang.org/x/time/rate"
 )
 
@@ -77,36 +76,46 @@ type taskListConfig struct {
 	IdleTasklistCheckInterval  func() time.Duration
 	MinTaskThrottlingBurstSize func() int
 	// taskWriter configuration
-	OutstandingTaskAppendsThreshold int
-	MaxTaskBatchSize                int
+	OutstandingTaskAppendsThreshold func() int
+	MaxTaskBatchSize                func() int
 }
 
-func newTaskListConfig(id *taskListID, config *Config) *taskListConfig {
+func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainCache) (*taskListConfig, error) {
+	domainEntry, err := domainCache.GetDomainByID(id.domainID)
+	if err != nil {
+		return nil, err
+	}
+
+	domain := domainEntry.GetInfo().Name
 	taskListName := id.taskListName
-	tlOpt := dynamicconfig.TaskListFilter(taskListName)
+	taskType := id.taskType
 	return &taskListConfig{
 		RangeSize: config.RangeSize,
 		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(tlOpt)
+			return config.GetTasksBatchSize(domain, taskListName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
-			return config.UpdateAckInterval(tlOpt)
+			return config.UpdateAckInterval(domain, taskListName, taskType)
 		},
 		IdleTasklistCheckInterval: func() time.Duration {
-			return config.IdleTasklistCheckInterval(tlOpt)
+			return config.IdleTasklistCheckInterval(domain, taskListName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(tlOpt)
+			return config.MinTaskThrottlingBurstSize(domain, taskListName, taskType)
 		},
 		EnableSyncMatch: func() bool {
-			return config.EnableSyncMatch(tlOpt)
+			return config.EnableSyncMatch(domain, taskListName, taskType)
 		},
 		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(tlOpt)
+			return config.LongPollExpirationInterval(domain, taskListName, taskType)
 		},
-		OutstandingTaskAppendsThreshold: config.OutstandingTaskAppendsThreshold(),
-		MaxTaskBatchSize:                config.MaxTaskBatchSize(),
-	}
+		OutstandingTaskAppendsThreshold: func() int {
+			return config.OutstandingTaskAppendsThreshold(domain, taskListName, taskType)
+		},
+		MaxTaskBatchSize: func() int {
+			return config.MaxTaskBatchSize(domain, taskListName, taskType)
+		},
+	}, nil
 }
 
 type rateLimiter struct {
@@ -180,15 +189,18 @@ func (rl *rateLimiter) Reserve() *rate.Reservation {
 
 func newTaskListManager(
 	e *matchingEngineImpl, taskList *taskListID, taskListKind *s.TaskListKind, config *Config,
-) taskListManager {
+) (taskListManager, error) {
 	dPtr := _defaultTaskDispatchRPS
-	taskListConfig := newTaskListConfig(taskList, config)
+	taskListConfig, err := newTaskListConfig(taskList, config, e.domainCache)
+	if err != nil {
+		return nil, err
+	}
 	rl := newRateLimiter(
 		&dPtr, _defaultTaskDispatchRPSTTL, taskListConfig.MinTaskThrottlingBurstSize(),
 	)
 	return newTaskListManagerWithRateLimiter(
 		e, taskList, taskListKind, taskListConfig, rl,
-	)
+	), nil
 }
 
 func newTaskListManagerWithRateLimiter(

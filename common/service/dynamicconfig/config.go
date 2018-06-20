@@ -49,8 +49,11 @@ type PropertyFn func() interface{}
 // IntPropertyFn is a wrapper to get int property from dynamic config
 type IntPropertyFn func(opts ...FilterOption) int
 
-// IntPropertyFn is a wrapper to get int property from dynamic config with domainName as filter
+// IntPropertyFnWithDomainFilter is a wrapper to get int property from dynamic config with domain as filter
 type IntPropertyFnWithDomainFilter func(domain string) int
+
+// IntPropertyFnWithTaskListInfoFilters is a wrapper to get int property from dynamic config with three filters: domain, taskList, taskType
+type IntPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) int
 
 // FloatPropertyFn is a wrapper to get float property from dynamic config
 type FloatPropertyFn func(opts ...FilterOption) float64
@@ -58,11 +61,17 @@ type FloatPropertyFn func(opts ...FilterOption) float64
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
 type DurationPropertyFn func(opts ...FilterOption) time.Duration
 
-// DurationPropertyFnWithDomainFilter is a wrapper to get duration property from dynamic config with domainName as filter
+// DurationPropertyFnWithDomainFilter is a wrapper to get duration property from dynamic config with domain as filter
 type DurationPropertyFnWithDomainFilter func(domain string) time.Duration
+
+// DurationPropertyFnWithTaskListInfoFilters is a wrapper to get duration property from dynamic config  with three filters: domain, taskList, taskType
+type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
+
+// BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: domain, taskList, taskType
+type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) bool
 
 // GetProperty gets a eface property and returns defaultValue if property is not found
 func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
@@ -95,6 +104,32 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 	}
 }
 
+// GetIntPropertyFilteredByDomain gets property with domain filter and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) IntPropertyFnWithDomainFilter {
+	return func(domain string) int {
+		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
+// GetIntPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an integer
+func (c *Collection) GetIntPropertyFilteredByTaskListInfo(key Key, defaultValue int) IntPropertyFnWithTaskListInfoFilters {
+	return func(domain string, taskList string, taskType int) int {
+		val, err := c.client.GetIntValue(
+			key,
+			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
 // GetFloat64Property gets property and asserts that it's a float64
 func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatPropertyFn {
 	return func(opts ...FilterOption) float64 {
@@ -117,6 +152,32 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 	}
 }
 
+// GetDurationPropertyFilteredByDomain gets property with domain filter and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainFilter {
+	return func(domain string) time.Duration {
+		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
+// GetDurationPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskListInfoFilters {
+	return func(domain string, taskList string, taskType int) time.Duration {
+		val, err := c.client.GetDurationValue(
+			key,
+			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			defaultValue,
+		)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
 // GetBoolProperty gets property and asserts that it's an bool
 func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
 	return func(opts ...FilterOption) bool {
@@ -128,21 +189,14 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn 
 	}
 }
 
-// GetIntPropertyFilteredByDomain gets property with domain filter and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByDomain(key Key, defaultValue int) IntPropertyFnWithDomainFilter {
-	return func(domain string) int {
-		val, err := c.client.GetIntValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
-		if err != nil {
-			c.logNoValue(key, err)
-		}
-		return val
-	}
-}
-
-// GetDurationPropertyFilteredByDomain gets property with domain filter and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByDomain(key Key, defaultValue time.Duration) DurationPropertyFnWithDomainFilter {
-	return func(domain string) time.Duration {
-		val, err := c.client.GetDurationValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
+// GetBoolPropertyFilteredByTaskListInfo gets property with taskListInfo as filters and asserts that it's an bool
+func (c *Collection) GetBoolPropertyFilteredByTaskListInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskListInfoFilters {
+	return func(domain string, taskList string, taskType int) bool {
+		val, err := c.client.GetBoolValue(
+			key,
+			getFilterMap(DomainFilter(domain), TaskListFilter(taskList), TaskTypeFilter(taskType)),
+			defaultValue,
+		)
 		if err != nil {
 			c.logNoValue(key, err)
 		}
