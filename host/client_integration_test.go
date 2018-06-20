@@ -327,20 +327,21 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 
 	// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
 	iter := s.wfClient.GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
-	cnt := 0
+	completedAct := 0
+	failedAct := 0
 	for iter.HasNext() {
-		cnt++
 		event, _ := iter.Next()
-		if event.GetEventId() == 7 {
-			s.Equal(shared.EventTypeActivityTaskCompleted, event.GetEventType())
+		if event.GetEventType() == shared.EventTypeActivityTaskCompleted {
+			completedAct++
 		}
-		if event.GetEventId() == 13 {
-			s.Equal(shared.EventTypeActivityTaskFailed, event.GetEventType())
+		if event.GetEventType() == shared.EventTypeActivityTaskFailed {
+			failedAct++
 			attr := event.ActivityTaskFailedEventAttributes
 			s.True(strings.HasPrefix(string(attr.Details), "unable to decode the activity function input bytes with error"))
 		}
 	}
-	s.True(cnt >= 13)
+	s.Equal(1, completedAct)
+	s.Equal(1, failedAct)
 }
 
 var childTaskList = "client-integration-data-converter-child-tasklist"
