@@ -45,7 +45,7 @@ imports:
 - name: github.com/fatih/color
   version: 507f6050b8568533fb3f5504de8e5205fa62a114
 - name: github.com/gocql/gocql
-  version: ca7d33956650d92d29e6db7fe901e23d0f0e3359
+  version: 56a164ee9f3135e9cfe725a6d25939f24cb2d044
   subpackages:
   - internal/lru
   - internal/murmur
