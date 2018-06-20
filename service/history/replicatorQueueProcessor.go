@@ -60,14 +60,15 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:            config.ReplicatorTaskBatchSize(),
-		WorkerCount:          config.ReplicatorTaskWorkerCount(),
-		MaxPollRPS:           config.ReplicatorProcessorMaxPollRPS(),
-		MaxPollInterval:      config.ReplicatorProcessorMaxPollInterval(),
-		UpdateAckInterval:    config.ReplicatorProcessorUpdateAckInterval(),
-		MaxRetryCount:        config.ReplicatorTaskMaxRetryCount(),
-		MetricScope:          metrics.ReplicatorQueueProcessorScope,
-		UpdateShardTaskCount: config.ReplicatorProcessorUpdateShardTaskCount(),
+		BatchSize:                        config.ReplicatorTaskBatchSize,
+		WorkerCount:                      config.ReplicatorTaskWorkerCount,
+		MaxPollRPS:                       config.ReplicatorProcessorMaxPollRPS,
+		MaxPollInterval:                  config.ReplicatorProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient: config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                config.ReplicatorProcessorUpdateAckInterval,
+		MaxRetryCount:                    config.ReplicatorTaskMaxRetryCount,
+		MetricScope:                      metrics.ReplicatorQueueProcessorScope,
+		UpdateShardTaskCount:             config.ReplicatorProcessorUpdateShardTaskCount,
 	}
 
 	logger = logger.WithFields(bark.Fields{
@@ -159,11 +160,10 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 }
 
 func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
-	batchSize := p.options.BatchSize
 	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
 		ReadLevel:    readLevel,
 		MaxReadLevel: p.shard.GetTransferMaxReadLevel(),
-		BatchSize:    batchSize,
+		BatchSize:    p.options.BatchSize(),
 	})
 
 	if err != nil {

@@ -48,11 +48,10 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 }
 
 func (t *transferQueueProcessorBase) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
-	batchSize := t.options.BatchSize
 	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ReadLevel:    readLevel,
 		MaxReadLevel: t.maxReadAckLevel(),
-		BatchSize:    batchSize,
+		BatchSize:    t.options.BatchSize(),
 	})
 
 	if err != nil {

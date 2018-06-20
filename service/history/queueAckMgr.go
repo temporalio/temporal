@@ -190,7 +190,7 @@ MoveAckLevelLoop:
 		a.finishedChan <- struct{}{}
 	}
 
-	if a.finishedTaskCounter < a.options.UpdateShardTaskCount {
+	if a.finishedTaskCounter < a.options.UpdateShardTaskCount() {
 		a.Unlock()
 	} else {
 		a.finishedTaskCounter = 0

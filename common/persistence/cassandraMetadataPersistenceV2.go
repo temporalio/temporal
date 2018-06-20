@@ -367,6 +367,11 @@ func (m *cassandraMetadataPersistenceV2) ListDomain(request *ListDomainRequest) 
 			domain.ReplicationConfig.Clusters = GetOrUseDefaultClusters(m.currentClusterName, domain.ReplicationConfig.Clusters)
 			response.Domains = append(response.Domains, domain)
 		}
+		domain = &GetDomainResponse{
+			Info:              &DomainInfo{},
+			Config:            &DomainConfig{},
+			ReplicationConfig: &DomainReplicationConfig{},
+		}
 	}
 
 	nextPageToken := iter.PageState()

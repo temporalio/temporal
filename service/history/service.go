@@ -45,16 +45,17 @@ type Config struct {
 	AcquireShardInterval dynamicconfig.DurationPropertyFn
 
 	// TimerQueueProcessor settings
-	TimerTaskBatchSize                           dynamicconfig.IntPropertyFn
-	TimerTaskWorkerCount                         dynamicconfig.IntPropertyFn
-	TimerTaskMaxRetryCount                       dynamicconfig.IntPropertyFn
-	TimerProcessorGetFailureRetryCount           dynamicconfig.IntPropertyFn
-	TimerProcessorCompleteTimerFailureRetryCount dynamicconfig.IntPropertyFn
-	TimerProcessorUpdateShardTaskCount           dynamicconfig.IntPropertyFn
-	TimerProcessorUpdateAckInterval              dynamicconfig.DurationPropertyFn
-	TimerProcessorCompleteTimerInterval          dynamicconfig.DurationPropertyFn
-	TimerProcessorMaxPollInterval                dynamicconfig.DurationPropertyFn
-	TimerProcessorStandbyTaskDelay               dynamicconfig.DurationPropertyFn
+	TimerTaskBatchSize                             dynamicconfig.IntPropertyFn
+	TimerTaskWorkerCount                           dynamicconfig.IntPropertyFn
+	TimerTaskMaxRetryCount                         dynamicconfig.IntPropertyFn
+	TimerProcessorGetFailureRetryCount             dynamicconfig.IntPropertyFn
+	TimerProcessorCompleteTimerFailureRetryCount   dynamicconfig.IntPropertyFn
+	TimerProcessorUpdateShardTaskCount             dynamicconfig.IntPropertyFn
+	TimerProcessorUpdateAckInterval                dynamicconfig.DurationPropertyFn
+	TimerProcessorCompleteTimerInterval            dynamicconfig.DurationPropertyFn
+	TimerProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
+	TimerProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	TimerProcessorStandbyTaskDelay                 dynamicconfig.DurationPropertyFn
 
 	// TransferQueueProcessor settings
 	TransferTaskBatchSize                              dynamicconfig.IntPropertyFn
@@ -64,18 +65,20 @@ type Config struct {
 	TransferProcessorCompleteTransferFailureRetryCount dynamicconfig.IntPropertyFn
 	TransferProcessorUpdateShardTaskCount              dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollInterval                   dynamicconfig.DurationPropertyFn
+	TransferProcessorMaxPollIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
 	TransferProcessorUpdateAckInterval                 dynamicconfig.DurationPropertyFn
 	TransferProcessorCompleteTransferInterval          dynamicconfig.DurationPropertyFn
 	TransferProcessorStandbyTaskDelay                  dynamicconfig.DurationPropertyFn
 
 	// ReplicatorQueueProcessor settings
-	ReplicatorTaskBatchSize                 dynamicconfig.IntPropertyFn
-	ReplicatorTaskWorkerCount               dynamicconfig.IntPropertyFn
-	ReplicatorTaskMaxRetryCount             dynamicconfig.IntPropertyFn
-	ReplicatorProcessorMaxPollRPS           dynamicconfig.IntPropertyFn
-	ReplicatorProcessorUpdateShardTaskCount dynamicconfig.IntPropertyFn
-	ReplicatorProcessorMaxPollInterval      dynamicconfig.DurationPropertyFn
-	ReplicatorProcessorUpdateAckInterval    dynamicconfig.DurationPropertyFn
+	ReplicatorTaskBatchSize                             dynamicconfig.IntPropertyFn
+	ReplicatorTaskWorkerCount                           dynamicconfig.IntPropertyFn
+	ReplicatorTaskMaxRetryCount                         dynamicconfig.IntPropertyFn
+	ReplicatorProcessorMaxPollRPS                       dynamicconfig.IntPropertyFn
+	ReplicatorProcessorUpdateShardTaskCount             dynamicconfig.IntPropertyFn
+	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
+	ReplicatorProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+	ReplicatorProcessorUpdateAckInterval                dynamicconfig.DurationPropertyFn
 
 	// Persistence settings
 	ExecutionMgrNumConns dynamicconfig.IntPropertyFn
@@ -95,43 +98,46 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
-		NumberOfShards:                                     numberOfShards,
-		HistoryCacheInitialSize:                            dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
-		HistoryCacheMaxSize:                                dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
-		HistoryCacheTTL:                                    dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
-		RangeSizeBits:                                      20, // 20 bits for sequencer, 2^20 sequence number for any range
-		AcquireShardInterval:                               dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
-		TimerTaskBatchSize:                                 dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
-		TimerTaskWorkerCount:                               dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
-		TimerTaskMaxRetryCount:                             dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 5),
-		TimerProcessorGetFailureRetryCount:                 dc.GetIntProperty(dynamicconfig.TimerProcessorGetFailureRetryCount, 5),
-		TimerProcessorCompleteTimerFailureRetryCount:       dc.GetIntProperty(dynamicconfig.TimerProcessorCompleteTimerFailureRetryCount, 10),
-		TimerProcessorUpdateShardTaskCount:                 dc.GetIntProperty(dynamicconfig.TimerProcessorUpdateShardTaskCount, 100),
-		TimerProcessorUpdateAckInterval:                    dc.GetDurationProperty(dynamicconfig.TimerProcessorUpdateAckInterval, 5*time.Second),
-		TimerProcessorCompleteTimerInterval:                dc.GetDurationProperty(dynamicconfig.TimerProcessorCompleteTimerInterval, 3*time.Second),
-		TimerProcessorMaxPollInterval:                      dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 60*time.Second),
-		TimerProcessorStandbyTaskDelay:                     dc.GetDurationProperty(dynamicconfig.TimerProcessorStandbyTaskDelay, 0*time.Minute),
-		TransferTaskBatchSize:                              dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
-		TransferProcessorMaxPollRPS:                        dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 100),
-		TransferTaskWorkerCount:                            dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
-		TransferTaskMaxRetryCount:                          dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 100),
-		TransferProcessorCompleteTransferFailureRetryCount: dc.GetIntProperty(dynamicconfig.TransferProcessorCompleteTransferFailureRetryCount, 10),
-		TransferProcessorUpdateShardTaskCount:              dc.GetIntProperty(dynamicconfig.TransferProcessorUpdateShardTaskCount, 100),
-		TransferProcessorMaxPollInterval:                   dc.GetDurationProperty(dynamicconfig.TransferProcessorMaxPollInterval, 60*time.Second),
-		TransferProcessorUpdateAckInterval:                 dc.GetDurationProperty(dynamicconfig.TransferProcessorUpdateAckInterval, 5*time.Second),
-		TransferProcessorCompleteTransferInterval:          dc.GetDurationProperty(dynamicconfig.TransferProcessorCompleteTransferInterval, 3*time.Second),
-		TransferProcessorStandbyTaskDelay:                  dc.GetDurationProperty(dynamicconfig.TransferProcessorStandbyTaskDelay, 0*time.Minute),
-		ReplicatorTaskBatchSize:                            dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
-		ReplicatorTaskWorkerCount:                          dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
-		ReplicatorTaskMaxRetryCount:                        dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
-		ReplicatorProcessorMaxPollRPS:                      dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 100),
-		ReplicatorProcessorUpdateShardTaskCount:            dc.GetIntProperty(dynamicconfig.ReplicatorProcessorUpdateShardTaskCount, 100),
-		ReplicatorProcessorMaxPollInterval:                 dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 60*time.Second),
-		ReplicatorProcessorUpdateAckInterval:               dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorUpdateAckInterval, 5*time.Second),
-		ExecutionMgrNumConns:                               dc.GetIntProperty(dynamicconfig.ExecutionMgrNumConns, 100),
-		HistoryMgrNumConns:                                 dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 100),
-		MaximumBufferedEventsBatch:                         dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
-		ShardUpdateMinInterval:                             dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		NumberOfShards:                                      numberOfShards,
+		HistoryCacheInitialSize:                             dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		HistoryCacheMaxSize:                                 dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryCacheTTL:                                     dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
+		RangeSizeBits:                                       20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:                                dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
+		TimerTaskBatchSize:                                  dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
+		TimerTaskWorkerCount:                                dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
+		TimerTaskMaxRetryCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 5),
+		TimerProcessorGetFailureRetryCount:                  dc.GetIntProperty(dynamicconfig.TimerProcessorGetFailureRetryCount, 5),
+		TimerProcessorCompleteTimerFailureRetryCount:        dc.GetIntProperty(dynamicconfig.TimerProcessorCompleteTimerFailureRetryCount, 10),
+		TimerProcessorUpdateShardTaskCount:                  dc.GetIntProperty(dynamicconfig.TimerProcessorUpdateShardTaskCount, 100),
+		TimerProcessorUpdateAckInterval:                     dc.GetDurationProperty(dynamicconfig.TimerProcessorUpdateAckInterval, 5*time.Second),
+		TimerProcessorCompleteTimerInterval:                 dc.GetDurationProperty(dynamicconfig.TimerProcessorCompleteTimerInterval, 3*time.Second),
+		TimerProcessorMaxPollInterval:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 5*time.Minute),
+		TimerProcessorMaxPollIntervalJitterCoefficient:      dc.GetFloat64Property(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		TimerProcessorStandbyTaskDelay:                      dc.GetDurationProperty(dynamicconfig.TimerProcessorStandbyTaskDelay, 0*time.Minute),
+		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
+		TransferProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 100),
+		TransferTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
+		TransferTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 100),
+		TransferProcessorCompleteTransferFailureRetryCount:  dc.GetIntProperty(dynamicconfig.TransferProcessorCompleteTransferFailureRetryCount, 10),
+		TransferProcessorUpdateShardTaskCount:               dc.GetIntProperty(dynamicconfig.TransferProcessorUpdateShardTaskCount, 100),
+		TransferProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.TransferProcessorMaxPollInterval, 1*time.Minute),
+		TransferProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		TransferProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.TransferProcessorUpdateAckInterval, 5*time.Second),
+		TransferProcessorCompleteTransferInterval:           dc.GetDurationProperty(dynamicconfig.TransferProcessorCompleteTransferInterval, 3*time.Second),
+		TransferProcessorStandbyTaskDelay:                   dc.GetDurationProperty(dynamicconfig.TransferProcessorStandbyTaskDelay, 0*time.Minute),
+		ReplicatorTaskBatchSize:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
+		ReplicatorTaskWorkerCount:                           dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
+		ReplicatorTaskMaxRetryCount:                         dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
+		ReplicatorProcessorMaxPollRPS:                       dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 100),
+		ReplicatorProcessorUpdateShardTaskCount:             dc.GetIntProperty(dynamicconfig.ReplicatorProcessorUpdateShardTaskCount, 100),
+		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
+		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		ReplicatorProcessorUpdateAckInterval:                dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorUpdateAckInterval, 5*time.Second),
+		ExecutionMgrNumConns:                                dc.GetIntProperty(dynamicconfig.ExecutionMgrNumConns, 100),
+		HistoryMgrNumConns:                                  dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 100),
+		MaximumBufferedEventsBatch:                          dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
+		ShardUpdateMinInterval:                              dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
 		// history client: client/history/client.go set the client timeout 30s
 		LongPollExpirationInterval: dc.GetDurationPropertyFilteredByDomain(
 			dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20,

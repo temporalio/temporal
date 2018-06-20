@@ -140,7 +140,10 @@ func (s *queueAckMgrSuite) SetupTest() {
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
-	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{UpdateShardTaskCount: 1, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
+	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{
+		UpdateShardTaskCount: dynamicconfig.GetIntPropertyFn(1),
+		MetricScope:          metrics.ReplicatorQueueProcessorScope,
+	}, s.mockProcessor, 0, s.logger)
 }
 
 func (s *queueAckMgrSuite) TearDownTest() {
@@ -346,7 +349,10 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
-	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{UpdateShardTaskCount: 1, MetricScope: metrics.ReplicatorQueueProcessorScope}, s.mockProcessor, 0, s.logger)
+	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{
+		UpdateShardTaskCount: dynamicconfig.GetIntPropertyFn(1),
+		MetricScope:          metrics.ReplicatorQueueProcessorScope,
+	}, s.mockProcessor, 0, s.logger)
 }
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {

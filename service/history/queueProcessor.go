@@ -30,22 +30,25 @@ import (
 	"github.com/uber-common/bark"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		BatchSize            int
-		WorkerCount          int
-		MaxPollRPS           int
-		MaxPollInterval      time.Duration
-		UpdateAckInterval    time.Duration
-		MaxRetryCount        int
-		MetricScope          int
-		UpdateShardTaskCount int
+		BatchSize                        dynamicconfig.IntPropertyFn
+		WorkerCount                      dynamicconfig.IntPropertyFn
+		MaxPollRPS                       dynamicconfig.IntPropertyFn
+		MaxPollInterval                  dynamicconfig.DurationPropertyFn
+		MaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		UpdateAckInterval                dynamicconfig.DurationPropertyFn
+		MaxRetryCount                    dynamicconfig.IntPropertyFn
+		MetricScope                      int
+		UpdateShardTaskCount             dynamicconfig.IntPropertyFn
 	}
 
 	queueProcessorBase struct {
@@ -73,7 +76,7 @@ var (
 
 func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger bark.Logger) *queueProcessorBase {
 	workerNotificationChans := []chan struct{}{}
-	for index := 0; index < options.WorkerCount; index++ {
+	for index := 0; index < options.WorkerCount(); index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
 
@@ -81,7 +84,7 @@ func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, p
 		shard:                   shard,
 		options:                 options,
 		processor:               processor,
-		rateLimiter:             common.NewTokenBucket(options.MaxPollRPS, common.NewRealTimeSource()),
+		rateLimiter:             common.NewTokenBucket(options.MaxPollRPS(), common.NewRealTimeSource()),
 		workerNotificationChans: workerNotificationChans,
 		status:                  common.DaemonStatusInitialized,
 		notifyCh:                make(chan struct{}, 1),
@@ -132,17 +135,19 @@ func (p *queueProcessorBase) notifyNewTask() {
 
 func (p *queueProcessorBase) processorPump() {
 	defer p.shutdownWG.Done()
-	tasksCh := make(chan queueTaskInfo, p.options.BatchSize)
+	tasksCh := make(chan queueTaskInfo, p.options.BatchSize())
 
 	var workerWG sync.WaitGroup
-	for i := 0; i < p.options.WorkerCount; i++ {
+	for i := 0; i < p.options.WorkerCount(); i++ {
 		workerWG.Add(1)
 		notificationChan := p.workerNotificationChans[i]
 		go p.taskWorker(tasksCh, notificationChan, &workerWG)
 	}
 
-	pollTimer := time.NewTimer(p.options.MaxPollInterval)
-	updateAckTimer := time.NewTimer(p.options.UpdateAckInterval)
+	jitter := backoff.NewJitter()
+	lastPollTime := time.Time{}
+	pollTimer := time.NewTimer(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
+	updateAckTimer := time.NewTimer(p.options.UpdateAckInterval())
 
 processorPumpLoop:
 	for {
@@ -154,12 +159,16 @@ processorPumpLoop:
 			go p.Stop()
 		case <-p.notifyCh:
 			p.processBatch(tasksCh)
+			lastPollTime = time.Now()
 		case <-pollTimer.C:
-			p.processBatch(tasksCh)
-			pollTimer.Reset(p.options.MaxPollInterval)
+			pollTimer.Reset(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
+			if lastPollTime.Add(p.options.MaxPollInterval()).Before(time.Now()) {
+				p.processBatch(tasksCh)
+				lastPollTime = time.Now()
+			}
 		case <-updateAckTimer.C:
 			p.ackMgr.updateQueueAckLevel()
-			updateAckTimer = time.NewTimer(p.options.UpdateAckInterval)
+			updateAckTimer = time.NewTimer(p.options.UpdateAckInterval())
 		}
 	}
 
@@ -175,7 +184,7 @@ processorPumpLoop:
 
 func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 
-	if !p.rateLimiter.Consume(1, p.options.MaxPollInterval) {
+	if !p.rateLimiter.Consume(1, p.options.MaxPollInterval()) {
 		p.notifyNewTask() // re-enqueue the event
 		return
 	}
@@ -239,7 +248,7 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 	}
 
 ProcessRetryLoop:
-	for retryCount := 1; retryCount <= p.options.MaxRetryCount; {
+	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
 		select {
 		case <-p.shutdownCh:
 			return
