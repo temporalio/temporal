@@ -1098,12 +1098,14 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 		}
 
 		// At this point we only know that the write was not applied.
-		// Return the row information returned by Cassandra.
+		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
+		// shard to recover from such errors
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
-		return nil, &ConditionFailedError{
+		return nil, &ShardOwnershipLostError{
+			ShardID: d.shardID,
 			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
 				request.RangeID, strings.Join(columns, ",")),
 		}
@@ -1624,13 +1626,15 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		}
 
 		// At this point we only know that the write was not applied.
-		// Return the row information returned by Cassandra.
+		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
+		// shard to recover from such errors
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		return &ConditionFailedError{
+		return &ShardOwnershipLostError{
+			ShardID: d.shardID,
 			Msg: fmt.Sprintf("Failed to update workflow execution.  RangeID: %v, Condition: %v, columns: (%v)",
 				request.RangeID, request.Condition, strings.Join(columns, ",")),
 		}
@@ -1802,13 +1806,15 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 		}
 
 		// At this point we only know that the write was not applied.
-		// Return the row information returned by Cassandra.
+		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
+		// shard to recover from such errors
 		var columns []string
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		return &ConditionFailedError{
+		return &ShardOwnershipLostError{
+			ShardID: d.shardID,
 			Msg: fmt.Sprintf("Failed to reset mutable state.  RangeID: %v, Condition: %v, columns: (%v)",
 				request.RangeID, request.Condition, strings.Join(columns, ",")),
 		}
