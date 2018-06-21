@@ -313,19 +313,22 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, err
 	}
 	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
-	createReplicationTask := msBuilder.GetReplicationState() != nil
+
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
-	if createReplicationTask {
+	if msBuilder.GetReplicationState() != nil {
 		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
 		replicationState = msBuilder.GetReplicationState()
-		replicationTask := &persistence.HistoryReplicationTask{
-			FirstEventID:        common.FirstEventID,
-			NextEventID:         msBuilder.GetNextEventID(),
-			Version:             msBuilder.GetCurrentVersion(),
-			LastReplicationInfo: nil,
+		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
+		if domainEntry.CanReplicateEvent() {
+			replicationTask := &persistence.HistoryReplicationTask{
+				FirstEventID:        common.FirstEventID,
+				NextEventID:         msBuilder.GetNextEventID(),
+				Version:             msBuilder.GetCurrentVersion(),
+				LastReplicationInfo: nil,
+			}
+			replicationTasks = append(replicationTasks, replicationTask)
 		}
-		replicationTasks = append(replicationTasks, replicationTask)
 	}
 	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
@@ -1952,19 +1955,22 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return nil, err
 	}
 	msBuilder.GetExecutionInfo().LastFirstEventID = startedEvent.GetEventId()
-	createReplicationTask := msBuilder.GetReplicationState() != nil
+
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
-	if createReplicationTask {
+	if msBuilder.GetReplicationState() != nil {
 		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
 		replicationState = msBuilder.GetReplicationState()
-		replicationTask := &persistence.HistoryReplicationTask{
-			FirstEventID:        common.FirstEventID,
-			NextEventID:         msBuilder.GetNextEventID(),
-			Version:             msBuilder.GetCurrentVersion(),
-			LastReplicationInfo: nil,
+		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
+		if domainEntry.CanReplicateEvent() {
+			replicationTask := &persistence.HistoryReplicationTask{
+				FirstEventID:        common.FirstEventID,
+				NextEventID:         msBuilder.GetNextEventID(),
+				Version:             msBuilder.GetCurrentVersion(),
+				LastReplicationInfo: nil,
+			}
+			replicationTasks = append(replicationTasks, replicationTask)
 		}
-		replicationTasks = append(replicationTasks, replicationTask)
 	}
 	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 

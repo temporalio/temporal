@@ -267,19 +267,34 @@ func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator
 	sw := p.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
+	attr := task.HistoryTaskAttributes
+	processTask := false
+Loop:
+	for _, cluster := range attr.TargetClusters {
+		if p.currentCluster == cluster {
+			processTask = true
+			break Loop
+		}
+	}
+	if !processTask {
+		p.logger.Debugf("Dropping non-targeted history task with domainID: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
+			attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(), attr.GetFirstEventId(), attr.GetNextEventId())
+		return nil
+	}
+
 	return p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
-		DomainUUID:    task.HistoryTaskAttributes.DomainId,
+		DomainUUID:    attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
-			WorkflowId: task.HistoryTaskAttributes.WorkflowId,
-			RunId:      task.HistoryTaskAttributes.RunId,
+			WorkflowId: attr.WorkflowId,
+			RunId:      attr.RunId,
 		},
-		FirstEventId:    task.HistoryTaskAttributes.FirstEventId,
-		NextEventId:     task.HistoryTaskAttributes.NextEventId,
-		Version:         task.HistoryTaskAttributes.Version,
-		ReplicationInfo: task.HistoryTaskAttributes.ReplicationInfo,
-		History:         task.HistoryTaskAttributes.History,
-		NewRunHistory:   task.HistoryTaskAttributes.NewRunHistory,
+		FirstEventId:    attr.FirstEventId,
+		NextEventId:     attr.NextEventId,
+		Version:         attr.Version,
+		ReplicationInfo: attr.ReplicationInfo,
+		History:         attr.History,
+		NewRunHistory:   attr.NewRunHistory,
 	})
 }
 

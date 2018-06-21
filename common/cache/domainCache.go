@@ -539,12 +539,11 @@ func (entry *DomainCacheEntry) IsDomainActive() bool {
 	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
 }
 
-// ShouldReplicateEvent return whether the workflows within this domain should be replicated
-func (entry *DomainCacheEntry) ShouldReplicateEvent() bool {
+// CanReplicateEvent return whether the workflows within this domain should be replicated
+func (entry *DomainCacheEntry) CanReplicateEvent() bool {
 	// frontend guarantee that the clusters always contains the active domain, so if the # of clusters is 1
 	// then we do not need to send out any events for replication
-	return entry.clusterMetadata.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName &&
-		entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1
+	return entry.isGlobalDomain && len(entry.replicationConfig.Clusters) > 1
 }
 
 // GetDomainNotActiveErr return err if domain is not active, nil otherwise
@@ -555,6 +554,8 @@ func (entry *DomainCacheEntry) GetDomainNotActiveErr() error {
 	}
 	return errors.NewDomainNotActiveError(entry.info.Name, entry.clusterMetadata.GetCurrentClusterName(), entry.replicationConfig.ActiveClusterName)
 }
+
+// Len return length
 func (t DomainCacheEntries) Len() int {
 	return len(t)
 }

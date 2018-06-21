@@ -122,6 +122,15 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 	sw := p.metricsClient.StartTimer(metrics.ReplicatorTaskHistoryScope, metrics.TaskLatency)
 	defer sw.Stop()
 
+	domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
+	if err != nil {
+		return err
+	}
+	targetClusters := []string{}
+	for _, cluster := range domainEntry.GetReplicationConfig().Clusters {
+		targetClusters = append(targetClusters, cluster.ClusterName)
+	}
+
 	history, err := p.getHistory(task.DomainID, task.WorkflowID, task.RunID, task.FirstEventID, task.NextEventID)
 	if err != nil {
 		return err
@@ -144,6 +153,7 @@ func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persi
 	replicationTask := &replicator.ReplicationTask{
 		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeHistory),
 		HistoryTaskAttributes: &replicator.HistoryTaskAttributes{
+			TargetClusters:  targetClusters,
 			DomainId:        common.StringPtr(task.DomainID),
 			WorkflowId:      common.StringPtr(task.WorkflowID),
 			RunId:           common.StringPtr(task.RunID),

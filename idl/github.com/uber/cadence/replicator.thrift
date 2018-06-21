@@ -44,6 +44,7 @@ struct DomainTaskAttributes {
 }
 
 struct HistoryTaskAttributes {
+  05: optional list<string> targetClusters
   10: optional string domainId
   20: optional string workflowId
   30: optional string runId

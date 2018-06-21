@@ -521,6 +521,7 @@ func (v *DomainTaskAttributes) GetFailoverVersion() (o int64) {
 }
 
 type HistoryTaskAttributes struct {
+	TargetClusters  []string                            `json:"targetClusters,omitempty"`
 	DomainId        *string                             `json:"domainId,omitempty"`
 	WorkflowId      *string                             `json:"workflowId,omitempty"`
 	RunId           *string                             `json:"runId,omitempty"`
@@ -531,6 +532,32 @@ type HistoryTaskAttributes struct {
 	History         *shared.History                     `json:"history,omitempty"`
 	NewRunHistory   *shared.History                     `json:"newRunHistory,omitempty"`
 }
+
+type _List_String_ValueList []string
+
+func (v _List_String_ValueList) ForEach(f func(wire.Value) error) error {
+	for _, x := range v {
+		w, err := wire.NewValueString(x), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_String_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_String_ValueList) ValueType() wire.Type {
+	return wire.TBinary
+}
+
+func (_List_String_ValueList) Close() {}
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*history.ReplicationInfo
 
@@ -587,12 +614,20 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
+	if v.TargetClusters != nil {
+		w, err = wire.NewValueList(_List_String_ValueList(v.TargetClusters)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
 	if v.DomainId != nil {
 		w, err = wire.NewValueString(*(v.DomainId)), error(nil)
 		if err != nil {
@@ -669,6 +704,24 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
+func _List_String_Read(l wire.ValueList) ([]string, error) {
+	if l.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make([]string, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := x.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
 func _ReplicationInfo_Read(w wire.Value) (*history.ReplicationInfo, error) {
 	var v history.ReplicationInfo
 	err := v.FromWire(w)
@@ -731,6 +784,14 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
+		case 5:
+			if field.Value.Type() == wire.TList {
+				v.TargetClusters, err = _List_String_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
 		case 10:
 			if field.Value.Type() == wire.TBinary {
 				var x string
@@ -828,8 +889,12 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [10]string
 	i := 0
+	if v.TargetClusters != nil {
+		fields[i] = fmt.Sprintf("TargetClusters: %v", v.TargetClusters)
+		i++
+	}
 	if v.DomainId != nil {
 		fields[i] = fmt.Sprintf("DomainId: %v", *(v.DomainId))
 		i++
@@ -870,6 +935,21 @@ func (v *HistoryTaskAttributes) String() string {
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
 
+func _List_String_Equals(lhs, rhs []string) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !(lv == rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*history.ReplicationInfo) bool {
 	if len(lhs) != len(rhs) {
 		return false
@@ -892,6 +972,9 @@ func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*history.Replication
 //
 // This function performs a deep comparison.
 func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
+	if !((v.TargetClusters == nil && rhs.TargetClusters == nil) || (v.TargetClusters != nil && rhs.TargetClusters != nil && _List_String_Equals(v.TargetClusters, rhs.TargetClusters))) {
+		return false
+	}
 	if !_String_EqualsPtr(v.DomainId, rhs.DomainId) {
 		return false
 	}
