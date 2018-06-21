@@ -182,6 +182,7 @@ func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificat
 
 func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
 	t.logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	var err error
 ProcessRetryLoop:
 	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount(); {
 		select {
@@ -194,7 +195,7 @@ ProcessRetryLoop:
 			default:
 			}
 
-			err := t.timerProcessor.process(task)
+			err = t.timerProcessor.process(task)
 			if err != nil {
 				if err == ErrTaskRetry {
 					<-notificationChan
@@ -212,7 +213,7 @@ ProcessRetryLoop:
 	}
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
 	logging.LogOperationPanicEvent(t.logger,
-		fmt.Sprintf("Retry count exceeded for timer taskID: %v", task.GetTaskID()), nil)
+		fmt.Sprintf("Retry count exceeded for timer taskID: %v", task.GetTaskID()), err)
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.

@@ -246,7 +246,7 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 	case *persistence.ReplicationTaskInfo:
 		p.logger.Debugf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 	}
-
+	var err error
 ProcessRetryLoop:
 	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
 		select {
@@ -259,7 +259,7 @@ ProcessRetryLoop:
 			default:
 			}
 
-			err := p.processor.process(task)
+			err = p.processor.process(task)
 			if err != nil {
 				if err == ErrTaskRetry {
 					<-notificationChan
@@ -279,9 +279,9 @@ ProcessRetryLoop:
 	switch task.(type) {
 	case *persistence.TransferTaskInfo:
 		logging.LogOperationPanicEvent(p.logger,
-			fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.GetTaskID()), nil)
+			fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.GetTaskID()), err)
 	case *persistence.ReplicationTaskInfo:
 		logging.LogOperationPanicEvent(p.logger,
-			fmt.Sprintf("Retry count exceeded for replication taskID: %v", task.GetTaskID()), nil)
+			fmt.Sprintf("Retry count exceeded for replication taskID: %v", task.GetTaskID()), err)
 	}
 }

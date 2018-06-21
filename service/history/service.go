@@ -106,7 +106,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		AcquireShardInterval:                                dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		TimerTaskBatchSize:                                  dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                                dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
-		TimerTaskMaxRetryCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 5),
+		TimerTaskMaxRetryCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 100),
 		TimerProcessorGetFailureRetryCount:                  dc.GetIntProperty(dynamicconfig.TimerProcessorGetFailureRetryCount, 5),
 		TimerProcessorCompleteTimerFailureRetryCount:        dc.GetIntProperty(dynamicconfig.TimerProcessorCompleteTimerFailureRetryCount, 10),
 		TimerProcessorUpdateShardTaskCount:                  dc.GetIntProperty(dynamicconfig.TimerProcessorUpdateShardTaskCount, 100),
