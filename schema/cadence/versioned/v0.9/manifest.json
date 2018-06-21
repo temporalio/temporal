@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.9",
+  "MinCompatibleVersion": "0.9",
+  "Description": "Support domain customized key-value data.",
+  "SchemaUpdateCqlFiles": [
+    "domain_data.cql"
+  ]
+}

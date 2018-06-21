@@ -765,6 +765,8 @@ struct DomainInfo {
   20: optional DomainStatus status
   30: optional string description
   40: optional string ownerEmail
+  // A key-value map for any customized purpose
+  50: optional map<string,string> data
 }
 
 struct DomainConfiguration {
@@ -775,6 +777,8 @@ struct DomainConfiguration {
 struct UpdateDomainInfo {
   10: optional string description
   20: optional string ownerEmail
+  // A key-value map for any customized purpose
+  30: optional map<string,string> data
 }
 
 struct ClusterReplicationConfiguration {
@@ -794,6 +798,8 @@ struct RegisterDomainRequest {
   50: optional bool emitMetric
   60: optional list<ClusterReplicationConfiguration> clusters
   70: optional string activeClusterName
+  // A key-value map for any customized purpose
+  80: optional map<string,string> data
 }
 
 struct DescribeDomainRequest {

@@ -201,6 +201,7 @@ CREATE TYPE domain (
   name        text,
   status      int, -- enum DomainStatus {Registered, Deprecated, Deleted}
   description text,
+  data        map<text,text>, -- Used for customized domain information, key values pair
   owner_email text,
 );
 

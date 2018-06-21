@@ -9206,11 +9206,47 @@ func (v *DomainConfiguration) GetEmitMetric() (o bool) {
 }
 
 type DomainInfo struct {
-	Name        *string       `json:"name,omitempty"`
-	Status      *DomainStatus `json:"status,omitempty"`
-	Description *string       `json:"description,omitempty"`
-	OwnerEmail  *string       `json:"ownerEmail,omitempty"`
+	Name        *string           `json:"name,omitempty"`
+	Status      *DomainStatus     `json:"status,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	OwnerEmail  *string           `json:"ownerEmail,omitempty"`
+	Data        map[string]string `json:"data,omitempty"`
 }
+
+type _Map_String_String_MapItemList map[string]string
+
+func (m _Map_String_String_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := wire.NewValueString(v), error(nil)
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_String_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_String_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_String_MapItemList) ValueType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_String_MapItemList) Close() {}
 
 // ToWire translates a DomainInfo struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -9229,7 +9265,7 @@ type DomainInfo struct {
 //   }
 func (v *DomainInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -9267,6 +9303,14 @@ func (v *DomainInfo) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 40, Value: w}
 		i++
 	}
+	if v.Data != nil {
+		w, err = wire.NewValueMap(_Map_String_String_MapItemList(v.Data)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -9275,6 +9319,34 @@ func _DomainStatus_Read(w wire.Value) (DomainStatus, error) {
 	var v DomainStatus
 	err := v.FromWire(w)
 	return v, err
+}
+
+func _Map_String_String_Read(m wire.MapItemList) (map[string]string, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TBinary {
+		return nil, nil
+	}
+
+	o := make(map[string]string, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := x.Value.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 // FromWire deserializes a DomainInfo struct from its Thrift-level
@@ -9339,6 +9411,14 @@ func (v *DomainInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TMap {
+				v.Data, err = _Map_String_String_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -9352,7 +9432,7 @@ func (v *DomainInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -9370,6 +9450,10 @@ func (v *DomainInfo) String() string {
 		fields[i] = fmt.Sprintf("OwnerEmail: %v", *(v.OwnerEmail))
 		i++
 	}
+	if v.Data != nil {
+		fields[i] = fmt.Sprintf("Data: %v", v.Data)
+		i++
+	}
 
 	return fmt.Sprintf("DomainInfo{%v}", strings.Join(fields[:i], ", "))
 }
@@ -9382,6 +9466,23 @@ func _DomainStatus_EqualsPtr(lhs, rhs *DomainStatus) bool {
 		return x.Equals(y)
 	}
 	return lhs == nil && rhs == nil
+}
+
+func _Map_String_String_Equals(lhs, rhs map[string]string) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !(lv == rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this DomainInfo match the
@@ -9399,6 +9500,9 @@ func (v *DomainInfo) Equals(rhs *DomainInfo) bool {
 		return false
 	}
 	if !_String_EqualsPtr(v.OwnerEmail, rhs.OwnerEmail) {
+		return false
+	}
+	if !((v.Data == nil && rhs.Data == nil) || (v.Data != nil && rhs.Data != nil && _Map_String_String_Equals(v.Data, rhs.Data))) {
 		return false
 	}
 
@@ -17810,6 +17914,7 @@ type RegisterDomainRequest struct {
 	EmitMetric                             *bool                              `json:"emitMetric,omitempty"`
 	Clusters                               []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
 	ActiveClusterName                      *string                            `json:"activeClusterName,omitempty"`
+	Data                                   map[string]string                  `json:"data,omitempty"`
 }
 
 // ToWire translates a RegisterDomainRequest struct into a Thrift-level intermediate
@@ -17829,7 +17934,7 @@ type RegisterDomainRequest struct {
 //   }
 func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -17889,6 +17994,14 @@ func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.Data != nil {
+		w, err = wire.NewValueMap(_Map_String_String_MapItemList(v.Data)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 
@@ -17985,6 +18098,14 @@ func (v *RegisterDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 80:
+			if field.Value.Type() == wire.TMap {
+				v.Data, err = _Map_String_String_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -17998,7 +18119,7 @@ func (v *RegisterDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -18026,6 +18147,10 @@ func (v *RegisterDomainRequest) String() string {
 	}
 	if v.ActiveClusterName != nil {
 		fields[i] = fmt.Sprintf("ActiveClusterName: %v", *(v.ActiveClusterName))
+		i++
+	}
+	if v.Data != nil {
+		fields[i] = fmt.Sprintf("Data: %v", v.Data)
 		i++
 	}
 
@@ -18056,6 +18181,9 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 		return false
 	}
 	if !_String_EqualsPtr(v.ActiveClusterName, rhs.ActiveClusterName) {
+		return false
+	}
+	if !((v.Data == nil && rhs.Data == nil) || (v.Data != nil && rhs.Data != nil && _Map_String_String_Equals(v.Data, rhs.Data))) {
 		return false
 	}
 
@@ -28421,8 +28549,9 @@ func (v *TransientDecisionInfo) Equals(rhs *TransientDecisionInfo) bool {
 }
 
 type UpdateDomainInfo struct {
-	Description *string `json:"description,omitempty"`
-	OwnerEmail  *string `json:"ownerEmail,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	OwnerEmail  *string           `json:"ownerEmail,omitempty"`
+	Data        map[string]string `json:"data,omitempty"`
 }
 
 // ToWire translates a UpdateDomainInfo struct into a Thrift-level intermediate
@@ -28442,7 +28571,7 @@ type UpdateDomainInfo struct {
 //   }
 func (v *UpdateDomainInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -28462,6 +28591,14 @@ func (v *UpdateDomainInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Data != nil {
+		w, err = wire.NewValueMap(_Map_String_String_MapItemList(v.Data)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
 
@@ -28510,6 +28647,14 @@ func (v *UpdateDomainInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TMap {
+				v.Data, err = _Map_String_String_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -28523,7 +28668,7 @@ func (v *UpdateDomainInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.Description != nil {
 		fields[i] = fmt.Sprintf("Description: %v", *(v.Description))
@@ -28531,6 +28676,10 @@ func (v *UpdateDomainInfo) String() string {
 	}
 	if v.OwnerEmail != nil {
 		fields[i] = fmt.Sprintf("OwnerEmail: %v", *(v.OwnerEmail))
+		i++
+	}
+	if v.Data != nil {
+		fields[i] = fmt.Sprintf("Data: %v", v.Data)
 		i++
 	}
 
@@ -28546,6 +28695,9 @@ func (v *UpdateDomainInfo) Equals(rhs *UpdateDomainInfo) bool {
 		return false
 	}
 	if !_String_EqualsPtr(v.OwnerEmail, rhs.OwnerEmail) {
+		return false
+	}
+	if !((v.Data == nil && rhs.Data == nil) || (v.Data != nil && rhs.Data != nil && _Map_String_String_Equals(v.Data, rhs.Data))) {
 		return false
 	}
 

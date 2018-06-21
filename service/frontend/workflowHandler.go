@@ -234,6 +234,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 			Status:      persistence.DomainStatusRegistered,
 			OwnerEmail:  registerRequest.GetOwnerEmail(),
 			Description: registerRequest.GetDescription(),
+			Data:        registerRequest.Data,
 		},
 		Config: &persistence.DomainConfig{
 			Retention:  registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
@@ -407,6 +408,10 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 			configurationChanged = true
 			info.OwnerEmail = updatedInfo.GetOwnerEmail()
 		}
+		if updatedInfo.Data != nil {
+			configurationChanged = true
+			info.Data = wh.mergeDomainData(info.Data, updatedInfo.Data)
+		}
 	}
 	if updateRequest.Configuration != nil {
 		updatedConfig := updateRequest.Configuration
@@ -489,6 +494,13 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
 		info, config, replicationConfig)
 	return response, nil
+}
+
+func (wh *WorkflowHandler) mergeDomainData(old map[string]string, new map[string]string) map[string]string {
+	for k, v := range new {
+		old[k] = v
+	}
+	return old
 }
 
 // DeprecateDomain us used to update status of a registered domain to DEPRECATED.  Once the domain is deprecated
@@ -2225,6 +2237,7 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 		Status:      getDomainStatus(info),
 		Description: common.StringPtr(info.Description),
 		OwnerEmail:  common.StringPtr(info.OwnerEmail),
+		Data:        info.Data,
 	}
 
 	configResult := &gen.DomainConfiguration{

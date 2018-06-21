@@ -795,6 +795,7 @@ type (
 		Status      int
 		Description string
 		OwnerEmail  string
+		Data        map[string]string
 	}
 
 	// DomainConfig describes the domain configuration

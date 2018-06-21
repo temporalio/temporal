@@ -40,7 +40,7 @@ const (
 		`VALUES(?, ?, ` + templateDomainInfoType + `, ` + templateDomainConfigType + `, ` + templateDomainReplicationConfigType + `, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetDomainByNameQueryV2 = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
-		`domain.owner_email, config.retention, config.emit_metric, ` +
+		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -78,7 +78,7 @@ const (
 		`and name = ?`
 
 	templateListDomainQueryV2 = `SELECT name, domain.id, domain.name, domain.status, domain.description, ` +
-		`domain.owner_email, config.retention, config.emit_metric, ` +
+		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -158,6 +158,7 @@ func (m *cassandraMetadataPersistenceV2) CreateDomain(request *CreateDomainReque
 		request.Info.Status,
 		request.Info.Description,
 		request.Info.OwnerEmail,
+		request.Info.Data,
 		request.Config.Retention,
 		request.Config.EmitMetric,
 		request.ReplicationConfig.ActiveClusterName,
@@ -213,6 +214,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateDomain(request *UpdateDomainReque
 		request.Info.Status,
 		request.Info.Description,
 		request.Info.OwnerEmail,
+		request.Info.Data,
 		request.Config.Retention,
 		request.Config.EmitMetric,
 		request.ReplicationConfig.ActiveClusterName,
@@ -302,6 +304,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *GetDomainRequest) (*
 		&info.Status,
 		&info.Description,
 		&info.OwnerEmail,
+		&info.Data,
 		&config.Retention,
 		&config.EmitMetric,
 		&replicationConfig.ActiveClusterName,
@@ -354,7 +357,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomain(request *ListDomainRequest) 
 	response := &ListDomainResponse{}
 	for iter.Scan(
 		&name,
-		&domain.Info.ID, &domain.Info.Name, &domain.Info.Status, &domain.Info.Description, &domain.Info.OwnerEmail,
+		&domain.Info.ID, &domain.Info.Name, &domain.Info.Status, &domain.Info.Description, &domain.Info.OwnerEmail, &domain.Info.Data,
 		&domain.Config.Retention, &domain.Config.EmitMetric,
 		&domain.ReplicationConfig.ActiveClusterName, &replicationClusters,
 		&domain.IsGlobalDomain, &domain.ConfigVersion, &domain.FailoverVersion,
@@ -403,7 +406,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteDomain(request *DeleteDomainReque
 func (m *cassandraMetadataPersistenceV2) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQueryV2, constDomainPartition, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil
