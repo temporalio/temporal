@@ -14315,6 +14315,342 @@ func (v *ListClosedWorkflowExecutionsResponse) Equals(rhs *ListClosedWorkflowExe
 	return true
 }
 
+type ListDomainsRequest struct {
+	PageSize      *int32 `json:"pageSize,omitempty"`
+	NextPageToken []byte `json:"nextPageToken,omitempty"`
+}
+
+// ToWire translates a ListDomainsRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ListDomainsRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.PageSize != nil {
+		w, err = wire.NewValueI32(*(v.PageSize)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a ListDomainsRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ListDomainsRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ListDomainsRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ListDomainsRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.PageSize = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ListDomainsRequest
+// struct.
+func (v *ListDomainsRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.PageSize != nil {
+		fields[i] = fmt.Sprintf("PageSize: %v", *(v.PageSize))
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("ListDomainsRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this ListDomainsRequest match the
+// provided ListDomainsRequest.
+//
+// This function performs a deep comparison.
+func (v *ListDomainsRequest) Equals(rhs *ListDomainsRequest) bool {
+	if !_I32_EqualsPtr(v.PageSize, rhs.PageSize) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
+// GetPageSize returns the value of PageSize if it is set or its
+// zero value if it is unset.
+func (v *ListDomainsRequest) GetPageSize() (o int32) {
+	if v.PageSize != nil {
+		return *v.PageSize
+	}
+
+	return
+}
+
+type ListDomainsResponse struct {
+	Domains       []*DescribeDomainResponse `json:"domains,omitempty"`
+	NextPageToken []byte                    `json:"nextPageToken,omitempty"`
+}
+
+type _List_DescribeDomainResponse_ValueList []*DescribeDomainResponse
+
+func (v _List_DescribeDomainResponse_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_DescribeDomainResponse_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_DescribeDomainResponse_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_DescribeDomainResponse_ValueList) Close() {}
+
+// ToWire translates a ListDomainsResponse struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *ListDomainsResponse) ToWire() (wire.Value, error) {
+	var (
+		fields [2]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.Domains != nil {
+		w, err = wire.NewValueList(_List_DescribeDomainResponse_ValueList(v.Domains)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.NextPageToken != nil {
+		w, err = wire.NewValueBinary(v.NextPageToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _DescribeDomainResponse_Read(w wire.Value) (*DescribeDomainResponse, error) {
+	var v DescribeDomainResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_DescribeDomainResponse_Read(l wire.ValueList) ([]*DescribeDomainResponse, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*DescribeDomainResponse, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _DescribeDomainResponse_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a ListDomainsResponse struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a ListDomainsResponse struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v ListDomainsResponse
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *ListDomainsResponse) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TList {
+				v.Domains, err = _List_DescribeDomainResponse_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				v.NextPageToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a ListDomainsResponse
+// struct.
+func (v *ListDomainsResponse) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [2]string
+	i := 0
+	if v.Domains != nil {
+		fields[i] = fmt.Sprintf("Domains: %v", v.Domains)
+		i++
+	}
+	if v.NextPageToken != nil {
+		fields[i] = fmt.Sprintf("NextPageToken: %v", v.NextPageToken)
+		i++
+	}
+
+	return fmt.Sprintf("ListDomainsResponse{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_DescribeDomainResponse_Equals(lhs, rhs []*DescribeDomainResponse) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this ListDomainsResponse match the
+// provided ListDomainsResponse.
+//
+// This function performs a deep comparison.
+func (v *ListDomainsResponse) Equals(rhs *ListDomainsResponse) bool {
+	if !((v.Domains == nil && rhs.Domains == nil) || (v.Domains != nil && rhs.Domains != nil && _List_DescribeDomainResponse_Equals(v.Domains, rhs.Domains))) {
+		return false
+	}
+	if !((v.NextPageToken == nil && rhs.NextPageToken == nil) || (v.NextPageToken != nil && rhs.NextPageToken != nil && bytes.Equal(v.NextPageToken, rhs.NextPageToken))) {
+		return false
+	}
+
+	return true
+}
+
 type ListOpenWorkflowExecutionsRequest struct {
 	Domain          *string                  `json:"domain,omitempty"`
 	MaximumPageSize *int32                   `json:"maximumPageSize,omitempty"`

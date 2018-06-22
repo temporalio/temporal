@@ -336,7 +336,7 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *GetDomainRequest) (*
 	}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) ListDomain(request *ListDomainRequest) (*ListDomainResponse, error) {
+func (m *cassandraMetadataPersistenceV2) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
 	var query *gocql.Query
 
 	query = m.session.Query(templateListDomainQueryV2, constDomainPartition)
@@ -354,7 +354,7 @@ func (m *cassandraMetadataPersistenceV2) ListDomain(request *ListDomainRequest) 
 		ReplicationConfig: &DomainReplicationConfig{},
 	}
 	var replicationClusters []map[string]interface{}
-	response := &ListDomainResponse{}
+	response := &ListDomainsResponse{}
 	for iter.Scan(
 		&name,
 		&domain.Info.ID, &domain.Info.Name, &domain.Info.Status, &domain.Info.Description, &domain.Info.OwnerEmail, &domain.Info.Data,

@@ -31,6 +31,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 
+	"strconv"
+	"strings"
+
+	"fmt"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
@@ -277,6 +282,75 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 		ActiveClusterName:                      common.StringPtr(activeClusterName),
 	})
 	s.NotNil(err)
+}
+
+func (s *integrationCrossDCSuite) TestIntegrationRegisterListDomains() {
+	// re-initialize to enable global domain
+	s.TearDownTest()
+	s.setupTest(true, true)
+
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	activeClusterName := ""
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+		if clusterName != s.ClusterMetadata.GetCurrentClusterName() {
+			activeClusterName = clusterName
+		}
+	}
+
+	total := 10
+	pageSize := int32(6)
+	domainNamePrefix := "some random domain name"
+	for i := 0; i < total; i++ {
+		err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+			Name:                                   common.StringPtr(fmt.Sprintf("%v-%v", domainNamePrefix, i)),
+			Description:                            common.StringPtr(description),
+			OwnerEmail:                             common.StringPtr(email),
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+			Clusters:                               clusters,
+			ActiveClusterName:                      common.StringPtr(activeClusterName),
+		})
+		s.Nil(err)
+	}
+
+	resp1, err := s.engine.ListDomains(createContext(), &workflow.ListDomainsRequest{
+		PageSize: common.Int32Ptr(pageSize),
+	})
+	s.Nil(err)
+	s.True(len(resp1.NextPageToken) > 0)
+	resp2, err := s.engine.ListDomains(createContext(), &workflow.ListDomainsRequest{
+		PageSize:      common.Int32Ptr(pageSize),
+		NextPageToken: resp1.NextPageToken,
+	})
+	s.Nil(err)
+
+	s.Equal(0, len(resp2.NextPageToken))
+	domains := append(resp1.Domains, resp2.Domains...)
+
+	for _, resp := range domains {
+		s.True(strings.HasPrefix(resp.DomainInfo.GetName(), domainNamePrefix))
+		ss := strings.Split(*resp.DomainInfo.Name, "-")
+		s.Equal(2, len(ss))
+		id, err := strconv.Atoi(ss[1])
+		s.Nil(err)
+		s.True(id >= 0)
+		s.True(id < total)
+
+		s.Equal(workflow.DomainStatusRegistered, *resp.DomainInfo.Status)
+		s.Equal(description, resp.DomainInfo.GetDescription())
+		s.Equal(email, resp.DomainInfo.GetOwnerEmail())
+		s.Equal(retention, resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+		s.Equal(emitMetric, resp.Configuration.GetEmitMetric())
+		s.Equal(activeClusterName, resp.ReplicationConfiguration.GetActiveClusterName())
+		s.Equal(clusters, resp.ReplicationConfiguration.Clusters)
+	}
 }
 
 func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainEnabled_IsMaster_NoDefault() {

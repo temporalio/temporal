@@ -621,11 +621,11 @@ func (p *metadataPersistenceClient) DeleteDomainByName(request *DeleteDomainByNa
 	return err
 }
 
-func (p *metadataPersistenceClient) ListDomain(request *ListDomainRequest) (*ListDomainResponse, error) {
+func (p *metadataPersistenceClient) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceListDomainScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceListDomainScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListDomain(request)
+	response, err := p.persistence.ListDomains(request)
 	sw.Stop()
 
 	if err != nil {

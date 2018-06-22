@@ -269,13 +269,13 @@ func (c *domainCache) refreshDomains() error {
 	c.Unlock()
 
 	var token []byte
-	request := &persistence.ListDomainRequest{PageSize: domainCacheRefreshPageSize}
+	request := &persistence.ListDomainsRequest{PageSize: domainCacheRefreshPageSize}
 	var domains DomainCacheEntries
 	continuePage := true
 
 	for continuePage {
 		request.NextPageToken = token
-		response, err := c.metadataMgr.ListDomain(request)
+		response, err := c.metadataMgr.ListDomains(request)
 		if err != nil {
 			return err
 		}

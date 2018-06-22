@@ -872,14 +872,14 @@ type (
 		Name string
 	}
 
-	// ListDomainRequest is used to list domains
-	ListDomainRequest struct {
+	// ListDomainsRequest is used to list domains
+	ListDomainsRequest struct {
 		PageSize      int
 		NextPageToken []byte
 	}
 
-	// ListDomainResponse is the response for GetDomain
-	ListDomainResponse struct {
+	// ListDomainsResponse is the response for GetDomain
+	ListDomainsResponse struct {
 		Domains       []*GetDomainResponse
 		NextPageToken []byte
 	}
@@ -957,7 +957,7 @@ type (
 		UpdateDomain(request *UpdateDomainRequest) error
 		DeleteDomain(request *DeleteDomainRequest) error
 		DeleteDomainByName(request *DeleteDomainByNameRequest) error
-		ListDomain(request *ListDomainRequest) (*ListDomainResponse, error)
+		ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 )

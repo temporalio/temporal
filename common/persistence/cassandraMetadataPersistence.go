@@ -342,7 +342,7 @@ func (m *cassandraMetadataPersistence) DeleteDomainByName(request *DeleteDomainB
 	return m.deleteDomain(request.Name, ID)
 }
 
-func (m *cassandraMetadataPersistence) ListDomain(request *ListDomainRequest) (*ListDomainResponse, error) {
+func (m *cassandraMetadataPersistence) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
 	panic("cassandraMetadataPersistence do not support list domain operation.")
 }
 

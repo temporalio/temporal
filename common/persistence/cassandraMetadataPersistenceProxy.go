@@ -71,8 +71,8 @@ func (m *metadataManagerProxy) GetDomain(request *GetDomainRequest) (*GetDomainR
 	return resp, err
 }
 
-func (m *metadataManagerProxy) ListDomain(request *ListDomainRequest) (*ListDomainResponse, error) {
-	return m.metadataMgrV2.ListDomain(request)
+func (m *metadataManagerProxy) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
+	return m.metadataMgrV2.ListDomains(request)
 }
 
 func (m *metadataManagerProxy) GetMetadata() (*GetMetadataResponse, error) {

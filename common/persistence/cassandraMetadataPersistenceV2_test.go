@@ -72,7 +72,7 @@ func (m *metadataPersistenceSuiteV2) SetupTest() {
 	pageSize := 10
 ListLoop:
 	for {
-		resp, err := m.ListDomain(pageSize, token)
+		resp, err := m.ListDomains(pageSize, token)
 		m.Nil(err)
 		token = resp.NextPageToken
 		for _, domain := range resp.Domains {
@@ -811,7 +811,7 @@ func (m *metadataPersistenceSuiteV2) TestListDomains() {
 	outputDomains := make(map[string]*GetDomainResponse)
 ListLoop:
 	for {
-		resp, err := m.ListDomain(pageSize, token)
+		resp, err := m.ListDomains(pageSize, token)
 		m.Nil(err)
 		token = resp.NextPageToken
 		for _, domain := range resp.Domains {
@@ -870,8 +870,8 @@ func (m *metadataPersistenceSuiteV2) DeleteDomain(id, name string) error {
 	return m.MetadataManagerV2.DeleteDomainByName(&DeleteDomainByNameRequest{Name: name})
 }
 
-func (m *metadataPersistenceSuiteV2) ListDomain(pageSize int, pageToken []byte) (*ListDomainResponse, error) {
-	return m.MetadataManagerV2.ListDomain(&ListDomainRequest{
+func (m *metadataPersistenceSuiteV2) ListDomains(pageSize int, pageToken []byte) (*ListDomainsResponse, error) {
+	return m.MetadataManagerV2.ListDomains(&ListDomainsRequest{
 		PageSize:      pageSize,
 		NextPageToken: pageToken,
 	})

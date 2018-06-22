@@ -121,21 +121,21 @@ func (_m *MetadataManager) UpdateDomain(request *persistence.UpdateDomainRequest
 	return r0
 }
 
-// ListDomain provides a mock function with given fields: request
-func (_m *MetadataManager) ListDomain(request *persistence.ListDomainRequest) (*persistence.ListDomainResponse, error) {
+// ListDomains provides a mock function with given fields: request
+func (_m *MetadataManager) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
 	ret := _m.Called(request)
 
-	var r0 *persistence.ListDomainResponse
-	if rf, ok := ret.Get(0).(func(*persistence.ListDomainRequest) *persistence.ListDomainResponse); ok {
+	var r0 *persistence.ListDomainsResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ListDomainsRequest) *persistence.ListDomainsResponse); ok {
 		r0 = rf(request)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.ListDomainResponse)
+			r0 = ret.Get(0).(*persistence.ListDomainsResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.ListDomainRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*persistence.ListDomainsRequest) error); ok {
 		r1 = rf(request)
 	} else {
 		r1 = ret.Error(1)

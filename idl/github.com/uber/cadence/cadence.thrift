@@ -55,6 +55,16 @@ service WorkflowService {
     )
 
   /**
+    * ListDomains returns the information and configuration for all domains.
+    **/
+    shared.ListDomainsResponse ListDomains(1: shared.ListDomainsRequest listRequest)
+      throws (
+        1: shared.BadRequestError badRequestError,
+        2: shared.InternalServiceError internalServiceError,
+        3: shared.EntityNotExistsError entityNotExistError,
+      )
+
+  /**
   * UpdateDomain is used to update the information and configuration for a registered domain.
   **/
   shared.UpdateDomainResponse UpdateDomain(1: shared.UpdateDomainRequest updateRequest)

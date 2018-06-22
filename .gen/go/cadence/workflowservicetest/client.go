@@ -258,6 +258,39 @@ func (mr *_MockClientRecorder) ListClosedWorkflowExecutions(
 	return mr.mock.ctrl.RecordCall(mr.mock, "ListClosedWorkflowExecutions", args...)
 }
 
+// ListDomains responds to a ListDomains call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().ListDomains(gomock.Any(), ...).Return(...)
+// 	... := client.ListDomains(...)
+func (m *MockClient) ListDomains(
+	ctx context.Context,
+	_ListRequest *shared.ListDomainsRequest,
+	opts ...yarpc.CallOption,
+) (success *shared.ListDomainsResponse, err error) {
+
+	args := []interface{}{ctx, _ListRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "ListDomains", args...)
+	success, _ = ret[i].(*shared.ListDomainsResponse)
+	i++
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) ListDomains(
+	ctx interface{},
+	_ListRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _ListRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "ListDomains", args...)
+}
+
 // ListOpenWorkflowExecutions responds to a ListOpenWorkflowExecutions call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

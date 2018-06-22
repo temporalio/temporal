@@ -132,18 +132,18 @@ func (s *domainCacheSuite) TestListDomain() {
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil)
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.metadataMgr.On("ListDomain", &persistence.ListDomainRequest{
+	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
 		PageSize:      domainCacheRefreshPageSize,
 		NextPageToken: nil,
-	}).Return(&persistence.ListDomainResponse{
+	}).Return(&persistence.ListDomainsResponse{
 		Domains:       []*persistence.GetDomainResponse{domainRecord1},
 		NextPageToken: pageToken,
 	}, nil).Once()
 
-	s.metadataMgr.On("ListDomain", &persistence.ListDomainRequest{
+	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
 		PageSize:      domainCacheRefreshPageSize,
 		NextPageToken: pageToken,
-	}).Return(&persistence.ListDomainResponse{
+	}).Return(&persistence.ListDomainsResponse{
 		Domains:       []*persistence.GetDomainResponse{domainRecord2, domainRecord3},
 		NextPageToken: nil,
 	}, nil).Once()
@@ -265,10 +265,10 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil).Once()
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.metadataMgr.On("ListDomain", &persistence.ListDomainRequest{
+	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
 		PageSize:      domainCacheRefreshPageSize,
 		NextPageToken: nil,
-	}).Return(&persistence.ListDomainResponse{
+	}).Return(&persistence.ListDomainsResponse{
 		Domains:       []*persistence.GetDomainResponse{domainRecord1, domainRecord2},
 		NextPageToken: nil,
 	}, nil).Once()
@@ -329,10 +329,10 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil).Once()
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
-	s.metadataMgr.On("ListDomain", &persistence.ListDomainRequest{
+	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
 		PageSize:      domainCacheRefreshPageSize,
 		NextPageToken: nil,
-	}).Return(&persistence.ListDomainResponse{
+	}).Return(&persistence.ListDomainsResponse{
 		Domains:       []*persistence.GetDomainResponse{domainRecord1Old, domainRecord2Old},
 		NextPageToken: nil,
 	}, nil).Once()
@@ -389,10 +389,10 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	s.Empty(entriesNew)
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil).Once()
-	s.metadataMgr.On("ListDomain", &persistence.ListDomainRequest{
+	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
 		PageSize:      domainCacheRefreshPageSize,
 		NextPageToken: nil,
-	}).Return(&persistence.ListDomainResponse{
+	}).Return(&persistence.ListDomainsResponse{
 		Domains:       []*persistence.GetDomainResponse{domainRecord1New, domainRecord2New},
 		NextPageToken: nil,
 	}, nil).Once()

@@ -268,6 +268,49 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	return nil
 }
 
+// ListDomains returns the information and configuration for a registered domain.
+func (wh *WorkflowHandler) ListDomains(ctx context.Context,
+	listRequest *gen.ListDomainsRequest) (*gen.ListDomainsResponse, error) {
+	scope := metrics.FrontendListDomainsScope
+	sw := wh.startRequestProfile(scope)
+	defer sw.Stop()
+
+	if listRequest == nil {
+		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	pageSize := 100
+	if listRequest.GetPageSize() != 0 {
+		pageSize = int(listRequest.GetPageSize())
+	}
+
+	resp, err := wh.metadataMgr.ListDomains(&persistence.ListDomainsRequest{
+		PageSize:      pageSize,
+		NextPageToken: listRequest.NextPageToken,
+	})
+
+	if err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	domains := []*gen.DescribeDomainResponse{}
+	for _, d := range resp.Domains {
+		desc := &gen.DescribeDomainResponse{
+			IsGlobalDomain:  common.BoolPtr(d.IsGlobalDomain),
+			FailoverVersion: common.Int64Ptr(d.FailoverVersion),
+		}
+		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = createDomainResponse(d.Info, d.Config, d.ReplicationConfig)
+		domains = append(domains, desc)
+	}
+
+	response := &gen.ListDomainsResponse{
+		Domains:       domains,
+		NextPageToken: resp.NextPageToken,
+	}
+
+	return response, nil
+}
+
 // DescribeDomain returns the information and configuration for a registered domain.
 func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 	describeRequest *gen.DescribeDomainRequest) (*gen.DescribeDomainResponse, error) {
