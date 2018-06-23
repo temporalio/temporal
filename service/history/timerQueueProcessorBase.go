@@ -32,6 +32,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -182,6 +183,7 @@ func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificat
 
 func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
 	t.logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	startTime := time.Now()
 	var err error
 ProcessRetryLoop:
 	for attempt := 1; attempt <= t.config.TimerTaskMaxRetryCount(); {
@@ -201,6 +203,13 @@ ProcessRetryLoop:
 					<-notificationChan
 				} else {
 					logging.LogTaskProcessingFailedEvent(t.logger, task.GetTaskID(), task.GetTaskType(), err)
+
+					// it is possible that DomainNotActiveError is thrown
+					// just keep try for cache.DomainCacheRefreshInterval
+					// and giveup
+					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+						return
+					}
 					backoff := time.Duration(attempt * 100)
 					time.Sleep(backoff * time.Millisecond)
 					attempt++

@@ -29,8 +29,10 @@ import (
 
 	"github.com/uber-common/bark"
 
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
@@ -247,6 +249,7 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 		p.logger.Debugf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 	}
 	var err error
+	startTime := time.Now()
 ProcessRetryLoop:
 	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
 		select {
@@ -265,6 +268,13 @@ ProcessRetryLoop:
 					<-notificationChan
 				} else {
 					logging.LogTaskProcessingFailedEvent(p.logger, task.GetTaskID(), task.GetTaskType(), err)
+
+					// it is possible that DomainNotActiveError is thrown
+					// just keep try for cache.DomainCacheRefreshInterval
+					// and giveup
+					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+						return
+					}
 					backoff := time.Duration(retryCount * 100)
 					time.Sleep(backoff * time.Millisecond)
 					retryCount++

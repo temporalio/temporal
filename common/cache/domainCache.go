@@ -37,11 +37,12 @@ import (
 )
 
 const (
-	domainCacheInitialSize     = 10 * 1024
-	domainCacheMaxSize         = 64 * 1024
-	domainCacheTTL             = 0 // 0 means infinity
-	domainCacheEntryTTL        = 20 * time.Second
-	domainCacheRefreshInterval = 10 * time.Second
+	domainCacheInitialSize = 10 * 1024
+	domainCacheMaxSize     = 64 * 1024
+	domainCacheTTL         = 0 // 0 means infinity
+	domainCacheEntryTTL    = 20 * time.Second
+	// DomainCacheRefreshInterval domain cache refresh interval
+	DomainCacheRefreshInterval = 10 * time.Second
 	domainCacheRefreshPageSize = 100
 
 	domainCacheLocked   int32 = 0
@@ -238,14 +239,14 @@ func (c *domainCache) GetDomainID(name string) (string, error) {
 }
 
 func (c *domainCache) refreshLoop() {
-	timer := time.NewTimer(domainCacheRefreshInterval)
+	timer := time.NewTimer(DomainCacheRefreshInterval)
 	defer timer.Stop()
 	for {
 		select {
 		case <-c.shutdownChan:
 			return
 		case <-timer.C:
-			timer.Reset(domainCacheRefreshInterval)
+			timer.Reset(DomainCacheRefreshInterval)
 			err := c.refreshDomains()
 			if err != nil {
 				c.logger.Errorf("Error refreshing domain cache: %v", err)
