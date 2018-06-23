@@ -302,7 +302,18 @@ func (r *historyReplicator) ApplyOtherEvents(context *workflowExecutionContext, 
 			logger.Errorf("Failed to buffer out of order replication task.  Err: %v", err)
 			return errors.New("failed to add buffered replication task")
 		}
-		return nil
+
+		// Generate a transaction ID for appending events to history
+		transactionID, err := r.shard.GetNextTransferTaskID()
+		if err != nil {
+			return err
+		}
+		// we need to handcraft some of the variables
+		// since this is a persisting the buffer replication task,
+		// so nothing on the replication state should be changed
+		lastWriteVersion := msBuilder.GetLastWriteVersion()
+		sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+		return context.updateHelper(nil, nil, nil, false, sourceCluster, lastWriteVersion, transactionID)
 	}
 
 	// apply the events normally
@@ -404,8 +415,9 @@ func (r *historyReplicator) FlushBuffer(context *workflowExecutionContext, msBui
 		// Applying replication task commits the transaction along with the delete
 		msBuilder.DeleteBufferedReplicationTask(nextEventID)
 
+		sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(bt.Version)
 		req := &h.ReplicateEventsRequest{
-			SourceCluster:     request.SourceCluster,
+			SourceCluster:     common.StringPtr(sourceCluster),
 			DomainUUID:        request.DomainUUID,
 			WorkflowExecution: request.WorkflowExecution,
 			FirstEventId:      common.Int64Ptr(bt.FirstEventID),
