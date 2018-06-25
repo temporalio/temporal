@@ -193,6 +193,8 @@ func (p *replicationTaskProcessor) getRemainingRetryCount(remainingRetryCount in
 	numWorker := float64(p.config.ReplicatorConcurrency)
 	retryPercentage := workerInRetry / numWorker
 
+	p.metricsClient.UpdateGauge(metrics.ReplicatorScope, metrics.ReplicatorRetryPercentage, retryPercentage)
+
 	min := func(i int64, j int64) int64 {
 		if i < j {
 			return i

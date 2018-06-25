@@ -67,7 +67,7 @@ type (
 	// requests using the stale entry from cache upto an hour
 	DomainCache interface {
 		common.Daemon
-		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn CallbackFn)
+		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, beforeCallback CallbackFn, afterCallback CallbackFn)
 		UnregisterDomainChangeCallback(shard int)
 		GetDomain(name string) (*DomainCacheEntry, error)
 		GetDomainByID(id string) (*DomainCacheEntry, error)
@@ -89,7 +89,8 @@ type (
 
 		sync.RWMutex
 		domainNotificationVersion int64
-		callbacks                 map[int]CallbackFn
+		beforeCallbacks           map[int]CallbackFn
+		afterCallbacks            map[int]CallbackFn
 	}
 
 	// DomainCacheEntries is DomainCacheEntry slice
@@ -126,7 +127,8 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 		clusterMetadata: clusterMetadata,
 		timeSource:      common.NewRealTimeSource(),
 		logger:          logger,
-		callbacks:       make(map[int]CallbackFn),
+		beforeCallbacks: make(map[int]CallbackFn),
+		afterCallbacks:  make(map[int]CallbackFn),
 	}
 }
 
@@ -178,14 +180,17 @@ func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
 }
 
 // RegisterDomainChangeCallback set a domain change callback
-// WARN: the callback function will be triggered by domain cache when holding the domain cache lock,
+// WARN: the beforeCallback function will be triggered by domain cache when holding the domain cache lock,
 // make sure the callback function will not call domain cache again in case of dead lock
-func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn CallbackFn) {
+// afterCallback will be invoked when NOT holding the domain cache lock.
+func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, beforeCallback CallbackFn, afterCallback CallbackFn) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.callbacks[shard] = fn
+	c.beforeCallbacks[shard] = beforeCallback
+	c.afterCallbacks[shard] = afterCallback
 
+	// this section is trying to make the shard catch up with domain changes
 	if c.domainNotificationVersion > initialNotificationVersion {
 		domains := DomainCacheEntries{}
 		for _, domain := range c.GetAllDomain() {
@@ -197,7 +202,8 @@ func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificatio
 		sort.Sort(domains)
 		for _, domain := range domains {
 			if domain.notificationVersion >= initialNotificationVersion {
-				fn(nil, domain)
+				beforeCallback(nil, domain)
+				afterCallback(nil, domain)
 			}
 		}
 	}
@@ -208,7 +214,8 @@ func (c *domainCache) UnregisterDomainChangeCallback(shard int) {
 	c.Lock()
 	defer c.Unlock()
 
-	delete(c.callbacks, shard)
+	delete(c.beforeCallbacks, shard)
+	delete(c.afterCallbacks, shard)
 }
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -343,9 +350,8 @@ func (c *domainCache) updateIDToDomainCache(id string, record *DomainCacheEntry)
 		return nil, err
 	}
 	entry := elem.(*DomainCacheEntry)
-	entry.Lock()
-	defer entry.Unlock()
 
+	entry.Lock()
 	var prevDomain *DomainCacheEntry
 	triggerCallback := c.clusterMetadata.IsGlobalDomainEnabled() &&
 		// expiry will be non zero when the entry is initialized / valid
@@ -368,7 +374,11 @@ func (c *domainCache) updateIDToDomainCache(id string, record *DomainCacheEntry)
 
 	nextDomain := entry.duplicate()
 	if triggerCallback {
-		c.triggerDomainChangeCallback(prevDomain, nextDomain)
+		c.triggerDomainBeforeChangeCallback(prevDomain, nextDomain)
+	}
+	entry.Unlock()
+	if triggerCallback {
+		c.triggerDomainAfterChangeCallback(prevDomain, nextDomain)
 	}
 
 	return nextDomain, nil
@@ -445,10 +455,18 @@ func (c *domainCache) getDomainByID(id string) (*DomainCacheEntry, error) {
 	return newEntry, nil
 }
 
-func (c *domainCache) triggerDomainChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+func (c *domainCache) triggerDomainBeforeChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
 	c.RLock()
 	defer c.RUnlock()
-	for _, callback := range c.callbacks {
+	for _, callback := range c.beforeCallbacks {
+		callback(prevDomain, nextDomain)
+	}
+}
+
+func (c *domainCache) triggerDomainAfterChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+	c.RLock()
+	defer c.RUnlock()
+	for _, callback := range c.afterCallbacks {
 		callback(prevDomain, nextDomain)
 	}
 }

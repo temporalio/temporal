@@ -708,6 +708,7 @@ const (
 	ReplicatorMessages = iota + NumCommonMetrics
 	ReplicatorFailures
 	ReplicatorLatency
+	ReplicatorRetryPercentage
 )
 
 // MetricDefs record the metrics for all services
@@ -801,9 +802,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		BufferThrottleCounter:         {metricName: "buffer.throttle.count"},
 	},
 	Worker: {
-		ReplicatorMessages: {metricName: "replicator.messages"},
-		ReplicatorFailures: {metricName: "replicator.errors"},
-		ReplicatorLatency:  {metricName: "replicator.latency"},
+		ReplicatorMessages:        {metricName: "replicator.messages"},
+		ReplicatorFailures:        {metricName: "replicator.errors"},
+		ReplicatorLatency:         {metricName: "replicator.latency"},
+		ReplicatorRetryPercentage: {metricName: "replicator.retry-percentage", metricType: Gauge},
 	},
 }
 

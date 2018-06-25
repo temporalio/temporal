@@ -277,16 +277,26 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 	s.Nil(s.domainCache.refreshDomains())
 	s.Equal(domainNotificationVersion, s.domainCache.GetDomainNotificationVersion())
 
-	entriesNotification := []*DomainCacheEntry{}
+	entriesNotificationBefore := []*DomainCacheEntry{}
+	entriesNotificationAfter := []*DomainCacheEntry{}
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(0)
-	s.domainCache.RegisterDomainChangeCallback(0, currentDomainNotificationVersion, func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-		s.Nil(prevDomain)
-		entriesNotification = append(entriesNotification, nextDomain)
-	})
+	s.domainCache.RegisterDomainChangeCallback(
+		0,
+		currentDomainNotificationVersion,
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			s.Nil(prevDomain)
+			entriesNotificationBefore = append(entriesNotificationBefore, nextDomain)
+		},
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			s.Nil(prevDomain)
+			entriesNotificationAfter = append(entriesNotificationAfter, nextDomain)
+		},
+	)
 
 	// the order matters here, should be ordered by notification version
-	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotification)
+	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotificationBefore)
+	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotificationAfter)
 }
 
 func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
@@ -377,16 +387,28 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	entry1New := s.buildEntryFromRecord(domainRecord1New)
 	domainNotificationVersion++
 
-	entriesOld := []*DomainCacheEntry{}
-	entriesNew := []*DomainCacheEntry{}
+	entriesOldBefore := []*DomainCacheEntry{}
+	entriesNewBefore := []*DomainCacheEntry{}
+	entriesOldAfter := []*DomainCacheEntry{}
+	entriesNewAfter := []*DomainCacheEntry{}
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(9999999)
-	s.domainCache.RegisterDomainChangeCallback(0, currentDomainNotificationVersion, func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-		entriesOld = append(entriesOld, prevDomain)
-		entriesNew = append(entriesNew, nextDomain)
-	})
-	s.Empty(entriesOld)
-	s.Empty(entriesNew)
+	s.domainCache.RegisterDomainChangeCallback(
+		0,
+		currentDomainNotificationVersion,
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			entriesOldBefore = append(entriesOldBefore, prevDomain)
+			entriesNewBefore = append(entriesNewBefore, nextDomain)
+		},
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			entriesOldAfter = append(entriesOldAfter, prevDomain)
+			entriesNewAfter = append(entriesNewAfter, nextDomain)
+		},
+	)
+	s.Empty(entriesOldBefore)
+	s.Empty(entriesNewBefore)
+	s.Empty(entriesOldAfter)
+	s.Empty(entriesNewAfter)
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil).Once()
 	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
@@ -402,8 +424,10 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	// the record 1 got updated later, thus a higher notification version.
 	// making sure notifying from lower to higher version helps the shard to keep track the
 	// domain change events
-	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOld)
-	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNew)
+	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOldBefore)
+	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNewBefore)
+	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOldAfter)
+	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNewAfter)
 }
 
 func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
@@ -442,19 +466,30 @@ func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 	s.Nil(err)
 	s.Equal(entryOld, entry)
 
-	callbackInvoked := false
+	callbackBeforeInvoked := false
+	callbackAfterInvoked := false
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(9999999)
-	s.domainCache.RegisterDomainChangeCallback(0, currentDomainNotificationVersion, func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-		s.Equal(entryOld, prevDomain)
-		s.Equal(entryNew, nextDomain)
-		callbackInvoked = true
-	})
+	s.domainCache.RegisterDomainChangeCallback(
+		0,
+		currentDomainNotificationVersion,
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			s.Equal(entryOld, prevDomain)
+			s.Equal(entryNew, nextDomain)
+			callbackBeforeInvoked = true
+		},
+		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+			s.Equal(entryOld, prevDomain)
+			s.Equal(entryNew, nextDomain)
+			callbackAfterInvoked = true
+		},
+	)
 
 	entry, err = s.domainCache.updateIDToDomainCache(domainRecordNew.Info.ID, entryNew)
 	s.Nil(err)
 	s.Equal(entryNew, entry)
-	s.False(callbackInvoked)
+	s.False(callbackBeforeInvoked)
+	s.False(callbackAfterInvoked)
 }
 
 func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {

@@ -145,9 +145,9 @@ func (_m *DomainCacheMock) GetDomainNotificationVersion() int64 {
 	return r0
 }
 
-// RegisterDomainChangeCallback provides a mock function with given fields: shard, initialNotificationVersion, fn
-func (_m *DomainCacheMock) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, fn CallbackFn) {
-	_m.Called(shard, initialNotificationVersion, fn)
+// RegisterDomainChangeCallback provides a mock function with given fields: shard, initialNotificationVersion, beforeCallback, afterCallback
+func (_m *DomainCacheMock) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, beforeCallback CallbackFn, afterCallback CallbackFn) {
+	_m.Called(shard, initialNotificationVersion, beforeCallback, afterCallback)
 }
 
 // Start provides a mock function with given fields:

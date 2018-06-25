@@ -194,26 +194,52 @@ func (e *historyEngineImpl) Stop() {
 }
 
 func (e *historyEngineImpl) registerDomainFailoverCallback() {
+
+	failoverPredicate := func(nextDomain *cache.DomainCacheEntry, action func()) {
+		domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
+		shardNotificationVersion := e.shard.GetDomainNotificationVersion()
+		domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
+
+		if nextDomain.IsGlobalDomain() &&
+			domainFailoverNotificationVersion >= shardNotificationVersion &&
+			domainActiveCluster == e.currentClusterName {
+			action()
+		}
+	}
+
 	// first set the failover callback
 	e.shard.GetDomainCache().RegisterDomainChangeCallback(
 		e.shard.GetShardID(),
 		e.shard.GetDomainCache().GetDomainNotificationVersion(),
+		// before the domain change, this will be invoked when (most of time) domain cache is locked
 		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
-			domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
-			shardNotificationVersion := e.shard.GetDomainNotificationVersion()
-			domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
-
 			e.logger.Infof("Domain Change Event: Shard: %v, Domain: %v, ID: %v, Failover Notification Version: %v, Active Cluster: %v, Shard Domain Notification Version: %v\n",
-				e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID, domainFailoverNotificationVersion, domainActiveCluster, shardNotificationVersion)
+				e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID,
+				nextDomain.GetFailoverNotificationVersion(), nextDomain.GetReplicationConfig().ActiveClusterName, e.shard.GetDomainNotificationVersion())
 
-			if nextDomain.IsGlobalDomain() &&
-				domainFailoverNotificationVersion >= shardNotificationVersion &&
-				domainActiveCluster == e.currentClusterName {
-				domainID := prevDomain.GetInfo().ID
+			failoverPredicate(nextDomain, func() {
+				e.logger.Infof("Domain Failover Start: Shard: %v, Domain: %v, ID: %v\n",
+					e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID)
+
+				domainID := nextDomain.GetInfo().ID
 				e.txProcessor.FailoverDomain(domainID)
 				e.timerProcessor.FailoverDomain(domainID)
-			}
+			})
+		},
+		// after the domain change, this will be invoked when domain cache is NOT locked
+		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
+			failoverPredicate(nextDomain, func() {
+				e.logger.Infof("Domain Failover Notify Active: Shard: %v, Domain: %v, ID: %v\n",
+					e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID)
 
+				now := e.shard.GetTimeSource().Now()
+				// the fake tasks will not be actually used, we just need to make sure
+				// its length > 0 and has correct timestamp, to trkgger a db scan
+				fakeDecisionTask := []persistence.Task{&persistence.DecisionTask{}}
+				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
+				e.txProcessor.NotifyNewTask(e.currentClusterName, now, fakeDecisionTask)
+				e.timerProcessor.NotifyNewTimers(e.currentClusterName, now, fakeDecisionTimeoutTask)
+			})
 			e.shard.UpdateDomainNotificationVersion(nextDomain.GetNotificationVersion() + 1)
 		},
 	)
