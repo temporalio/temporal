@@ -780,7 +780,7 @@ Update_History_Loop:
 		}
 
 		// Start a timer for the decision task.
-		timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(scheduleID, di.Attempt, di.DecisionTimeout)
+		timeOutTask := tBuilder.AddStartToCloseDecisionTimoutTask(di.ScheduleID, di.Attempt, di.DecisionTimeout)
 		timerTasks := []persistence.Task{timeOutTask}
 		defer e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 
