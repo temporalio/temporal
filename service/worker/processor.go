@@ -68,7 +68,7 @@ const (
 	// [0.9, 0.95) percentage max retry count
 	retryCount95PercentInRetry int64 = 32
 	// [0.95, 1] percentage max retry count
-	retryCount100PercentInRetry int64 = 8
+	retryCount100PercentInRetry int64 = 16
 
 	retryErrorWaitMillis = 100
 )

@@ -28,6 +28,7 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -40,13 +41,13 @@ type (
 		currentClusterName     string
 		shard                  ShardContext
 		config                 *Config
+		metricsClient          metrics.Client
 		historyService         *historyEngineImpl
 		ackLevel               TimerSequenceID
 		logger                 bark.Logger
 		matchingClient         matching.Client
 		isStarted              int32
 		isStopped              int32
-		finishedTaskCounter    int
 		shutdownChan           chan struct{}
 		activeTimerProcessor   *timerQueueActiveProcessorImpl
 		standbyTimerProcessors map[string]*timerQueueStandbyProcessorImpl
@@ -70,11 +71,11 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		currentClusterName:     currentClusterName,
 		shard:                  shard,
 		config:                 shard.GetConfig(),
+		metricsClient:          historyService.metricsClient,
 		historyService:         historyService,
 		ackLevel:               TimerSequenceID{VisibilityTimestamp: shard.GetTimerAckLevel()},
 		logger:                 logger,
 		matchingClient:         matchingClient,
-		finishedTaskCounter:    0,
 		shutdownChan:           make(chan struct{}),
 		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
@@ -201,6 +202,8 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		return nil
 	}
 
+	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
+
 	executionMgr := t.shard.GetExecutionManager()
 	minTimestamp := lowerAckLevel.VisibilityTimestamp
 	// releax the upper limit for scan since the query is [minTimestamp, minTimestamp)
@@ -231,7 +234,6 @@ LoadCompleteLoop:
 				TaskID:              timer.TaskID}); err != nil {
 				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timer, err)
 			}
-			t.finishedTaskCounter++
 		}
 
 		if len(response.NextPageToken) == 0 {
@@ -240,9 +242,6 @@ LoadCompleteLoop:
 	}
 	t.ackLevel = upperAckLevel
 
-	if t.finishedTaskCounter >= t.config.TimerProcessorUpdateShardTaskCount() {
-		t.finishedTaskCounter = 0
-		t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
-	}
+	t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
 	return nil
 }

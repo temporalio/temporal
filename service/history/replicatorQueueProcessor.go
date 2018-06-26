@@ -68,7 +68,6 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 		UpdateAckInterval:                config.ReplicatorProcessorUpdateAckInterval,
 		MaxRetryCount:                    config.ReplicatorTaskMaxRetryCount,
 		MetricScope:                      metrics.ReplicatorQueueProcessorScope,
-		UpdateShardTaskCount:             config.ReplicatorProcessorUpdateShardTaskCount,
 	}
 
 	logger = logger.WithFields(bark.Fields{

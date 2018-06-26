@@ -51,8 +51,6 @@ type (
 		readLevel        int64
 		ackLevel         int64
 		isReadFinished   bool
-		// number of finished and acked tasks, used to reduce # of calls to update shard
-		finishedTaskCounter int
 	}
 )
 
@@ -169,6 +167,8 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 	a.Lock()
 	ackLevel := a.ackLevel
 
+	a.logger.Debugf("Moving timer ack level from %v, with %v.", ackLevel, a.outstandingTasks)
+
 	// task ID is not sequancial, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
 	var taskIDs []int64
@@ -181,28 +181,25 @@ MoveAckLevelLoop:
 	for _, current := range taskIDs {
 		acked := a.outstandingTasks[current]
 		if acked {
-			a.logger.Debugf("Updating ack level: %v", current)
 			ackLevel = current
-			a.finishedTaskCounter++
 			delete(a.outstandingTasks, current)
+			a.logger.Debugf("Moving timer ack level to %v.", ackLevel)
 		} else {
 			break MoveAckLevelLoop
 		}
 	}
+	updateShard := a.ackLevel != ackLevel
 	a.ackLevel = ackLevel
 
 	if a.isFailover && a.isReadFinished && len(a.outstandingTasks) == 0 {
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown
+		a.logger.Debugf("Queue ack manager shutdoen.")
 		a.finishedChan <- struct{}{}
 	}
+	a.Unlock()
 
-	if a.finishedTaskCounter < a.options.UpdateShardTaskCount() {
-		a.Unlock()
-	} else {
-		a.finishedTaskCounter = 0
-		a.Unlock()
-
+	if updateShard {
 		if !a.isFailover {
 			if err := a.processor.updateAckLevel(ackLevel); err != nil {
 				a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)

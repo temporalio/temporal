@@ -65,7 +65,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	timerGate := NewLocalTimerGate()
 	// this will trigger a timer gate fire event immediately
 	timerGate.Update(time.Time{})
-	timerQueueAckMgr := newTimerQueueAckMgr(shard, historyService.metricsClient, currentClusterName, logger)
+	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerActiveQueueProcessorScope, shard, historyService.metricsClient, currentClusterName, logger)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
@@ -76,7 +76,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		metricsClient:           historyService.metricsClient,
 		currentClusterName:      currentClusterName,
 		timerGate:               timerGate,
-		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
+		timerQueueProcessorBase: newTimerQueueProcessorBase(metrics.TimerActiveQueueProcessorScope, shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
@@ -109,7 +109,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		metricsClient:           historyService.metricsClient,
 		matchingClient:          matchingClient,
 		timerGate:               NewLocalTimerGate(),
-		timerQueueProcessorBase: newTimerQueueProcessorBase(shard, historyService, timerQueueAckMgr, timeNow, logger),
+		timerQueueProcessorBase: newTimerQueueProcessorBase(metrics.TimerActiveQueueProcessorScope, shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
@@ -136,7 +136,7 @@ func (t *timerQueueActiveProcessorImpl) getTimerGate() TimerGate {
 // NotifyNewTimers - Notify the processor about the new active timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueActiveProcessorImpl) notifyNewTimers(timerTasks []persistence.Task) {
-	t.timerQueueProcessorBase.notifyNewTimers(timerTasks, metrics.NewActiveTimerCounter)
+	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
 func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo) error {
@@ -150,30 +150,30 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		return nil
 	}
 
-	scope := metrics.TimerQueueProcessorScope
+	scope := metrics.TimerActiveQueueProcessorScope
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		scope = metrics.TimerTaskUserTimerScope
+		scope = metrics.TimerActiveTaskUserTimerScope
 		err = t.processExpiredUserTimer(timerTask)
 
 	case persistence.TaskTypeActivityTimeout:
-		scope = metrics.TimerTaskActivityTimeoutScope
+		scope = metrics.TimerActiveTaskActivityTimeoutScope
 		err = t.processActivityTimeout(timerTask)
 
 	case persistence.TaskTypeDecisionTimeout:
-		scope = metrics.TimerTaskDecisionTimeoutScope
+		scope = metrics.TimerActiveTaskDecisionTimeoutScope
 		err = t.processDecisionTimeout(timerTask)
 
 	case persistence.TaskTypeWorkflowTimeout:
-		scope = metrics.TimerTaskWorkflowTimeoutScope
+		scope = metrics.TimerActiveTaskWorkflowTimeoutScope
 		err = t.processWorkflowTimeout(timerTask)
 
 	case persistence.TaskTypeRetryTimer:
-		scope = metrics.TimerTaskRetryTimerScope
+		scope = metrics.TimerActiveTaskRetryTimerScope
 		err = t.processRetryTimer(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
-		scope = metrics.TimerTaskDeleteHistoryEvent
+		scope = metrics.TimerActiveTaskDeleteHistoryEvent
 		err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
 	}
 
@@ -198,8 +198,8 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 }
 
 func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerTaskUserTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskUserTimerScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskUserTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskUserTimerScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
@@ -267,8 +267,8 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskActivityTimeoutScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskActivityTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
@@ -344,7 +344,7 @@ Update_History_Loop:
 				switch timeoutType {
 				case workflow.TimeoutTypeScheduleToClose:
 					{
-						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
+						t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToCloseTimeoutCounter)
 						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
 							return errFailedToAddTimeoutEvent
 						}
@@ -353,7 +353,7 @@ Update_History_Loop:
 
 				case workflow.TimeoutTypeStartToClose:
 					{
-						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
+						t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.StartToCloseTimeoutCounter)
 						if ai.StartedID != common.EmptyEventID {
 							if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
 								return errFailedToAddTimeoutEvent
@@ -364,7 +364,7 @@ Update_History_Loop:
 
 				case workflow.TimeoutTypeHeartbeat:
 					{
-						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
+						t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.HeartbeatTimeoutCounter)
 						if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, ai.Details) == nil {
 							return errFailedToAddTimeoutEvent
 						}
@@ -373,7 +373,7 @@ Update_History_Loop:
 
 				case workflow.TimeoutTypeScheduleToStart:
 					{
-						t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+						t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 						if ai.StartedID == common.EmptyEventID {
 							if msBuilder.AddActivityTaskTimedOutEvent(ai.ScheduleID, ai.StartedID, timeoutType, nil) == nil {
 								return errFailedToAddTimeoutEvent
@@ -424,8 +424,8 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskDecisionTimeoutScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
@@ -459,14 +459,14 @@ Update_History_Loop:
 		scheduleNewDecision := false
 		switch task.TimeoutType {
 		case int(workflow.TimeoutTypeStartToClose):
-			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
+			t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.StartToCloseTimeoutCounter)
 			if di.Attempt == task.ScheduleAttempt {
 				// Add a decision task timeout event.
 				msBuilder.AddDecisionTaskTimedOutEvent(scheduleID, di.StartedID)
 				scheduleNewDecision = true
 			}
 		case int(workflow.TimeoutTypeScheduleToStart):
-			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
+			t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.ScheduleToStartTimeoutCounter)
 			// decision schedule to start timeout only apply to sticky decision
 			// check if scheduled decision still pending and not started yet
 			if di.Attempt == task.ScheduleAttempt && di.StartedID == common.EmptyEventID && msBuilder.IsStickyTaskListEnabled() {
@@ -500,8 +500,8 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerTaskRetryTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskRetryTimerScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskRetryTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskRetryTimerScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processFn := func() error {
@@ -575,8 +575,8 @@ func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.Time
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerTaskWorkflowTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskWorkflowTimeoutScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))

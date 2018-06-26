@@ -141,8 +141,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{
-		UpdateShardTaskCount: dynamicconfig.GetIntPropertyFn(1),
-		MetricScope:          metrics.ReplicatorQueueProcessorScope,
+		MetricScope: metrics.ReplicatorQueueProcessorScope,
 	}, s.mockProcessor, 0, s.logger)
 }
 
@@ -279,7 +278,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Equal(moreOutput, moreInput)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: false, taskID3: false}, s.queueAckMgr.outstandingTasks)
 
-	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil)
+	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
 	s.mockProcessor.On("completeTask", taskID1).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID1)
 	s.queueAckMgr.updateQueueAckLevel()
@@ -290,7 +289,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
-	s.mockProcessor.On("updateAckLevel", taskID3).Return(nil)
+	s.mockProcessor.On("updateAckLevel", taskID3).Return(nil).Once()
 	s.mockProcessor.On("completeTask", taskID2).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID2)
 	s.queueAckMgr.updateQueueAckLevel()
@@ -350,8 +349,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{
-		UpdateShardTaskCount: dynamicconfig.GetIntPropertyFn(1),
-		MetricScope:          metrics.ReplicatorQueueProcessorScope,
+		MetricScope: metrics.ReplicatorQueueProcessorScope,
 	}, s.mockProcessor, 0, s.logger)
 }
 

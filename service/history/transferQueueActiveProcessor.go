@@ -77,8 +77,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		MaxPollIntervalJitterCoefficient: config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                config.TransferProcessorUpdateAckInterval,
 		MaxRetryCount:                    config.TransferTaskMaxRetryCount,
-		MetricScope:                      metrics.TransferQueueProcessorScope,
-		UpdateShardTaskCount:             config.TransferProcessorUpdateShardTaskCount,
+		MetricScope:                      metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{
@@ -129,8 +128,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		MaxPollIntervalJitterCoefficient: config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                config.TransferProcessorUpdateAckInterval,
 		MaxRetryCount:                    config.TransferTaskMaxRetryCount,
-		MetricScope:                      metrics.TransferQueueProcessorScope,
-		UpdateShardTaskCount:             config.TransferProcessorUpdateShardTaskCount,
+		MetricScope:                      metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = logger.WithFields(bark.Fields{
@@ -193,22 +191,22 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) error {
 	scope := metrics.TransferQueueProcessorScope
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		scope = metrics.TransferTaskActivityScope
+		scope = metrics.TransferActiveTaskActivityScope
 		err = t.processActivityTask(task)
 	case persistence.TransferTaskTypeDecisionTask:
-		scope = metrics.TransferTaskDecisionScope
+		scope = metrics.TransferActiveTaskDecisionScope
 		err = t.processDecisionTask(task)
 	case persistence.TransferTaskTypeCloseExecution:
-		scope = metrics.TransferTaskCloseExecutionScope
+		scope = metrics.TransferActiveTaskCloseExecutionScope
 		err = t.processCloseExecution(task)
 	case persistence.TransferTaskTypeCancelExecution:
-		scope = metrics.TransferTaskCancelExecutionScope
+		scope = metrics.TransferActiveTaskCancelExecutionScope
 		err = t.processCancelExecution(task)
 	case persistence.TransferTaskTypeSignalExecution:
-		scope = metrics.TransferTaskSignalExecutionScope
+		scope = metrics.TransferActiveTaskSignalExecutionScope
 		err = t.processSignalExecution(task)
 	case persistence.TransferTaskTypeStartChildExecution:
-		scope = metrics.TransferTaskStartChildExecutionScope
+		scope = metrics.TransferActiveTaskStartChildExecutionScope
 		err = t.processStartChildExecution(task)
 	default:
 		err = errUnknownTransferTask
@@ -235,8 +233,8 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) error {
 }
 
 func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskActivityScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskActivityScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskActivityScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskActivityScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -292,8 +290,8 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 }
 
 func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskDecisionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskDecisionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskDecisionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskDecisionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -374,8 +372,8 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 }
 
 func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskCloseExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskCloseExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskCloseExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskCloseExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -476,8 +474,8 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 }
 
 func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskCancelExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskCancelExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskCancelExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskCancelExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -599,8 +597,8 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persiste
 }
 
 func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskSignalExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskSignalExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskSignalExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskSignalExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error
@@ -731,8 +729,8 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 }
 
 func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferTaskStartChildExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskStartChildExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferActiveTaskStartChildExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskStartChildExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	var err error

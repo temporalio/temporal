@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -41,6 +42,7 @@ type (
 		currentClusterName    string
 		shard                 ShardContext
 		config                *Config
+		metricsClient         metrics.Client
 		historyService        *historyEngineImpl
 		visibilityMgr         persistence.VisibilityManager
 		matchingClient        matching.Client
@@ -49,7 +51,6 @@ type (
 		logger                bark.Logger
 		isStarted             int32
 		isStopped             int32
-		finishedTaskCounter   int
 		shutdownChan          chan struct{}
 		activeTaskProcessor   *transferQueueActiveProcessorImpl
 		standbyTaskProcessors map[string]*transferQueueStandbyProcessorImpl
@@ -74,13 +75,13 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 		currentClusterName:    currentClusterName,
 		shard:                 shard,
 		config:                shard.GetConfig(),
+		metricsClient:         historyService.metricsClient,
 		historyService:        historyService,
 		visibilityMgr:         visibilityMgr,
 		matchingClient:        matchingClient,
 		historyClient:         historyClient,
 		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
-		finishedTaskCounter:   0,
 		shutdownChan:          make(chan struct{}),
 		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, matchingClient, historyClient, logger),
 		standbyTaskProcessors: standbyTaskProcessors,
@@ -204,6 +205,8 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
+	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
+
 	executionMgr := t.shard.GetExecutionManager()
 	maxLevel := upperAckLevel + 1
 	batchSize := t.config.TransferTaskBatchSize()
@@ -229,7 +232,6 @@ LoadCompleteLoop:
 			if err := executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: task.GetTaskID()}); err != nil {
 				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", task, err)
 			}
-			t.finishedTaskCounter++
 		}
 
 		if len(response.NextPageToken) == 0 {
@@ -238,9 +240,6 @@ LoadCompleteLoop:
 	}
 	t.ackLevel = upperAckLevel
 
-	if t.finishedTaskCounter >= t.config.TransferProcessorUpdateShardTaskCount() {
-		t.finishedTaskCounter = 0
-		t.shard.UpdateTransferAckLevel(upperAckLevel)
-	}
+	t.shard.UpdateTransferAckLevel(upperAckLevel)
 	return nil
 }

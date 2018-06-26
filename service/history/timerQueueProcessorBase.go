@@ -47,6 +47,7 @@ var (
 
 type (
 	timerQueueProcessorBase struct {
+		scope            int
 		shard            ShardContext
 		historyService   *historyEngineImpl
 		cache            *historyCache
@@ -75,7 +76,7 @@ type (
 	}
 )
 
-func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngineImpl, timerQueueAckMgr timerQueueAckMgr, timeNow timeNow, logger bark.Logger) *timerQueueProcessorBase {
+func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *historyEngineImpl, timerQueueAckMgr timerQueueAckMgr, timeNow timeNow, logger bark.Logger) *timerQueueProcessorBase {
 	log := logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
 	})
@@ -87,6 +88,7 @@ func newTimerQueueProcessorBase(shard ShardContext, historyService *historyEngin
 	}
 
 	base := &timerQueueProcessorBase{
+		scope:                   scope,
 		shard:                   shard,
 		historyService:          historyService,
 		cache:                   historyService.historyCache,
@@ -209,6 +211,7 @@ ProcessRetryLoop:
 			err = t.timerProcessor.process(task)
 			if err != nil {
 				if err == ErrTaskRetry {
+					t.metricsClient.IncCounter(t.scope, metrics.HistoryTaskStandbyRetryCounter)
 					<-notificationChan
 				} else {
 					logging.LogTaskProcessingFailedEvent(logger, err)
@@ -217,6 +220,7 @@ ProcessRetryLoop:
 					// just keep try for cache.DomainCacheRefreshInterval
 					// and giveup
 					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+						t.metricsClient.IncCounter(t.scope, metrics.HistoryTaskNotActiveCounter)
 						return
 					}
 					backoff := time.Duration(attempt * 100)
@@ -244,12 +248,13 @@ ProcessRetryLoop:
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task, counterType int) {
+func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task) {
 	if len(timerTasks) == 0 {
 		return
 	}
 
-	t.metricsClient.AddCounter(metrics.TimerQueueProcessorScope, counterType, int64(len(timerTasks)))
+	isActive := t.scope == metrics.TimerActiveQueueProcessorScope
+
 	newTime := persistence.GetVisibilityTSFrom(timerTasks[0])
 	for _, task := range timerTasks {
 		ts := persistence.GetVisibilityTSFrom(task)
@@ -259,17 +264,41 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task,
 
 		switch task.GetType() {
 		case persistence.TaskTypeDecisionTimeout:
-			t.metricsClient.IncCounter(metrics.TimerTaskDecisionTimeoutScope, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDecisionTimeoutScope, metrics.NewTimerCounter)
+			}
 		case persistence.TaskTypeActivityTimeout:
-			t.metricsClient.IncCounter(metrics.TimerTaskActivityTimeoutScope, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskActivityTimeoutScope, metrics.NewTimerCounter)
+			}
 		case persistence.TaskTypeUserTimer:
-			t.metricsClient.IncCounter(metrics.TimerTaskUserTimerScope, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskUserTimerScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskUserTimerScope, metrics.NewTimerCounter)
+			}
 		case persistence.TaskTypeWorkflowTimeout:
-			t.metricsClient.IncCounter(metrics.TimerTaskWorkflowTimeoutScope, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowTimeoutScope, metrics.NewTimerCounter)
+			}
 		case persistence.TaskTypeDeleteHistoryEvent:
-			t.metricsClient.IncCounter(metrics.TimerTaskDeleteHistoryEvent, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskDeleteHistoryEvent, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDeleteHistoryEvent, metrics.NewTimerCounter)
+			}
 		case persistence.TaskTypeRetryTimer:
-			t.metricsClient.IncCounter(metrics.TimerTaskRetryTimerScope, counterType)
+			if isActive {
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskRetryTimerScope, metrics.NewTimerCounter)
+			} else {
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskRetryTimerScope, metrics.NewTimerCounter)
+			}
 			// TODO add default
 		}
 	}
@@ -339,7 +368,7 @@ continueProcessor:
 				t.newTime = emptyTime
 				t.newTimeLock.Unlock()
 				// New Timer has arrived.
-				t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.NewTimerNotifyCounter)
+				t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
 				t.logger.Debugf("Woke up by the timer")
 
 				if timerGate.Update(newTime) {
@@ -412,8 +441,8 @@ func (t *timerQueueProcessorBase) getDomainIDAndWorkflowExecution(task *persiste
 }
 
 func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerTaskDeleteHistoryEvent, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerTaskDeleteHistoryEvent, metrics.TaskLatency)
+	t.metricsClient.IncCounter(t.scope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(t.scope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(task))

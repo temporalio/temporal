@@ -364,32 +364,64 @@ const (
 	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope
-	// TransferTaskActivityScope is the scope used for activity task processing by transfer queue processor
-	TransferTaskActivityScope
-	// TransferTaskDecisionScope is the scope used for decision task processing by transfer queue processor
-	TransferTaskDecisionScope
-	// TransferTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
-	TransferTaskCloseExecutionScope
-	// TransferTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
-	TransferTaskCancelExecutionScope
-	// TransferTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
-	TransferTaskSignalExecutionScope
-	// TransferTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
-	TransferTaskStartChildExecutionScope
+	// TransferActiveQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
+	TransferActiveQueueProcessorScope
+	// TransferStandbyQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
+	TransferStandbyQueueProcessorScope
+	// TransferActiveTaskActivityScope is the scope used for activity task processing by transfer queue processor
+	TransferActiveTaskActivityScope
+	// TransferActiveTaskDecisionScope is the scope used for decision task processing by transfer queue processor
+	TransferActiveTaskDecisionScope
+	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
+	TransferActiveTaskCloseExecutionScope
+	// TransferActiveTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
+	TransferActiveTaskCancelExecutionScope
+	// TransferActiveTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
+	TransferActiveTaskSignalExecutionScope
+	// TransferActiveTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
+	TransferActiveTaskStartChildExecutionScope
+	// TransferStandbyTaskActivityScope is the scope used for activity task processing by transfer queue processor
+	TransferStandbyTaskActivityScope
+	// TransferStandbyTaskDecisionScope is the scope used for decision task processing by transfer queue processor
+	TransferStandbyTaskDecisionScope
+	// TransferStandbyTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
+	TransferStandbyTaskCloseExecutionScope
+	// TransferStandbyTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
+	TransferStandbyTaskCancelExecutionScope
+	// TransferStandbyTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
+	TransferStandbyTaskSignalExecutionScope
+	// TransferStandbyTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
+	TransferStandbyTaskStartChildExecutionScope
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerQueueProcessorScope
-	// TimerTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
-	TimerTaskActivityTimeoutScope
-	// TimerTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
-	TimerTaskDecisionTimeoutScope
-	// TimerTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
-	TimerTaskUserTimerScope
-	// TimerTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
-	TimerTaskWorkflowTimeoutScope
-	// TimerTaskRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
-	TimerTaskRetryTimerScope
-	// TimerTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
-	TimerTaskDeleteHistoryEvent
+	// TimerActiveQueueProcessorScope is the scope used by all metric emitted by timer queue processor
+	TimerActiveQueueProcessorScope
+	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
+	TimerStandbyQueueProcessorScope
+	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
+	TimerActiveTaskActivityTimeoutScope
+	// TimerActiveTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
+	TimerActiveTaskDecisionTimeoutScope
+	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
+	TimerActiveTaskUserTimerScope
+	// TimerActiveTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
+	TimerActiveTaskWorkflowTimeoutScope
+	// TimerActiveTaskRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
+	TimerActiveTaskRetryTimerScope
+	// TimerActiveTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
+	TimerActiveTaskDeleteHistoryEvent
+	// TimerStandbyTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
+	TimerStandbyTaskActivityTimeoutScope
+	// TimerStandbyTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
+	TimerStandbyTaskDecisionTimeoutScope
+	// TimerStandbyTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
+	TimerStandbyTaskUserTimerScope
+	// TimerStandbyTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
+	TimerStandbyTaskWorkflowTimeoutScope
+	// TimerStandbyTaskRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
+	TimerStandbyTaskRetryTimerScope
+	// TimerStandbyTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
+	TimerStandbyTaskDeleteHistoryEvent
 	// HistoryEventNotificationScope is the scope used by shard history event nitification
 	HistoryEventNotificationScope
 	// ReplicatorQueueProcessorScope is the scope used by all metric emitted by replicator queue processor
@@ -568,19 +600,35 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReplicateEventsScope:                  {operation: "ReplicateEvents"},
 		HistoryShardControllerScope:                  {operation: "ShardController"},
 		TransferQueueProcessorScope:                  {operation: "TransferQueueProcessor"},
-		TransferTaskActivityScope:                    {operation: "TransferTaskActivity"},
-		TransferTaskDecisionScope:                    {operation: "TransferTaskDecision"},
-		TransferTaskCloseExecutionScope:              {operation: "TransferTaskCloseExecution"},
-		TransferTaskCancelExecutionScope:             {operation: "TransferTaskCancelExecution"},
-		TransferTaskSignalExecutionScope:             {operation: "TransferTaskSignalExecution"},
-		TransferTaskStartChildExecutionScope:         {operation: "TransferTaskStartChildExecution"},
+		TransferActiveQueueProcessorScope:            {operation: "TransferActiveQueueProcessor"},
+		TransferStandbyQueueProcessorScope:           {operation: "TransferStandbyQueueProcessor"},
+		TransferActiveTaskActivityScope:              {operation: "TransferActiveTaskActivity"},
+		TransferActiveTaskDecisionScope:              {operation: "TransferActiveTaskDecision"},
+		TransferActiveTaskCloseExecutionScope:        {operation: "TransferActiveTaskCloseExecution"},
+		TransferActiveTaskCancelExecutionScope:       {operation: "TransferActiveTaskCancelExecution"},
+		TransferActiveTaskSignalExecutionScope:       {operation: "TransferActiveTaskSignalExecution"},
+		TransferActiveTaskStartChildExecutionScope:   {operation: "TransferActiveTaskStartChildExecution"},
+		TransferStandbyTaskActivityScope:             {operation: "TransferStandbyTaskActivity"},
+		TransferStandbyTaskDecisionScope:             {operation: "TransferStandbyTaskDecision"},
+		TransferStandbyTaskCloseExecutionScope:       {operation: "TransferStandbyTaskCloseExecution"},
+		TransferStandbyTaskCancelExecutionScope:      {operation: "TransferStandbyTaskCancelExecution"},
+		TransferStandbyTaskSignalExecutionScope:      {operation: "TransferStandbyTaskSignalExecution"},
+		TransferStandbyTaskStartChildExecutionScope:  {operation: "TransferStandbyTaskStartChildExecution"},
 		TimerQueueProcessorScope:                     {operation: "TimerQueueProcessor"},
-		TimerTaskActivityTimeoutScope:                {operation: "TimerTaskActivityTimeout"},
-		TimerTaskDecisionTimeoutScope:                {operation: "TimerTaskDecisionTimeout"},
-		TimerTaskUserTimerScope:                      {operation: "TimerTaskUserTimer"},
-		TimerTaskWorkflowTimeoutScope:                {operation: "TimerTaskWorkflowTimeout"},
-		TimerTaskRetryTimerScope:                     {operation: "TimerTaskRetryTimer"},
-		TimerTaskDeleteHistoryEvent:                  {operation: "TimerTaskDeleteHistoryEvent"},
+		TimerActiveQueueProcessorScope:               {operation: "TimerActiveQueueProcessor"},
+		TimerStandbyQueueProcessorScope:              {operation: "TimerStandbyQueueProcessor"},
+		TimerActiveTaskActivityTimeoutScope:          {operation: "TimerActiveTaskActivityTimeout"},
+		TimerActiveTaskDecisionTimeoutScope:          {operation: "TimerActiveTaskDecisionTimeout"},
+		TimerActiveTaskUserTimerScope:                {operation: "TimerActiveTaskUserTimer"},
+		TimerActiveTaskWorkflowTimeoutScope:          {operation: "TimerActiveTaskWorkflowTimeout"},
+		TimerActiveTaskRetryTimerScope:               {operation: "TimerActiveTaskRetryTimer"},
+		TimerActiveTaskDeleteHistoryEvent:            {operation: "TimerActiveTaskDeleteHistoryEvent"},
+		TimerStandbyTaskActivityTimeoutScope:         {operation: "TimerStandbyTaskActivityTimeout"},
+		TimerStandbyTaskDecisionTimeoutScope:         {operation: "TimerStandbyTaskDecisionTimeout"},
+		TimerStandbyTaskUserTimerScope:               {operation: "TimerStandbyTaskUserTimer"},
+		TimerStandbyTaskWorkflowTimeoutScope:         {operation: "TimerStandbyTaskWorkflowTimeout"},
+		TimerStandbyTaskRetryTimerScope:              {operation: "TimerStandbyTaskRetryTimer"},
+		TimerStandbyTaskDeleteHistoryEvent:           {operation: "TimerStandbyTaskDeleteHistoryEvent"},
 		HistoryEventNotificationScope:                {operation: "HistoryEventNotification"},
 		ReplicatorQueueProcessorScope:                {operation: "ReplicatorQueueProcessor"},
 		ReplicatorTaskHistoryScope:                   {operation: "ReplicatorTaskHistory"},
@@ -667,8 +715,7 @@ const (
 	ScheduleToStartTimeoutCounter
 	StartToCloseTimeoutCounter
 	ScheduleToCloseTimeoutCounter
-	NewActiveTimerCounter
-	NewStandbyTimerCounter
+	NewTimerCounter
 	NewTimerNotifyCounter
 	AcquireShardsCounter
 	AcquireShardsLatency
@@ -689,6 +736,9 @@ const (
 	StaleReplicationEventsCounter
 	BufferedReplicationTaskCounter
 	HistoryConflictsCounter
+	HistoryTaskStandbyRetryCounter
+	HistoryTaskNotActiveCounter
+	HistoryTaskBatchCompleteCounter
 )
 
 // Matching metrics enum
@@ -769,8 +819,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScheduleToStartTimeoutCounter:                {metricName: "schedule-to-start-timeout", metricType: Counter},
 		StartToCloseTimeoutCounter:                   {metricName: "start-to-close-timeout", metricType: Counter},
 		ScheduleToCloseTimeoutCounter:                {metricName: "schedule-to-close-timeout", metricType: Counter},
-		NewActiveTimerCounter:                        {metricName: "new-active-timer", metricType: Counter},
-		NewStandbyTimerCounter:                       {metricName: "new-standby-timer", metricType: Counter},
+		NewTimerCounter:                              {metricName: "new-timer", metricType: Counter},
 		NewTimerNotifyCounter:                        {metricName: "new-timer-notifications", metricType: Counter},
 		AcquireShardsCounter:                         {metricName: "acquire-shards-count", metricType: Counter},
 		AcquireShardsLatency:                         {metricName: "acquire-shards-latency", metricType: Timer},
@@ -791,6 +840,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		StaleReplicationEventsCounter:                {metricName: "stale-replication-events", metricType: Counter},
 		BufferedReplicationTaskCounter:               {metricName: "buffered-replication-tasks", metricType: Counter},
 		HistoryConflictsCounter:                      {metricName: "history-conflicts", metricType: Counter},
+		HistoryTaskStandbyRetryCounter:               {metricName: "history-task-standby-retry-counter", metricType: Counter},
+		HistoryTaskNotActiveCounter:                  {metricName: "history-task-not-active-counter", metricType: Counter},
+		HistoryTaskBatchCompleteCounter:              {metricName: "history-task-batch-complete-counter", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

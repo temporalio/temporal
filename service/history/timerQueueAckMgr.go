@@ -39,6 +39,7 @@ type (
 	timerSequenceIDs []TimerSequenceID
 
 	timerQueueAckMgrImpl struct {
+		scope         int
 		isFailover    bool
 		clusterName   string
 		shard         ShardContext
@@ -66,8 +67,6 @@ type (
 		// mutable min timer level
 		minQueryLevel time.Time
 		pageToken     []byte
-		// number of finished and acked tasks, used to reduce # of calls to update shard
-		finishedTaskCounter int
 	}
 	// for each cluster, the ack level is the point in time when
 	// all timers before the ack level are processed.
@@ -94,11 +93,12 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
 }
 
-func newTimerQueueAckMgr(shard ShardContext, metricsClient metrics.Client, clusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
+func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client, clusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
 	ackLevel := TimerSequenceID{VisibilityTimestamp: shard.GetTimerClusterAckLevel(clusterName)}
 	maxQueryLevel := timerQueueAckMgrMaxQueryLevel
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
+		scope:            scope,
 		isFailover:       false,
 		clusterName:      clusterName,
 		shard:            shard,
@@ -125,6 +125,7 @@ func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Clien
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
+		scope:            metrics.TimerActiveQueueProcessorScope,
 		isFailover:       true,
 		clusterName:      standbyClusterName,
 		shard:            shard,
@@ -241,11 +242,13 @@ func (t *timerQueueAckMgrImpl) getReadLevel() TimerSequenceID {
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() {
-	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateCounter)
+	t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
 
 	t.Lock()
 	ackLevel := t.ackLevel
 	outstandingTasks := t.outstandingTasks
+
+	t.logger.Debugf("Moving timer ack level from %v, with %v.", ackLevel, outstandingTasks)
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
@@ -260,24 +263,24 @@ MoveAckLevelLoop:
 		acked := outstandingTasks[current]
 		if acked {
 			ackLevel = current
-			t.finishedTaskCounter++
 			delete(outstandingTasks, current)
+			t.logger.Debugf("Moving timer ack level to %v.", ackLevel)
 		} else {
 			break MoveAckLevelLoop
 		}
 	}
+	updateShard := t.ackLevel != ackLevel
 	t.ackLevel = ackLevel
 
 	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shundown
+		t.logger.Debugf("Timer ack manager shutdoen.")
 		t.finishedChan <- struct{}{}
 	}
-	if t.finishedTaskCounter < t.config.TimerProcessorUpdateShardTaskCount() {
-		t.Unlock()
-	} else {
-		t.finishedTaskCounter = 0
-		t.Unlock()
+	t.Unlock()
+
+	if updateShard {
 		t.updateTimerAckLevel(ackLevel)
 	}
 }
@@ -305,13 +308,13 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 }
 
 func (t *timerQueueAckMgrImpl) updateTimerAckLevel(ackLevel TimerSequenceID) {
-	t.logger.Debugf("Updating timer ack level: %v", ackLevel)
+	t.logger.Debugf("Updating timer ack level for shard: %v", ackLevel)
 
 	// not failover ack level updating
 	if !t.isFailover {
 		// Always update ackLevel to detect if the shared is stolen
 		if err := t.shard.UpdateTimerClusterAckLevel(t.clusterName, ackLevel.VisibilityTimestamp); err != nil {
-			t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.AckLevelUpdateFailedCounter)
+			t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
 			t.logger.Errorf("Error updating timer ack level for shard: %v", err)
 		}
 	} else {

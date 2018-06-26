@@ -58,8 +58,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		MaxPollIntervalJitterCoefficient: config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                config.TransferProcessorUpdateAckInterval,
 		MaxRetryCount:                    config.TransferTaskMaxRetryCount,
-		MetricScope:                      metrics.TransferQueueProcessorScope,
-		UpdateShardTaskCount:             config.TransferProcessorUpdateShardTaskCount,
+		MetricScope:                      metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: clusterName,
@@ -116,22 +115,22 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 	scope := metrics.TransferQueueProcessorScope
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		scope = metrics.TransferTaskActivityScope
+		scope = metrics.TransferStandbyTaskActivityScope
 		err = t.processActivityTask(task)
 	case persistence.TransferTaskTypeDecisionTask:
-		scope = metrics.TransferTaskDecisionScope
+		scope = metrics.TransferStandbyTaskDecisionScope
 		err = t.processDecisionTask(task)
 	case persistence.TransferTaskTypeCloseExecution:
-		scope = metrics.TransferTaskCloseExecutionScope
+		scope = metrics.TransferStandbyTaskCloseExecutionScope
 		err = t.processCloseExecution(task)
 	case persistence.TransferTaskTypeCancelExecution:
-		scope = metrics.TransferTaskCancelExecutionScope
+		scope = metrics.TransferStandbyTaskCancelExecutionScope
 		err = t.processCancelExecution(task)
 	case persistence.TransferTaskTypeSignalExecution:
-		scope = metrics.TransferTaskSignalExecutionScope
+		scope = metrics.TransferStandbyTaskSignalExecutionScope
 		err = t.processSignalExecution(task)
 	case persistence.TransferTaskTypeStartChildExecution:
-		scope = metrics.TransferTaskStartChildExecutionScope
+		scope = metrics.TransferStandbyTaskStartChildExecutionScope
 		err = t.processStartChildExecution(task)
 	default:
 		err = errUnknownTransferTask
@@ -155,8 +154,8 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 }
 
 func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskActivityScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskActivityScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskActivityScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskActivityScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := false
@@ -181,8 +180,8 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 }
 
 func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskDecisionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskDecisionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskDecisionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskDecisionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := false
@@ -215,8 +214,8 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 }
 
 func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskCloseExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskCloseExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskCloseExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskCloseExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := true
@@ -250,8 +249,8 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 }
 
 func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskCancelExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskCancelExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskCancelExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskCancelExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := false
@@ -273,8 +272,8 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 }
 
 func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskSignalExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskSignalExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskSignalExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskSignalExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := false
@@ -296,8 +295,8 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 }
 
 func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferTask *persistence.TransferTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TransferTaskStartChildExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferTaskStartChildExecutionScope, metrics.TaskLatency)
+	t.metricsClient.IncCounter(metrics.TransferStandbyTaskStartChildExecutionScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskStartChildExecutionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processTaskIfClosed := false
