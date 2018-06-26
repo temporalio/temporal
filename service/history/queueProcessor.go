@@ -22,7 +22,6 @@ package history
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -242,12 +241,31 @@ func (p *queueProcessorBase) retryTasks() {
 }
 
 func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task queueTaskInfo) {
-	switch task.(type) {
+	logger := p.logger.WithFields(bark.Fields{
+		logging.TagTaskID:   task.GetTaskID(),
+		logging.TagTaskType: task.GetTaskType(),
+		logging.TagVersion:  task.GetVersion(),
+	})
+
+	switch task := task.(type) {
 	case *persistence.TransferTaskInfo:
-		p.logger.Debugf("Processing transfer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+		logger = logger.WithFields(bark.Fields{
+			logging.TagDomainID:            task.DomainID,
+			logging.TagWorkflowExecutionID: task.WorkflowID,
+			logging.TagWorkflowRunID:       task.RunID,
+		})
+
+		logger.Debug("Processing transfer task")
 	case *persistence.ReplicationTaskInfo:
-		p.logger.Debugf("Processing replication task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+		logger = logger.WithFields(bark.Fields{
+			logging.TagDomainID:            task.DomainID,
+			logging.TagWorkflowExecutionID: task.WorkflowID,
+			logging.TagWorkflowRunID:       task.RunID,
+		})
+
+		logger.Debug("Processing replication task")
 	}
+
 	var err error
 	startTime := time.Now()
 ProcessRetryLoop:
@@ -267,7 +285,7 @@ ProcessRetryLoop:
 				if err == ErrTaskRetry {
 					<-notificationChan
 				} else {
-					logging.LogTaskProcessingFailedEvent(p.logger, task.GetTaskID(), task.GetTaskType(), err)
+					logging.LogTaskProcessingFailedEvent(logger, err)
 
 					// it is possible that DomainNotActiveError is thrown
 					// just keep try for cache.DomainCacheRefreshInterval
@@ -288,10 +306,24 @@ ProcessRetryLoop:
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
 	switch task.(type) {
 	case *persistence.TransferTaskInfo:
-		logging.LogOperationPanicEvent(p.logger,
-			fmt.Sprintf("Retry count exceeded for transfer taskID: %v", task.GetTaskID()), err)
+		// Cannot processes transfer task due to LimitExceededError after all retries
+		// raise and alert and move on
+		if _, ok := err.(*workflow.LimitExceededError); ok {
+			logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task.  Skipping.", err)
+			p.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CadenceCriticalFailures)
+			return
+		}
+
+		logging.LogOperationPanicEvent(logger, "Retry count exceeded for transfer task", err)
 	case *persistence.ReplicationTaskInfo:
-		logging.LogOperationPanicEvent(p.logger,
-			fmt.Sprintf("Retry count exceeded for replication taskID: %v", task.GetTaskID()), err)
+		// Cannot processes replication task due to LimitExceededError after all retries
+		// raise and alert and move on
+		if _, ok := err.(*workflow.LimitExceededError); ok {
+			logging.LogCriticalErrorEvent(logger, "Critical error processing replication task.  Skipping.", err)
+			p.metricsClient.IncCounter(metrics.ReplicatorQueueProcessorScope, metrics.CadenceCriticalFailures)
+			return
+		}
+
+		logging.LogOperationPanicEvent(logger, "Retry count exceeded for replication task", err)
 	}
 }

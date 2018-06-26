@@ -54,6 +54,7 @@ const (
 	TagVersion              = "version"
 	TagFirstEventID         = "first-event-id"
 	TagNextEventID          = "next-event-id"
+	TagTimeoutType          = "timeout-type"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

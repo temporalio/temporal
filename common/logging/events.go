@@ -89,6 +89,7 @@ const (
 	ReplicationTaskProcessingFailed          = 7106
 
 	// General purpose events
-	OperationFailed = 9000
-	OperationPanic  = 9001
+	OperationFailed   = 9000
+	OperationPanic    = 9001
+	OperationCritical = 9002
 )

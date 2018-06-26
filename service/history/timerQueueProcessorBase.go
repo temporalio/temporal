@@ -22,7 +22,6 @@ package history
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -182,7 +181,17 @@ func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificat
 }
 
 func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
-	t.logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
+	logger := t.logger.WithFields(bark.Fields{
+		logging.TagTaskID:              task.GetTaskID(),
+		logging.TagTaskType:            task.GetTaskType(),
+		logging.TagVersion:             task.GetVersion(),
+		logging.TagTimeoutType:         task.TimeoutType,
+		logging.TagDomainID:            task.DomainID,
+		logging.TagWorkflowExecutionID: task.WorkflowID,
+		logging.TagWorkflowRunID:       task.RunID,
+	})
+
+	logger.Debugf("Processing timer task: %v, type: %v", task.GetTaskID(), task.GetTaskType())
 	startTime := time.Now()
 	var err error
 ProcessRetryLoop:
@@ -202,7 +211,7 @@ ProcessRetryLoop:
 				if err == ErrTaskRetry {
 					<-notificationChan
 				} else {
-					logging.LogTaskProcessingFailedEvent(t.logger, task.GetTaskID(), task.GetTaskType(), err)
+					logging.LogTaskProcessingFailedEvent(logger, err)
 
 					// it is possible that DomainNotActiveError is thrown
 					// just keep try for cache.DomainCacheRefreshInterval
@@ -220,9 +229,17 @@ ProcessRetryLoop:
 			return
 		}
 	}
+
+	// Cannot processes timer task due to LimitExceededError after all retries
+	// raise and alert and move on
+	if _, ok := err.(*workflow.LimitExceededError); ok {
+		logging.LogCriticalErrorEvent(logger, "Critical error processing timer task.  Skipping.", err)
+		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.CadenceCriticalFailures)
+		return
+	}
+
 	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	logging.LogOperationPanicEvent(t.logger,
-		fmt.Sprintf("Retry count exceeded for timer taskID: %v", task.GetTaskID()), err)
+	logging.LogOperationPanicEvent(logger, "Retry count exceeded for timer task", err)
 }
 
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
