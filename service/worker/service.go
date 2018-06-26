@@ -41,8 +41,8 @@ type (
 	// Config contains all the service config for worker
 	Config struct {
 		// Replicator settings
-		ReplicatorConcurrency   int
-		ReplicatorMaxRetryCount int
+		ReplicatorConcurrency      int
+		ReplicatorBufferRetryCount int
 	}
 )
 
@@ -58,7 +58,8 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 // NewConfig builds the new Config for cadence-worker service
 func NewConfig() *Config {
 	return &Config{
-		ReplicatorConcurrency: 1000,
+		ReplicatorConcurrency:      1000,
+		ReplicatorBufferRetryCount: 8,
 	}
 }
 

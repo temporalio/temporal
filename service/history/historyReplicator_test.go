@@ -431,7 +431,41 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingEqualToCurrent() {
 	// TODO
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent() {
+func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent_NoForceBuffer() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentVersion := int64(4096)
+	currentNextEventID := int64(10)
+
+	incomingSourceCluster := "some random incoming source cluster"
+	incomingVersion := currentVersion * 2
+	incomingFirstEventID := currentNextEventID + 4
+	incomingNextEventID := incomingFirstEventID + 4
+
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	context.updateCondition = currentNextEventID
+	msBuilder := &mockMutableState{}
+	context.msBuilder = msBuilder
+
+	request := &h.ReplicateEventsRequest{
+		SourceCluster: common.StringPtr(incomingSourceCluster),
+		Version:       common.Int64Ptr(incomingVersion),
+		FirstEventId:  common.Int64Ptr(incomingFirstEventID),
+		NextEventId:   common.Int64Ptr(incomingNextEventID),
+	}
+
+	msBuilder.On("GetNextEventID").Return(currentNextEventID)
+
+	err := s.historyReplicator.ApplyOtherEvents(context, msBuilder, request, s.logger)
+	s.Equal(ErrRetryBufferEvents, err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent_ForceBuffer() {
 	domainID := validDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -454,10 +488,11 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	context.msBuilder = msBuilder
 
 	request := &h.ReplicateEventsRequest{
-		SourceCluster: common.StringPtr(incomingSourceCluster),
-		Version:       common.Int64Ptr(incomingVersion),
-		FirstEventId:  common.Int64Ptr(incomingFirstEventID),
-		NextEventId:   common.Int64Ptr(incomingNextEventID),
+		SourceCluster:     common.StringPtr(incomingSourceCluster),
+		Version:           common.Int64Ptr(incomingVersion),
+		FirstEventId:      common.Int64Ptr(incomingFirstEventID),
+		NextEventId:       common.Int64Ptr(incomingNextEventID),
+		ForceBufferEvents: common.BoolPtr(true),
 	}
 
 	serializedHistoryBatch := &persistence.SerializedHistoryEventBatch{
@@ -1388,7 +1423,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 
 	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
-	s.Equal(ErrRetryEntityNotExists, err)
+	s.Equal(ErrRetryExistingWorkflow, err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
 	s.Equal(1, len(timerTasks))

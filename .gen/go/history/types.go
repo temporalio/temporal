@@ -3138,6 +3138,7 @@ type ReplicateEventsRequest struct {
 	ReplicationInfo   map[string]*ReplicationInfo `json:"replicationInfo,omitempty"`
 	History           *shared.History             `json:"history,omitempty"`
 	NewRunHistory     *shared.History             `json:"newRunHistory,omitempty"`
+	ForceBufferEvents *bool                       `json:"forceBufferEvents,omitempty"`
 }
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*ReplicationInfo
@@ -3195,7 +3196,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [10]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -3271,6 +3272,14 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.ForceBufferEvents != nil {
+		w, err = wire.NewValueBool(*(v.ForceBufferEvents)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
 		i++
 	}
 
@@ -3421,6 +3430,16 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.ForceBufferEvents = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -3434,7 +3453,7 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [10]string
 	i := 0
 	if v.SourceCluster != nil {
 		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
@@ -3470,6 +3489,10 @@ func (v *ReplicateEventsRequest) String() string {
 	}
 	if v.NewRunHistory != nil {
 		fields[i] = fmt.Sprintf("NewRunHistory: %v", v.NewRunHistory)
+		i++
+	}
+	if v.ForceBufferEvents != nil {
+		fields[i] = fmt.Sprintf("ForceBufferEvents: %v", *(v.ForceBufferEvents))
 		i++
 	}
 
@@ -3525,6 +3548,9 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	if !((v.NewRunHistory == nil && rhs.NewRunHistory == nil) || (v.NewRunHistory != nil && rhs.NewRunHistory != nil && v.NewRunHistory.Equals(rhs.NewRunHistory))) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.ForceBufferEvents, rhs.ForceBufferEvents) {
+		return false
+	}
 
 	return true
 }
@@ -3574,6 +3600,16 @@ func (v *ReplicateEventsRequest) GetNextEventId() (o int64) {
 func (v *ReplicateEventsRequest) GetVersion() (o int64) {
 	if v.Version != nil {
 		return *v.Version
+	}
+
+	return
+}
+
+// GetForceBufferEvents returns the value of ForceBufferEvents if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetForceBufferEvents() (o bool) {
+	if v.ForceBufferEvents != nil {
+		return *v.ForceBufferEvents
 	}
 
 	return

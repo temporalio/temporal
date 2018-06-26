@@ -69,6 +69,8 @@ const (
 	retryCount95PercentInRetry int64 = 32
 	// [0.95, 1] percentage max retry count
 	retryCount100PercentInRetry int64 = 8
+
+	retryErrorWaitMillis = 100
 )
 
 type (
@@ -282,7 +284,7 @@ ProcessRetryLoop:
 					return errMaxAttemptReached
 				}
 
-				errMsg := p.process(msg)
+				errMsg := p.process(msg, isInRetry)
 				if errMsg != nil && p.isTransientRetryableError(errMsg) {
 					// Keep on retrying transient errors for ever
 					if !isInRetry {
@@ -318,7 +320,7 @@ ProcessRetryLoop:
 	}
 }
 
-func (p *replicationTaskProcessor) process(msg kafka.Message) error {
+func (p *replicationTaskProcessor) process(msg kafka.Message, inRetry bool) error {
 	scope := metrics.ReplicatorScope
 	task, err := deserialize(msg.Value())
 	if err != nil {
@@ -342,7 +344,7 @@ func (p *replicationTaskProcessor) process(msg kafka.Message) error {
 		err = p.handleDomainReplicationTask(task)
 	case replicator.ReplicationTaskTypeHistory:
 		scope = metrics.HistoryReplicationTaskScope
-		err = p.handleHistoryReplicationTask(task)
+		err = p.handleHistoryReplicationTask(task, inRetry)
 	default:
 		err = ErrUnknownReplicationTask
 	}
@@ -363,7 +365,7 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 }
 
-func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask) error {
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, inRetry bool) error {
 	p.metricsClient.IncCounter(metrics.HistoryReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -383,20 +385,32 @@ Loop:
 		return nil
 	}
 
-	return p.historyClient.ReplicateEvents(context.Background(), &h.ReplicateEventsRequest{
+	var err error
+	req := &h.ReplicateEventsRequest{
 		SourceCluster: common.StringPtr(p.sourceCluster),
 		DomainUUID:    attr.DomainId,
 		WorkflowExecution: &shared.WorkflowExecution{
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},
-		FirstEventId:    attr.FirstEventId,
-		NextEventId:     attr.NextEventId,
-		Version:         attr.Version,
-		ReplicationInfo: attr.ReplicationInfo,
-		History:         attr.History,
-		NewRunHistory:   attr.NewRunHistory,
-	})
+		FirstEventId:      attr.FirstEventId,
+		NextEventId:       attr.NextEventId,
+		Version:           attr.Version,
+		ReplicationInfo:   attr.ReplicationInfo,
+		History:           attr.History,
+		NewRunHistory:     attr.NewRunHistory,
+		ForceBufferEvents: common.BoolPtr(inRetry),
+	}
+
+RetryLoop:
+	for i := 0; i < p.config.ReplicatorBufferRetryCount; i++ {
+		err = p.historyClient.ReplicateEvents(context.Background(), req)
+		if _, ok := err.(*shared.RetryTaskError); ok {
+			time.Sleep(retryErrorWaitMillis * time.Millisecond)
+			continue RetryLoop
+		}
+	}
+	return err
 }
 
 func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {

@@ -216,7 +216,7 @@ struct ReplicationInfo {
 }
 
 struct ReplicateEventsRequest {
-  10:  optional string sourceCluster
+  10: optional string sourceCluster
   20: optional string domainUUID
   30: optional shared.WorkflowExecution workflowExecution
   40: optional i64 (js.type = "Long") firstEventId
@@ -225,6 +225,7 @@ struct ReplicateEventsRequest {
   70: optional map<string, ReplicationInfo> replicationInfo
   80: optional shared.History history
   90: optional shared.History newRunHistory
+  100: optional bool forceBufferEvents
 }
 
 /**

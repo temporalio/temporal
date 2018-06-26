@@ -64,6 +64,10 @@ var (
 	// ErrRetryEntityNotExists is returned to indicate workflow execution is not created yet and replicator should
 	// try this task again after a small delay.
 	ErrRetryEntityNotExists = &shared.RetryTaskError{Message: "workflow execution not found"}
+	// ErrRetryExistingWorkflow is returned when events are arriving out of order, and there is another workflow with same version running
+	ErrRetryExistingWorkflow = &shared.RetryTaskError{Message: "workflow with same version is running"}
+	// ErrRetryBufferEvents is returned when events are arriving out of order, should retry, or specify force apply
+	ErrRetryBufferEvents = &shared.RetryTaskError{Message: "retry on applying buffer events"}
 	// ErrRetryExecutionAlreadyStarted is returned to indicate another workflow execution already started,
 	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
 	// the target workflow has done continue as new.
@@ -296,6 +300,11 @@ func (r *historyReplicator) ApplyOtherEvents(context *workflowExecutionContext, 
 		// out of order replication task and store it in the buffer
 		logger.Debugf("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
 			msBuilder.GetNextEventID(), firstEventID)
+
+		if !request.GetForceBufferEvents() {
+			return ErrRetryBufferEvents
+		}
+
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.BufferedReplicationTaskCounter)
 		err = msBuilder.BufferReplicationTask(request)
 		if err != nil {
@@ -589,7 +598,7 @@ func (r *historyReplicator) replicateWorkflowStarted(context *workflowExecutionC
 		return nil
 	}
 	if currentStartVersion == incomingVersion {
-		return ErrRetryEntityNotExists
+		return ErrRetryExistingWorkflow
 	}
 
 	// currentStartVersion < incomingVersion && current workflow still running
