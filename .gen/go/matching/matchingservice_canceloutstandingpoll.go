@@ -220,6 +220,8 @@ func init() {
 			return true
 		case *shared.InternalServiceError:
 			return true
+		case *shared.ServiceBusyError:
+			return true
 		default:
 			return false
 		}
@@ -241,6 +243,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_CancelOutstandingPoll_Result.InternalServiceError")
 			}
 			return &MatchingService_CancelOutstandingPoll_Result{InternalServiceError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_CancelOutstandingPoll_Result.ServiceBusyError")
+			}
+			return &MatchingService_CancelOutstandingPoll_Result{ServiceBusyError: e}, nil
 		}
 
 		return nil, err
@@ -254,6 +261,10 @@ func init() {
 			err = result.InternalServiceError
 			return
 		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
 		return
 	}
 
@@ -265,6 +276,7 @@ func init() {
 type MatchingService_CancelOutstandingPoll_Result struct {
 	BadRequestError      *shared.BadRequestError      `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
+	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
 }
 
 // ToWire translates a MatchingService_CancelOutstandingPoll_Result struct into a Thrift-level intermediate
@@ -284,7 +296,7 @@ type MatchingService_CancelOutstandingPoll_Result struct {
 //   }
 func (v *MatchingService_CancelOutstandingPoll_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [3]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -304,6 +316,14 @@ func (v *MatchingService_CancelOutstandingPoll_Result) ToWire() (wire.Value, err
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 2, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 3, Value: w}
 		i++
 	}
 
@@ -352,6 +372,14 @@ func (v *MatchingService_CancelOutstandingPoll_Result) FromWire(w wire.Value) er
 				}
 
 			}
+		case 3:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -360,6 +388,9 @@ func (v *MatchingService_CancelOutstandingPoll_Result) FromWire(w wire.Value) er
 		count++
 	}
 	if v.InternalServiceError != nil {
+		count++
+	}
+	if v.ServiceBusyError != nil {
 		count++
 	}
 	if count > 1 {
@@ -376,7 +407,7 @@ func (v *MatchingService_CancelOutstandingPoll_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [3]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -384,6 +415,10 @@ func (v *MatchingService_CancelOutstandingPoll_Result) String() string {
 	}
 	if v.InternalServiceError != nil {
 		fields[i] = fmt.Sprintf("InternalServiceError: %v", v.InternalServiceError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
 		i++
 	}
 
@@ -399,6 +434,9 @@ func (v *MatchingService_CancelOutstandingPoll_Result) Equals(rhs *MatchingServi
 		return false
 	}
 	if !((v.InternalServiceError == nil && rhs.InternalServiceError == nil) || (v.InternalServiceError != nil && rhs.InternalServiceError != nil && v.InternalServiceError.Equals(rhs.InternalServiceError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
 

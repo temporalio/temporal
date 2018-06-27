@@ -66,13 +66,15 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	// this will trigger a timer gate fire event immediately
 	timerGate.Update(time.Time{})
 	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerActiveQueueProcessorScope, shard, historyService.metricsClient, currentClusterName, logger)
+	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
+		common.IsMatchingServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
 		cache:                   historyService.historyCache,
 		timerTaskFilter:         timerTaskFilter,
 		logger:                  logger,
-		matchingClient:          matchingClient,
+		matchingClient:          retryableMatchingClient,
 		metricsClient:           historyService.metricsClient,
 		currentClusterName:      currentClusterName,
 		timerGate:               timerGate,
@@ -99,7 +101,10 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		return verifyFailoverActiveTask(logger, domainID, timer.DomainID, timer)
 	}
 
-	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel, maxLevel, logger)
+	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel,
+		maxLevel, logger)
+	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
+		common.IsMatchingServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
@@ -107,7 +112,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		timerTaskFilter:         timerTaskFilter,
 		logger:                  logger,
 		metricsClient:           historyService.metricsClient,
-		matchingClient:          matchingClient,
+		matchingClient:          retryableMatchingClient,
 		timerGate:               NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(metrics.TimerActiveQueueProcessorScope, shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,

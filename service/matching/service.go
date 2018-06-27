@@ -32,6 +32,7 @@ import (
 // Config represents configuration for cadence-matching service
 type Config struct {
 	EnableSyncMatch dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
+	RPS             dynamicconfig.IntPropertyFn
 
 	// taskListManager configuration
 	RangeSize                 int64
@@ -51,6 +52,7 @@ type Config struct {
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskListInfo(dynamicconfig.MatchingEnableSyncMatch, true),
+		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,
 		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
 		UpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),

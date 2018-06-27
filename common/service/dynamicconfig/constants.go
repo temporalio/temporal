@@ -62,6 +62,7 @@ var keys = map[Key]string{
 	MatchingIdleTasklistCheckInterval:       "matching.idleTasklistCheckInterval",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
+	MatchingRPS:                             "matching.rps",
 
 	// history settings
 	HistoryLongPollExpirationInterval:                   "history.longPollExpirationInterval",
@@ -152,6 +153,8 @@ const (
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer
 	MatchingMaxTaskBatchSize
+	// MatchingRPS is request rate per second for each matching host
+	MatchingRPS
 
 	// key for history
 

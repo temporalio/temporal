@@ -107,6 +107,7 @@ service MatchingService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.LimitExceededError limitExceededError,
+      4: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -118,6 +119,7 @@ service MatchingService {
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
       3: shared.LimitExceededError limitExceededError,
+      4: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -154,6 +156,7 @@ service MatchingService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.QueryFailedError queryFailedError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -165,6 +168,7 @@ service MatchingService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
+      5: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -180,6 +184,7 @@ service MatchingService {
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
+      3: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -191,5 +196,6 @@ service MatchingService {
         1: shared.BadRequestError badRequestError,
         2: shared.InternalServiceError internalServiceError,
         3: shared.EntityNotExistsError entityNotExistError,
+        4: shared.ServiceBusyError serviceBusyError,
       )
 }

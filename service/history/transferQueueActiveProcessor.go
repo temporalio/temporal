@@ -93,13 +93,16 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		return shard.UpdateTransferClusterAckLevel(currentClusterName, ackLevel)
 	}
 
+	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
+		common.IsMatchingServiceTransientError)
+
 	processor := &transferQueueActiveProcessorImpl{
 		currentClusterName:         currentClusterName,
 		shard:                      shard,
 		historyService:             historyService,
 		options:                    options,
 		visibilityManager:          visibilityMgr,
-		matchingClient:             matchingClient,
+		matchingClient:             retryableMatchingClient,
 		historyClient:              historyClient,
 		logger:                     logger,
 		metricsClient:              historyService.metricsClient,
@@ -147,13 +150,16 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		return nil
 	}
 
+	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
+		common.IsMatchingServiceTransientError)
+
 	processor := &transferQueueActiveProcessorImpl{
 		currentClusterName:         currentClusterName,
 		shard:                      shard,
 		historyService:             historyService,
 		options:                    options,
 		visibilityManager:          visibilityMgr,
-		matchingClient:             matchingClient,
+		matchingClient:             retryableMatchingClient,
 		historyClient:              historyClient,
 		logger:                     logger,
 		metricsClient:              historyService.metricsClient,

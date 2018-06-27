@@ -221,6 +221,8 @@ func init() {
 			return true
 		case *shared.EntityNotExistsError:
 			return true
+		case *shared.ServiceBusyError:
+			return true
 		default:
 			return false
 		}
@@ -247,6 +249,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_DescribeTaskList_Result.EntityNotExistError")
 			}
 			return &MatchingService_DescribeTaskList_Result{EntityNotExistError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_DescribeTaskList_Result.ServiceBusyError")
+			}
+			return &MatchingService_DescribeTaskList_Result{ServiceBusyError: e}, nil
 		}
 
 		return nil, err
@@ -262,6 +269,10 @@ func init() {
 		}
 		if result.EntityNotExistError != nil {
 			err = result.EntityNotExistError
+			return
+		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
 			return
 		}
 
@@ -287,6 +298,7 @@ type MatchingService_DescribeTaskList_Result struct {
 	BadRequestError      *shared.BadRequestError          `json:"badRequestError,omitempty"`
 	InternalServiceError *shared.InternalServiceError     `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError     `json:"entityNotExistError,omitempty"`
+	ServiceBusyError     *shared.ServiceBusyError         `json:"serviceBusyError,omitempty"`
 }
 
 // ToWire translates a MatchingService_DescribeTaskList_Result struct into a Thrift-level intermediate
@@ -306,7 +318,7 @@ type MatchingService_DescribeTaskList_Result struct {
 //   }
 func (v *MatchingService_DescribeTaskList_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -342,6 +354,14 @@ func (v *MatchingService_DescribeTaskList_Result) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 3, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 4, Value: w}
 		i++
 	}
 
@@ -418,6 +438,14 @@ func (v *MatchingService_DescribeTaskList_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 4:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -434,6 +462,9 @@ func (v *MatchingService_DescribeTaskList_Result) FromWire(w wire.Value) error {
 	if v.EntityNotExistError != nil {
 		count++
 	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("MatchingService_DescribeTaskList_Result should have exactly one field: got %v fields", count)
 	}
@@ -448,7 +479,7 @@ func (v *MatchingService_DescribeTaskList_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -464,6 +495,10 @@ func (v *MatchingService_DescribeTaskList_Result) String() string {
 	}
 	if v.EntityNotExistError != nil {
 		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
 		i++
 	}
 
@@ -485,6 +520,9 @@ func (v *MatchingService_DescribeTaskList_Result) Equals(rhs *MatchingService_De
 		return false
 	}
 	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
 

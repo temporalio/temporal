@@ -47,8 +47,13 @@ type Handler struct {
 	metricsClient   metrics.Client
 	startWG         sync.WaitGroup
 	domainCache     cache.DomainCache
+	rateLimiter     common.TokenBucket
 	service.Service
 }
+
+var (
+	errMatchingHostThrottle = &gen.ServiceBusyError{Message: "Matching host rps exceeded"}
+)
 
 // NewHandler creates a thrift handler for the history service
 func NewHandler(sVice service.Service, config *Config, taskPersistence persistence.TaskManager, metadataMgr persistence.MetadataManager) *Handler {
@@ -57,6 +62,7 @@ func NewHandler(sVice service.Service, config *Config, taskPersistence persisten
 		taskPersistence: taskPersistence,
 		metadataMgr:     metadataMgr,
 		config:          config,
+		rateLimiter:     common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
 	}
 	// prevent us from trying to serve requests before matching engine is started and ready
 	handler.startWG.Add(1)
@@ -112,6 +118,11 @@ func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivity
 	scope := metrics.MatchingAddActivityTaskScope
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return h.handleErr(errMatchingHostThrottle, scope)
+	}
+
 	return h.handleErr(h.engine.AddActivityTask(addRequest), scope)
 }
 
@@ -120,6 +131,11 @@ func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecision
 	scope := metrics.MatchingAddDecisionTaskScope
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return h.handleErr(errMatchingHostThrottle, scope)
+	}
+
 	return h.handleErr(h.engine.AddDecisionTask(addRequest), scope)
 }
 
@@ -130,6 +146,10 @@ func (h *Handler) PollForActivityTask(ctx context.Context,
 	scope := metrics.MatchingPollForActivityTaskScope
 	sw := h.startRequestProfile("PollForActivityTask", scope)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
 
 	response, err := h.engine.PollForActivityTask(ctx, pollRequest)
 	return response, h.handleErr(err, scope)
@@ -143,6 +163,10 @@ func (h *Handler) PollForDecisionTask(ctx context.Context,
 	sw := h.startRequestProfile("PollForDecisionTask", scope)
 	defer sw.Stop()
 
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
+
 	response, err := h.engine.PollForDecisionTask(ctx, pollRequest)
 	return response, h.handleErr(err, scope)
 }
@@ -154,6 +178,10 @@ func (h *Handler) QueryWorkflow(ctx context.Context,
 	sw := h.startRequestProfile("QueryWorkflow", scope)
 	defer sw.Stop()
 
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
+
 	response, err := h.engine.QueryWorkflow(ctx, queryRequest)
 	return response, h.handleErr(err, scope)
 }
@@ -163,6 +191,9 @@ func (h *Handler) RespondQueryTaskCompleted(ctx context.Context, request *m.Resp
 	scope := metrics.MatchingRespondQueryTaskCompletedScope
 	sw := h.startRequestProfile("RespondQueryTaskCompleted", scope)
 	defer sw.Stop()
+
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	h.rateLimiter.TryConsume(1)
 
 	err := h.engine.RespondQueryTaskCompleted(ctx, request)
 	return h.handleErr(err, scope)
@@ -175,6 +206,9 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	sw := h.startRequestProfile("CancelOutstandingPoll", scope)
 	defer sw.Stop()
 
+	// Count the request in the RPS, but we still accept it even if RPS is exceeded
+	h.rateLimiter.TryConsume(1)
+
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return h.handleErr(err, scope)
 }
@@ -185,6 +219,10 @@ func (h *Handler) DescribeTaskList(ctx context.Context, request *m.DescribeTaskL
 	scope := metrics.MatchingDescribeTaskListScope
 	sw := h.startRequestProfile("DescribeTaskList", scope)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return nil, h.handleErr(errMatchingHostThrottle, scope)
+	}
 
 	response, err := h.engine.DescribeTaskList(ctx, request)
 	return response, h.handleErr(err, scope)
@@ -217,6 +255,9 @@ func (h *Handler) handleErr(err error, scope int) error {
 		return err
 	case *gen.LimitExceededError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
+		return err
+	case *gen.ServiceBusyError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
