@@ -59,7 +59,7 @@ func (s *CQLClientTestSuite) SetupSuite() {
 	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	s.keyspace = fmt.Sprintf("cql_client_test_%v", rand.Int63())
 
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system", defaultTimeout)
 	if err != nil {
 		log.Fatalf("error creating CQLClient, err=%v", err)
 	}
@@ -191,7 +191,7 @@ func (s *CQLClientTestSuite) testCreate(client CQLClient) {
 }
 
 func (s *CQLClientTestSuite) TestCQLClient() {
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace)
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace, defaultTimeout)
 	s.Nil(err)
 	s.testCreate(client)
 	s.testUpdate(client)

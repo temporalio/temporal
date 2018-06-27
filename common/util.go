@@ -123,7 +123,7 @@ func CreateFrontendServiceRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
-// CreatePersistanceRetryPolicy creates a retry policy for persistence layer operations
+// CreateMatchingRetryPolicy creates a retry policy for calls to matching service
 func CreateMatchingRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(matchingServiceOperationInitialInterval)
 	policy.SetMaximumInterval(matchingServiceOperationMaxInterval)

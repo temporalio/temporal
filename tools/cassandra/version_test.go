@@ -209,7 +209,7 @@ func (s *VersionTestSuite) TestCheckCompatibleVersion() {
 }
 
 func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system", defaultTimeout)
 	s.NoError(err)
 
 	err = client.CreateKeyspace(keyspace, 1)

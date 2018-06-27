@@ -35,6 +35,7 @@ type (
 		CassUser     string
 		CassPassword string
 		CassKeyspace string
+		CassTimeout  int
 	}
 
 	// UpdateSchemaConfig holds the config
@@ -76,6 +77,7 @@ const (
 	cliOptPort              = "port"
 	cliOptUser              = "user"
 	cliOptPassword          = "password"
+	cliOptTimeout           = "timeout"
 	cliOptKeyspace          = "keyspace"
 	cliOptVersion           = "version"
 	cliOptSchemaFile        = "schema-file"
@@ -91,6 +93,7 @@ const (
 	cliFlagPort              = cliOptPort + ", p"
 	cliFlagUser              = cliOptUser + ", u"
 	cliFlagPassword          = cliOptPassword + ", pw"
+	cliFlagTimeout           = cliOptTimeout + ", t"
 	cliFlagKeyspace          = cliOptKeyspace + ", k"
 	cliFlagVersion           = cliOptVersion + ", v"
 	cliFlagSchemaFile        = cliOptSchemaFile + ", f"

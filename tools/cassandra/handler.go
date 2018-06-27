@@ -59,7 +59,8 @@ func createKeyspace(cli *cli.Context) error {
 	if err != nil {
 		return handleErr(err)
 	}
-	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, "system")
+	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword, "system",
+		config.CassTimeout)
 	if err != nil {
 		return handleErr(fmt.Errorf("error creating cql client:%v", err))
 	}
@@ -127,6 +128,7 @@ func newSetupSchemaConfig(cli *cli.Context) (*SetupSchemaConfig, error) {
 	config.CassPort = cli.GlobalInt(cliOptPort)
 	config.CassUser = cli.GlobalString(cliOptUser)
 	config.CassPassword = cli.GlobalString(cliOptPassword)
+	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
 	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
 	config.SchemaFilePath = cli.String(cliOptSchemaFile)
 	config.InitialVersion = cli.String(cliOptVersion)
@@ -171,6 +173,7 @@ func newUpdateSchemaConfig(cli *cli.Context) (*UpdateSchemaConfig, error) {
 	config.CassPort = cli.GlobalInt(cliOptPort)
 	config.CassUser = cli.GlobalString(cliOptUser)
 	config.CassPassword = cli.GlobalString(cliOptPassword)
+	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
 	config.CassKeyspace = cli.GlobalString(cliOptKeyspace)
 	config.SchemaDir = cli.String(cliOptSchemaDir)
 	config.IsDryRun = cli.Bool(cliOptDryrun)
@@ -189,6 +192,7 @@ func newCreateKeyspaceConfig(cli *cli.Context) (*CreateKeyspaceConfig, error) {
 	config.CassPort = cli.GlobalInt(cliOptPort)
 	config.CassUser = cli.GlobalString(cliOptUser)
 	config.CassPassword = cli.GlobalString(cliOptPassword)
+	config.CassTimeout = cli.GlobalInt(cliOptTimeout)
 	config.CassKeyspace = cli.String(cliOptKeyspace)
 	config.ReplicationFactor = cli.Int(cliOptReplicationFactor)
 

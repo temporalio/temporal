@@ -34,7 +34,7 @@ type SetupSchemaTask struct {
 
 func newSetupSchemaTask(config *SetupSchemaConfig) (*SetupSchemaTask, error) {
 	client, err := newCQLClient(config.CassHosts, config.CassPort, config.CassUser, config.CassPassword,
-		config.CassKeyspace)
+		config.CassKeyspace, config.CassTimeout)
 	if err != nil {
 		return nil, err
 	}

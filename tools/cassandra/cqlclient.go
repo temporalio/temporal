@@ -74,7 +74,7 @@ var errGetSchemaVersion = errors.New("Failed to get current schema version from 
 
 const (
 	newLineDelim         = '\n'
-	defaultTimeout       = 30 * time.Second
+	defaultTimeout       = 30       // timeout in seconds
 	cqlProtoVersion      = 4        // default CQL protocol version
 	defaultConsistency   = "QUORUM" // schema updates must always be QUORUM
 	defaultCassandraPort = 9042
@@ -107,7 +107,8 @@ const (
 )
 
 // newCQLClient returns a new instance of CQLClient
-func newCQLClient(hostsCsv string, port int, user, password, keyspace string) (CQLClient, error) {
+func newCQLClient(hostsCsv string, port int, user, password, keyspace string, timeoutSeconds int) (CQLClient,
+	error) {
 	hosts := parseHosts(hostsCsv)
 	if len(hosts) == 0 {
 		return nil, errNoHosts
@@ -122,8 +123,9 @@ func newCQLClient(hostsCsv string, port int, user, password, keyspace string) (C
 			Password: password,
 		}
 	}
+	timeout := time.Duration(timeoutSeconds) * time.Second
 	clusterCfg.Keyspace = keyspace
-	clusterCfg.Timeout = defaultTimeout
+	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
 	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
 	cqlClient := new(cqlClient)

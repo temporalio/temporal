@@ -61,7 +61,7 @@ func (s *UpdateSchemaTestSuite) SetupSuite() {
 	s.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	s.keyspace = fmt.Sprintf("update_schema_test_%v", s.rand.Int63())
 
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system")
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", "system", defaultTimeout)
 	if err != nil {
 		s.log.Fatal("Error creating CQLClient")
 	}
@@ -81,7 +81,7 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace)
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace, defaultTimeout)
 	s.Nil(err)
 	defer client.Close()
 
@@ -118,7 +118,7 @@ func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 
 func (s *UpdateSchemaTestSuite) TestDryrun() {
 
-	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace)
+	client, err := newCQLClient("127.0.0.1", defaultCassandraPort, "", "", s.keyspace, defaultTimeout)
 	s.Nil(err)
 	defer client.Close()
 

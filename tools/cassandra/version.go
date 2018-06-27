@@ -141,7 +141,7 @@ func VerifyCompatibleVersion(cfg config.Cassandra, rootPath string) error {
 
 // checkCompatibleVersion check the version compatibility
 func checkCompatibleVersion(cfg config.Cassandra, keyspace string, dirPath string) error {
-	cqlClient, err := newCQLClient(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, keyspace)
+	cqlClient, err := newCQLClient(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, keyspace, defaultTimeout)
 	if err != nil {
 		return fmt.Errorf("unable to create CQL Client: %v", err.Error())
 	}
