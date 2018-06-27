@@ -64,6 +64,7 @@ type (
 		visibitiltyMgr     persistence.VisibilityManager
 		history            history.Client
 		matching           matching.Client
+		matchingRawClient  matching.Client
 		tokenSerializer    common.TaskTokenSerializer
 		hSerializerFactory persistence.HistorySerializerFactory
 		metricsClient      metrics.Client
@@ -144,11 +145,11 @@ func (wh *WorkflowHandler) Start() error {
 	if err != nil {
 		return err
 	}
-	wh.matching, err = wh.Service.GetClientFactory().NewMatchingClient()
+	wh.matchingRawClient, err = wh.Service.GetClientFactory().NewMatchingClient()
 	if err != nil {
 		return err
 	}
-	wh.matching = matching.NewRetryableClient(wh.matching, common.CreateMatchingRetryPolicy(),
+	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingRetryPolicy(),
 		common.IsMatchingServiceTransientError)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
@@ -1988,7 +1989,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickyness
 		stickyContext, cancel := context.WithTimeout(context.Background(), time.Duration(stickyDecisionTimeout)*time.Second)
-		matchingResp, err := wh.matching.QueryWorkflow(stickyContext, matchingRequest)
+		matchingResp, err := wh.matchingRawClient.QueryWorkflow(stickyContext, matchingRequest)
 		cancel()
 		if err == nil {
 			return matchingResp, nil

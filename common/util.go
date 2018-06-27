@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
 	farm "github.com/dgryski/go-farm"
@@ -157,6 +158,12 @@ func IsServiceNonRetryableError(err error) bool {
 		return true
 	case *workflow.CancellationAlreadyRequestedError:
 		return true
+	case *yarpcerrors.Status:
+		rpcErr := err.(*yarpcerrors.Status)
+		if rpcErr.Code() != yarpcerrors.CodeDeadlineExceeded {
+			return true
+		}
+		return false
 	}
 
 	return false
@@ -171,6 +178,12 @@ func IsMatchingServiceTransientError(err error) bool {
 		return true
 	case *workflow.LimitExceededError:
 		return true
+	case *yarpcerrors.Status:
+		rpcErr := err.(*yarpcerrors.Status)
+		if rpcErr.Code() == yarpcerrors.CodeDeadlineExceeded {
+			return true
+		}
+		return false
 	}
 
 	return false
