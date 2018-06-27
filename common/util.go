@@ -30,11 +30,12 @@ import (
 	farm "github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
+	"math/rand"
+
 	h "github.com/uber/cadence/.gen/go/history"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/backoff"
-	"math/rand"
 )
 
 const (
@@ -50,7 +51,7 @@ const (
 	frontendServiceOperationMaxInterval        = 5 * time.Second
 	frontendServiceOperationExpirationInterval = 15 * time.Second
 
-	matchingServiceOperationInitialInterval    = 50 * time.Millisecond
+	matchingServiceOperationInitialInterval    = 1000 * time.Millisecond
 	matchingServiceOperationMaxInterval        = 10 * time.Second
 	matchingServiceOperationExpirationInterval = 30 * time.Second
 )
