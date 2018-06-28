@@ -129,8 +129,8 @@ type rateLimiter struct {
 	minBurst int
 }
 
-func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration, minBurst int) rateLimiter {
-	rl := rateLimiter{
+func newRateLimiter(maxDispatchPerSecond *float64, ttl time.Duration, minBurst int) *rateLimiter {
+	rl := &rateLimiter{
 		maxDispatchPerSecond: maxDispatchPerSecond,
 		ttl:                  ttl,
 		ttlTimer:             time.NewTimer(ttl),
@@ -205,7 +205,7 @@ func newTaskListManager(
 
 func newTaskListManagerWithRateLimiter(
 	e *matchingEngineImpl, taskList *taskListID, taskListKind *s.TaskListKind, config *taskListConfig,
-	rl rateLimiter,
+	rl *rateLimiter,
 ) taskListManager {
 	// To perform one db operation if there are no pollers
 	taskBufferSize := config.GetTasksBatchSize() - 1
@@ -303,7 +303,7 @@ type taskListManagerImpl struct {
 	outstandingPollsLock sync.Mutex
 	outstandingPollsMap  map[string]context.CancelFunc
 	// Rate limiter for task dispatch
-	rateLimiter rateLimiter
+	rateLimiter *rateLimiter
 
 	taskListKind *s.TaskListKind // sticky taskList has different process in persistence
 }
