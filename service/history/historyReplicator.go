@@ -655,12 +655,40 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(msBuilder m
 	}
 
 	getPrevRunID := func(domainID string, workflowID string, runID string) (string, error) {
-		startEvent, err := getWorkflowStartedEvent(r.historyMgr, domainID, workflowID, runID)
+		response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
+			DomainID: domainID,
+			Execution: shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(workflowID),
+				RunId:      common.StringPtr(runID),
+			},
+			FirstEventID:  common.FirstEventID,
+			NextEventID:   common.FirstEventID + 1,
+			PageSize:      defaultHistoryPageSize,
+			NextPageToken: nil,
+		})
 		if err != nil {
 			return "", err
 		}
+		if len(response.Events) == 0 {
+			return "", fmt.Errorf("no history found for domainID: %v, workflowID: %v, runID: %v",
+				domainID, workflowID, runID)
+		}
+		serializedHistoryEventBatch := response.Events[0]
+		persistence.SetSerializedHistoryDefaults(&serializedHistoryEventBatch)
+		serializer, err := persistence.NewHistorySerializerFactory().Get(serializedHistoryEventBatch.EncodingType)
+		if err != nil {
+			return "", err
+		}
+		history, err := serializer.Deserialize(&serializedHistoryEventBatch)
+		if err != nil {
+			return "", err
+		}
+		if len(history.Events) == 0 {
+			return "", fmt.Errorf("no history events found for domainID: %v, workflowID: %v, runID: %v",
+				domainID, workflowID, runID)
+		}
 
-		return startEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId(), nil
+		return history.Events[0].WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId(), nil
 	}
 
 	targetRunID := msBuilder.GetExecutionInfo().RunID
@@ -687,41 +715,6 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(msBuilder m
 
 	// same workflow ID, same shard
 	return r.terminateWorkflow(domainID, workflowID, currentRunID)
-}
-
-func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, domainID, workflowID, runID string) (*shared.HistoryEvent, error) {
-	response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-		FirstEventID:  common.FirstEventID,
-		NextEventID:   common.FirstEventID + 1,
-		PageSize:      defaultHistoryPageSize,
-		NextPageToken: nil,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(response.Events) == 0 {
-		return nil, fmt.Errorf("no history found for domainID: %v, workflowID: %v, runID: %v", domainID, workflowID, runID)
-	}
-	serializedHistoryEventBatch := response.Events[0]
-	persistence.SetSerializedHistoryDefaults(&serializedHistoryEventBatch)
-	serializer, err := persistence.NewHistorySerializerFactory().Get(serializedHistoryEventBatch.EncodingType)
-	if err != nil {
-		return nil, err
-	}
-	history, err := serializer.Deserialize(&serializedHistoryEventBatch)
-	if err != nil {
-		return nil, err
-	}
-	if len(history.Events) == 0 {
-		return nil, fmt.Errorf("no history events found for domainID: %v, workflowID: %v, runID: %v", domainID, workflowID, runID)
-	}
-
-	return history.Events[0], nil
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {

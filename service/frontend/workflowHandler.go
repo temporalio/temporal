@@ -1329,10 +1329,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowId is not set on request."}, scope)
 	}
 
-	if err := common.ValidateRetryPolicy(startRequest.RetryPolicy); err != nil {
-		return nil, wh.error(err, scope)
-	}
-
 	wh.Service.GetLogger().Debugf(
 		"Received StartWorkflowExecution. WorkflowID: %v",
 		startRequest.GetWorkflowId())
@@ -1364,8 +1360,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	wh.Service.GetLogger().Debugf("Start workflow execution request domainID: %v", domainID)
 
-	resp, err := wh.history.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(domainID, startRequest))
-
+	resp, err := wh.history.StartWorkflowExecution(ctx, &h.StartWorkflowExecutionRequest{
+		DomainUUID:   common.StringPtr(domainID),
+		StartRequest: startRequest,
+	})
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1623,10 +1621,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() <= 0 {
 		return nil, wh.error(&gen.BadRequestError{
 			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
-	}
-
-	if err := common.ValidateRetryPolicy(signalWithStartRequest.RetryPolicy); err != nil {
-		return nil, wh.error(err, scope)
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(signalWithStartRequest.GetDomain())

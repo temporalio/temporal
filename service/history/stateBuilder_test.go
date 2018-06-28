@@ -464,8 +464,17 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		domainID,
 		continueAsNewEvent,
 		newRunStartedEvent,
+		&decisionInfo{
+			Version:         newRunDecisionEvent.GetVersion(),
+			ScheduleID:      newRunDecisionEvent.GetEventId(),
+			StartedID:       common.EmptyEventID,
+			RequestID:       emptyUUID,
+			DecisionTimeout: decisionTimeoutSecond,
+			TaskList:        tasklist,
+			Attempt:         0,
+		},
 		mock.Anything,
-	).Return(nil).Once()
+	).Once()
 	s.mockUpdateVersion(continueAsNewEvent)
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}

@@ -38,11 +38,43 @@ func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, 
 		return nil
 	}
 
-	backoffInterval := getBackoffInterval(a.Attempt, a.MaximumAttempts, a.InitialInterval, a.MaximumInterval, a.BackoffCoefficient, now, a.ExpirationTime, errReason, a.NonRetriableErrors)
-	if backoffInterval == common.NoRetryBackoff {
+	if a.MaximumAttempts == 0 && a.ExpirationTime.IsZero() {
+		// Invalid retry policy, Decider worker should reject this.
 		return nil
 	}
-	nextScheduleTime := now.Add(backoffInterval)
+
+	if a.MaximumAttempts > 0 && a.Attempt >= a.MaximumAttempts-1 {
+		// Attempt starts from 0.
+		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
+		return nil
+	}
+
+	nextInterval := int64(float64(a.InitialInterval) * math.Pow(a.BackoffCoefficient, float64(a.Attempt)))
+	if nextInterval <= 0 {
+		// math.Pow() could overflow
+		if a.MaximumInterval > 0 {
+			nextInterval = int64(a.MaximumInterval)
+		} else {
+			return nil
+		}
+	}
+
+	if a.MaximumInterval > 0 && nextInterval > int64(a.MaximumInterval) {
+		// cap next interval to MaxInterval
+		nextInterval = int64(a.MaximumInterval)
+	}
+
+	nextScheduleTime := now.Add(time.Duration(nextInterval) * time.Second)
+	if !a.ExpirationTime.IsZero() && nextScheduleTime.After(a.ExpirationTime) {
+		return nil
+	}
+
+	// check if error is non-retriable
+	for _, er := range a.NonRetriableErrors {
+		if er == errReason {
+			return nil
+		}
+	}
 
 	// a retry is needed, update activity info for next retry
 	a.Attempt++
@@ -54,54 +86,12 @@ func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, 
 	// clear timer created bits except for ScheduleToClose
 	a.TimerTaskStatus = TimerTaskStatusNone | (a.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose)
 
-	return &persistence.ActivityRetryTimerTask{
+	return &persistence.RetryTimerTask{
 		Version:             a.Version,
 		VisibilityTimestamp: a.ScheduledTime,
 		EventID:             a.ScheduleID,
 		Attempt:             a.Attempt,
 	}
-}
-
-func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int32, backoffCoefficient float64, now, expirationTime time.Time, errReason string, nonRetriableErrors []string) time.Duration {
-	if maxAttempts == 0 && expirationTime.IsZero() {
-		return common.NoRetryBackoff
-	}
-
-	if maxAttempts > 0 && currAttempt >= maxAttempts-1 {
-		// currAttempt starts from 0.
-		// MaximumAttempts is the total attempts, including initial (non-retry) attempt.
-		return common.NoRetryBackoff
-	}
-
-	nextInterval := int64(float64(initInterval) * math.Pow(backoffCoefficient, float64(currAttempt)))
-	if nextInterval <= 0 {
-		// math.Pow() could overflow
-		if maxInterval > 0 {
-			nextInterval = int64(maxInterval)
-		} else {
-			return common.NoRetryBackoff
-		}
-	}
-
-	if maxInterval > 0 && nextInterval > int64(maxInterval) {
-		// cap next interval to MaxInterval
-		nextInterval = int64(maxInterval)
-	}
-
-	backoffInterval := time.Duration(nextInterval) * time.Second
-	nextScheduleTime := now.Add(backoffInterval)
-	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
-		return common.NoRetryBackoff
-	}
-
-	// check if error is non-retriable
-	for _, er := range nonRetriableErrors {
-		if er == errReason {
-			return common.NoRetryBackoff
-		}
-	}
-
-	return backoffInterval
 }
 
 func getTimeoutErrorReason(timeoutType shared.TimeoutType) string {

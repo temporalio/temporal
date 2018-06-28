@@ -1,9 +1,8 @@
 {
   "CurrVersion": "0.9",
   "MinCompatibleVersion": "0.9",
-  "Description": "Support domain customized key-value data. Support workflow server side retry.",
+  "Description": "Support domain customized key-value data.",
   "SchemaUpdateCqlFiles": [
-    "domain_data.cql",
-    "workflow_retry.cql"
+    "domain_data.cql"
   ]
 }

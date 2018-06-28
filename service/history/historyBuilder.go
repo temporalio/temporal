@@ -477,10 +477,6 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.ChildPolicy = request.ChildPolicy
 	attributes.ContinuedExecutionRunId = previousRunID
 	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
-	attributes.RetryPolicy = request.RetryPolicy
-	attributes.Attempt = common.Int32Ptr(startRequest.GetAttempt())
-	attributes.ExpirationTimestamp = startRequest.ExpirationTimestamp
-
 	parentInfo := startRequest.ParentExecutionInfo
 	if parentInfo != nil {
 		attributes.ParentWorkflowDomain = parentInfo.Domain
@@ -840,7 +836,6 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	attributes.ExecutionStartToCloseTimeoutSeconds = common.Int32Ptr(*request.ExecutionStartToCloseTimeoutSeconds)
 	attributes.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(*request.TaskStartToCloseTimeoutSeconds)
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
-	attributes.BackoffStartIntervalInSeconds = common.Int32Ptr(request.GetBackoffStartIntervalInSeconds())
 	historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = attributes
 
 	return historyEvent
@@ -861,7 +856,6 @@ func (b *historyBuilder) newStartChildWorkflowExecutionInitiatedEvent(decisionTa
 	attributes.Control = startAttributes.Control
 	attributes.DecisionTaskCompletedEventId = common.Int64Ptr(decisionTaskCompletedEventID)
 	attributes.WorkflowIdReusePolicy = startAttributes.WorkflowIdReusePolicy
-	attributes.RetryPolicy = startAttributes.RetryPolicy
 	historyEvent.StartChildWorkflowExecutionInitiatedEventAttributes = attributes
 
 	return historyEvent
