@@ -179,13 +179,15 @@ func (e *matchingEngineImpl) getTaskListManager(taskList *taskListID,
 		e.taskListsLock.Unlock()
 		return result, nil
 	}
+	logging.LogTaskListLoadingEvent(e.logger, taskList.taskListName, taskList.taskType)
 	mgr, err := newTaskListManager(e, taskList, taskListKind, e.config)
 	if err != nil {
+		e.taskListsLock.Unlock()
+		logging.LogTaskListLoadingFailedEvent(e.logger, taskList.taskListName, taskList.taskType, err)
 		return nil, err
 	}
 	e.taskLists[*taskList] = mgr
 	e.taskListsLock.Unlock()
-	logging.LogTaskListLoadingEvent(e.logger, taskList.taskListName, taskList.taskType)
 	err = mgr.Start()
 	if err != nil {
 		logging.LogTaskListLoadingFailedEvent(e.logger, taskList.taskListName, taskList.taskType, err)
