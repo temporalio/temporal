@@ -5717,6 +5717,8 @@ type StartWorkflowExecutionRequest struct {
 	DomainUUID          *string                               `json:"domainUUID,omitempty"`
 	StartRequest        *shared.StartWorkflowExecutionRequest `json:"startRequest,omitempty"`
 	ParentExecutionInfo *ParentExecutionInfo                  `json:"parentExecutionInfo,omitempty"`
+	Attempt             *int32                                `json:"attempt,omitempty"`
+	ExpirationTimestamp *int64                                `json:"expirationTimestamp,omitempty"`
 }
 
 // ToWire translates a StartWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -5736,7 +5738,7 @@ type StartWorkflowExecutionRequest struct {
 //   }
 func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -5764,6 +5766,22 @@ func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.Attempt != nil {
+		w, err = wire.NewValueI32(*(v.Attempt)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.ExpirationTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.ExpirationTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -5830,6 +5848,26 @@ func (v *StartWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.Attempt = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ExpirationTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -5843,7 +5881,7 @@ func (v *StartWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [5]string
 	i := 0
 	if v.DomainUUID != nil {
 		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
@@ -5855,6 +5893,14 @@ func (v *StartWorkflowExecutionRequest) String() string {
 	}
 	if v.ParentExecutionInfo != nil {
 		fields[i] = fmt.Sprintf("ParentExecutionInfo: %v", v.ParentExecutionInfo)
+		i++
+	}
+	if v.Attempt != nil {
+		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
+		i++
+	}
+	if v.ExpirationTimestamp != nil {
+		fields[i] = fmt.Sprintf("ExpirationTimestamp: %v", *(v.ExpirationTimestamp))
 		i++
 	}
 
@@ -5875,6 +5921,12 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 	if !((v.ParentExecutionInfo == nil && rhs.ParentExecutionInfo == nil) || (v.ParentExecutionInfo != nil && rhs.ParentExecutionInfo != nil && v.ParentExecutionInfo.Equals(rhs.ParentExecutionInfo))) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.Attempt, rhs.Attempt) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ExpirationTimestamp, rhs.ExpirationTimestamp) {
+		return false
+	}
 
 	return true
 }
@@ -5884,6 +5936,26 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 func (v *StartWorkflowExecutionRequest) GetDomainUUID() (o string) {
 	if v.DomainUUID != nil {
 		return *v.DomainUUID
+	}
+
+	return
+}
+
+// GetAttempt returns the value of Attempt if it is set or its
+// zero value if it is unset.
+func (v *StartWorkflowExecutionRequest) GetAttempt() (o int32) {
+	if v.Attempt != nil {
+		return *v.Attempt
+	}
+
+	return
+}
+
+// GetExpirationTimestamp returns the value of ExpirationTimestamp if it is set or its
+// zero value if it is unset.
+func (v *StartWorkflowExecutionRequest) GetExpirationTimestamp() (o int64) {
+	if v.ExpirationTimestamp != nil {
+		return *v.ExpirationTimestamp
 	}
 
 	return

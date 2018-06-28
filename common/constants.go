@@ -20,6 +20,8 @@
 
 package common
 
+import "time"
+
 const (
 	// FirstEventID is the id of the first event in the history
 	FirstEventID int64 = 1
@@ -51,6 +53,9 @@ const (
 	EncodingTypeJSON EncodingType = "json"
 	EncodingTypeGob               = "gob"
 )
+
+// NoRetryBackoff is used to represent backoff when no retry is needed
+const NoRetryBackoff = time.Duration(-1)
 
 type (
 	// EncodingType is an enum that represents various data encoding types

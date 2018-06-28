@@ -1312,6 +1312,100 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
+func (s *integrationSuite) TestWorkflowRetry() {
+	id := "integration-wf-retry-test"
+	wt := "integration-wf-retry-type"
+	tl := "integration-wf-retry-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(s.domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		RetryPolicy: &workflow.RetryPolicy{
+			InitialIntervalInSeconds: common.Int32Ptr(1),
+			MaximumAttempts:          common.Int32Ptr(3),
+			MaximumIntervalInSeconds: common.Int32Ptr(1),
+			NonRetriableErrorReasons: []string{"bad-bug"},
+			BackoffCoefficient:       common.Float64Ptr(1),
+		},
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	var executions []*workflow.WorkflowExecution
+
+	attemptCount := 0
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		executions = append(executions, execution)
+		attemptCount++
+		if attemptCount == 3 {
+			return nil, []*workflow.Decision{
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+					CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+						Result: []byte("succeed-after-retry"),
+					},
+				}}, nil
+		}
+		return nil, []*workflow.Decision{
+			{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
+				FailWorkflowExecutionDecisionAttributes: &workflow.FailWorkflowExecutionDecisionAttributes{
+					Reason:  common.StringPtr("retryable-error"),
+					Details: nil,
+				},
+			}}, nil
+	}
+
+	poller := &taskPoller{
+		engine:          s.engine,
+		domain:          s.domainName,
+		taskList:        taskList,
+		identity:        identity,
+		decisionHandler: dtHandler,
+		logger:          s.logger,
+		suite:           s,
+	}
+
+	_, err := poller.pollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	_, err = poller.pollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	_, err = poller.pollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	s.Equal(3, attemptCount)
+
+	events := s.getHistory(s.domainName, executions[0])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+
+	events = s.getHistory(s.domainName, executions[1])
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, events[len(events)-1].GetEventType())
+
+	events = s.getHistory(s.domainName, executions[2])
+	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
+}
+
 func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	id := "integration-heartbeat-timeout-test"
 	wt := "integration-heartbeat-timeout-test-type"

@@ -248,7 +248,6 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 // StartWorkflowExecution starts a workflow execution
 func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflowExecutionRequest) (
 	*workflow.StartWorkflowExecutionResponse, error) {
-
 	domainEntry, err := e.getActiveDomainEntry(startRequest.DomainUUID)
 	if err != nil {
 		return nil, err
@@ -359,7 +358,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
-		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+		createRequest := &persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
 			DomainID:                    domainID,
 			Execution:                   execution,
@@ -383,7 +382,20 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			ContinueAsNew:               !isBrandNew,
 			PreviousRunID:               prevRunID,
 			ReplicationState:            replicationState,
-		})
+			HasRetryPolicy:              request.RetryPolicy != nil,
+		}
+		if createRequest.HasRetryPolicy {
+			createRequest.InitialInterval = request.RetryPolicy.GetInitialIntervalInSeconds()
+			createRequest.BackoffCoefficient = request.RetryPolicy.GetBackoffCoefficient()
+			createRequest.MaximumInterval = request.RetryPolicy.GetMaximumIntervalInSeconds()
+			expireTimeNano := startedEvent.WorkflowExecutionStartedEventAttributes.GetExpirationTimestamp()
+			if expireTimeNano > 0 {
+				createRequest.ExpirationTime = time.Unix(0, expireTimeNano)
+			}
+			createRequest.MaximumAttempts = request.RetryPolicy.GetMaximumAttempts()
+			createRequest.NonRetriableErrors = request.RetryPolicy.NonRetriableErrorReasons
+		}
+		_, err = e.shard.CreateWorkflowExecution(createRequest)
 
 		if err != nil {
 			switch t := err.(type) {
@@ -1056,16 +1068,43 @@ Update_History_Loop:
 					logging.LogMultipleCompletionDecisionsEvent(e.logger, *d.DecisionType)
 					continue Process_Decision_Loop
 				}
-				attributes := d.FailWorkflowExecutionDecisionAttributes
-				if err = validateFailWorkflowExecutionAttributes(attributes); err != nil {
+
+				failedAttributes := d.FailWorkflowExecutionDecisionAttributes
+				if err = validateFailWorkflowExecutionAttributes(failedAttributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadFailWorkflowExecutionAttributes
 					break Process_Decision_Loop
 				}
-				if e := msBuilder.AddFailWorkflowEvent(completedID, attributes); e == nil {
-					return nil, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+
+				retryBackoffInterval := msBuilder.GetRetryBackoffDuration(failedAttributes.GetReason())
+				if retryBackoffInterval == common.NoRetryBackoff {
+					// no retry
+					if e := msBuilder.AddFailWorkflowEvent(completedID, failedAttributes); e == nil {
+						return nil, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+					}
+				} else {
+					// retry with backoff
+					startEvent, err := getWorkflowStartedEvent(e.historyMgr, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
+					if err != nil {
+						return nil, err
+					}
+
+					startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
+					continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+						WorkflowType: startAttributes.WorkflowType,
+						TaskList:     startAttributes.TaskList,
+						RetryPolicy:  startAttributes.RetryPolicy,
+						Input:        startAttributes.Input,
+						ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
+						TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
+						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
+					}
+					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes); err != nil {
+						return nil, err
+					}
 				}
 				isComplete = true
+
 			case workflow.DecisionTypeCancelWorkflowExecution:
 				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
 					metrics.DecisionTypeCancelWorkflowCounter)
@@ -1267,18 +1306,10 @@ Update_History_Loop:
 					parentDomainName = parentDomainEntry.GetInfo().Name
 				}
 
-				runID := uuid.New()
-				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, runID, parentDomainName, attributes)
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, parentDomainName, attributes)
 				if err != nil {
 					return nil, err
 				}
-
-				// add timer task to new workflow
-				duration := time.Duration(*attributes.ExecutionStartToCloseTimeoutSeconds) * time.Second
-				continueAsNewTimerTasks = []persistence.Task{&persistence.WorkflowTimeoutTask{
-					VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
-				}}
-				msBuilder.GetContinueAsNew().TimerTasks = continueAsNewTimerTasks
 
 				isComplete = true
 				continueAsNewBuilder = newStateBuilder
@@ -1392,6 +1423,9 @@ Update_History_Loop:
 		// the history and try the operation again.
 		var updateErr error
 		if continueAsNewBuilder != nil {
+			if msBuilder.GetContinueAsNew() != nil {
+				continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
+			}
 			updateErr = context.continueAsNewWorkflowExecution(request.ExecutionContext, continueAsNewBuilder,
 				transferTasks, timerTasks, transactionID)
 		} else {
@@ -2295,13 +2329,19 @@ func (e *historyEngineImpl) getDeleteWorkflowTasks(
 	domainID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
+	return getDeleteWorkflowTasksFromShard(e.shard, domainID, tBuilder)
+}
 
+func getDeleteWorkflowTasksFromShard(shard ShardContext,
+	domainID string,
+	tBuilder *timerBuilder,
+) (persistence.Task, persistence.Task, error) {
 	// Create a transfer task to close workflow execution
 	closeTask := &persistence.CloseExecutionTask{}
 
 	// Generate a timer task to cleanup history events for this workflow execution
 	var retentionInDays int32
-	domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
 			return nil, nil, err
@@ -2425,16 +2465,8 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		return &workflow.BadRequestError{Message: "ActivityType is not set on decision."}
 	}
 
-	if policy := attributes.RetryPolicy; policy != nil {
-		if policy.GetInitialIntervalInSeconds() <= 0 {
-			return &workflow.BadRequestError{Message: "A valid InitialIntervalInSeconds is not set on retry policy."}
-		}
-		if policy.GetBackoffCoefficient() < 1 {
-			return &workflow.BadRequestError{Message: "BackoffCoefficient cannot be less than 1 on retry policy."}
-		}
-		if policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
-			return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy."}
-		}
+	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+		return err
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
@@ -2617,6 +2649,10 @@ func validateStartChildExecutionAttributes(parentInfo *persistence.WorkflowExecu
 		return &workflow.BadRequestError{Message: "Required field ChildPolicy is not set on decision."}
 	}
 
+	if err := common.ValidateRetryPolicy(attributes.RetryPolicy); err != nil {
+		return err
+	}
+
 	// Inherit tasklist from parent workflow execution if not provided on decision
 	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
 		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(parentInfo.TaskList)}
@@ -2645,7 +2681,7 @@ func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecut
 	if request.TaskList == nil || request.TaskList.Name == nil || request.TaskList.GetName() == "" {
 		return &workflow.BadRequestError{Message: "Missing Tasklist."}
 	}
-	return nil
+	return common.ValidateRetryPolicy(request.RetryPolicy)
 }
 
 func validateDomainUUID(domainUUID *string) (string, error) {
@@ -2658,12 +2694,16 @@ func validateDomainUUID(domainUUID *string) (string, error) {
 }
 
 func (e *historyEngineImpl) getActiveDomainEntry(domainUUID *string) (*cache.DomainCacheEntry, error) {
+	return getActiveDomainEntryFromShard(e.shard, domainUUID)
+}
+
+func getActiveDomainEntryFromShard(shard ShardContext, domainUUID *string) (*cache.DomainCacheEntry, error) {
 	domainID, err := validateDomainUUID(domainUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	domainEntry, err := e.shard.GetDomainCache().GetDomainByID(domainID)
+	domainEntry, err := shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -2713,12 +2753,10 @@ func getStartRequest(domainID string,
 		Identity:                            request.Identity,
 		RequestId:                           request.RequestId,
 		WorkflowIdReusePolicy:               &policy,
+		RetryPolicy:                         request.RetryPolicy,
 	}
 
-	startRequest := &h.StartWorkflowExecutionRequest{
-		DomainUUID:   common.StringPtr(domainID),
-		StartRequest: req,
-	}
+	startRequest := common.CreateHistoryStartWorkflowRequest(domainID, req)
 	return startRequest
 }
 

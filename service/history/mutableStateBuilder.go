@@ -57,7 +57,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTerminatedEventAttributes) *workflow.HistoryEvent
 		AddChildWorkflowExecutionTimedOutEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent
 		AddCompletedWorkflowEvent(int64, *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, mutableState, error)
+		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, mutableState, error)
 		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent
 		AddDecisionTaskFailedEvent(int64, int64, workflow.DecisionTaskFailedCause, []uint8, string) *workflow.HistoryEvent
 		AddDecisionTaskScheduleToStartTimeoutEvent(int64) *workflow.HistoryEvent
@@ -132,6 +132,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
 		GetReplicationState() *persistence.ReplicationState
 		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
+		GetRetryBackoffDuration(errReason string) time.Duration
 		GetScheduleIDByActivityID(string) (int64, bool)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
 		GetStartVersion() int64
@@ -179,7 +180,7 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCanceledEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCompletedEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState)
+		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, mutableState) error
 		ReplicateWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.WorkflowExecutionStartedEventAttributes)
 		ReplicateWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
@@ -995,6 +996,15 @@ func (e *mutableStateBuilder) GetRequestCancelInfo(initiatedEventID int64) (*per
 	return ri, ok
 }
 
+func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Duration {
+	info := e.executionInfo
+	if !info.HasRetryPolicy {
+		return common.NoRetryBackoff
+	}
+
+	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, time.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
+}
+
 // GetSignalInfo get details about a signal request that is currently in progress.
 func (e *mutableStateBuilder) GetSignalInfo(initiatedEventID int64) (*persistence.SignalInfo, bool) {
 	ri, ok := e.pendingSignalInfoIDs[initiatedEventID]
@@ -1306,14 +1316,21 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(d
 		WorkflowType:                        wType,
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeout),
 		ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
-		Input:    attributes.Input,
-		Identity: nil,
+		Input:       attributes.Input,
+		RetryPolicy: attributes.RetryPolicy,
 	}
 
 	req := &h.StartWorkflowExecutionRequest{
 		DomainUUID:          common.StringPtr(domainID),
 		StartRequest:        createRequest,
 		ParentExecutionInfo: parentExecutionInfo,
+	}
+	if attributes.GetBackoffStartIntervalInSeconds() > 0 {
+		req.Attempt = common.Int32Ptr(previousExecutionState.GetExecutionInfo().Attempt + 1)
+		expirationTime := previousExecutionState.GetExecutionInfo().ExpirationTime
+		if !expirationTime.IsZero() {
+			req.ExpirationTimestamp = common.Int64Ptr(expirationTime.UnixNano())
+		}
 	}
 
 	// History event only has domainName so domainID has to be passed in explicitly to update the mutable state
@@ -2235,7 +2252,7 @@ func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 	return e.hBuilder.AddWorkflowExecutionSignaledEvent(request)
 }
 
-func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry, newRunID string,
+func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
 	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, mutableState,
 	error) {
 	if e.hasPendingTasks() || e.HasPendingDecisionTask() {
@@ -2244,6 +2261,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 			e.HasPendingDecisionTask()))
 	}
 
+	newRunID := uuid.New()
 	newExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(e.executionInfo.WorkflowID),
 		RunId:      common.StringPtr(newRunID),
@@ -2278,21 +2296,28 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 	if startedEvent == nil {
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}
-	di := newStateBuilder.AddDecisionTaskScheduledEvent()
-	if di == nil {
-		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision started event."}
-	}
 
-	e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder)
+	if err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, newStateBuilder); err != nil {
+		return nil, nil, err
+	}
 
 	return continueAsNewEvent, newStateBuilder, nil
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID string,
-	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
-	newStateBuilder mutableState) {
+	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent,
+	newStateBuilder mutableState) error {
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
+
+	var di *decisionInfo
+	// First decision for retry will be created by a backoff timer
+	if continueAsNewAttributes.GetBackoffStartIntervalInSeconds() == 0 {
+		di = newStateBuilder.AddDecisionTaskScheduledEvent()
+		if di == nil {
+			return &workflow.InternalServiceError{Message: "Failed to add decision started event."}
+		}
+	}
 
 	newRunID := continueAsNewAttributes.GetNewExecutionRunId()
 	prevRunID := startedAttributes.GetContinuedExecutionRunId()
@@ -2318,42 +2343,83 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		initiatedID = newExecutionInfo.InitiatedID
 	}
 
-	if newStateBuilder.GetReplicationState() != nil {
-		newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), di.ScheduleID)
-	}
-
-	newTransferTasks := []persistence.Task{&persistence.DecisionTask{
-		DomainID:   domainID,
-		TaskList:   newExecutionInfo.TaskList,
-		ScheduleID: di.ScheduleID,
-	}}
-	setTaskVersion(newStateBuilder.GetCurrentVersion(), newTransferTasks, nil)
-
-	e.continueAsNew = &persistence.CreateWorkflowExecutionRequest{
+	continueAsNew := &persistence.CreateWorkflowExecutionRequest{
 		// NOTE: there is no replication task for the start / decision scheduled event,
 		// the above 2 events will be replicated along with previous continue as new event.
-		RequestID:                   uuid.New(),
-		DomainID:                    domainID,
-		Execution:                   newExecution,
-		ParentDomainID:              parentDomainID,
-		ParentExecution:             parentExecution,
-		InitiatedID:                 initiatedID,
-		TaskList:                    newExecutionInfo.TaskList,
-		WorkflowTypeName:            newExecutionInfo.WorkflowTypeName,
-		WorkflowTimeout:             newExecutionInfo.WorkflowTimeout,
-		DecisionTimeoutValue:        newExecutionInfo.DecisionTimeoutValue,
-		ExecutionContext:            nil,
-		NextEventID:                 newStateBuilder.GetNextEventID(),
-		LastProcessedEvent:          common.EmptyEventID,
-		TransferTasks:               newTransferTasks,
-		DecisionVersion:             di.Version,
-		DecisionScheduleID:          di.ScheduleID,
-		DecisionStartedID:           di.StartedID,
-		DecisionStartToCloseTimeout: di.DecisionTimeout,
-		ContinueAsNew:               true,
-		PreviousRunID:               prevRunID,
-		ReplicationState:            newStateBuilder.GetReplicationState(),
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            newExecution,
+		ParentDomainID:       parentDomainID,
+		ParentExecution:      parentExecution,
+		InitiatedID:          initiatedID,
+		TaskList:             newExecutionInfo.TaskList,
+		WorkflowTypeName:     newExecutionInfo.WorkflowTypeName,
+		WorkflowTimeout:      newExecutionInfo.WorkflowTimeout,
+		DecisionTimeoutValue: newExecutionInfo.DecisionTimeoutValue,
+		ExecutionContext:     nil,
+		NextEventID:          newStateBuilder.GetNextEventID(),
+		LastProcessedEvent:   common.EmptyEventID,
+		ContinueAsNew:        true,
+		PreviousRunID:        prevRunID,
+		ReplicationState:     newStateBuilder.GetReplicationState(),
+		HasRetryPolicy:       startedAttributes.RetryPolicy != nil,
+		Attempt:              e.executionInfo.Attempt,
+		InitialInterval:      e.executionInfo.InitialInterval,
+		BackoffCoefficient:   e.executionInfo.BackoffCoefficient,
+		MaximumInterval:      e.executionInfo.MaximumInterval,
+		ExpirationTime:       e.executionInfo.ExpirationTime,
+		MaximumAttempts:      e.executionInfo.MaximumAttempts,
+		NonRetriableErrors:   e.executionInfo.NonRetriableErrors,
 	}
+	if continueAsNewAttributes.GetBackoffStartIntervalInSeconds() > 0 {
+		// this is a retry
+		continueAsNew.Attempt++
+	}
+
+	// timeout includes workflow_timeout + backoff_interval
+	timeoutInSeconds := continueAsNewAttributes.GetExecutionStartToCloseTimeoutSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
+	timeoutDuration := time.Duration(timeoutInSeconds) * time.Second
+	timeoutDeadline := time.Now().Add(timeoutDuration)
+	if !e.executionInfo.ExpirationTime.IsZero() && timeoutDeadline.After(e.executionInfo.ExpirationTime) {
+		// expire before timeout
+		timeoutDeadline = e.executionInfo.ExpirationTime
+	}
+	continueAsNew.TimerTasks = []persistence.Task{&persistence.WorkflowTimeoutTask{
+		VisibilityTimestamp: timeoutDeadline,
+	}}
+
+	if di != nil {
+		continueAsNew.DecisionVersion = di.Version
+		continueAsNew.DecisionScheduleID = di.ScheduleID
+		continueAsNew.DecisionStartedID = di.StartedID
+		continueAsNew.DecisionStartToCloseTimeout = di.DecisionTimeout
+
+		if newStateBuilder.GetReplicationState() != nil {
+			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), di.ScheduleID)
+		}
+		newTransferTasks := []persistence.Task{&persistence.DecisionTask{
+			DomainID:   domainID,
+			TaskList:   newExecutionInfo.TaskList,
+			ScheduleID: di.ScheduleID,
+		}}
+		continueAsNew.TransferTasks = newTransferTasks
+	} else {
+		// this is for retry
+		continueAsNew.DecisionVersion = newStateBuilder.GetCurrentVersion()
+		continueAsNew.DecisionScheduleID = common.EmptyEventID
+		continueAsNew.DecisionStartedID = common.EmptyEventID
+		if newStateBuilder.GetReplicationState() != nil {
+			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), startedEvent.GetEventId())
+		}
+		backoffTimer := &persistence.WorkflowRetryTimerTask{
+			VisibilityTimestamp: time.Now().Add(time.Second * time.Duration(continueAsNewAttributes.GetBackoffStartIntervalInSeconds())),
+		}
+		continueAsNew.TimerTasks = append(continueAsNew.TimerTasks, backoffTimer)
+	}
+	setTaskVersion(newStateBuilder.GetCurrentVersion(), continueAsNew.TransferTasks, continueAsNew.TimerTasks)
+	e.continueAsNew = continueAsNew
+
+	return nil
 }
 
 func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedEventID int64,

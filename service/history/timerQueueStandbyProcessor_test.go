@@ -732,7 +732,7 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessRetryTimeout() {
 		WorkflowID:          execution.GetWorkflowId(),
 		RunID:               execution.GetRunId(),
 		TaskID:              int64(100),
-		TaskType:            persistence.TaskTypeRetryTimer,
+		TaskType:            persistence.TaskTypeActivityRetryTimer,
 		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
 		VisibilityTimestamp: time.Now(),
 	}

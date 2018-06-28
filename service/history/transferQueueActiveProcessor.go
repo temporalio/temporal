@@ -818,6 +818,7 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 				RequestId:             common.StringPtr(ci.CreateRequestID),
 				WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 				ChildPolicy:           attributes.ChildPolicy,
+				RetryPolicy:           attributes.RetryPolicy,
 			},
 			ParentExecutionInfo: &h.ParentExecutionInfo{
 				DomainUUID: common.StringPtr(domainID),

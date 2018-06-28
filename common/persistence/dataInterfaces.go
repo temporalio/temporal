@@ -96,7 +96,8 @@ const (
 	TaskTypeUserTimer
 	TaskTypeWorkflowTimeout
 	TaskTypeDeleteHistoryEvent
-	TaskTypeRetryTimer
+	TaskTypeActivityRetryTimer
+	TaskTypeWorkflowRetryTimer
 )
 
 type (
@@ -183,6 +184,15 @@ type (
 		ClientLibraryVersion         string
 		ClientFeatureVersion         string
 		ClientImpl                   string
+		// for retry
+		Attempt            int32
+		HasRetryPolicy     bool
+		InitialInterval    int32
+		BackoffCoefficient float64
+		MaximumInterval    int32
+		ExpirationTime     time.Time
+		MaximumAttempts    int32
+		NonRetriableErrors []string
 	}
 
 	// ReplicationState represents mutable state information for global domains.
@@ -364,13 +374,21 @@ type (
 		Version             int64
 	}
 
-	// RetryTimerTask to schedule a retry task for activity
-	RetryTimerTask struct {
+	// ActivityRetryTimerTask to schedule a retry task for activity
+	ActivityRetryTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
 		Version             int64
 		Attempt             int32
+	}
+
+	// WorkflowRetryTimerTask to schedule first decision task for retried workflow
+	WorkflowRetryTimerTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		EventID             int64
+		Version             int64
 	}
 
 	// HistoryReplicationTask is the transfer task created for shipping history replication events to other clusters
@@ -528,6 +546,14 @@ type (
 		ContinueAsNew               bool
 		PreviousRunID               string
 		ReplicationState            *ReplicationState
+		Attempt                     int32
+		HasRetryPolicy              bool
+		InitialInterval             int32
+		BackoffCoefficient          float64
+		MaximumInterval             int32
+		ExpirationTime              time.Time
+		MaximumAttempts             int32
+		NonRetriableErrors          []string
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -1188,37 +1214,72 @@ func (u *UserTimerTask) SetVisibilityTimestamp(t time.Time) {
 }
 
 // GetType returns the type of the retry timer task
-func (r *RetryTimerTask) GetType() int {
-	return TaskTypeRetryTimer
+func (r *ActivityRetryTimerTask) GetType() int {
+	return TaskTypeActivityRetryTimer
 }
 
 // GetVersion returns the version of the retry timer task
-func (r *RetryTimerTask) GetVersion() int64 {
+func (r *ActivityRetryTimerTask) GetVersion() int64 {
 	return r.Version
 }
 
 // SetVersion returns the version of the retry timer task
-func (r *RetryTimerTask) SetVersion(version int64) {
+func (r *ActivityRetryTimerTask) SetVersion(version int64) {
 	r.Version = version
 }
 
 // GetTaskID returns the sequence ID.
-func (r *RetryTimerTask) GetTaskID() int64 {
+func (r *ActivityRetryTimerTask) GetTaskID() int64 {
 	return r.TaskID
 }
 
 // SetTaskID sets the sequence ID.
-func (r *RetryTimerTask) SetTaskID(id int64) {
+func (r *ActivityRetryTimerTask) SetTaskID(id int64) {
 	r.TaskID = id
 }
 
 // GetVisibilityTimestamp gets the visibility time stamp
-func (r *RetryTimerTask) GetVisibilityTimestamp() time.Time {
+func (r *ActivityRetryTimerTask) GetVisibilityTimestamp() time.Time {
 	return r.VisibilityTimestamp
 }
 
 // SetVisibilityTimestamp gets the visibility time stamp
-func (r *RetryTimerTask) SetVisibilityTimestamp(t time.Time) {
+func (r *ActivityRetryTimerTask) SetVisibilityTimestamp(t time.Time) {
+	r.VisibilityTimestamp = t
+}
+
+// GetType returns the type of the retry timer task
+func (r *WorkflowRetryTimerTask) GetType() int {
+	return TaskTypeWorkflowRetryTimer
+}
+
+// GetVersion returns the version of the retry timer task
+func (r *WorkflowRetryTimerTask) GetVersion() int64 {
+	return r.Version
+}
+
+// SetVersion returns the version of the retry timer task
+func (r *WorkflowRetryTimerTask) SetVersion(version int64) {
+	r.Version = version
+}
+
+// GetTaskID returns the sequence ID.
+func (r *WorkflowRetryTimerTask) GetTaskID() int64 {
+	return r.TaskID
+}
+
+// SetTaskID sets the sequence ID.
+func (r *WorkflowRetryTimerTask) SetTaskID(id int64) {
+	r.TaskID = id
+}
+
+// GetVisibilityTimestamp gets the visibility time stamp
+func (r *WorkflowRetryTimerTask) GetVisibilityTimestamp() time.Time {
+	return r.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp gets the visibility time stamp
+func (r *WorkflowRetryTimerTask) SetVisibilityTimestamp(t time.Time) {
 	r.VisibilityTimestamp = t
 }
 
