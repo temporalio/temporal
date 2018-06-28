@@ -154,7 +154,8 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 		_, err := context.loadWorkflowExecution()
 		if err == nil {
 			// Workflow execution already exist, looks like a duplicate start event, it is safe to ignore it
-			logger.Info("Dropping stale replication task for start event.")
+			logger.Infof("Dropping stale replication task for start event, DomainID: %v, WorkflowID: %v, RunID: %v.",
+				domainID, execution.GetWorkflowId(), execution.GetRunId())
 			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 			return nil
 		}

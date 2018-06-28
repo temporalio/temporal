@@ -409,6 +409,7 @@ RetryLoop:
 			time.Sleep(retryErrorWaitMillis * time.Millisecond)
 			continue RetryLoop
 		}
+		break RetryLoop
 	}
 	return err
 }
