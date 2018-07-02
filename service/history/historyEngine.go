@@ -2048,6 +2048,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return &workflow.StartWorkflowExecutionResponse{
 			RunId: common.StringPtr(resultRunID),
 		}, nil
+	} else if alreadyStartedErr, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
+		return nil, &workflow.WorkflowExecutionAlreadyStartedError{
+			Message:        common.StringPtr("Workflow is already running"),
+			StartRequestId: common.StringPtr(alreadyStartedErr.StartRequestID),
+			RunId:          common.StringPtr(alreadyStartedErr.RunID),
+		}
 	}
 	return nil, err
 }

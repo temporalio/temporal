@@ -936,6 +936,13 @@ func (h *Handler) convertError(err error) error {
 			return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return createShardOwnershipLostError(h.GetHostInfo().GetAddress(), "")
+	case *persistence.WorkflowExecutionAlreadyStartedError:
+		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
+		return &gen.WorkflowExecutionAlreadyStartedError{
+			Message:        common.StringPtr("Workflow is already running"),
+			StartRequestId: common.StringPtr(err.StartRequestID),
+			RunId:          common.StringPtr(err.RunID),
+		}
 	}
 
 	return err

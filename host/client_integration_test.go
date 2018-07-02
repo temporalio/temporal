@@ -283,7 +283,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.logger.Fatalf("Start workflow with err: %v", err)
@@ -313,7 +314,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.logger.Fatalf("Start workflow with err: %v", err)
@@ -414,7 +416,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		TaskList:                     s.taskList,
 		ExecutionStartToCloseTimeout: 60 * time.Second,
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	we, err := s.wfClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
 		s.logger.Fatalf("Start workflow with err: %v", err)

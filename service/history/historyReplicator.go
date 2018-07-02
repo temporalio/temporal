@@ -125,6 +125,9 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 			case *shared.WorkflowExecutionAlreadyStartedError:
 				logger.Debugf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError)
 				retError = ErrRetryExecutionAlreadyStarted
+			case *persistence.WorkflowExecutionAlreadyStartedError:
+				logger.Debugf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError)
+				retError = ErrRetryExecutionAlreadyStarted
 			}
 		}
 	}()

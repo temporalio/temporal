@@ -197,7 +197,7 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 	})
 }
 
-func (s *integrationSuite) TestIntegrationStartWorkflowExecution() {
+func (s *integrationSuite) TestStartWorkflowExecution() {
 	id := "integration-start-workflow-test"
 	wt := "integration-start-workflow-test-type"
 	tl := "integration-start-workflow-test-tasklist"
@@ -544,7 +544,6 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 
 	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
 
-	workflowComplete := false
 	decisionCount := 0
 	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
@@ -559,7 +558,6 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 			}}, nil
 		}
 
-		workflowComplete = true
 		return nil, []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
 			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
