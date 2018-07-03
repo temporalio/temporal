@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 )
@@ -218,4 +219,19 @@ func (s *configSuite) TestGetDurationPropertyFilteredByTaskListInfo() {
 	s.Equal(time.Second, value(domain, taskList, taskType))
 	s.client.SetValue(key, time.Minute)
 	s.Equal(time.Minute, value(domain, taskList, taskType))
+}
+
+func TestDynamicConfigKeyIsMapped(t *testing.T) {
+	for i := unknownKey; i < lastKeyForTest; i++ {
+		key, ok := keys[i]
+		require.True(t, ok)
+		require.NotEmpty(t, key)
+	}
+}
+
+func TestDynamicConfigFilterTypeIsMapped(t *testing.T) {
+	require.Equal(t, int(lastFilterTypeForTest), len(filters))
+	for i := unknownFilter; i < lastFilterTypeForTest; i++ {
+		require.NotEmpty(t, filters[i])
+	}
 }
