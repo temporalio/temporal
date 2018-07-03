@@ -543,6 +543,9 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 }
 
 func (wh *WorkflowHandler) mergeDomainData(old map[string]string, new map[string]string) map[string]string {
+	if old == nil {
+		old = map[string]string{}
+	}
 	for k, v := range new {
 		old[k] = v
 	}

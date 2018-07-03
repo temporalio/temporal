@@ -76,3 +76,19 @@ func TestMergeDomainData_Merging(t *testing.T) {
 		"k1": "v2",
 	}, out)
 }
+
+func TestMergeDomainData_Nil(t *testing.T) {
+	wh := &WorkflowHandler{}
+	out := wh.mergeDomainData(
+		nil,
+		map[string]string{
+			"k0": "v1",
+			"k1": "v2",
+		},
+	)
+
+	assert.Equal(t, map[string]string{
+		"k0": "v1",
+		"k1": "v2",
+	}, out)
+}
