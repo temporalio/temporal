@@ -60,6 +60,7 @@ var keys = map[Key]string{
 	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
 	MatchingIdleTasklistCheckInterval:       "matching.idleTasklistCheckInterval",
+	MaxTasklistIdleTime:                     "matching.maxTasklistIdleTime",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 	MatchingRPS:                             "matching.rps",
@@ -149,6 +150,8 @@ const (
 	MatchingUpdateAckInterval
 	// MatchingIdleTasklistCheckInterval is the IdleTasklistCheckInterval
 	MatchingIdleTasklistCheckInterval
+	// MaxTasklistIdleTime is the max time tasklist being idle
+	MaxTasklistIdleTime
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer

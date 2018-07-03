@@ -74,6 +74,7 @@ type taskListConfig struct {
 	GetTasksBatchSize          func() int
 	UpdateAckInterval          func() time.Duration
 	IdleTasklistCheckInterval  func() time.Duration
+	MaxTasklistIdleTime        func() time.Duration
 	MinTaskThrottlingBurstSize func() int
 	// taskWriter configuration
 	OutstandingTaskAppendsThreshold func() int
@@ -99,6 +100,9 @@ func newTaskListConfig(id *taskListID, config *Config, domainCache cache.DomainC
 		},
 		IdleTasklistCheckInterval: func() time.Duration {
 			return config.IdleTasklistCheckInterval(domain, taskListName, taskType)
+		},
+		MaxTasklistIdleTime: func() time.Duration {
+			return config.MaxTasklistIdleTime(domain, taskListName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(domain, taskListName, taskType)
@@ -742,7 +746,8 @@ func (c *taskListManagerImpl) getTasksPump() {
 
 	go c.deliverBufferTasksForPoll()
 	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
-	checkPollerTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
+	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
+	lastTimeWriteTask := time.Time{}
 getTasksPumpLoop:
 	for {
 		select {
@@ -750,6 +755,8 @@ getTasksPumpLoop:
 			break getTasksPumpLoop
 		case <-c.notifyCh:
 			{
+				lastTimeWriteTask = time.Now()
+
 				tasks, readLevel, err := c.getTaskBatch()
 				if err != nil {
 					c.signalNewTask() // re-enqueue the event
@@ -796,19 +803,18 @@ getTasksPumpLoop:
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
 				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
 			}
-		case <-checkPollerTimer.C:
+		case <-checkIdleTaskListTimer.C:
 			{
-				pollers := c.GetAllPollerInfo()
-				if len(pollers) == 0 {
+				if !c.isTaskAddedRecently(lastTimeWriteTask) && len(c.GetAllPollerInfo()) == 0 {
 					c.Stop()
 				}
-				checkPollerTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
+				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
 			}
 		}
 	}
 
 	updateAckTimer.Stop()
-	checkPollerTimer.Stop()
+	checkIdleTaskListTimer.Stop()
 }
 
 // Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().
@@ -952,4 +958,8 @@ func (c *taskContext) completeTask(err error) {
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {
 	return &s.ServiceBusyError{Message: msg}
+}
+
+func (c *taskListManagerImpl) isTaskAddedRecently(lastAddTime time.Time) bool {
+	return time.Now().Sub(lastAddTime) <= c.config.MaxTasklistIdleTime()
 }

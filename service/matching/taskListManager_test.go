@@ -22,6 +22,7 @@ package matching
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,11 +33,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 const _minBurst = 10000
@@ -83,9 +86,12 @@ func TestNewRateLimiter(t *testing.T) {
 }
 
 func createTestTaskListManager() *taskListManagerImpl {
+	return createTestTaskListManagerWithConfig(defaultTestConfig())
+}
+
+func createTestTaskListManagerWithConfig(cfg *Config) *taskListManagerImpl {
 	logger := bark.NewLoggerFromLogrus(log.New())
 	tm := newTestTaskManager(logger)
-	cfg := defaultTestConfig()
 	mockDomainCache := &cache.DomainCacheMock{}
 	mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.CreateDomainCacheEntry("domainName"), nil)
 	me := newMatchingEngine(
@@ -100,4 +106,49 @@ func createTestTaskListManager() *taskListManagerImpl {
 		logger.Fatalf("error when createTestTaskListManager: %v", err)
 	}
 	return tlMgr.(*taskListManagerImpl)
+}
+
+func TestIsTaskAddedRecently(t *testing.T) {
+	tlm := createTestTaskListManager()
+	require.True(t, tlm.isTaskAddedRecently(time.Now()))
+	require.False(t, tlm.isTaskAddedRecently(time.Now().Add(-tlm.config.MaxTasklistIdleTime())))
+	require.True(t, tlm.isTaskAddedRecently(time.Now().Add(1*time.Second)))
+	require.False(t, tlm.isTaskAddedRecently(time.Time{}))
+}
+
+func tlMgrStartWithoutNotifyEvent(tlm *taskListManagerImpl) {
+	// mimic tlm.Start() but avoid calling notifyEvent
+	tlm.startWG.Done()
+	go tlm.getTasksPump()
+}
+
+func TestCheckIdleTaskList(t *testing.T) {
+	cfg := NewConfig(dynamicconfig.NewNopCollection())
+	cfg.IdleTasklistCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
+
+	// Idle
+	tlm := createTestTaskListManagerWithConfig(cfg)
+	tlMgrStartWithoutNotifyEvent(tlm)
+	time.Sleep(20 * time.Millisecond)
+	require.False(t, atomic.CompareAndSwapInt32(&tlm.stopped, 0, 1))
+
+	// Active poll-er
+	tlm = createTestTaskListManagerWithConfig(cfg)
+	tlm.updatePollerInfo(pollerIdentity{identity: "test-poll"})
+	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
+	tlMgrStartWithoutNotifyEvent(tlm)
+	time.Sleep(20 * time.Millisecond)
+	require.Equal(t, int32(0), tlm.stopped)
+	tlm.Stop()
+	require.Equal(t, int32(1), tlm.stopped)
+
+	// Active adding task
+	tlm = createTestTaskListManagerWithConfig(cfg)
+	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
+	tlMgrStartWithoutNotifyEvent(tlm)
+	tlm.signalNewTask()
+	time.Sleep(20 * time.Millisecond)
+	require.Equal(t, int32(0), tlm.stopped)
+	tlm.Stop()
+	require.Equal(t, int32(1), tlm.stopped)
 }

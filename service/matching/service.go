@@ -39,6 +39,7 @@ type Config struct {
 	GetTasksBatchSize         dynamicconfig.IntPropertyFnWithTaskListInfoFilters
 	UpdateAckInterval         dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
 	IdleTasklistCheckInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
+	MaxTasklistIdleTime       dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
 	// Time to hold a poll request before returning an empty response if there are no tasks
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskListInfoFilters
 	MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskListInfoFilters
@@ -57,6 +58,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
 		UpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
 		IdleTasklistCheckInterval:       dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingIdleTasklistCheckInterval, 5*time.Minute),
+		MaxTasklistIdleTime:             dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MaxTasklistIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:      dc.GetDurationPropertyFilteredByTaskListInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
 		MinTaskThrottlingBurstSize:      dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
 		OutstandingTaskAppendsThreshold: dc.GetIntPropertyFilteredByTaskListInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
