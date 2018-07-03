@@ -143,7 +143,6 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
 		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
 	failoverTimerProcessor.Start()
-	failoverTimerProcessor.timerQueueProcessorBase.readAndFanoutTimerTasks()
 }
 
 func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 {

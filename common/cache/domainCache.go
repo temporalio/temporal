@@ -173,8 +173,11 @@ func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
 	for ite.HasNext() {
 		entry := ite.Next()
 		id := entry.Key().(string)
-		domainCacheEntry := entry.Value().(*DomainCacheEntry).duplicate()
-		result[id] = domainCacheEntry
+		domainCacheEntry := entry.Value().(*DomainCacheEntry)
+		domainCacheEntry.RLock()
+		dup := domainCacheEntry.duplicate()
+		domainCacheEntry.RUnlock()
+		result[id] = dup
 	}
 	return result
 }
@@ -185,13 +188,13 @@ func (c *domainCache) GetAllDomain() map[string]*DomainCacheEntry {
 // afterCallback will be invoked when NOT holding the domain cache lock.
 func (c *domainCache) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, beforeCallback CallbackFn, afterCallback CallbackFn) {
 	c.Lock()
-	defer c.Unlock()
-
 	c.beforeCallbacks[shard] = beforeCallback
 	c.afterCallbacks[shard] = afterCallback
+	domainNotificationVersion := c.domainNotificationVersion
+	c.Unlock()
 
 	// this section is trying to make the shard catch up with domain changes
-	if c.domainNotificationVersion > initialNotificationVersion {
+	if domainNotificationVersion > initialNotificationVersion {
 		domains := DomainCacheEntries{}
 		for _, domain := range c.GetAllDomain() {
 			domains = append(domains, domain)
