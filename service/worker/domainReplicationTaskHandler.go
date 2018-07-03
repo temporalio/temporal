@@ -98,6 +98,7 @@ func (domainReplicator *domainReplicatorImpl) handleDomainCreationReplicationTas
 			Status:      status,
 			Description: task.Info.GetDescription(),
 			OwnerEmail:  task.Info.GetOwnerEmail(),
+			Data:        task.Info.Data,
 		},
 		Config: &persistence.DomainConfig{
 			Retention:  task.Config.GetWorkflowExecutionRetentionPeriodInDays(),

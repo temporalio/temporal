@@ -150,6 +150,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(12)
 	failoverVersion := int64(59)
+	domainData := map[string]string{"k1": "v1", "k2": "v2"}
 	clusters := []*shared.ClusterReplicationConfiguration{
 		&shared.ClusterReplicationConfiguration{
 			ClusterName: common.StringPtr(clusterActive),
@@ -167,6 +168,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        domainData,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -194,6 +196,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_DomainN
 	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
+	s.Equal(domainData, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
