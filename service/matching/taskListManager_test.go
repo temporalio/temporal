@@ -61,6 +61,20 @@ func TestDeliverBufferTasks(t *testing.T) {
 	}
 }
 
+func TestDeliverBufferTasks_NoPollers(t *testing.T) {
+	tlm := createTestTaskListManager()
+	tlm.taskBuffer <- &persistence.TaskInfo{}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		tlm.deliverBufferTasksForPoll()
+		wg.Done()
+	}()
+	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
+	close(tlm.deliverBufferShutdownCh)
+	wg.Wait()
+}
+
 func TestNewRateLimiter(t *testing.T) {
 	maxDispatch := float64(0.01)
 	rl := newRateLimiter(&maxDispatch, time.Second, _minBurst)

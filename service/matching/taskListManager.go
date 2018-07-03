@@ -725,7 +725,11 @@ deliverBufferTasksLoop:
 			if !ok { // Task list getTasks pump is shutdown
 				break deliverBufferTasksLoop
 			}
-			c.tasksForPoll <- &getTaskResult{task: task}
+			select {
+			case c.tasksForPoll <- &getTaskResult{task: task}:
+			case <-c.deliverBufferShutdownCh:
+				break deliverBufferTasksLoop
+			}
 		case <-c.deliverBufferShutdownCh:
 			break deliverBufferTasksLoop
 		}
