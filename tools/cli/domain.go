@@ -20,7 +20,47 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/urfave/cli"
+)
+
+// by default we don't require any domain data. But this can be overridden by calling SetRequiredDomainDataKeys()
+var requiredDomainDataKeys = []string{}
+
+// SetRequiredDomainDataKeys will set requiredDomainDataKeys
+func SetRequiredDomainDataKeys(keys []string) {
+	requiredDomainDataKeys = keys
+}
+
+func checkRequiredDomainDataKVs(domainData map[string]string) error {
+	//check requiredDomainDataKeys
+	for _, k := range requiredDomainDataKeys {
+		_, ok := domainData[k]
+		if !ok {
+			return fmt.Errorf("domain data error, missing required key %v . All required keys: %v", k, requiredDomainDataKeys)
+		}
+	}
+	return nil
+}
+
+func parseDomainDataKVs(domainDataStr string) (map[string]string, error) {
+	kvstrs := strings.Split(domainDataStr, ",")
+	kvMap := map[string]string{}
+	for _, kvstr := range kvstrs {
+		kv := strings.Split(kvstr, ":")
+		if len(kv) != 2 {
+			return kvMap, fmt.Errorf("domain data format error. It must be k1:v2,k2:v2,...,kn:vn")
+		}
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+		kvMap[k] = v
+	}
+
+	return kvMap, nil
+}
 
 func newDomainCommands() []cli.Command {
 	return []cli.Command{
@@ -52,6 +92,10 @@ func newDomainCommands() []cli.Command {
 				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
 					Name:  FlagClustersWithAlias,
 					Usage: "Clusters",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainDataWithAlias,
+					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -86,6 +130,10 @@ func newDomainCommands() []cli.Command {
 				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
 					Name:  FlagClustersWithAlias,
 					Usage: "Clusters",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainDataWithAlias,
+					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
 				},
 			},
 			Action: func(c *cli.Context) {

@@ -117,6 +117,8 @@ const (
 	FlagActiveClusterNameWithAlias = FlagActiveClusterName + ", ac"
 	FlagClusters                   = "clusters"
 	FlagClustersWithAlias          = FlagClusters + ", cl"
+	FlagDomainData                 = "domain_data"
+	FlagDomainDataWithAlias        = FlagDomainData + ", dmd"
 )
 
 const (
@@ -191,6 +193,22 @@ func RegisterDomain(c *cli.Context) {
 			return
 		}
 	}
+
+	domainData := map[string]string{}
+	if len(requiredDomainDataKeys) > 0 {
+		domainDataStr := getRequiredOption(c, FlagDomainData)
+		domainData, err = parseDomainDataKVs(domainDataStr)
+		if err != nil {
+			fmt.Printf("Register Domain failed: %v.\n", err.Error())
+			return
+		}
+		err = checkRequiredDomainDataKVs(domainData)
+		if err != nil {
+			fmt.Printf("Register Domain failed: %v.\n", err.Error())
+			return
+		}
+	}
+
 	var activeClusterName string
 	if c.IsSet(FlagActiveClusterName) {
 		activeClusterName = c.String(FlagActiveClusterName)
@@ -209,9 +227,10 @@ func RegisterDomain(c *cli.Context) {
 	}
 
 	request := &s.RegisterDomainRequest{
-		Name:                                   common.StringPtr(domain),
-		Description:                            common.StringPtr(description),
-		OwnerEmail:                             common.StringPtr(ownerEmail),
+		Name:        common.StringPtr(domain),
+		Description: common.StringPtr(description),
+		OwnerEmail:  common.StringPtr(ownerEmail),
+		Data:        domainData,
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
@@ -274,6 +293,14 @@ func UpdateDomain(c *cli.Context) {
 		if c.IsSet(FlagOwnerEmail) {
 			ownerEmail = c.String(FlagOwnerEmail)
 		}
+		domainData := map[string]string{}
+		if c.IsSet(FlagDomainData) {
+			domainDataStr := c.String(FlagDomainData)
+			domainData, err = parseDomainDataKVs(domainDataStr)
+			if err != nil {
+				ErrorAndExit("Update Domain failed", err)
+			}
+		}
 		if c.IsSet(FlagRetentionDays) {
 			retentionDays = int32(c.Int(FlagRetentionDays))
 		}
@@ -298,6 +325,7 @@ func UpdateDomain(c *cli.Context) {
 		updateInfo := &s.UpdateDomainInfo{
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        domainData,
 		}
 		updateConfig := &s.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
@@ -341,11 +369,12 @@ func DescribeDomain(c *cli.Context) {
 			fmt.Printf("Domain %s does not exist.\n", domain)
 		}
 	} else {
-		fmt.Printf("Name: %v\nDescription: %v\nOwnerEmail: %v\nStatus: %v\nRetentionInDays: %v\n"+
+		fmt.Printf("Name: %v\nDescription: %v\nOwnerEmail: %v\nDomainData: %v\nStatus: %v\nRetentionInDays: %v\n"+
 			"EmitMetrics: %v\nActiveClusterName: %v\nClusters: %v\n",
 			resp.DomainInfo.GetName(),
 			resp.DomainInfo.GetDescription(),
 			resp.DomainInfo.GetOwnerEmail(),
+			resp.DomainInfo.Data,
 			resp.DomainInfo.GetStatus(),
 			resp.Configuration.GetWorkflowExecutionRetentionPeriodInDays(),
 			resp.Configuration.GetEmitMetric(),
