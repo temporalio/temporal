@@ -66,10 +66,10 @@ func NewConfig() *Config {
 // Start is called to start the service
 func (s *Service) Start() {
 	p := s.params
-	log := p.Logger
-
-	log.Infof("%v starting", common.WorkerServiceName)
 	base := service.New(p)
+
+	log := base.GetLogger()
+	log.Infof("%v starting", common.WorkerServiceName)
 	base.Start()
 
 	s.metricsClient = base.GetMetricsClient()
