@@ -221,6 +221,11 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 	processTaskIfClosed := true
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 
+		if msBuilder.IsWorkflowExecutionRunning() {
+			// this can happen if workflow is reset.
+			return nil
+		}
+
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return err

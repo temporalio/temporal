@@ -397,7 +397,8 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	msBuilder, err = loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
-	} else if msBuilder == nil {
+	} else if msBuilder == nil || msBuilder.IsWorkflowExecutionRunning() {
+		// this can happen if workflow is reset.
 		return nil
 	}
 
