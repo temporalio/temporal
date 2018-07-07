@@ -63,6 +63,8 @@ type (
 		// worker coroutines notification
 		workerNotificationChans []chan struct{}
 
+		lastPollTime time.Time
+
 		notifyCh   chan struct{}
 		status     int32
 		shutdownWG sync.WaitGroup
@@ -92,6 +94,7 @@ func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, p
 		metricsClient:           shard.GetMetricsClient(),
 		logger:                  logger,
 		ackMgr:                  queueAckMgr,
+		lastPollTime:            time.Time{},
 	}
 
 	return p
@@ -145,7 +148,6 @@ func (p *queueProcessorBase) processorPump() {
 	}
 
 	jitter := backoff.NewJitter()
-	lastPollTime := time.Time{}
 	pollTimer := time.NewTimer(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
 	updateAckTimer := time.NewTimer(p.options.UpdateAckInterval())
 
@@ -159,12 +161,10 @@ processorPumpLoop:
 			go p.Stop()
 		case <-p.notifyCh:
 			p.processBatch(tasksCh)
-			lastPollTime = time.Now()
 		case <-pollTimer.C:
 			pollTimer.Reset(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
-			if lastPollTime.Add(p.options.MaxPollInterval()).Before(time.Now()) {
+			if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(time.Now()) {
 				p.processBatch(tasksCh)
-				lastPollTime = time.Now()
 			}
 		case <-updateAckTimer.C:
 			p.ackMgr.updateQueueAckLevel()
@@ -189,6 +189,7 @@ func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 		return
 	}
 
+	p.lastPollTime = time.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()
 
 	if err != nil {

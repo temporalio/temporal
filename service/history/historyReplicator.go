@@ -194,7 +194,7 @@ func (r *historyReplicator) ApplyStartEvent(context *workflowExecutionContext, r
 	msBuilder := r.getNewMutableState(request.GetVersion(), logger)
 	err := r.ApplyReplicationTask(context, msBuilder, request, logger)
 	if err != nil {
-		logger.Errorf("Fail to Apply Replication task.  NextEvent: %v, FirstEvent: %v, Err: %v", msBuilder.GetNextEventID(),
+		logger.Debugf("Fail to Apply Replication task.  NextEvent: %v, FirstEvent: %v, Err: %v", msBuilder.GetNextEventID(),
 			request.GetFirstEventId(), err)
 	}
 	return err

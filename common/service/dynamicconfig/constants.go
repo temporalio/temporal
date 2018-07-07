@@ -82,6 +82,7 @@ var keys = map[Key]string{
 	TimerProcessorUpdateShardTaskCount:                  "history.timerProcessorUpdateShardTaskCount",
 	TimerProcessorUpdateAckInterval:                     "history.timerProcessorUpdateAckInterval",
 	TimerProcessorCompleteTimerInterval:                 "history.timerProcessorCompleteTimerInterval",
+	TimerProcessorMaxPollRPS:                            "history.timerProcessorMaxPollRPS",
 	TimerProcessorMaxPollInterval:                       "history.timerProcessorMaxPollInterval",
 	TimerProcessorMaxPollIntervalJitterCoefficient:      "history.timerProcessorMaxPollIntervalJitterCoefficient",
 	TimerProcessorStandbyTaskDelay:                      "history.timerProcessorStandbyTaskDelay",
@@ -190,6 +191,8 @@ const (
 	TimerProcessorUpdateAckInterval
 	// TimerProcessorCompleteTimerInterval is complete timer interval for timer processor
 	TimerProcessorCompleteTimerInterval
+	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
+	TimerProcessorMaxPollRPS
 	// TimerProcessorMaxPollInterval is max poll interval for timer processor
 	TimerProcessorMaxPollInterval
 	// TimerProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient

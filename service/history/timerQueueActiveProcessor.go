@@ -63,9 +63,6 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		return verifyActiveTask(shard, logger, timer.DomainID, timer)
 	}
 
-	timerGate := NewLocalTimerGate()
-	// this will trigger a timer gate fire event immediately
-	timerGate.Update(time.Time{})
 	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerActiveQueueProcessorScope, shard, historyService.metricsClient, currentClusterName, logger)
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
 		common.IsMatchingServiceTransientError)
@@ -79,7 +76,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		matchingClient:          retryableMatchingClient,
 		metricsClient:           historyService.metricsClient,
 		currentClusterName:      currentClusterName,
-		timerGate:               timerGate,
+		timerGate:               NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(metrics.TimerActiveQueueProcessorScope, shard, historyService, timerQueueAckMgr, timeNow, logger),
 		timerQueueAckMgr:        timerQueueAckMgr,
 	}

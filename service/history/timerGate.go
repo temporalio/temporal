@@ -76,10 +76,10 @@ type (
 
 		// lock for timer and next wake up time
 		sync.Mutex
+		// view of current time
+		currentTime time.Time
 		// time which timer will fire
 		nextWakeupTime time.Time
-		// nextWakeupTime already fired or not
-		nextWakeupTimeFired bool
 	}
 )
 
@@ -155,9 +155,9 @@ func (timerGate *LocalTimerGateImpl) Close() {
 // NewRemoteTimerGate create a new timer gate instance
 func NewRemoteTimerGate() RemoteTimerGate {
 	timer := &RemoteTimerGateImpl{
-		nextWakeupTime:      time.Time{},
-		nextWakeupTimeFired: true, // this should be true so update API can set the next timer
-		fireChan:            make(chan struct{}, 1),
+		currentTime:    time.Time{},
+		nextWakeupTime: time.Time{},
+		fireChan:       make(chan struct{}, 1),
 	}
 	return timer
 }
@@ -171,7 +171,9 @@ func (timerGate *RemoteTimerGateImpl) FireChan() <-chan struct{} {
 func (timerGate *RemoteTimerGateImpl) FireAfter(now time.Time) bool {
 	timerGate.Lock()
 	defer timerGate.Unlock()
-	return timerGate.nextWakeupTime.After(now)
+
+	active := timerGate.currentTime.Before(timerGate.nextWakeupTime)
+	return active && timerGate.nextWakeupTime.After(now)
 }
 
 // Update update the timer gate, return true if update is a success
@@ -180,33 +182,69 @@ func (timerGate *RemoteTimerGateImpl) Update(nextTime time.Time) bool {
 	timerGate.Lock()
 	defer timerGate.Unlock()
 
-	if timerGate.nextWakeupTimeFired || timerGate.nextWakeupTime.After(nextTime) {
-		// if timer will not fire or next wake time is after the "next"
-		// then we need to update the timer to fire
+	active := timerGate.currentTime.Before(timerGate.nextWakeupTime)
+	if active {
+		if timerGate.nextWakeupTime.Before(nextTime) {
+			// current time < next wake up time < next time
+			return false
+		}
+
+		if timerGate.currentTime.Before(nextTime) {
+			// current time < next time <= next wake up time
+			timerGate.nextWakeupTime = nextTime
+			return true
+		}
+
+		// next time <= current time < next wake up time
 		timerGate.nextWakeupTime = nextTime
-		timerGate.nextWakeupTimeFired = false
-		// Notifies caller that next notification is reset to fire at passed in 'next' visibility time
+		timerGate.fire()
 		return true
 	}
 
-	return false
+	// this means the timer, before stopped, has already fired / never active
+	if !timerGate.currentTime.Before(nextTime) {
+		// next time is <= current time, need to fire immediately
+		// whether to update next wake up time or not is irrelevent
+		timerGate.fire()
+	} else {
+		// next time > current time
+		timerGate.nextWakeupTime = nextTime
+	}
+	return true
 }
 
 // SetCurrentTime set the current time, and additionally fire the fire chan
 // if new "current" time is after the next wake up time, return true if
-// "current" is antually updated
+// "current" is actually updated
 func (timerGate *RemoteTimerGateImpl) SetCurrentTime(currentTime time.Time) bool {
 	timerGate.Lock()
 	defer timerGate.Unlock()
-	if !timerGate.nextWakeupTimeFired && !currentTime.Before(timerGate.nextWakeupTime) {
-		timerGate.nextWakeupTimeFired = true
-		select {
-		case timerGate.fireChan <- struct{}{}:
-			// timer successfully triggered
-		default:
-			// timer already triggered, pass
-		}
+
+	if !timerGate.currentTime.Before(currentTime) {
+		// new current time is <= current time
+		return false
+	}
+
+	// NOTE: do not update the current time now
+	if !timerGate.currentTime.Before(timerGate.nextWakeupTime) {
+		// current time already >= next wakeup time
+		// avoid duplicate fire
+		timerGate.currentTime = currentTime
 		return true
 	}
-	return false
+
+	timerGate.currentTime = currentTime
+	if !timerGate.currentTime.Before(timerGate.nextWakeupTime) {
+		timerGate.fire()
+	}
+	return true
+}
+
+func (timerGate *RemoteTimerGateImpl) fire() {
+	select {
+	case timerGate.fireChan <- struct{}{}:
+		// timer successfully triggered
+	default:
+		// timer already triggered, pass
+	}
 }

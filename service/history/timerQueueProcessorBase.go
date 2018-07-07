@@ -63,11 +63,14 @@ type (
 		timerFiredCount  uint64
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
+		rateLimiter      common.TokenBucket
 
 		// worker coroutines notification
 		workerNotificationChans []chan struct{}
 		// duplicate numOfWorker from config.TimerTaskWorkerCount for dynamic config works correctly
 		numOfWorker int
+
+		lastPollTime time.Time
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -104,6 +107,8 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		numOfWorker:             numOfWorker,
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
+		lastPollTime:            time.Time{},
+		rateLimiter:             common.NewTokenBucket(shard.GetConfig().TimerProcessorMaxPollRPS(), common.NewRealTimeSource()),
 	}
 
 	return base
@@ -115,6 +120,8 @@ func (t *timerQueueProcessorBase) Start() {
 	}
 
 	t.shutdownWG.Add(1)
+	// notify a initial scan
+	t.notifyNewTimer(time.Time{})
 	go t.processorPump()
 
 	t.logger.Info("Timer queue processor started.")
@@ -303,6 +310,10 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 		}
 	}
 
+	t.notifyNewTimer(newTime)
+}
+
+func (t *timerQueueProcessorBase) notifyNewTimer(newTime time.Time) {
 	t.newTimeLock.Lock()
 	defer t.newTimeLock.Unlock()
 	if t.newTime.IsZero() || newTime.Before(t.newTime) {
@@ -319,7 +330,6 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 func (t *timerQueueProcessorBase) internalProcessor() error {
 	timerGate := t.timerProcessor.getTimerGate()
 	jitter := backoff.NewJitter()
-	lastPollTime := time.Time{}
 	pollTimer := time.NewTimer(jitter.JitDuration(
 		t.config.TimerProcessorMaxPollInterval(),
 		t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
@@ -327,97 +337,83 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	defer pollTimer.Stop()
 
 	updateAckChan := time.NewTicker(t.shard.GetConfig().TimerProcessorUpdateAckInterval()).C
-	var nextKeyTask *persistence.TimerTaskInfo
 
-continueProcessor:
 	for {
-		now := t.now()
-		if nextKeyTask == nil || timerGate.FireAfter(now) {
-			// Wait until one of four things occurs:
-			// 1. we get notified of a new message
-			// 2. the timer gate fires (message scheduled to be delivered)
-			// 3. shutdown was triggered.
-			// 4. updating ack level
-			//
-			select {
-			case <-t.shutdownCh:
-				t.logger.Debug("Timer queue processor pump shutting down.")
-				return nil
-			case <-t.timerQueueAckMgr.getFinishedChan():
-				// timer queue ack manager indicate that all task scanned
-				// are finished and no more tasks
-				// use a separate gorouting since the caller hold the shutdownWG
-				go t.Stop()
-				return nil
-			case <-timerGate.FireChan():
-				// Timer Fired.
-			case <-pollTimer.C:
-				pollTimer.Reset(jitter.JitDuration(
-					t.config.TimerProcessorMaxPollInterval(),
-					t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
-				))
-				if !lastPollTime.Add(t.config.TimerProcessorMaxPollInterval()).Before(time.Now()) {
-					continue continueProcessor
+		// Wait until one of four things occurs:
+		// 1. we get notified of a new message
+		// 2. the timer gate fires (message scheduled to be delivered)
+		// 3. shutdown was triggered.
+		// 4. updating ack level
+		//
+		select {
+		case <-t.shutdownCh:
+			t.logger.Debug("Timer queue processor pump shutting down.")
+			return nil
+		case <-t.timerQueueAckMgr.getFinishedChan():
+			// timer queue ack manager indicate that all task scanned
+			// are finished and no more tasks
+			// use a separate gorouting since the caller hold the shutdownWG
+			go t.Stop()
+			return nil
+		case <-timerGate.FireChan():
+			lookAheadTimer, err := t.readAndFanoutTimerTasks()
+			if err != nil {
+				return err
+			}
+			if lookAheadTimer != nil {
+				timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+			}
+		case <-pollTimer.C:
+			pollTimer.Reset(jitter.JitDuration(
+				t.config.TimerProcessorMaxPollInterval(),
+				t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
+			))
+			if t.lastPollTime.Add(t.config.TimerProcessorMaxPollInterval()).Before(time.Now()) {
+				lookAheadTimer, err := t.readAndFanoutTimerTasks()
+				if err != nil {
+					return err
 				}
-			case <-updateAckChan:
-				t.timerQueueAckMgr.updateAckLevel()
-				continue continueProcessor
-			case <-t.newTimerCh:
-				t.newTimeLock.Lock()
-				newTime := t.newTime
-				t.newTime = emptyTime
-				t.newTimeLock.Unlock()
-				// New Timer has arrived.
-				t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
-				t.logger.Debugf("Woke up by the timer")
-
-				if timerGate.Update(newTime) {
-					// this means timer is updated, to the new time provided
-					// reset the nextKeyTask as the new timer is expected to fire before previously read nextKeyTask
-					nextKeyTask = nil
-				}
-
-				now = t.now()
-				t.logger.Debugf("%v: Next key after woke up by timer: %v", now.UTC(), newTime.UTC())
-				if timerGate.FireAfter(now) {
-					continue continueProcessor
+				if lookAheadTimer != nil {
+					timerGate.Update(lookAheadTimer.VisibilityTimestamp)
 				}
 			}
-		}
-
-		lastPollTime = time.Now()
-		var err error
-		nextKeyTask, err = t.readAndFanoutTimerTasks()
-		if err != nil {
-			return err
-		}
-
-		if nextKeyTask != nil {
-			nextKey := TimerSequenceID{VisibilityTimestamp: nextKeyTask.VisibilityTimestamp, TaskID: nextKeyTask.TaskID}
-			t.logger.Debugf("%s: GetNextKey: %s", time.Now(), nextKey)
-
-			timerGate.Update(nextKey.VisibilityTimestamp)
+		case <-updateAckChan:
+			t.timerQueueAckMgr.updateAckLevel()
+		case <-t.newTimerCh:
+			t.newTimeLock.Lock()
+			newTime := t.newTime
+			t.newTime = emptyTime
+			t.newTimeLock.Unlock()
+			// New Timer has arrived.
+			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
+			timerGate.Update(newTime)
 		}
 	}
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
-	for {
-		// Get next set of timer tasks.
-		timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
-		if err != nil {
-			return nil, err
-		}
-
-		for _, task := range timerTasks {
-			// We have a timer to fire.
-			t.tasksCh <- task
-		}
-
-		if !moreTasks {
-			return lookAheadTask, nil
-		}
+	if !t.rateLimiter.Consume(1, t.shard.GetConfig().TransferProcessorMaxPollInterval()) {
+		t.notifyNewTimer(time.Time{}) // re-enqueue the event
+		return nil, nil
 	}
+
+	t.lastPollTime = time.Now()
+	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range timerTasks {
+		// We have a timer to fire.
+		t.tasksCh <- task
+	}
+
+	if !moreTasks {
+		return lookAheadTask, nil
+	}
+
+	t.notifyNewTimer(time.Time{}) // re-enqueue the event
+	return nil, nil
 }
 
 func (t *timerQueueProcessorBase) retryTasks() {
