@@ -392,7 +392,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerTaskInfo, error) {
-	if !t.rateLimiter.Consume(1, t.shard.GetConfig().TransferProcessorMaxPollInterval()) {
+	if !t.rateLimiter.Consume(1, t.shard.GetConfig().TimerProcessorMaxPollInterval()) {
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}

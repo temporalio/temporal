@@ -1422,6 +1422,26 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here jsut use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 
+	currentContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(currentRunID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	currentMsBuilder := &mockMutableState{}
+	currentMsBuilder.On("HasBufferedReplicationTasks").Return(false)
+	// return empty since not actually used
+	currentMsBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
+	// return nil to bypass updating the version, since this test does not test that
+	currentMsBuilder.On("GetReplicationState").Return(nil)
+	currentContext.msBuilder = currentMsBuilder
+	s.historyReplicator.historyCache.PutIfNotExist(currentRunID, currentContext)
+	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{
+		RunID: currentRunID,
+		// other attributes are not used
+	}, nil)
+
 	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
 	s.Equal(ErrRetryExistingWorkflow, err)
 	s.Equal(1, len(transferTasks))
