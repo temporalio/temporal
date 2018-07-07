@@ -189,7 +189,7 @@ type (
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
 		UpdateDecision(*decisionInfo)
-		UpdateReplicationStateVersion(int64)
+		UpdateReplicationStateVersion(int64, bool)
 		UpdateReplicationStateLastEventID(string, int64, int64)
 		UpdateUserTimer(string, *persistence.TimerInfo)
 	}
@@ -510,8 +510,8 @@ func (e *mutableStateBuilder) GetLastWriteVersion() int64 {
 	return e.replicationState.LastWriteVersion
 }
 
-func (e *mutableStateBuilder) UpdateReplicationStateVersion(version int64) {
-	if version > e.replicationState.CurrentVersion {
+func (e *mutableStateBuilder) UpdateReplicationStateVersion(version int64, forceUpdate bool) {
+	if version > e.replicationState.CurrentVersion || forceUpdate {
 		e.replicationState.CurrentVersion = version
 	}
 }

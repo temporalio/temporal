@@ -123,7 +123,7 @@ func (s *stateBuilderSuite) TearDownTest() {
 
 func (s *stateBuilderSuite) mockUpdateVersion(events ...*shared.HistoryEvent) {
 	for _, event := range events {
-		s.mockMutableState.On("UpdateReplicationStateVersion", event.GetVersion()).Once()
+		s.mockMutableState.On("UpdateReplicationStateVersion", event.GetVersion(), true).Once()
 	}
 }
 

@@ -93,7 +93,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 	for _, event := range history.Events {
 		lastEvent = event
 		// must set the current version, since this is standby here, not active
-		b.msBuilder.UpdateReplicationStateVersion(event.GetVersion())
+		b.msBuilder.UpdateReplicationStateVersion(event.GetVersion(), true)
 		switch event.GetEventType() {
 		case shared.EventTypeWorkflowExecutionStarted:
 			attributes := event.WorkflowExecutionStartedEventAttributes

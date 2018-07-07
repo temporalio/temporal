@@ -2105,9 +2105,9 @@ func (_m *mockMutableState) UpdateReplicationStateLastEventID(clusterName string
 	_m.Called(clusterName, lastWriteVersion, lastEventID)
 }
 
-// UpdateReplicationStateVersion provides a mock function with given fields: version
-func (_m *mockMutableState) UpdateReplicationStateVersion(version int64) {
-	_m.Called(version)
+// UpdateReplicationStateVersion provides a mock function with given fields: version, forceUpdate
+func (_m *mockMutableState) UpdateReplicationStateVersion(version int64, forceUpdate bool) {
+	_m.Called(version, forceUpdate)
 }
 
 // UpdateUserTimer provides a mock function with given fields: _a0, _a1

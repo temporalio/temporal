@@ -161,7 +161,7 @@ func (c *workflowExecutionContext) updateVersion() error {
 		if err != nil {
 			return err
 		}
-		c.msBuilder.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion())
+		c.msBuilder.UpdateReplicationStateVersion(domainEntry.GetFailoverVersion(), false)
 
 		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
 		c.createReplicationTask = domainEntry.CanReplicateEvent()

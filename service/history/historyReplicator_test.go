@@ -1711,7 +1711,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 	msBuilderCurrent.On("GetReplicationState").Return(&persistence.ReplicationState{}) // this is used to update the version on mutable state
 	msBuilderCurrent.On("IsWorkflowExecutionRunning").Return(true)                     // this is used to update the version on mutable state
 	msBuilderCurrent.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{RunID: currentRunID, CloseStatus: persistence.WorkflowCloseStatusNone})
-	msBuilderCurrent.On("UpdateReplicationStateVersion", version)
+	msBuilderCurrent.On("UpdateReplicationStateVersion", version, false)
 	contextCurrent.msBuilder = msBuilderCurrent
 	release(nil)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
