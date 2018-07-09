@@ -194,8 +194,8 @@ func (s *shardContextImpl) GetTimerAckLevel() time.Time {
 }
 
 func (s *shardContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 
 	s.shardInfo.TimerAckLevel = ackLevel
 	s.shardInfo.StolenSinceRenew = 0

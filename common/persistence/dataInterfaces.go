@@ -140,7 +140,7 @@ type (
 		UpdatedAt                 time.Time
 		ReplicationAckLevel       int64
 		TransferAckLevel          int64     // TO BE DEPRECATED IN FAVOR OF ClusterTransferAckLevel
-		TimerAckLevel             time.Time // TO BE DEPRECATED IN FAVOR OF ClusteerTimerAckLevel
+		TimerAckLevel             time.Time // TO BE DEPRECATED IN FAVOR OF ClusterTimerAckLevel
 		ClusterTransferAckLevel   map[string]int64
 		ClusterTimerAckLevel      map[string]time.Time
 		DomainNotificationVersion int64

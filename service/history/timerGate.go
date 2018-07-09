@@ -134,12 +134,12 @@ func (timerGate *LocalTimerGateImpl) Update(nextTime time.Time) bool {
 	now := time.Now()
 
 	if timerGate.timer.Stop() && timerGate.nextWakeupTime.Before(nextTime) {
-		// this means the timer, before stopped, is active && next wake up time do not have to be upddated
+		// this means the timer, before stopped, is active && next wake up time do not have to be updated
 		timerGate.timer.Reset(timerGate.nextWakeupTime.Sub(now))
 		return false
 	}
 
-	// this means the timer, before stopped, is active && next wake up time has to be upddated
+	// this means the timer, before stopped, is active && next wake up time has to be updated
 	// or this means the timer, before stopped, is already fired / never active
 	timerGate.nextWakeupTime = nextTime
 	timerGate.timer.Reset(nextTime.Sub(now))

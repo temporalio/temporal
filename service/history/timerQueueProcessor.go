@@ -205,7 +205,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	executionMgr := t.shard.GetExecutionManager()
 	minTimestamp := lowerAckLevel.VisibilityTimestamp
-	// releax the upper limit for scan since the query is [minTimestamp, minTimestamp)
+	// relax the upper limit for scan since the query is [minTimestamp, maxTimestamp)
 	maxTimestamp := upperAckLevel.VisibilityTimestamp.Add(1 * time.Second)
 	batchSize := t.config.TimerTaskBatchSize()
 	request := &persistence.GetTimerIndexTasksRequest{
@@ -227,10 +227,10 @@ LoadCompleteLoop:
 			if compareTimerIDLess(&upperAckLevel, &timerSequenceID) {
 				break LoadCompleteLoop
 			}
-			minTimestamp = timer.VisibilityTimestamp
-			if err := executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+			err := executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
 				VisibilityTimestamp: timer.VisibilityTimestamp,
-				TaskID:              timer.TaskID}); err != nil {
+				TaskID:              timer.TaskID})
+			if err != nil {
 				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timer, err)
 			}
 		}
