@@ -21,14 +21,11 @@
 package worker
 
 import (
-	"math"
+	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"encoding/json"
-
-	"context"
 
 	"github.com/uber-common/bark"
 	"github.com/uber-go/kafka-client/kafka"
@@ -42,35 +39,6 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/yarpc/yarpcerrors"
-)
-
-type workerStatus int
-
-var errMaxAttemptReached = &shared.BadRequestError{Message: "Maximum attempts exceeded"}
-var errDeserializeReplicationTask = &shared.BadRequestError{Message: "Failed to deserialize replication task"}
-
-const (
-	workerStatusRunning workerStatus = iota
-	workerStatusPendingRetry
-)
-
-const (
-	// below are the max retry count for worker
-
-	// [0, 0.6) percentage max retry count
-	retryCountInfinity int64 = math.MaxInt64 // using int64 max as infinity
-	// [0.6, 0.7) percentage max retry count
-	retryCount70PercentInRetry int64 = 256
-	// [0.7, 0.8) percentage max retry count
-	retryCount80PercentInRetry int64 = 128
-	// [0.8, 0.9) percentage max retry count
-	retryCount90PercentInRetry int64 = 64
-	// [0.9, 0.95) percentage max retry count
-	retryCount95PercentInRetry int64 = 32
-	// [0.95, 1] percentage max retry count
-	retryCount100PercentInRetry int64 = 16
-
-	retryErrorWaitMillis = 100
 )
 
 type (
@@ -95,12 +63,11 @@ type (
 		metricsClient    metrics.Client
 		domainReplicator DomainReplicator
 		historyClient    history.Client
-
-		// worker in retry count is used by underlying processor when doing retry on a task
-		// this help the replicator / underlying processor understanding the overall
-		// situation and giveup retrying
-		workerInRetryCount int32
 	}
+)
+
+const (
+	retryErrorWaitMillis = 100
 )
 
 const (
@@ -113,13 +80,20 @@ var (
 	// ErrEmptyReplicationTask is the error to indicate empty replication task
 	ErrEmptyReplicationTask = &shared.BadRequestError{Message: "empty replication task"}
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask  = &shared.BadRequestError{Message: "unknown replication task"}
+	ErrUnknownReplicationTask = &shared.BadRequestError{Message: "unknown replication task"}
+	// ErrDeserializeReplicationTask is the error to indicate failure to deserialize replication task
+	ErrDeserializeReplicationTask = &shared.BadRequestError{Message: "Failed to deserialize replication task"}
+
 	replicationTaskRetryPolicy = createReplicatorRetryPolicy()
 )
 
 func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
 	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
 	historyClient history.Client) *replicationTaskProcessor {
+
+	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError)
+
 	return &replicationTaskProcessor{
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,
@@ -132,10 +106,9 @@ func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string,
 			logging.TagSourceCluster:     sourceCluster,
 			logging.TagConsumerName:      consumer,
 		}),
-		metricsClient:      metricsClient,
-		domainReplicator:   domainReplicator,
-		historyClient:      historyClient,
-		workerInRetryCount: 0,
+		metricsClient:    metricsClient,
+		domainReplicator: domainReplicator,
+		historyClient:    retryableHistoryClient,
 	}
 }
 
@@ -181,50 +154,6 @@ func (p *replicationTaskProcessor) Stop() {
 	}
 }
 
-func (p *replicationTaskProcessor) updateWorkerRetryStatus(isInRetry bool) {
-	if isInRetry {
-		atomic.AddInt32(&p.workerInRetryCount, 1)
-	} else {
-		atomic.AddInt32(&p.workerInRetryCount, -1)
-	}
-}
-
-// getRemainingRetryCount returns the max retry count at the moment
-func (p *replicationTaskProcessor) getRemainingRetryCount(remainingRetryCount int64) int64 {
-	workerInRetry := float64(atomic.LoadInt32(&p.workerInRetryCount))
-	numWorker := float64(p.config.ReplicatorConcurrency)
-	retryPercentage := workerInRetry / numWorker
-
-	if retryPercentage > 1 || retryPercentage < 0 {
-		p.logger.Fatal("Worker busy level is out of bound")
-	}
-	p.metricsClient.UpdateGauge(metrics.ReplicatorScope, metrics.ReplicatorRetryPercentage, retryPercentage)
-
-	min := func(i int64, j int64) int64 {
-		if i < j {
-			return i
-		}
-		return j
-	}
-
-	if retryPercentage < 0.6 {
-		return min(remainingRetryCount, retryCountInfinity)
-	}
-	if retryPercentage < 0.7 {
-		return min(remainingRetryCount, retryCount70PercentInRetry)
-	}
-	if retryPercentage < 0.8 {
-		return min(remainingRetryCount, retryCount80PercentInRetry)
-	}
-	if retryPercentage < 0.9 {
-		return min(remainingRetryCount, retryCount90PercentInRetry)
-	}
-	if retryPercentage < 0.95 {
-		return min(remainingRetryCount, retryCount95PercentInRetry)
-	}
-	return min(remainingRetryCount, retryCount100PercentInRetry)
-}
-
 func (p *replicationTaskProcessor) processorPump() {
 	defer p.shutdownWG.Done()
 
@@ -267,54 +196,55 @@ func (p *replicationTaskProcessor) messageProcessLoop(workerWG *sync.WaitGroup, 
 func (p *replicationTaskProcessor) processWithRetry(msg kafka.Message, workerID int) {
 	var err error
 
-	isInRetry := false
-	remainingRetryCount := retryCountInfinity
-	defer func() {
-		if isInRetry {
-			p.updateWorkerRetryStatus(false)
+	forceBuffer := false
+	remainingRetryCount := p.config.ReplicationTaskMaxRetry
+
+	op := func() error {
+		processErr := p.process(msg, forceBuffer)
+		if processErr != nil && p.isRetryTaskError(processErr) {
+			// Enable buffering of replication tasks for next attempt
+			forceBuffer = true
 		}
-	}()
+
+		return processErr
+	}
 
 ProcessRetryLoop:
-	for {
+	for attempt := 0; ; attempt++ {
 		select {
 		case <-p.shutdownCh:
 			return
 		default:
-			op := func() error {
-				remainingRetryCount--
-				if remainingRetryCount <= 0 {
-					return errMaxAttemptReached
-				}
-
-				errMsg := p.process(msg, isInRetry)
-				if errMsg != nil && p.isTransientRetryableError(errMsg) {
-					// Keep on retrying transient errors for ever
-					if !isInRetry {
-						isInRetry = true
-						p.updateWorkerRetryStatus(true)
-					}
-					remainingRetryCount = p.getRemainingRetryCount(remainingRetryCount)
-				}
-
-				return errMsg
-			}
-
+			// isTransientRetryableError is pretty broad on purpose as we want to retry replication tasks few times before
+			// moving them to DLQ.
 			err = backoff.Retry(op, replicationTaskRetryPolicy, p.isTransientRetryableError)
 			if err != nil && p.isTransientRetryableError(err) {
-				// Emit a warning log on every 1000 attempt to retry a message
-				if remainingRetryCount%1000 == 0 {
-					p.logger.WithFields(bark.Fields{
-						logging.TagErr:          err,
-						logging.TagPartitionKey: msg.Partition(),
-						logging.TagOffset:       msg.Offset(),
-					}).Warn("Error processing replication task.")
+				// Any whitelisted transient errors should be retried indefinitely
+				if common.IsWhitelistServiceTransientError(err) {
+					// Emit a warning log on every 100 transient error retries of replication task
+					if attempt%100 == 0 {
+						p.logger.WithFields(bark.Fields{
+							logging.TagErr:          err,
+							logging.TagPartitionKey: msg.Partition(),
+							logging.TagOffset:       msg.Offset(),
+						}).Warn("Error processing replication task.")
+					}
+
+					// Keep on retrying transient errors for ever
+					continue ProcessRetryLoop
 				}
 
-				// Keep on retrying transient errors for ever
-				continue ProcessRetryLoop
+				// Otherwise decrement the remaining retries and check if we have more attempts left.
+				// This code path is needed to handle RetryTaskError so we can retry such replication tasks with forceBuffer
+				// enabled.  Once all attempts are exhausted then msg will be nack'ed and moved to DLQ
+				remainingRetryCount--
+				if remainingRetryCount > 0 {
+					continue ProcessRetryLoop
+				}
 			}
+
 		}
+
 		break ProcessRetryLoop
 	}
 
@@ -345,7 +275,7 @@ func (p *replicationTaskProcessor) process(msg kafka.Message, inRetry bool) erro
 		}).Error("Failed to deserialize replication task.")
 
 		// return BadRequestError so processWithRetry can nack the message
-		return errDeserializeReplicationTask
+		return ErrDeserializeReplicationTask
 	}
 
 	if task.TaskType == nil {
@@ -419,8 +349,15 @@ Loop:
 
 RetryLoop:
 	for i := 0; i < p.config.ReplicatorBufferRetryCount; i++ {
-		err = p.historyClient.ReplicateEvents(context.Background(), req)
-		if _, ok := err.(*shared.RetryTaskError); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		err = p.historyClient.ReplicateEvents(ctx, req)
+
+		// Replication tasks could be slightly out of order for a particular workflow execution
+		// We first try to apply the events without buffering enabled with a small delay to account for such delays
+		// Caller should try to apply the event with buffering enabled once we return RetryTaskError after all retries
+		if p.isRetryTaskError(err) {
 			time.Sleep(retryErrorWaitMillis * time.Millisecond)
 			continue RetryLoop
 		}
@@ -454,6 +391,14 @@ func (p *replicationTaskProcessor) updateFailureMetric(scope int, err error) {
 			p.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)
 		}
 	}
+}
+
+func (p *replicationTaskProcessor) isRetryTaskError(err error) bool {
+	if _, ok := err.(*shared.RetryTaskError); ok {
+		return true
+	}
+
+	return false
 }
 
 func (p *replicationTaskProcessor) isTransientRetryableError(err error) bool {

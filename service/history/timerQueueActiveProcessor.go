@@ -65,7 +65,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 
 	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerActiveQueueProcessorScope, shard, historyService.metricsClient, currentClusterName, logger)
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsMatchingServiceTransientError)
+		common.IsWhitelistServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,
@@ -103,7 +103,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel,
 		maxLevel, logger)
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsMatchingServiceTransientError)
+		common.IsWhitelistServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
 		shard:                   shard,
 		historyService:          historyService,

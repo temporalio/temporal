@@ -150,7 +150,7 @@ func (wh *WorkflowHandler) Start() error {
 		return err
 	}
 	wh.matching = matching.NewRetryableClient(wh.matchingRawClient, common.CreateMatchingRetryPolicy(),
-		common.IsMatchingServiceTransientError)
+		common.IsWhitelistServiceTransientError)
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.startWG.Done()
 	return nil

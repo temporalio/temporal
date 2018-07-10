@@ -43,6 +43,7 @@ type (
 		// Replicator settings
 		ReplicatorConcurrency      int
 		ReplicatorBufferRetryCount int
+		ReplicationTaskMaxRetry    int
 	}
 )
 
@@ -60,6 +61,7 @@ func NewConfig() *Config {
 	return &Config{
 		ReplicatorConcurrency:      1000,
 		ReplicatorBufferRetryCount: 8,
+		ReplicationTaskMaxRetry:    5,
 	}
 }
 
