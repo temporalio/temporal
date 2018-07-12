@@ -365,10 +365,10 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to create history service client when start worker")
 	}
-	metadataManager := persistence.NewMetadataPersistenceClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
+	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 
-	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient, worker.NewConfig(), c.messagingClient, c.logger,
-		service.GetMetricsClient())
+	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
+		worker.NewConfig(dynamicconfig.NewNopCollection()), c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
 		c.logger.WithField("error", err).Fatal("Fail to start replicator when start worker")

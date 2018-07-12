@@ -31,6 +31,7 @@ import (
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
+	PersistenceMaxQPS     dynamicconfig.FloatPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                   dynamicconfig.IntPropertyFn
@@ -42,6 +43,7 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		PersistenceMaxQPS:     dc.GetFloat64Property(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize: dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		HistoryMaxPageSize:    dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, 1000),
 		RPS:                   dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
@@ -75,6 +77,9 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
+	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
+
 	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
@@ -87,7 +92,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient(), log)
+	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
+	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
 	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -100,7 +106,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create visiblity manager: %v", err)
 	}
-	visibility = persistence.NewVisibilityPersistenceClient(visibility, base.GetMetricsClient(), log)
+	visibility = persistence.NewVisibilityPersistenceRateLimitedClient(visibility, persistenceRateLimiter, log)
+	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)
 
 	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -114,8 +121,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
 	}
-
-	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient(), log)
+	history = persistence.NewHistoryPersistenceRateLimitedClient(history, persistenceRateLimiter, log)
+	history = persistence.NewHistoryPersistenceMetricsClient(history, base.GetMetricsClient(), log)
 
 	// TODO when global domain is enabled, uncomment the line below and remove the line after
 	var kafkaProducer messaging.Producer

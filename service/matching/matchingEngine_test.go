@@ -906,6 +906,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 
 	// Try with expired context
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	resp, err := s.matchingEngine.PollForActivityTask(ctx, &matching.PollForActivityTaskRequest{
 		DomainUUID: common.StringPtr(domainID),
 		PollRequest: &workflow.PollForActivityTaskRequest{
@@ -914,7 +915,6 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	})
 	s.Nil(err)
 	s.Equal(emptyPollForActivityTaskResponse, resp)
-
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {

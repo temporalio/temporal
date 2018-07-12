@@ -132,7 +132,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
+		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.metricsClient, s.logger),
 		metricsClient:             s.metricsClient,
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
@@ -575,7 +575,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
+		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.metricsClient, s.logger),
 		metricsClient:             s.metricsClient,
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)

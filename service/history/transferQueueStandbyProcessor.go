@@ -51,6 +51,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	visibilityMgr persistence.VisibilityManager, logger bark.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
+		StartDelay:                       config.TransferProcessorStartDelay,
 		BatchSize:                        config.TransferTaskBatchSize,
 		WorkerCount:                      config.TransferTaskWorkerCount,
 		MaxPollRPS:                       config.TransferProcessorMaxPollRPS,

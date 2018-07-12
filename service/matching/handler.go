@@ -77,7 +77,7 @@ func (h *Handler) Start() error {
 	if err != nil {
 		return err
 	}
-	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetLogger())
+	h.domainCache = cache.NewDomainCache(h.metadataMgr, h.GetClusterMetadata(), h.GetMetricsClient(), h.GetLogger())
 	h.domainCache.Start()
 	h.metricsClient = h.Service.GetMetricsClient()
 	h.engine = NewEngine(

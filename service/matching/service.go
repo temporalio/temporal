@@ -31,8 +31,9 @@ import (
 
 // Config represents configuration for cadence-matching service
 type Config struct {
-	EnableSyncMatch dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
-	RPS             dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS dynamicconfig.FloatPropertyFn
+	EnableSyncMatch   dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
+	RPS               dynamicconfig.IntPropertyFn
 
 	// taskListManager configuration
 	RangeSize                 int64
@@ -52,6 +53,7 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		PersistenceMaxQPS:               dc.GetFloat64Property(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskListInfo(dynamicconfig.MatchingEnableSyncMatch, true),
 		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,
@@ -92,6 +94,9 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
+	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
+
 	taskPersistence, err := persistence.NewCassandraTaskPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
@@ -102,7 +107,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create task persistence: %v", err)
 	}
-	taskPersistence = persistence.NewTaskPersistenceClient(taskPersistence, base.GetMetricsClient(), log)
+	taskPersistence = persistence.NewTaskPersistenceRateLimitedClient(taskPersistence, persistenceRateLimiter, log)
+	taskPersistence = persistence.NewTaskPersistenceMetricsClient(taskPersistence, base.GetMetricsClient(), log)
 
 	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -116,7 +122,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient(), log)
+	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
+	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
 	handler := NewHandler(base, s.config, taskPersistence, metadata)
 	handler.Start()

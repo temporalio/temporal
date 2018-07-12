@@ -72,8 +72,8 @@ var _ HistoryManager = (*historyPersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ VisibilityManager = (*visibilityPersistenceClient)(nil)
 
-// NewShardPersistenceClient creates a client to manage shards
-func NewShardPersistenceClient(persistence ShardManager, metricClient metrics.Client, logger bark.Logger) ShardManager {
+// NewShardPersistenceMetricsClient creates a client to manage shards
+func NewShardPersistenceMetricsClient(persistence ShardManager, metricClient metrics.Client, logger bark.Logger) ShardManager {
 	return &shardPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -81,8 +81,8 @@ func NewShardPersistenceClient(persistence ShardManager, metricClient metrics.Cl
 	}
 }
 
-// NewWorkflowExecutionPersistenceClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceClient(persistence ExecutionManager, metricClient metrics.Client, logger bark.Logger) ExecutionManager {
+// NewWorkflowExecutionPersistenceMetricsClient creates a client to manage executions
+func NewWorkflowExecutionPersistenceMetricsClient(persistence ExecutionManager, metricClient metrics.Client, logger bark.Logger) ExecutionManager {
 	return &workflowExecutionPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -90,8 +90,8 @@ func NewWorkflowExecutionPersistenceClient(persistence ExecutionManager, metricC
 	}
 }
 
-// NewTaskPersistenceClient creates a client to manage tasks
-func NewTaskPersistenceClient(persistence TaskManager, metricClient metrics.Client, logger bark.Logger) TaskManager {
+// NewTaskPersistenceMetricsClient creates a client to manage tasks
+func NewTaskPersistenceMetricsClient(persistence TaskManager, metricClient metrics.Client, logger bark.Logger) TaskManager {
 	return &taskPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -99,8 +99,8 @@ func NewTaskPersistenceClient(persistence TaskManager, metricClient metrics.Clie
 	}
 }
 
-// NewHistoryPersistenceClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryPersistenceClient(persistence HistoryManager, metricClient metrics.Client, logger bark.Logger) HistoryManager {
+// NewHistoryPersistenceMetricsClient creates a HistoryManager client to manage workflow execution history
+func NewHistoryPersistenceMetricsClient(persistence HistoryManager, metricClient metrics.Client, logger bark.Logger) HistoryManager {
 	return &historyPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -108,8 +108,8 @@ func NewHistoryPersistenceClient(persistence HistoryManager, metricClient metric
 	}
 }
 
-// NewMetadataPersistenceClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceClient(persistence MetadataManager, metricClient metrics.Client, logger bark.Logger) MetadataManager {
+// NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
+func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricClient metrics.Client, logger bark.Logger) MetadataManager {
 	return &metadataPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,
@@ -117,8 +117,8 @@ func NewMetadataPersistenceClient(persistence MetadataManager, metricClient metr
 	}
 }
 
-// NewVisibilityPersistenceClient creates a client to manage visibility
-func NewVisibilityPersistenceClient(persistence VisibilityManager, metricClient metrics.Client, logger bark.Logger) VisibilityManager {
+// NewVisibilityPersistenceMetricsClient creates a client to manage visibility
+func NewVisibilityPersistenceMetricsClient(persistence VisibilityManager, metricClient metrics.Client, logger bark.Logger) VisibilityManager {
 	return &visibilityPersistenceClient{
 		persistence:  persistence,
 		metricClient: metricClient,

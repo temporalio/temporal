@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
@@ -40,7 +41,7 @@ const (
 	domainCacheInitialSize = 10 * 1024
 	domainCacheMaxSize     = 64 * 1024
 	domainCacheTTL         = 0 // 0 means infinity
-	domainCacheEntryTTL    = 20 * time.Second
+	domainCacheEntryTTL    = 300 * time.Second
 	// DomainCacheRefreshInterval domain cache refresh interval
 	DomainCacheRefreshInterval = 10 * time.Second
 	domainCacheRefreshPageSize = 100
@@ -85,6 +86,7 @@ type (
 		metadataMgr     persistence.MetadataManager
 		clusterMetadata cluster.Metadata
 		timeSource      common.TimeSource
+		metricsClient   metrics.Client
 		logger          bark.Logger
 
 		sync.RWMutex
@@ -113,7 +115,7 @@ type (
 )
 
 // NewDomainCache creates a new instance of cache for holding onto domain information to reduce the load on persistence
-func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, logger bark.Logger) DomainCache {
+func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata cluster.Metadata, metricsClient metrics.Client, logger bark.Logger) DomainCache {
 	opts := &Options{}
 	opts.InitialCapacity = domainCacheInitialSize
 	opts.TTL = domainCacheTTL
@@ -126,6 +128,7 @@ func NewDomainCache(metadataMgr persistence.MetadataManager, clusterMetadata clu
 		metadataMgr:     metadataMgr,
 		clusterMetadata: clusterMetadata,
 		timeSource:      common.NewRealTimeSource(),
+		metricsClient:   metricsClient,
 		logger:          logger,
 		beforeCallbacks: make(map[int]CallbackFn),
 		afterCallbacks:  make(map[int]CallbackFn),
@@ -305,6 +308,7 @@ func (c *domainCache) refreshDomains() error {
 	domainNotificationVersion = c.domainNotificationVersion
 	c.RUnlock()
 
+	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCacheTotalCallbacksLatency)
 UpdateLoop:
 	for _, domain := range domains {
 		if domain.notificationVersion >= domainNotificationVersion {
@@ -318,7 +322,7 @@ UpdateLoop:
 		c.updateIDToDomainCache(domain.info.ID, domain)
 		c.updateNameToIDCache(domain.info.Name, domain.info.ID)
 	}
-
+	sw.Stop()
 	return nil
 }
 
@@ -459,6 +463,9 @@ func (c *domainCache) getDomainByID(id string) (*DomainCacheEntry, error) {
 }
 
 func (c *domainCache) triggerDomainBeforeChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCacheBeforeCallbackLatency)
+	defer sw.Stop()
+
 	c.RLock()
 	defer c.RUnlock()
 	for _, callback := range c.beforeCallbacks {
@@ -467,6 +474,9 @@ func (c *domainCache) triggerDomainBeforeChangeCallback(prevDomain *DomainCacheE
 }
 
 func (c *domainCache) triggerDomainAfterChangeCallback(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
+	sw := c.metricsClient.StartTimer(metrics.DomainCacheScope, metrics.DomainCacheAfterCallbackLatency)
+	defer sw.Stop()
+
 	c.RLock()
 	defer c.RUnlock()
 	for _, callback := range c.afterCallbacks {

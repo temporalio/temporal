@@ -248,6 +248,8 @@ const (
 	MatchingClientCancelOutstandingPollScope
 	// MatchingClientDescribeTaskListScope tracks RPC calls to matching service
 	MatchingClientDescribeTaskListScope
+	// DomainCacheScope tracks domain cache callbacks
+	DomainCacheScope
 
 	NumCommonScopes
 )
@@ -543,6 +545,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientRespondQueryTaskCompletedScope:       {operation: "MatchingClientRespondQueryTaskCompleted"},
 		MatchingClientCancelOutstandingPollScope:           {operation: "MatchingClientCancelOutstandingPoll"},
 		MatchingClientDescribeTaskListScope:                {operation: "MatchingClientDescribeTaskList"},
+		DomainCacheScope:                                   {operation: "DomainCache"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -683,6 +686,10 @@ const (
 	HistoryClientFailures
 	MatchingClientFailures
 
+	DomainCacheTotalCallbacksLatency
+	DomainCacheBeforeCallbackLatency
+	DomainCacheAfterCallbackLatency
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -789,6 +796,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrBusyCounter:                     {metricName: "persistence.errors.busy", metricType: Counter},
 		HistoryClientFailures:                         {metricName: "client.history.errors", metricType: Counter},
 		MatchingClientFailures:                        {metricName: "client.matching.errors", metricType: Counter},
+		DomainCacheTotalCallbacksLatency:              {metricName: "domain-cache.total-callbacks.latency", metricType: Timer},
+		DomainCacheBeforeCallbackLatency:              {metricName: "domain-cache.before-callbacks.latency", metricType: Timer},
+		DomainCacheAfterCallbackLatency:               {metricName: "domain-cache.after-callbacks.latency", metricType: Timer},
 	},
 	Frontend: {},
 	History: {

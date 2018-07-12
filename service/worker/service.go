@@ -25,6 +25,7 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -41,6 +42,7 @@ type (
 	// Config contains all the service config for worker
 	Config struct {
 		// Replicator settings
+		PersistenceMaxQPS          dynamicconfig.FloatPropertyFn
 		ReplicatorConcurrency      int
 		ReplicatorBufferRetryCount int
 		ReplicationTaskMaxRetry    int
@@ -51,14 +53,15 @@ type (
 func NewService(params *service.BootstrapParams) common.Daemon {
 	return &Service{
 		params: params,
-		config: NewConfig(),
+		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
 		stopC:  make(chan struct{}),
 	}
 }
 
 // NewConfig builds the new Config for cadence-worker service
-func NewConfig() *Config {
+func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		PersistenceMaxQPS:          dc.GetFloat64Property(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 		ReplicatorConcurrency:      1000,
 		ReplicatorBufferRetryCount: 8,
 		ReplicationTaskMaxRetry:    5,
@@ -73,6 +76,9 @@ func (s *Service) Start() {
 	log := base.GetLogger()
 	log.Infof("%v starting", common.WorkerServiceName)
 	base.Start()
+
+	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
 	s.metricsClient = base.GetMetricsClient()
 
@@ -89,7 +95,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadataManager = persistence.NewMetadataPersistenceClient(metadataManager, base.GetMetricsClient(), log)
+	metadataManager = persistence.NewMetadataPersistenceRateLimitedClient(metadataManager, persistenceRateLimiter, log)
+	metadataManager = persistence.NewMetadataPersistenceMetricsClient(metadataManager, base.GetMetricsClient(), log)
 
 	history, err := base.GetClientFactory().NewHistoryClient()
 	if err != nil {

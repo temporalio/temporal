@@ -198,9 +198,6 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 func (r *historyReplicator) ApplyStartEvent(context *workflowExecutionContext, request *h.ReplicateEventsRequest, logger bark.Logger) error {
 	msBuilder := r.getNewMutableState(request.GetVersion(), logger)
 	err := r.ApplyReplicationTask(context, msBuilder, request, logger)
-	if err != nil {
-		r.logError(logger, "Fail to Apply Replication task.", err)
-	}
 	return err
 }
 

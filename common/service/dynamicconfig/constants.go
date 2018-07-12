@@ -51,12 +51,14 @@ var keys = map[Key]string{
 	EnableGlobalDomain: "system.enableGlobalDomain",
 
 	// frontend settings
+	FrontendPersistenceMaxQPS:     "frontend.persistenceMaxQPS",
 	FrontendVisibilityMaxPageSize: "frontend.visibilityMaxPageSize",
 	FrontendHistoryMaxPageSize:    "frontend.historyMaxPageSize",
 	FrontendRPS:                   "frontend.rps",
 	FrontendHistoryMgrNumConns:    "frontend.historyMgrNumConns",
 
 	// matching settings
+	MatchingPersistenceMaxQPS:               "matching.persistenceMaxQPS",
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
@@ -69,6 +71,7 @@ var keys = map[Key]string{
 	MatchingRPS:                             "matching.rps",
 
 	// history settings
+	HistoryPersistenceMaxQPS:                            "history.persistenceMaxQPS",
 	HistoryLongPollExpirationInterval:                   "history.longPollExpirationInterval",
 	HistoryCacheInitialSize:                             "history.cacheInitialSize",
 	HistoryCacheMaxSize:                                 "history.cacheMaxSize",
@@ -77,19 +80,25 @@ var keys = map[Key]string{
 	TimerTaskBatchSize:                                  "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                              "history.timerTaskMaxRetryCount",
+	TimerProcessorStartDelay:                            "history.timerProcessorStartDelay",
+	TimerProcessorFailoverStartDelay:                    "history.timerProcessorFailoverStartDelay",
 	TimerProcessorGetFailureRetryCount:                  "history.timerProcessorGetFailureRetryCount",
 	TimerProcessorCompleteTimerFailureRetryCount:        "history.timerProcessorCompleteTimerFailureRetryCount",
 	TimerProcessorUpdateShardTaskCount:                  "history.timerProcessorUpdateShardTaskCount",
 	TimerProcessorUpdateAckInterval:                     "history.timerProcessorUpdateAckInterval",
 	TimerProcessorCompleteTimerInterval:                 "history.timerProcessorCompleteTimerInterval",
+	TimerProcessorFailoverMaxPollRPS:                    "history.timerProcessorFailoverMaxPollRPS",
 	TimerProcessorMaxPollRPS:                            "history.timerProcessorMaxPollRPS",
 	TimerProcessorMaxPollInterval:                       "history.timerProcessorMaxPollInterval",
 	TimerProcessorMaxPollIntervalJitterCoefficient:      "history.timerProcessorMaxPollIntervalJitterCoefficient",
 	TimerProcessorStandbyTaskDelay:                      "history.timerProcessorStandbyTaskDelay",
 	TransferTaskBatchSize:                               "history.transferTaskBatchSize",
+	TransferProcessorFailoverMaxPollRPS:                 "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                         "history.transferProcessorMaxPollRPS",
 	TransferTaskWorkerCount:                             "history.transferTaskWorkerCount",
 	TransferTaskMaxRetryCount:                           "history.transferTaskMaxRetryCount",
+	TransferProcessorStartDelay:                         "history.transferProcessorStartDelay",
+	TransferProcessorFailoverStartDelay:                 "history.transferProcessorFailoverStartDelay",
 	TransferProcessorCompleteTransferFailureRetryCount:  "history.transferProcessorCompleteTransferFailureRetryCount",
 	TransferProcessorUpdateShardTaskCount:               "history.transferProcessorUpdateShardTaskCount",
 	TransferProcessorMaxPollInterval:                    "history.transferProcessorMaxPollInterval",
@@ -100,6 +109,7 @@ var keys = map[Key]string{
 	ReplicatorTaskBatchSize:                             "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                           "history.replicatorTaskWorkerCount",
 	ReplicatorTaskMaxRetryCount:                         "history.replicatorTaskMaxRetryCount",
+	ReplicatorProcessorStartDelay:                       "history.replicatorProcessorStartDelay",
 	ReplicatorProcessorMaxPollRPS:                       "history.replicatorProcessorMaxPollRPS",
 	ReplicatorProcessorUpdateShardTaskCount:             "history.replicatorProcessorUpdateShardTaskCount",
 	ReplicatorProcessorMaxPollInterval:                  "history.replicatorProcessorMaxPollInterval",
@@ -109,6 +119,9 @@ var keys = map[Key]string{
 	HistoryMgrNumConns:                                  "history.historyMgrNumConns",
 	MaximumBufferedEventsBatch:                          "history.maximumBufferedEventsBatch",
 	ShardUpdateMinInterval:                              "history.shardUpdateMinInterval",
+
+	// worker settings
+	WorkerPersistenceMaxQPS: "worker.persistenceMaxQPS",
 }
 
 const (
@@ -131,6 +144,8 @@ const (
 
 	// key for frontend
 
+	// FrontendPersistenceMaxQPS is the max qps frontend host can querty DB
+	FrontendPersistenceMaxQPS
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
@@ -142,6 +157,8 @@ const (
 
 	// key for matching
 
+	// MatchingPersistenceMaxQPS is the max qps matching host can querty DB
+	MatchingPersistenceMaxQPS
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
 	MatchingMinTaskThrottlingBurstSize
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -165,6 +182,8 @@ const (
 
 	// key for history
 
+	// HistoryPersistenceMaxQPS is the max qps history host can querty DB
+	HistoryPersistenceMaxQPS
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval
 	// HistoryCacheInitialSize is initial size of history cache
@@ -181,6 +200,10 @@ const (
 	TimerTaskWorkerCount
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount
+	// TimerProcessorStartDelay is the start delay
+	TimerProcessorStartDelay
+	// TimerProcessorFailoverStartDelay is the failover start delay
+	TimerProcessorFailoverStartDelay
 	// TimerProcessorGetFailureRetryCount is retry count for timer processor get failure operation
 	TimerProcessorGetFailureRetryCount
 	// TimerProcessorCompleteTimerFailureRetryCount is retry count for timer processor complete timer operation
@@ -191,6 +214,8 @@ const (
 	TimerProcessorUpdateAckInterval
 	// TimerProcessorCompleteTimerInterval is complete timer interval for timer processor
 	TimerProcessorCompleteTimerInterval
+	// TimerProcessorFailoverMaxPollRPS is max poll rate per second for timer processor
+	TimerProcessorFailoverMaxPollRPS
 	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
 	TimerProcessorMaxPollRPS
 	// TimerProcessorMaxPollInterval is max poll interval for timer processor
@@ -201,12 +226,18 @@ const (
 	TimerProcessorStandbyTaskDelay
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize
+	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
+	TransferProcessorFailoverMaxPollRPS
 	// TransferProcessorMaxPollRPS is max poll rate per second for transferQueueProcessor
 	TransferProcessorMaxPollRPS
 	// TransferTaskWorkerCount is number of worker for transferQueueProcessor
 	TransferTaskWorkerCount
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount
+	// TransferProcessorStartDelay is the start delay
+	TransferProcessorStartDelay
+	// TransferProcessorFailoverStartDelay is the failover start delay
+	TransferProcessorFailoverStartDelay
 	// TransferProcessorCompleteTransferFailureRetryCount is times of retry for failure
 	TransferProcessorCompleteTransferFailureRetryCount
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
@@ -227,6 +258,8 @@ const (
 	ReplicatorTaskWorkerCount
 	// ReplicatorTaskMaxRetryCount is max times of retry for ReplicatorProcessor
 	ReplicatorTaskMaxRetryCount
+	// ReplicatorProcessorStartDelay is the start delay
+	ReplicatorProcessorStartDelay
 	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
 	ReplicatorProcessorMaxPollRPS
 	// ReplicatorProcessorUpdateShardTaskCount is update shard count for ReplicatorProcessor
@@ -245,6 +278,11 @@ const (
 	MaximumBufferedEventsBatch
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval
+
+	// key for histoworkerry
+
+	// WorkerPersistenceMaxQPS is the max qps worker host can querty DB
+	WorkerPersistenceMaxQPS
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

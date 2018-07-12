@@ -62,16 +62,25 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
 	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerStandbyQueueProcessorScope, shard, historyService.metricsClient, clusterName, logger)
 	processor := &timerQueueStandbyProcessorImpl{
-		shard:                   shard,
-		historyService:          historyService,
-		cache:                   historyService.historyCache,
-		timerTaskFilter:         timerTaskFilter,
-		logger:                  logger,
-		metricsClient:           historyService.metricsClient,
-		clusterName:             clusterName,
-		timerGate:               timerGate,
-		timerQueueProcessorBase: newTimerQueueProcessorBase(metrics.TimerStandbyQueueProcessorScope, shard, historyService, timerQueueAckMgr, timeNow, logger),
-		timerQueueAckMgr:        timerQueueAckMgr,
+		shard:           shard,
+		historyService:  historyService,
+		cache:           historyService.historyCache,
+		timerTaskFilter: timerTaskFilter,
+		logger:          logger,
+		metricsClient:   historyService.metricsClient,
+		clusterName:     clusterName,
+		timerGate:       timerGate,
+		timerQueueProcessorBase: newTimerQueueProcessorBase(
+			metrics.TimerStandbyQueueProcessorScope,
+			shard,
+			historyService,
+			timerQueueAckMgr,
+			timeNow,
+			shard.GetConfig().TimerProcessorMaxPollRPS,
+			shard.GetConfig().TimerProcessorStartDelay,
+			logger,
+		),
+		timerQueueAckMgr: timerQueueAckMgr,
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
 	return processor

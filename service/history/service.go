@@ -37,6 +37,8 @@ import (
 type Config struct {
 	NumberOfShards int
 
+	PersistenceMaxQPS dynamicconfig.FloatPropertyFn
+
 	// HistoryCache settings
 	// Change of these configs require shard restart
 	HistoryCacheInitialSize dynamicconfig.IntPropertyFn
@@ -51,10 +53,13 @@ type Config struct {
 	TimerTaskBatchSize                             dynamicconfig.IntPropertyFn
 	TimerTaskWorkerCount                           dynamicconfig.IntPropertyFn
 	TimerTaskMaxRetryCount                         dynamicconfig.IntPropertyFn
+	TimerProcessorStartDelay                       dynamicconfig.DurationPropertyFn
+	TimerProcessorFailoverStartDelay               dynamicconfig.DurationPropertyFn
 	TimerProcessorGetFailureRetryCount             dynamicconfig.IntPropertyFn
 	TimerProcessorCompleteTimerFailureRetryCount   dynamicconfig.IntPropertyFn
 	TimerProcessorUpdateAckInterval                dynamicconfig.DurationPropertyFn
 	TimerProcessorCompleteTimerInterval            dynamicconfig.DurationPropertyFn
+	TimerProcessorFailoverMaxPollRPS               dynamicconfig.IntPropertyFn
 	TimerProcessorMaxPollRPS                       dynamicconfig.IntPropertyFn
 	TimerProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
 	TimerProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -64,7 +69,10 @@ type Config struct {
 	TransferTaskBatchSize                              dynamicconfig.IntPropertyFn
 	TransferTaskWorkerCount                            dynamicconfig.IntPropertyFn
 	TransferTaskMaxRetryCount                          dynamicconfig.IntPropertyFn
+	TransferProcessorStartDelay                        dynamicconfig.DurationPropertyFn
+	TransferProcessorFailoverStartDelay                dynamicconfig.DurationPropertyFn
 	TransferProcessorCompleteTransferFailureRetryCount dynamicconfig.IntPropertyFn
+	TransferProcessorFailoverMaxPollRPS                dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollRPS                        dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollInterval                   dynamicconfig.DurationPropertyFn
 	TransferProcessorMaxPollIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
@@ -76,6 +84,7 @@ type Config struct {
 	ReplicatorTaskBatchSize                             dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                           dynamicconfig.IntPropertyFn
 	ReplicatorTaskMaxRetryCount                         dynamicconfig.IntPropertyFn
+	ReplicatorProcessorStartDelay                       dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollRPS                       dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollInterval                  dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
@@ -100,6 +109,7 @@ type Config struct {
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                                      numberOfShards,
+		PersistenceMaxQPS:                                   dc.GetFloat64Property(dynamicconfig.HistoryPersistenceMaxQPS, 6000),
 		HistoryCacheInitialSize:                             dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                 dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                     dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
@@ -108,18 +118,24 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		TimerTaskBatchSize:                                  dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                                dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 100),
+		TimerProcessorStartDelay:                            dc.GetDurationProperty(dynamicconfig.TimerProcessorStartDelay, 1*time.Microsecond),
+		TimerProcessorFailoverStartDelay:                    dc.GetDurationProperty(dynamicconfig.TimerProcessorFailoverStartDelay, 5*time.Second),
 		TimerProcessorGetFailureRetryCount:                  dc.GetIntProperty(dynamicconfig.TimerProcessorGetFailureRetryCount, 5),
 		TimerProcessorCompleteTimerFailureRetryCount:        dc.GetIntProperty(dynamicconfig.TimerProcessorCompleteTimerFailureRetryCount, 10),
 		TimerProcessorUpdateAckInterval:                     dc.GetDurationProperty(dynamicconfig.TimerProcessorUpdateAckInterval, 5*time.Second),
 		TimerProcessorCompleteTimerInterval:                 dc.GetDurationProperty(dynamicconfig.TimerProcessorCompleteTimerInterval, 3*time.Second),
+		TimerProcessorFailoverMaxPollRPS:                    dc.GetIntProperty(dynamicconfig.TimerProcessorFailoverMaxPollRPS, 1),
 		TimerProcessorMaxPollRPS:                            dc.GetIntProperty(dynamicconfig.TimerProcessorMaxPollRPS, 20),
 		TimerProcessorMaxPollInterval:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 5*time.Minute),
 		TimerProcessorMaxPollIntervalJitterCoefficient:      dc.GetFloat64Property(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		TimerProcessorStandbyTaskDelay:                      dc.GetDurationProperty(dynamicconfig.TimerProcessorStandbyTaskDelay, 0*time.Minute),
 		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
+		TransferProcessorFailoverMaxPollRPS:                 dc.GetIntProperty(dynamicconfig.TransferProcessorFailoverMaxPollRPS, 1),
 		TransferProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 20),
 		TransferTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
 		TransferTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 100),
+		TransferProcessorStartDelay:                         dc.GetDurationProperty(dynamicconfig.TransferProcessorStartDelay, 1*time.Microsecond),
+		TransferProcessorFailoverStartDelay:                 dc.GetDurationProperty(dynamicconfig.TransferProcessorFailoverStartDelay, 5*time.Second),
 		TransferProcessorCompleteTransferFailureRetryCount:  dc.GetIntProperty(dynamicconfig.TransferProcessorCompleteTransferFailureRetryCount, 10),
 		TransferProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.TransferProcessorMaxPollInterval, 1*time.Minute),
 		TransferProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
@@ -129,6 +145,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		ReplicatorTaskBatchSize:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                           dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
 		ReplicatorTaskMaxRetryCount:                         dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
+		ReplicatorProcessorStartDelay:                       dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorStartDelay, 1*time.Microsecond),
 		ReplicatorProcessorMaxPollRPS:                       dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 20),
 		ReplicatorProcessorMaxPollInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
@@ -179,6 +196,9 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
+	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
+
 	s.metricsClient = base.GetMetricsClient()
 
 	shardMgr, err := persistence.NewCassandraShardPersistence(p.CassandraConfig.Hosts,
@@ -193,7 +213,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create shard manager: %v", err)
 	}
-	shardMgr = persistence.NewShardPersistenceClient(shardMgr, base.GetMetricsClient(), log)
+	shardMgr = persistence.NewShardPersistenceRateLimitedClient(shardMgr, persistenceRateLimiter, log)
+	shardMgr = persistence.NewShardPersistenceMetricsClient(shardMgr, base.GetMetricsClient(), log)
 
 	// Hack to create shards for bootstrap purposes
 	// TODO: properly pre-create all shards before deployment.
@@ -211,7 +232,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceClient(metadata, base.GetMetricsClient(), log)
+	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
+	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
 	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -224,7 +246,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("failed to create visiblity manager: %v", err)
 	}
-	visibility = persistence.NewVisibilityPersistenceClient(visibility, base.GetMetricsClient(), log)
+	visibility = persistence.NewVisibilityPersistenceRateLimitedClient(visibility, persistenceRateLimiter, log)
+	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)
 
 	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -238,7 +261,8 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
 	}
-	history = persistence.NewHistoryPersistenceClient(history, base.GetMetricsClient(), log)
+	history = persistence.NewHistoryPersistenceRateLimitedClient(history, persistenceRateLimiter, log)
+	history = persistence.NewHistoryPersistenceMetricsClient(history, base.GetMetricsClient(), log)
 
 	execMgrFactory, err := persistence.NewCassandraPersistenceClientFactory(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
@@ -248,6 +272,7 @@ func (s *Service) Start() {
 		p.CassandraConfig.Keyspace,
 		s.config.ExecutionMgrNumConns(),
 		p.Logger,
+		persistenceRateLimiter,
 		s.metricsClient,
 	)
 	if err != nil {

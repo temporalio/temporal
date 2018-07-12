@@ -55,7 +55,7 @@ func NewAdminHandler(
 	handler := &AdminHandler{
 		numberOfHistoryShards: numberOfHistoryShards,
 		Service:               sVice,
-		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetLogger()),
+		domainCache:           cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 	}
 	return handler
 }

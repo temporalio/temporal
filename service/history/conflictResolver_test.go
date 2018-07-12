@@ -103,7 +103,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.logger),
+		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{

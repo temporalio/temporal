@@ -90,8 +90,8 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager,
 	metadataMgr persistence.MetadataManager, metadataMgrV2 persistence.MetadataManager, clusterMetadata cluster.Metadata, config *Config,
 	logger bark.Logger) *TestShardContext {
-	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, logger)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+	domainCache := cache.NewDomainCache(metadataMgr, clusterMetadata, metricsClient, logger)
 
 	// initialize the cluster current time to be the same as ack level
 	standbyClusterCurrentTime := make(map[string]time.Time)

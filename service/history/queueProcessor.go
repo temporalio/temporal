@@ -41,6 +41,7 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
+		StartDelay                       dynamicconfig.DurationPropertyFn
 		BatchSize                        dynamicconfig.IntPropertyFn
 		WorkerCount                      dynamicconfig.IntPropertyFn
 		MaxPollRPS                       dynamicconfig.IntPropertyFn
@@ -137,6 +138,8 @@ func (p *queueProcessorBase) notifyNewTask() {
 }
 
 func (p *queueProcessorBase) processorPump() {
+	<-time.NewTimer(backoff.NewJitter().JitDuration(p.options.StartDelay(), 0.99)).C
+
 	defer p.shutdownWG.Done()
 	tasksCh := make(chan queueTaskInfo, p.options.BatchSize())
 
@@ -241,7 +244,80 @@ func (p *queueProcessorBase) retryTasks() {
 }
 
 func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task queueTaskInfo) {
-	logger := p.logger.WithFields(bark.Fields{
+
+	var logger bark.Logger
+	var err error
+	startTime := time.Now()
+ProcessRetryLoop:
+	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
+		select {
+		case <-p.shutdownCh:
+			return
+		default:
+			// clear the existing notification
+			select {
+			case <-notificationChan:
+			default:
+			}
+
+			err = p.processor.process(task)
+			if err != nil {
+				if err == ErrTaskRetry {
+					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskStandbyRetryCounter)
+					<-notificationChan
+				} else {
+					logger = p.initializeLoggerForTask(task, logger)
+					logging.LogTaskProcessingFailedEvent(logger, err)
+
+					// it is possible that DomainNotActiveError is thrown
+					// just keep try for cache.DomainCacheRefreshInterval
+					// and giveup
+					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+						p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
+						return
+					}
+					backoff := time.Duration(retryCount * 100)
+					time.Sleep(backoff * time.Millisecond)
+					retryCount++
+				}
+				continue ProcessRetryLoop
+			}
+			return
+		}
+	}
+
+	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
+	logger = p.initializeLoggerForTask(task, logger)
+	switch task.(type) {
+	case *persistence.TransferTaskInfo:
+		// Cannot processes transfer task due to LimitExceededError after all retries
+		// raise and alert and move on
+		if _, ok := err.(*workflow.LimitExceededError); ok {
+			logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task.  Skipping.", err)
+			p.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CadenceCriticalFailures)
+			return
+		}
+
+		logging.LogOperationPanicEvent(logger, "Retry count exceeded for transfer task", err)
+	case *persistence.ReplicationTaskInfo:
+		// Cannot processes replication task due to LimitExceededError after all retries
+		// raise and alert and move on
+		if _, ok := err.(*workflow.LimitExceededError); ok {
+			logging.LogCriticalErrorEvent(logger, "Critical error processing replication task.  Skipping.", err)
+			p.metricsClient.IncCounter(metrics.ReplicatorQueueProcessorScope, metrics.CadenceCriticalFailures)
+			return
+		}
+
+		logging.LogOperationPanicEvent(logger, "Retry count exceeded for replication task", err)
+	}
+}
+
+func (p *queueProcessorBase) initializeLoggerForTask(task queueTaskInfo, logger bark.Logger) bark.Logger {
+	if logger != nil {
+		return logger
+	}
+
+	logger = p.logger.WithFields(bark.Fields{
 		logging.TagTaskID:   task.GetTaskID(),
 		logging.TagTaskType: task.GetTaskType(),
 		logging.TagVersion:  task.GetVersion(),
@@ -266,66 +342,5 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 		logger.Debug("Processing replication task")
 	}
 
-	var err error
-	startTime := time.Now()
-ProcessRetryLoop:
-	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
-		select {
-		case <-p.shutdownCh:
-			return
-		default:
-			// clear the existing notification
-			select {
-			case <-notificationChan:
-			default:
-			}
-
-			err = p.processor.process(task)
-			if err != nil {
-				if err == ErrTaskRetry {
-					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskStandbyRetryCounter)
-					<-notificationChan
-				} else {
-					logging.LogTaskProcessingFailedEvent(logger, err)
-
-					// it is possible that DomainNotActiveError is thrown
-					// just keep try for cache.DomainCacheRefreshInterval
-					// and giveup
-					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-						p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
-						return
-					}
-					backoff := time.Duration(retryCount * 100)
-					time.Sleep(backoff * time.Millisecond)
-					retryCount++
-				}
-				continue ProcessRetryLoop
-			}
-			return
-		}
-	}
-
-	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	switch task.(type) {
-	case *persistence.TransferTaskInfo:
-		// Cannot processes transfer task due to LimitExceededError after all retries
-		// raise and alert and move on
-		if _, ok := err.(*workflow.LimitExceededError); ok {
-			logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task.  Skipping.", err)
-			p.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CadenceCriticalFailures)
-			return
-		}
-
-		logging.LogOperationPanicEvent(logger, "Retry count exceeded for transfer task", err)
-	case *persistence.ReplicationTaskInfo:
-		// Cannot processes replication task due to LimitExceededError after all retries
-		// raise and alert and move on
-		if _, ok := err.(*workflow.LimitExceededError); ok {
-			logging.LogCriticalErrorEvent(logger, "Critical error processing replication task.  Skipping.", err)
-			p.metricsClient.IncCounter(metrics.ReplicatorQueueProcessorScope, metrics.CadenceCriticalFailures)
-			return
-		}
-
-		logging.LogOperationPanicEvent(logger, "Retry count exceeded for replication task", err)
-	}
+	return logger
 }

@@ -142,6 +142,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	// we should consider make the failover idempotent
 	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
 		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
+
 	failoverTimerProcessor.Start()
 }
 

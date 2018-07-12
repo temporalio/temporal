@@ -26,11 +26,13 @@ import (
 	"testing"
 
 	"github.com/pborman/uuid"
+	"github.com/uber-go/tally"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -68,7 +70,8 @@ func (s *domainCacheSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log2)
 	s.clusterMetadata = &mocks.ClusterMetadata{}
 	s.metadataMgr = &mocks.MetadataManager{}
-	s.domainCache = NewDomainCache(s.metadataMgr, s.clusterMetadata, s.logger).(*domainCache)
+	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+	s.domainCache = NewDomainCache(s.metadataMgr, s.clusterMetadata, metricsClient, s.logger).(*domainCache)
 }
 
 func (s *domainCacheSuite) TearDownTest() {
