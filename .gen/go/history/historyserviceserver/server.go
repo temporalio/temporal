@@ -139,6 +139,11 @@ type Interface interface {
 		StartRequest *history.StartWorkflowExecutionRequest,
 	) (*shared.StartWorkflowExecutionResponse, error)
 
+	SyncShardStatus(
+		ctx context.Context,
+		SyncShardStatusRequest *history.SyncShardStatusRequest,
+	) error
+
 	TerminateWorkflowExecution(
 		ctx context.Context,
 		TerminateRequest *history.TerminateWorkflowExecutionRequest,
@@ -388,6 +393,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "SyncShardStatus",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.SyncShardStatus),
+				},
+				Signature:    "SyncShardStatus(SyncShardStatusRequest *history.SyncShardStatusRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "TerminateWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -400,7 +416,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 22)
+	procedures := make([]transport.Procedure, 0, 23)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -797,6 +813,25 @@ func (h handler) StartWorkflowExecution(ctx context.Context, body wire.Value) (t
 
 	hadError := err != nil
 	result, err := history.HistoryService_StartWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) SyncShardStatus(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_SyncShardStatus_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.SyncShardStatus(ctx, args.SyncShardStatusRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_SyncShardStatus_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

@@ -188,7 +188,6 @@ MoveAckLevelLoop:
 			break MoveAckLevelLoop
 		}
 	}
-	updateShard := a.ackLevel != ackLevel
 	a.ackLevel = ackLevel
 
 	if a.isFailover && a.isReadFinished && len(a.outstandingTasks) == 0 {
@@ -199,14 +198,12 @@ MoveAckLevelLoop:
 	}
 	a.Unlock()
 
-	if updateShard {
-		if !a.isFailover {
-			if err := a.processor.updateAckLevel(ackLevel); err != nil {
-				a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
-				logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
-			}
-		} else {
-			// TODO deal with failover ack level persistence, issue #646
+	if !a.isFailover {
+		if err := a.processor.updateAckLevel(ackLevel); err != nil {
+			a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+			logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 		}
+	} else {
+		// TODO deal with failover ack level persistence, issue #646
 	}
 }

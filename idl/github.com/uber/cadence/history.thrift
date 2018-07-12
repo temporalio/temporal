@@ -228,6 +228,12 @@ struct ReplicateEventsRequest {
   100: optional bool forceBufferEvents
 }
 
+struct SyncShardStatusRequest {
+  10: optional string sourceCluster
+  20: optional i64 (js.type = "Long") shardId
+  30: optional i64 (js.type = "Long") timestamp
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -538,6 +544,17 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.RetryTaskError retryTaskError,
+    )
+
+  /**
+  * SyncShardStatus sync the status between shards
+  **/
+  void SyncShardStatus(1: SyncShardStatusRequest syncShardStatusRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+      5: shared.LimitExceededError limitExceededError,
     )
 
   /**

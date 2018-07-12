@@ -73,6 +73,7 @@ type (
 		ScheduleDecisionTask(ctx context.Context, request *h.ScheduleDecisionTaskRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
 		ReplicateEvents(request *h.ReplicateEventsRequest) error
+		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 	}
 
 	// EngineFactory is used to create an instance of sharded history engine

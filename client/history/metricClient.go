@@ -401,3 +401,20 @@ func (c *metricClient) ReplicateEvents(
 
 	return err
 }
+
+func (c *metricClient) SyncShardStatus(
+	context context.Context,
+	request *h.SyncShardStatusRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientSyncShardStatusScope, metrics.CadenceRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientSyncShardStatusScope, metrics.CadenceLatency)
+	err := c.client.SyncShardStatus(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientSyncShardStatusScope, metrics.HistoryClientFailures)
+	}
+
+	return err
+}

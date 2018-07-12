@@ -287,6 +287,9 @@ func (p *replicationTaskProcessor) process(msg kafka.Message, inRetry bool) erro
 	case replicator.ReplicationTaskTypeDomain:
 		scope = metrics.DomainReplicationTaskScope
 		err = p.handleDomainReplicationTask(task)
+	case replicator.ReplicationTaskTypeSyncShardStatus:
+		scope = metrics.SyncShardTaskScope
+		err = p.handleSyncShardTask(task)
 	case replicator.ReplicationTaskTypeHistory:
 		scope = metrics.HistoryReplicationTaskScope
 		err = p.handleHistoryReplicationTask(task, inRetry)
@@ -308,6 +311,24 @@ func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.
 
 	p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
 	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
+}
+
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask) error {
+	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
+	defer sw.Stop()
+
+	attr := task.SyncShardStatusTaskAttributes
+	p.logger.Debugf("Received sync shard task %v.", attr)
+
+	req := &h.SyncShardStatusRequest{
+		SourceCluster: attr.SourceCluster,
+		ShardId:       attr.ShardId,
+		Timestamp:     attr.Timestamp,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return p.historyClient.SyncShardStatus(ctx, req)
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, inRetry bool) error {

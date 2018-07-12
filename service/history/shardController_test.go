@@ -91,7 +91,7 @@ func (s *shardControllerSuite) SetupTest() {
 	s.domainCache = cache.NewDomainCache(s.mockMetadaraMgr, s.mockClusterMetadata, s.metricsClient, s.logger)
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager,
 		s.mockHistoryMgr, s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger,
-		s.metricsClient)
+		s.metricsClient, s.mockMessaging)
 }
 
 func (s *shardControllerSuite) TearDownTest() {
@@ -345,7 +345,7 @@ func (s *shardControllerSuite) TestHistoryEngineClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient, s.mockMessaging)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}
@@ -438,7 +438,7 @@ func (s *shardControllerSuite) TestRingUpdated() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient, s.mockMessaging)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}
@@ -518,7 +518,7 @@ func (s *shardControllerSuite) TestShardControllerClosed() {
 	numShards := 4
 	s.config.NumberOfShards = numShards
 	s.controller = newShardController(s.mockService, s.hostInfo, s.mockServiceResolver, s.mockShardManager, s.mockHistoryMgr,
-		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient)
+		s.domainCache, s.mockExecutionMgrFactory, s.mockEngineFactory, s.config, s.logger, s.metricsClient, s.mockMessaging)
 	historyEngines := make(map[int]*MockHistoryEngine)
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockEngine := &MockHistoryEngine{}

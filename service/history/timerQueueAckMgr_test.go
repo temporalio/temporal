@@ -517,7 +517,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTimestamp, s.mockShard.GetTimerClusterAckLevel(s.clusterName))
 
-	// there will be no call to update shard
+	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	timerSequenceID3 := TimerSequenceID{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
 	s.timerQueueAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])

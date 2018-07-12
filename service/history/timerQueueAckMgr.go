@@ -269,7 +269,6 @@ MoveAckLevelLoop:
 			break MoveAckLevelLoop
 		}
 	}
-	updateShard := t.ackLevel != ackLevel
 	t.ackLevel = ackLevel
 
 	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
@@ -280,9 +279,7 @@ MoveAckLevelLoop:
 	}
 	t.Unlock()
 
-	if updateShard {
-		t.updateTimerAckLevel(ackLevel)
-	}
+	t.updateTimerAckLevel(ackLevel)
 }
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra

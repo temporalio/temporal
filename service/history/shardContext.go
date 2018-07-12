@@ -27,7 +27,9 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/messaging"
 
+	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
@@ -76,6 +78,7 @@ type (
 
 	shardContextImpl struct {
 		shardID          int
+		currentCluster   string
 		service          service.Service
 		rangeID          int64
 		shardManager     persistence.ShardManager
@@ -87,6 +90,7 @@ type (
 		config           *Config
 		logger           bark.Logger
 		metricsClient    metrics.Client
+		messageProducer  messaging.Producer
 
 		sync.RWMutex
 		lastUpdated               time.Time
@@ -590,6 +594,19 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 	}
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 
+	if s.messageProducer != nil {
+		syncStatusTask := &replicator.ReplicationTask{
+			TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncShardStatus),
+			SyncShardStatusTaskAttributes: &replicator.SyncShardStatusTaskAttributes{
+				SourceCluster: common.StringPtr(s.currentCluster),
+				ShardId:       common.Int64Ptr(int64(s.shardID)),
+				Timestamp:     common.Int64Ptr(now.UnixNano()),
+			},
+		}
+		// ignore the error
+		s.messageProducer.Publish(syncStatusTask)
+	}
+
 	err := s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.RangeID,
@@ -660,7 +677,8 @@ func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
 func acquireShard(shardID int, svc service.Service, shardManager persistence.ShardManager,
 	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager, domainCache cache.DomainCache,
-	owner string, closeCh chan<- int, config *Config, logger bark.Logger, metricsClient metrics.Client) (ShardContext,
+	owner string, closeCh chan<- int, config *Config, logger bark.Logger,
+	metricsClient metrics.Client, messageProducer messaging.Producer) (ShardContext,
 	error) {
 	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
 	if err0 != nil {
@@ -685,6 +703,7 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 
 	context := &shardContextImpl{
 		shardID:          shardID,
+		currentCluster:   svc.GetClusterMetadata().GetCurrentClusterName(),
 		service:          svc,
 		shardManager:     shardManager,
 		historyMgr:       historyMgr,
@@ -693,6 +712,7 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 		shardInfo:        updatedShardInfo,
 		closeCh:          closeCh,
 		metricsClient:    metricsClient,
+		messageProducer:  messageProducer,
 		config:           config,
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
 	}

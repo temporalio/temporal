@@ -6283,6 +6283,194 @@ func (v *StartWorkflowExecutionRequest) GetParentExecutionInfo() (o *ParentExecu
 	return
 }
 
+type SyncShardStatusRequest struct {
+	SourceCluster *string `json:"sourceCluster,omitempty"`
+	ShardId       *int64  `json:"shardId,omitempty"`
+	Timestamp     *int64  `json:"timestamp,omitempty"`
+}
+
+// ToWire translates a SyncShardStatusRequest struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *SyncShardStatusRequest) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardId != nil {
+		w, err = wire.NewValueI64(*(v.ShardId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Timestamp != nil {
+		w, err = wire.NewValueI64(*(v.Timestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a SyncShardStatusRequest struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a SyncShardStatusRequest struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v SyncShardStatusRequest
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *SyncShardStatusRequest) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ShardId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Timestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a SyncShardStatusRequest
+// struct.
+func (v *SyncShardStatusRequest) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
+	if v.ShardId != nil {
+		fields[i] = fmt.Sprintf("ShardId: %v", *(v.ShardId))
+		i++
+	}
+	if v.Timestamp != nil {
+		fields[i] = fmt.Sprintf("Timestamp: %v", *(v.Timestamp))
+		i++
+	}
+
+	return fmt.Sprintf("SyncShardStatusRequest{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this SyncShardStatusRequest match the
+// provided SyncShardStatusRequest.
+//
+// This function performs a deep comparison.
+func (v *SyncShardStatusRequest) Equals(rhs *SyncShardStatusRequest) bool {
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ShardId, rhs.ShardId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Timestamp, rhs.Timestamp) {
+		return false
+	}
+
+	return true
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusRequest) GetSourceCluster() (o string) {
+	if v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
+}
+
+// GetShardId returns the value of ShardId if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusRequest) GetShardId() (o int64) {
+	if v.ShardId != nil {
+		return *v.ShardId
+	}
+
+	return
+}
+
+// GetTimestamp returns the value of Timestamp if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusRequest) GetTimestamp() (o int64) {
+	if v.Timestamp != nil {
+		return *v.Timestamp
+	}
+
+	return
+}
+
 type TerminateWorkflowExecutionRequest struct {
 	DomainUUID       *string                                   `json:"domainUUID,omitempty"`
 	TerminateRequest *shared.TerminateWorkflowExecutionRequest `json:"terminateRequest,omitempty"`

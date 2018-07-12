@@ -562,6 +562,28 @@ func (c *clientImpl) ReplicateEvents(
 	return err
 }
 
+func (c *clientImpl) SyncShardStatus(
+	ctx context.Context,
+	request *h.SyncShardStatusRequest,
+	opts ...yarpc.CallOption) error {
+
+	// we do not have a workflow ID here, instead, we have something even better
+	host, err := c.resolver.Lookup(string(request.GetShardId()))
+	if err != nil {
+		return err
+	}
+	client := c.getThriftClient(host.GetAddress())
+
+	opts = common.AggregateYarpcOptions(ctx, opts...)
+	op := func(ctx context.Context, client historyserviceclient.Interface) error {
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		return client.SyncShardStatus(ctx, request, opts...)
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	return err
+}
+
 func (c *clientImpl) getHostForRequest(workflowID string) (historyserviceclient.Interface, error) {
 	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
 	host, err := c.resolver.Lookup(string(key))

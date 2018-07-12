@@ -2194,6 +2194,20 @@ func (e *historyEngineImpl) ReplicateEvents(replicateRequest *h.ReplicateEventsR
 	return e.replicator.ApplyEvents(replicateRequest)
 }
 
+func (e *historyEngineImpl) SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error {
+	clusterName := request.GetSourceCluster()
+	now := time.Unix(0, request.GetTimestamp())
+
+	// here there are 3 main things
+	// 1. update the view of remote cluster's shard time
+	// 2. notify the timer gate in the timer queue standby processor
+	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
+	e.shard.SetCurrentTime(clusterName, now)
+	e.txProcessor.NotifyNewTask(clusterName, now, []persistence.Task{})
+	e.timerProcessor.NotifyNewTimers(clusterName, now, []persistence.Task{})
+	return nil
+}
+
 type updateWorkflowAction struct {
 	deleteWorkflow bool
 	createDecision bool

@@ -428,4 +428,18 @@ func (_m *MockHistoryEngine) ReplicateEvents(request *gohistory.ReplicateEventsR
 	return r0
 }
 
+// SyncShardStatus is mock implementation for SyncShardStatus of HistoryEngine
+func (_m *MockHistoryEngine) SyncShardStatus(ctx context.Context, request *gohistory.SyncShardStatusRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.SyncShardStatusRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 var _ Engine = (*MockHistoryEngine)(nil)

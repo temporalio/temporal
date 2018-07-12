@@ -284,6 +284,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
+	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
 	s.mockProcessor.On("completeTask", taskID3).Return(nil).Once()
 	s.queueAckMgr.completeQueueTask(taskID3)
 	s.queueAckMgr.updateQueueAckLevel()

@@ -1153,9 +1153,10 @@ func (v *HistoryTaskAttributes) GetNewRunHistory() (o *shared.History) {
 }
 
 type ReplicationTask struct {
-	TaskType              *ReplicationTaskType   `json:"taskType,omitempty"`
-	DomainTaskAttributes  *DomainTaskAttributes  `json:"domainTaskAttributes,omitempty"`
-	HistoryTaskAttributes *HistoryTaskAttributes `json:"historyTaskAttributes,omitempty"`
+	TaskType                      *ReplicationTaskType           `json:"taskType,omitempty"`
+	DomainTaskAttributes          *DomainTaskAttributes          `json:"domainTaskAttributes,omitempty"`
+	HistoryTaskAttributes         *HistoryTaskAttributes         `json:"historyTaskAttributes,omitempty"`
+	SyncShardStatusTaskAttributes *SyncShardStatusTaskAttributes `json:"syncShardStatusTaskAttributes,omitempty"`
 }
 
 // ToWire translates a ReplicationTask struct into a Thrift-level intermediate
@@ -1175,7 +1176,7 @@ type ReplicationTask struct {
 //   }
 func (v *ReplicationTask) ToWire() (wire.Value, error) {
 	var (
-		fields [3]wire.Field
+		fields [4]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1205,6 +1206,14 @@ func (v *ReplicationTask) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 30, Value: w}
 		i++
 	}
+	if v.SyncShardStatusTaskAttributes != nil {
+		w, err = v.SyncShardStatusTaskAttributes.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -1223,6 +1232,12 @@ func _DomainTaskAttributes_Read(w wire.Value) (*DomainTaskAttributes, error) {
 
 func _HistoryTaskAttributes_Read(w wire.Value) (*HistoryTaskAttributes, error) {
 	var v HistoryTaskAttributes
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _SyncShardStatusTaskAttributes_Read(w wire.Value) (*SyncShardStatusTaskAttributes, error) {
+	var v SyncShardStatusTaskAttributes
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -1275,6 +1290,14 @@ func (v *ReplicationTask) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.SyncShardStatusTaskAttributes, err = _SyncShardStatusTaskAttributes_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1288,7 +1311,7 @@ func (v *ReplicationTask) String() string {
 		return "<nil>"
 	}
 
-	var fields [3]string
+	var fields [4]string
 	i := 0
 	if v.TaskType != nil {
 		fields[i] = fmt.Sprintf("TaskType: %v", *(v.TaskType))
@@ -1300,6 +1323,10 @@ func (v *ReplicationTask) String() string {
 	}
 	if v.HistoryTaskAttributes != nil {
 		fields[i] = fmt.Sprintf("HistoryTaskAttributes: %v", v.HistoryTaskAttributes)
+		i++
+	}
+	if v.SyncShardStatusTaskAttributes != nil {
+		fields[i] = fmt.Sprintf("SyncShardStatusTaskAttributes: %v", v.SyncShardStatusTaskAttributes)
 		i++
 	}
 
@@ -1328,6 +1355,9 @@ func (v *ReplicationTask) Equals(rhs *ReplicationTask) bool {
 		return false
 	}
 	if !((v.HistoryTaskAttributes == nil && rhs.HistoryTaskAttributes == nil) || (v.HistoryTaskAttributes != nil && rhs.HistoryTaskAttributes != nil && v.HistoryTaskAttributes.Equals(rhs.HistoryTaskAttributes))) {
+		return false
+	}
+	if !((v.SyncShardStatusTaskAttributes == nil && rhs.SyncShardStatusTaskAttributes == nil) || (v.SyncShardStatusTaskAttributes != nil && rhs.SyncShardStatusTaskAttributes != nil && v.SyncShardStatusTaskAttributes.Equals(rhs.SyncShardStatusTaskAttributes))) {
 		return false
 	}
 
@@ -1364,11 +1394,22 @@ func (v *ReplicationTask) GetHistoryTaskAttributes() (o *HistoryTaskAttributes) 
 	return
 }
 
+// GetSyncShardStatusTaskAttributes returns the value of SyncShardStatusTaskAttributes if it is set or its
+// zero value if it is unset.
+func (v *ReplicationTask) GetSyncShardStatusTaskAttributes() (o *SyncShardStatusTaskAttributes) {
+	if v.SyncShardStatusTaskAttributes != nil {
+		return v.SyncShardStatusTaskAttributes
+	}
+
+	return
+}
+
 type ReplicationTaskType int32
 
 const (
-	ReplicationTaskTypeDomain  ReplicationTaskType = 0
-	ReplicationTaskTypeHistory ReplicationTaskType = 1
+	ReplicationTaskTypeDomain          ReplicationTaskType = 0
+	ReplicationTaskTypeHistory         ReplicationTaskType = 1
+	ReplicationTaskTypeSyncShardStatus ReplicationTaskType = 2
 )
 
 // ReplicationTaskType_Values returns all recognized values of ReplicationTaskType.
@@ -1376,6 +1417,7 @@ func ReplicationTaskType_Values() []ReplicationTaskType {
 	return []ReplicationTaskType{
 		ReplicationTaskTypeDomain,
 		ReplicationTaskTypeHistory,
+		ReplicationTaskTypeSyncShardStatus,
 	}
 }
 
@@ -1391,6 +1433,9 @@ func (v *ReplicationTaskType) UnmarshalText(value []byte) error {
 		return nil
 	case "History":
 		*v = ReplicationTaskTypeHistory
+		return nil
+	case "SyncShardStatus":
+		*v = ReplicationTaskTypeSyncShardStatus
 		return nil
 	default:
 		return fmt.Errorf("unknown enum value %q for %q", value, "ReplicationTaskType")
@@ -1409,6 +1454,8 @@ func (v ReplicationTaskType) MarshalText() ([]byte, error) {
 		return []byte("Domain"), nil
 	case 1:
 		return []byte("History"), nil
+	case 2:
+		return []byte("SyncShardStatus"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -1453,6 +1500,8 @@ func (v ReplicationTaskType) String() string {
 		return "Domain"
 	case 1:
 		return "History"
+	case 2:
+		return "SyncShardStatus"
 	}
 	return fmt.Sprintf("ReplicationTaskType(%d)", w)
 }
@@ -1475,6 +1524,8 @@ func (v ReplicationTaskType) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"Domain\""), nil
 	case 1:
 		return ([]byte)("\"History\""), nil
+	case 2:
+		return ([]byte)("\"SyncShardStatus\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -1513,4 +1564,192 @@ func (v *ReplicationTaskType) UnmarshalJSON(text []byte) error {
 	default:
 		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "ReplicationTaskType")
 	}
+}
+
+type SyncShardStatusTaskAttributes struct {
+	SourceCluster *string `json:"sourceCluster,omitempty"`
+	ShardId       *int64  `json:"shardId,omitempty"`
+	Timestamp     *int64  `json:"timestamp,omitempty"`
+}
+
+// ToWire translates a SyncShardStatusTaskAttributes struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *SyncShardStatusTaskAttributes) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.SourceCluster != nil {
+		w, err = wire.NewValueString(*(v.SourceCluster)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.ShardId != nil {
+		w, err = wire.NewValueI64(*(v.ShardId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Timestamp != nil {
+		w, err = wire.NewValueI64(*(v.Timestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a SyncShardStatusTaskAttributes struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a SyncShardStatusTaskAttributes struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v SyncShardStatusTaskAttributes
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *SyncShardStatusTaskAttributes) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.SourceCluster = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.ShardId = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.Timestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a SyncShardStatusTaskAttributes
+// struct.
+func (v *SyncShardStatusTaskAttributes) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.SourceCluster != nil {
+		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
+		i++
+	}
+	if v.ShardId != nil {
+		fields[i] = fmt.Sprintf("ShardId: %v", *(v.ShardId))
+		i++
+	}
+	if v.Timestamp != nil {
+		fields[i] = fmt.Sprintf("Timestamp: %v", *(v.Timestamp))
+		i++
+	}
+
+	return fmt.Sprintf("SyncShardStatusTaskAttributes{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this SyncShardStatusTaskAttributes match the
+// provided SyncShardStatusTaskAttributes.
+//
+// This function performs a deep comparison.
+func (v *SyncShardStatusTaskAttributes) Equals(rhs *SyncShardStatusTaskAttributes) bool {
+	if !_String_EqualsPtr(v.SourceCluster, rhs.SourceCluster) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.ShardId, rhs.ShardId) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.Timestamp, rhs.Timestamp) {
+		return false
+	}
+
+	return true
+}
+
+// GetSourceCluster returns the value of SourceCluster if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusTaskAttributes) GetSourceCluster() (o string) {
+	if v.SourceCluster != nil {
+		return *v.SourceCluster
+	}
+
+	return
+}
+
+// GetShardId returns the value of ShardId if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusTaskAttributes) GetShardId() (o int64) {
+	if v.ShardId != nil {
+		return *v.ShardId
+	}
+
+	return
+}
+
+// GetTimestamp returns the value of Timestamp if it is set or its
+// zero value if it is unset.
+func (v *SyncShardStatusTaskAttributes) GetTimestamp() (o int64) {
+	if v.Timestamp != nil {
+		return *v.Timestamp
+	}
+
+	return
 }
