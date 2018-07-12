@@ -99,6 +99,8 @@ type Config struct {
 
 	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
+	// ShardSyncMinInterval the minimal time interval which the shard info should be sync to remote
+	ShardSyncMinInterval dynamicconfig.DurationPropertyFn
 
 	// Time to hold a poll request before returning an empty response
 	// right now only used by GetMutableState
@@ -154,6 +156,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		HistoryMgrNumConns:                                  dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 50),
 		MaximumBufferedEventsBatch:                          dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		ShardUpdateMinInterval:                              dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardSyncMinInterval:                                dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 		// history client: client/history/client.go set the client timeout 30s
 		LongPollExpirationInterval: dc.GetDurationPropertyFilteredByDomain(
 			dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20,

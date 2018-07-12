@@ -60,6 +60,7 @@ type (
 		metricsClient metrics.Client
 		rateLimiter   common.TokenBucket // Read rate limiter
 		ackMgr        queueAckMgr
+		retryPolicy   backoff.RetryPolicy
 
 		// worker coroutines notification
 		workerNotificationChans []chan struct{}
@@ -95,6 +96,7 @@ func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, p
 		metricsClient:           shard.GetMetricsClient(),
 		logger:                  logger,
 		ackMgr:                  queueAckMgr,
+		retryPolicy:             common.CreatePersistanceRetryPolicy(),
 		lastPollTime:            time.Time{},
 	}
 
@@ -248,8 +250,20 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 	var logger bark.Logger
 	var err error
 	startTime := time.Now()
+
+	retryCount := 0
+	op := func() error {
+		err = p.processor.process(task)
+		if err != nil && err != ErrTaskRetry {
+			retryCount++
+			logger = p.initializeLoggerForTask(task, logger)
+			logging.LogTaskProcessingFailedEvent(logger, err)
+		}
+		return err
+	}
+
 ProcessRetryLoop:
-	for retryCount := 1; retryCount <= p.options.MaxRetryCount(); {
+	for retryCount < p.options.MaxRetryCount() {
 		select {
 		case <-p.shutdownCh:
 			return
@@ -260,25 +274,17 @@ ProcessRetryLoop:
 			default:
 			}
 
-			err = p.processor.process(task)
+			err = backoff.Retry(op, p.retryPolicy, func(err error) bool {
+				return err != ErrTaskRetry
+			})
+
 			if err != nil {
 				if err == ErrTaskRetry {
 					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskStandbyRetryCounter)
 					<-notificationChan
-				} else {
-					logger = p.initializeLoggerForTask(task, logger)
-					logging.LogTaskProcessingFailedEvent(logger, err)
-
-					// it is possible that DomainNotActiveError is thrown
-					// just keep try for cache.DomainCacheRefreshInterval
-					// and giveup
-					if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-						p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
-						return
-					}
-					backoff := time.Duration(retryCount * 100)
-					time.Sleep(backoff * time.Millisecond)
-					retryCount++
+				} else if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
+					return
 				}
 				continue ProcessRetryLoop
 			}

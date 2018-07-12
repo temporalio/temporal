@@ -119,6 +119,7 @@ var keys = map[Key]string{
 	HistoryMgrNumConns:                                  "history.historyMgrNumConns",
 	MaximumBufferedEventsBatch:                          "history.maximumBufferedEventsBatch",
 	ShardUpdateMinInterval:                              "history.shardUpdateMinInterval",
+	ShardSyncMinInterval:                                "history.shardSyncMinInterval",
 
 	// worker settings
 	WorkerPersistenceMaxQPS: "worker.persistenceMaxQPS",
@@ -278,6 +279,8 @@ const (
 	MaximumBufferedEventsBatch
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval
+	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
+	ShardSyncMinInterval
 
 	// key for histoworkerry
 

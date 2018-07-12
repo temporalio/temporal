@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/messaging"
 
 	"github.com/uber-common/bark"
 
@@ -62,7 +61,6 @@ type (
 		logger              bark.Logger
 		config              *Config
 		metricsClient       metrics.Client
-		messageProducer     messaging.Producer
 
 		sync.RWMutex
 		historyShards map[int]*historyShardsItem
@@ -71,26 +69,25 @@ type (
 
 	historyShardsItem struct {
 		sync.RWMutex
-		shardID         int
-		service         service.Service
-		shardMgr        persistence.ShardManager
-		historyMgr      persistence.HistoryManager
-		executionMgr    persistence.ExecutionManager
-		domainCache     cache.DomainCache
-		engineFactory   EngineFactory
-		host            *membership.HostInfo
-		engine          Engine
-		config          *Config
-		logger          bark.Logger
-		metricsClient   metrics.Client
-		messageProducer messaging.Producer
+		shardID       int
+		service       service.Service
+		shardMgr      persistence.ShardManager
+		historyMgr    persistence.HistoryManager
+		executionMgr  persistence.ExecutionManager
+		domainCache   cache.DomainCache
+		engineFactory EngineFactory
+		host          *membership.HostInfo
+		engine        Engine
+		config        *Config
+		logger        bark.Logger
+		metricsClient metrics.Client
 	}
 )
 
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
 	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
-	config *Config, logger bark.Logger, metricsClient metrics.Client, messageProducer messaging.Producer) *shardController {
+	config *Config, logger bark.Logger, metricsClient metrics.Client) *shardController {
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueShardController,
 	})
@@ -110,14 +107,13 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		logger:              logger,
 		config:              config,
 		metricsClient:       metricsClient,
-		messageProducer:     messageProducer,
 	}
 }
 
 func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence.ShardManager,
 	historyMgr persistence.HistoryManager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
-	config *Config, logger bark.Logger, metricsClient metrics.Client, messageProducer messaging.Producer) (*historyShardsItem, error) {
+	config *Config, logger bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 
 	executionMgr, err := executionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
@@ -137,8 +133,7 @@ func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence
 		logger: logger.WithFields(bark.Fields{
 			logging.TagHistoryShardID: shardID,
 		}),
-		metricsClient:   metricsClient,
-		messageProducer: messageProducer,
+		metricsClient: metricsClient,
 	}, nil
 }
 
@@ -228,7 +223,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 
 	if info.Identity() == c.host.Identity() {
 		shardItem, err := newHistoryShardsItem(shardID, c.service, c.shardMgr, c.historyMgr, c.domainCache,
-			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.metricsClient, c.messageProducer)
+			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.metricsClient)
 		if err != nil {
 			return nil, err
 		}
@@ -398,7 +393,7 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 	logging.LogShardEngineCreatingEvent(i.logger, i.host.Identity(), i.shardID)
 
 	context, err := acquireShard(i.shardID, i.service, i.shardMgr, i.historyMgr, i.executionMgr, i.domainCache,
-		i.host.Identity(), shardClosedCh, i.config, i.logger, i.metricsClient, i.messageProducer)
+		i.host.Identity(), shardClosedCh, i.config, i.logger, i.metricsClient)
 	if err != nil {
 		return nil, err
 	}
