@@ -21,6 +21,7 @@
 package history
 
 import (
+	ctx "context"
 	"os"
 	"reflect"
 	"testing"
@@ -182,7 +183,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(domainID, workflowID, version, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, version,
+		s.logger)
 	s.Equal(ErrRetryEntityNotExists, err)
 }
 
@@ -229,7 +231,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsMissingMutableState_Incomin
 		},
 	}, nil)
 
-	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(domainID, workflowID, version, s.logger)
+	err := s.historyReplicator.ApplyOtherEventsMissingMutableState(ctx.Background(), domainID, workflowID, version,
+		s.logger)
 	s.Nil(err)
 }
 
@@ -251,7 +254,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	}
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion})
 
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
+		request, s.logger)
 	s.Nil(msBuilderOut)
 	s.Nil(err)
 }
@@ -274,7 +278,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingEqu
 	}
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{LastWriteVersion: currentLastWriteVersion})
 
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderIn, msBuilderOut)
 	s.Nil(err)
 }
@@ -319,7 +323,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderMid := &mockMutableState{}
 	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
 	mockConflictResolver.On("reset", mock.Anything, incomingLastEventID, startTimeStamp).Return(msBuilderMid, nil)
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
 	s.Equal(msBuilderMid, msBuilderOut)
 	s.Nil(err)
 }
@@ -360,7 +364,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
+		request, s.logger)
 	s.Equal(msBuilderIn, msBuilderOut)
 	s.Nil(err)
 }
@@ -397,7 +402,8 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
 
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(context, msBuilderIn, request, s.logger)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
+		request, s.logger)
 	s.Nil(msBuilderOut)
 	s.Equal(ErrCorruptedReplicationInfo, err)
 }
@@ -423,7 +429,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingLessThanCurrent() 
 	msBuilder.On("GetNextEventID").Return(currentNextEventID)
 	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{}) // logger will use this
 
-	err := s.historyReplicator.ApplyOtherEvents(context, msBuilder, request, s.logger)
+	err := s.historyReplicator.ApplyOtherEvents(ctx.Background(), context, msBuilder, request, s.logger)
 	s.Nil(err)
 }
 
@@ -461,7 +467,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 
 	msBuilder.On("GetNextEventID").Return(currentNextEventID)
 
-	err := s.historyReplicator.ApplyOtherEvents(context, msBuilder, request, s.logger)
+	err := s.historyReplicator.ApplyOtherEvents(ctx.Background(), context, msBuilder, request, s.logger)
 	s.Equal(ErrRetryBufferEvents, err)
 }
 
@@ -569,7 +575,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 		return true
 	})).Return(nil).Once()
 
-	err := s.historyReplicator.ApplyOtherEvents(context, msBuilder, request, s.logger)
+	err := s.historyReplicator.ApplyOtherEvents(ctx.Background(), context, msBuilder, request, s.logger)
 	s.Nil(err)
 }
 
@@ -683,7 +689,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 		return true
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -766,7 +772,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	// the test above already assert the create workflow request, so here jsut use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Equal(errRet, err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -854,7 +861,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	// the test above already assert the create workflow request, so here jsut use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -943,7 +951,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1094,7 +1103,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1245,7 +1255,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1334,7 +1345,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1442,7 +1454,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		// other attributes are not used
 	}, nil)
 
-	err := s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err := s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Equal(ErrRetryExistingWorkflow, err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1623,7 +1636,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	currentMsBuilder.On("IsWorkflowExecutionRunning").Return(false) // return nil so we can skil a lot of mocking
 	currentMsBuilder.On("GetReplicationState").Return(nil)
 
-	err = s.historyReplicator.replicateWorkflowStarted(context, msBuilder, di, sourceCluster, history, sBuilder, s.logger)
+	err = s.historyReplicator.replicateWorkflowStarted(ctx.Background(), context, msBuilder, di, sourceCluster, history,
+		sBuilder, s.logger)
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
@@ -1634,7 +1648,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_TargetRunning() {
 	msBuilderTarget := &mockMutableState{}
 	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(true)
-	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(ctx.Background(), msBuilderTarget)
 	s.Nil(err)
 }
 
@@ -1643,7 +1657,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 	msBuilderTarget.On("IsWorkflowExecutionRunning").Return(false)
 	msBuilderTarget.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{CloseStatus: persistence.WorkflowCloseStatusCompleted})
 
-	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	err := s.historyReplicator.conflictResolutionTerminateContinueAsNew(ctx.Background(), msBuilderTarget)
 	s.Nil(err)
 }
 
@@ -1683,7 +1697,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 		// other attributes are not used
 	}, nil)
 
-	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(ctx.Background(), msBuilderTarget)
 	s.Nil(err)
 }
 
@@ -1772,7 +1786,7 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 	// this is to save a lot of meaningless mock, since we are not testing functionality of history engine
 	msBuilderCurrent.On("AddWorkflowExecutionTerminatedEvent", mock.Anything).Return(nil)
 
-	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(msBuilderTarget)
+	err = s.historyReplicator.conflictResolutionTerminateContinueAsNew(ctx.Background(), msBuilderTarget)
 	s.NotNil(err)
 	_, ok := err.(*shared.InternalServiceError)
 	s.True(ok)

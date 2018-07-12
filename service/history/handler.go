@@ -918,7 +918,7 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 		return err1
 	}
 
-	err2 := engine.ReplicateEvents(replicateRequest)
+	err2 := engine.ReplicateEvents(ctx, replicateRequest)
 	if err2 != nil {
 		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, h.convertError(err2))
 		return h.convertError(err2)

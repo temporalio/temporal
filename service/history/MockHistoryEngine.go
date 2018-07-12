@@ -415,7 +415,7 @@ func (_m *MockHistoryEngine) RecordChildExecutionCompleted(ctx context.Context, 
 }
 
 // ReplicateEvents is mock implementation for ReplicateEvents of HistoryEngine
-func (_m *MockHistoryEngine) ReplicateEvents(request *gohistory.ReplicateEventsRequest) error {
+func (_m *MockHistoryEngine) ReplicateEvents(ctx context.Context, request *gohistory.ReplicateEventsRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error

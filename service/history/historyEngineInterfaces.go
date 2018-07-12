@@ -72,7 +72,7 @@ type (
 		TerminateWorkflowExecution(ctx context.Context, request *h.TerminateWorkflowExecutionRequest) error
 		ScheduleDecisionTask(ctx context.Context, request *h.ScheduleDecisionTaskRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *h.RecordChildExecutionCompletedRequest) error
-		ReplicateEvents(request *h.ReplicateEventsRequest) error
+		ReplicateEvents(ctx context.Context, request *h.ReplicateEventsRequest) error
 		SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error
 	}
 

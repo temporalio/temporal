@@ -2190,8 +2190,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(ctx context.Context, c
 		})
 }
 
-func (e *historyEngineImpl) ReplicateEvents(replicateRequest *h.ReplicateEventsRequest) error {
-	return e.replicator.ApplyEvents(replicateRequest)
+func (e *historyEngineImpl) ReplicateEvents(ctx context.Context, replicateRequest *h.ReplicateEventsRequest) error {
+	return e.replicator.ApplyEvents(ctx, replicateRequest)
 }
 
 func (e *historyEngineImpl) SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error {
