@@ -23,8 +23,8 @@ package cli
 import (
 	"errors"
 
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/urfave/cli"
+	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"

@@ -21,11 +21,11 @@
 package cli
 
 import (
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	s "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
+	"go.uber.org/cadence/.gen/go/admin"
+	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
+	s "go.uber.org/cadence/.gen/go/shared"
 )
 
 func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {

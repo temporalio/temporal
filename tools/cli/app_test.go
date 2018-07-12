@@ -30,9 +30,9 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 
-	"github.com/uber/cadence/.gen/go/admin"
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	"github.com/uber/cadence/.gen/go/admin/adminservicetest"
+	"go.uber.org/cadence/.gen/go/admin"
+	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
+	"go.uber.org/cadence/.gen/go/admin/adminservicetest"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 	"go.uber.org/cadence/.gen/go/shared"
