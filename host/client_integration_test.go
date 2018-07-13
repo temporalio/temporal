@@ -236,8 +236,8 @@ func testActivity(ctx context.Context, msg string) (string, error) {
 
 func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) {
 	ao := workflow.ActivityOptions{
-		ScheduleToStartTimeout: time.Minute,
-		StartToCloseTimeout:    time.Minute,
+		ScheduleToStartTimeout: 20 * time.Second,
+		StartToCloseTimeout:    40 * time.Second,
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 

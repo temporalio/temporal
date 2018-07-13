@@ -432,3 +432,13 @@ func LogCriticalErrorEvent(logger bark.Logger, msg string, err error) {
 		TagWorkflowErr:     err,
 	}).Error(msg)
 }
+
+// LogDecisionTimeoutTooLarge is used to log warning msg for workflow that contains large decision timeout
+func LogDecisionTimeoutTooLarge(logger bark.Logger, t int32, domain, wid, wfType string) {
+	logger.WithFields(bark.Fields{
+		"Domain":          domain,
+		"WorkflowID":      wid,
+		"WorkflowType":    wfType,
+		"DecisionTimeout": t,
+	}).Warn("Decision timeout is too large")
+}

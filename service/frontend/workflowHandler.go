@@ -1354,6 +1354,23 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
 	}
 
+	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))
+	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
+	if startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
+		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
+		logging.LogDecisionTimeoutTooLarge(wh.Service.GetLogger(),
+			startRequest.GetTaskStartToCloseTimeoutSeconds(),
+			startRequest.GetDomain(),
+			startRequest.GetWorkflowId(),
+			startRequest.WorkflowType.GetName(),
+		)
+	}
+	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() ||
+		startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
+	}
+
 	domainName := startRequest.GetDomain()
 	wh.Service.GetLogger().Debugf("Start workflow execution request domain: %v", domainName)
 	domainID, err := wh.domainCache.GetDomainID(domainName)
@@ -1624,6 +1641,23 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() <= 0 {
 		return nil, wh.error(&gen.BadRequestError{
 			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
+	}
+
+	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(signalWithStartRequest.GetDomain()))
+	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
+	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
+		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
+		logging.LogDecisionTimeoutTooLarge(wh.Service.GetLogger(),
+			signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds(),
+			signalWithStartRequest.GetDomain(),
+			signalWithStartRequest.GetWorkflowId(),
+			signalWithStartRequest.WorkflowType.GetName(),
+		)
+	}
+	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() ||
+		signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
+		return nil, wh.error(&gen.BadRequestError{
+			Message: fmt.Sprintf("TaskStartToCloseTimeoutSeconds is larger than ExecutionStartToCloseTimeout or MaxDecisionStartToCloseTimeout (%ds).", maxDecisionTimeout)}, scope)
 	}
 
 	domainID, err := wh.domainCache.GetDomainID(signalWithStartRequest.GetDomain())

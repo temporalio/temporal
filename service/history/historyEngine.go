@@ -1000,7 +1000,7 @@ Update_History_Loop:
 					targetDomainID = domainEntry.GetInfo().ID
 				}
 
-				if err = validateActivityScheduleAttributes(attributes); err != nil {
+				if err = validateActivityScheduleAttributes(attributes, executionInfo.WorkflowTimeout); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadScheduleActivityAttributes
 					break Process_Decision_Loop
@@ -2428,7 +2428,7 @@ func (s *shardContextWrapper) NotifyNewHistoryEvent(event *historyEventNotificat
 	return err
 }
 
-func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTaskDecisionAttributes) error {
+func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTaskDecisionAttributes, wfTimeout int32) error {
 	if attributes == nil {
 		return &workflow.BadRequestError{Message: "ScheduleActivityTaskDecisionAttributes is not set on decision."}
 	}
@@ -2463,6 +2463,20 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		return &workflow.BadRequestError{Message: "A valid timeout may not be negative."}
 	}
 
+	// ensure activity timeout never larger than workflow timeout
+	if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+	}
+	if attributes.GetScheduleToStartTimeoutSeconds() > wfTimeout {
+		attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(wfTimeout)
+	}
+	if attributes.GetStartToCloseTimeoutSeconds() > wfTimeout {
+		attributes.StartToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+	}
+	if attributes.GetHeartbeatTimeoutSeconds() > wfTimeout {
+		attributes.HeartbeatTimeoutSeconds = common.Int32Ptr(wfTimeout)
+	}
+
 	validScheduleToClose := attributes.GetScheduleToCloseTimeoutSeconds() > 0
 	validScheduleToStart := attributes.GetScheduleToStartTimeoutSeconds() > 0
 	validStartToClose := attributes.GetStartToCloseTimeoutSeconds() > 0
@@ -2476,6 +2490,9 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		}
 	} else if validScheduleToStart && validStartToClose {
 		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(attributes.GetScheduleToStartTimeoutSeconds() + attributes.GetStartToCloseTimeoutSeconds())
+		if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
+			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
+		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
 		return &workflow.BadRequestError{Message: "A valid ScheduleToCloseTimeout is not set on decision."}

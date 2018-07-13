@@ -51,11 +51,12 @@ var keys = map[Key]string{
 	EnableGlobalDomain: "system.enableGlobalDomain",
 
 	// frontend settings
-	FrontendPersistenceMaxQPS:     "frontend.persistenceMaxQPS",
-	FrontendVisibilityMaxPageSize: "frontend.visibilityMaxPageSize",
-	FrontendHistoryMaxPageSize:    "frontend.historyMaxPageSize",
-	FrontendRPS:                   "frontend.rps",
-	FrontendHistoryMgrNumConns:    "frontend.historyMgrNumConns",
+	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
+	FrontendVisibilityMaxPageSize:  "frontend.visibilityMaxPageSize",
+	FrontendHistoryMaxPageSize:     "frontend.historyMaxPageSize",
+	FrontendRPS:                    "frontend.rps",
+	FrontendHistoryMgrNumConns:     "frontend.historyMgrNumConns",
+	MaxDecisionStartToCloseTimeout: "frontend.maxDecisionStartToCloseTimeout",
 
 	// matching settings
 	MatchingPersistenceMaxQPS:               "matching.persistenceMaxQPS",
@@ -155,6 +156,8 @@ const (
 	FrontendRPS
 	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
 	FrontendHistoryMgrNumConns
+	// MaxDecisionStartToCloseTimeout is max decision timeout in seconds
+	MaxDecisionStartToCloseTimeout
 
 	// key for matching
 

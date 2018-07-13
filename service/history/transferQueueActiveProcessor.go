@@ -281,7 +281,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 		return nil
 	}
 
-	timeout := ai.ScheduleToStartTimeout
+	timeout := common.MinInt32(ai.ScheduleToStartTimeout, common.MaxTaskTimeout)
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -341,7 +341,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 
 	executionInfo := msBuilder.GetExecutionInfo()
 	workflowTimeout := executionInfo.WorkflowTimeout
-	decisionTimeout := workflowTimeout
+	decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp
 	if msBuilder.IsStickyTaskListEnabled() {

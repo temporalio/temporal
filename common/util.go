@@ -254,3 +254,11 @@ func CreateMatchingPollForDecisionTaskResponse(historyResponse *h.RecordDecision
 	}
 	return matchingResp
 }
+
+// MinInt32 return smaller one of two inputs int32
+func MinInt32(a, b int32) int32 {
+	if a < b {
+		return a
+	}
+	return b
+}
