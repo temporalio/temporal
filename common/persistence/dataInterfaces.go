@@ -434,6 +434,8 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
+		// Not written to database - This is used only for deduping heartbeat timer creation
+		LastTimeoutVisibility int64
 	}
 
 	// TimerInfo details - metadata about user timer info.

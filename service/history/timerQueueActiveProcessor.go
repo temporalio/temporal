@@ -318,7 +318,7 @@ Update_History_Loop:
 			// NOTE: When record activity HB comes in we only update last heartbeat timestamp, this is the place
 			// where we create next timer task based on that new updated timestamp.
 			isHeartBeatTask := timerTask.TimeoutType == int(workflow.TimeoutTypeHeartbeat)
-			if isHeartBeatTask {
+			if isHeartBeatTask && ai.LastTimeoutVisibility <= timerTask.VisibilityTimestamp.Unix() {
 				ai.TimerTaskStatus = ai.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
 				msBuilder.UpdateActivity(ai)
 			}
@@ -415,6 +415,8 @@ Update_History_Loop:
 					at := nextTask.(*persistence.ActivityTimeoutTask)
 
 					ai.TimerTaskStatus = ai.TimerTaskStatus | getActivityTimerStatus(workflow.TimeoutType(at.TimeoutType))
+					// Use second resolution for setting LastTimeoutVisibility, which is used for deduping heartbeat timer creation
+					ai.LastTimeoutVisibility = td.TimerSequenceID.VisibilityTimestamp.Unix()
 					msBuilder.UpdateActivity(ai)
 					createNewTimer = true
 
