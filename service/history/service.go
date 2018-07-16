@@ -111,7 +111,7 @@ type Config struct {
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                                      numberOfShards,
-		PersistenceMaxQPS:                                   dc.GetFloat64Property(dynamicconfig.HistoryPersistenceMaxQPS, 6000),
+		PersistenceMaxQPS:                                   dc.GetFloat64Property(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		HistoryCacheInitialSize:                             dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                 dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                     dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),

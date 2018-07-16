@@ -2238,11 +2238,6 @@ func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
 func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry, newRunID string,
 	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, mutableState,
 	error) {
-	if e.hasPendingTasks() || e.HasPendingDecisionTask() {
-		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionContinueAsNew, e.GetNextEventID(), fmt.Sprintf(
-			"{OutStandingActivityTasks: %v, HasPendingDecision: %v}", len(e.pendingActivityInfoIDs),
-			e.HasPendingDecisionTask()))
-	}
 
 	newExecution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(e.executionInfo.WorkflowID),

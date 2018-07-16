@@ -44,6 +44,7 @@ const (
 	TagTaskID               = "task-id"
 	TagTaskType             = "task-type"
 	TagSourceCluster        = "source-cluster"
+	TagPrevActiveCluster    = "prev-active-cluster"
 	TagTopicName            = "topic-name"
 	TagConsumerName         = "consumer-name"
 	TagPartition            = "partition"
@@ -52,9 +53,12 @@ const (
 	TagScope                = "scope"
 	TagFailover             = "failover"
 	TagVersion              = "version"
+	TagCurrentVersion       = "current-version"
+	TagIncomingVersion      = "incoming-version"
 	TagFirstEventID         = "first-event-id"
 	TagNextEventID          = "next-event-id"
 	TagTimeoutType          = "timeout-type"
+	TagReplicationInfo      = "replication-info"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

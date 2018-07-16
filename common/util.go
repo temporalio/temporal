@@ -182,7 +182,10 @@ func IsWhitelistServiceTransientError(err error) bool {
 		return true
 	case *yarpcerrors.Status:
 		// We only selectively retry the following yarpc errors client can safe retry with a backoff
-		if yarpcerrors.IsDeadlineExceeded(err) || yarpcerrors.IsUnavailable(err) {
+		if yarpcerrors.IsDeadlineExceeded(err) ||
+			yarpcerrors.IsUnavailable(err) ||
+			yarpcerrors.IsUnknown(err) ||
+			yarpcerrors.IsInternal(err) {
 			return true
 		}
 		return false

@@ -20,13 +20,17 @@
 
 package membership
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/uber/cadence/.gen/go/shared"
+)
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance
 var ErrUnknownService = errors.New("Service not tracked by Monitor")
 
 // ErrInsufficientHosts is thrown when there are not enough hosts to serve the request
-var ErrInsufficientHosts = errors.New("Not enough hosts to serve the request")
+var ErrInsufficientHosts = &shared.InternalServiceError{Message: "Not enough hosts to serve the request"}
 
 // ErrListenerAlreadyExist is thrown on a duplicate AddListener call from the same listener
 var ErrListenerAlreadyExist = errors.New("Listener already exist for the service")
