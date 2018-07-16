@@ -156,6 +156,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeActivityTaskStarted:
 			b.msBuilder.ReplicateActivityTaskStartedEvent(event)
+			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
+			}
 
 		case shared.EventTypeActivityTaskCompleted:
 			if err := b.msBuilder.ReplicateActivityTaskCompletedEvent(event); err != nil {

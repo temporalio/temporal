@@ -1617,21 +1617,67 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 	}
 
 	now := time.Now()
-	evenType := shared.EventTypeActivityTaskStarted
-	event := &shared.HistoryEvent{
+	activityID := "activity ID"
+	tasklist := "some random tasklist"
+	timeoutSecond := int32(10)
+	evenType := shared.EventTypeActivityTaskScheduled
+	scheduledEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(130),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: &evenType,
+		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
+	}
+
+	evenType = shared.EventTypeActivityTaskStarted
+	startedEvent := &shared.HistoryEvent{
 		Version:                            common.Int64Ptr(version),
-		EventId:                            common.Int64Ptr(130),
-		Timestamp:                          common.Int64Ptr(now.UnixNano()),
+		EventId:                            common.Int64Ptr(scheduledEvent.GetEventId() + 1),
+		Timestamp:                          common.Int64Ptr(scheduledEvent.GetTimestamp() + 1000),
 		EventType:                          &evenType,
 		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
 	}
-	s.mockMutableState.On("ReplicateActivityTaskStartedEvent", event).Once()
-	s.mockUpdateVersion(event)
 
-	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil)
+	serializedScheduledEvent, err := newJSONHistoryEventSerializer().Serialize(scheduledEvent)
+	s.Nil(err)
+	serializedStartedEvent, err := newJSONHistoryEventSerializer().Serialize(startedEvent)
+	s.Nil(err)
+	ai := &persistence.ActivityInfo{
+		Version:                  version,
+		ScheduleID:               scheduledEvent.GetEventId(),
+		ScheduledEvent:           serializedScheduledEvent,
+		ScheduledTime:            time.Unix(0, scheduledEvent.GetTimestamp()),
+		StartedID:                startedEvent.GetEventId(),
+		StartedEvent:             serializedStartedEvent,
+		StartedTime:              time.Unix(0, startedEvent.GetTimestamp()),
+		ActivityID:               activityID,
+		ScheduleToStartTimeout:   timeoutSecond,
+		ScheduleToCloseTimeout:   timeoutSecond,
+		StartToCloseTimeout:      timeoutSecond,
+		HeartbeatTimeout:         timeoutSecond,
+		CancelRequested:          false,
+		CancelRequestID:          common.EmptyEventID,
+		LastHeartBeatUpdatedTime: time.Time{},
+		TimerTaskStatus:          TimerTaskStatusNone,
+		TaskList:                 tasklist,
+	}
+	executionInfo := &persistence.WorkflowExecutionInfo{
+		TaskList: tasklist,
+	}
+	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
+	s.mockMutableState.On("GetPendingActivityInfos").Return(map[int64]*persistence.ActivityInfo{scheduledEvent.GetEventId(): ai})
+	s.mockMutableState.On("UpdateActivity", ai).Return(nil).Once()
+	s.mockMutableState.On("ReplicateActivityTaskStartedEvent", startedEvent).Once()
+	s.mockUpdateVersion(startedEvent)
 
-	s.Empty(s.stateBuilder.timerTasks)
+	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(startedEvent), nil)
+	s.Equal(1, len(s.stateBuilder.timerTasks))
+	timerTask, ok := s.stateBuilder.timerTasks[0].(*persistence.ActivityTimeoutTask)
+	s.True(ok)
+	s.True(timerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(timeoutSecond) * time.Second)))
+	s.Equal(ai.ScheduleID, timerTask.EventID)
 	s.Empty(s.stateBuilder.transferTasks)
+
 	s.Empty(s.stateBuilder.newRunTimerTasks)
 	s.Empty(s.stateBuilder.newRunTransferTasks)
 }
