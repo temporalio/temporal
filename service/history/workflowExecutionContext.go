@@ -223,8 +223,9 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 	executionInfo := c.msBuilder.GetExecutionInfo()
 
+	hasNewHistoryEvents := builder.history != nil && len(builder.history) > 0
 	// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
-	if builder.history != nil && len(builder.history) > 0 {
+	if hasNewHistoryEvents {
 		firstEvent := builder.GetFirstEvent()
 		// Transient decision events need to be written as a separate batch
 		if builder.HasTransientEvents() {
@@ -259,7 +260,8 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 	}
 
 	var replicationTasks []persistence.Task
-	if createReplicationTask {
+	// Check if the update resulted in new history events before generating replication task
+	if hasNewHistoryEvents && createReplicationTask {
 		// Let's create a replication task as part of this update
 		replicationTasks = append(replicationTasks, c.msBuilder.CreateReplicationTask())
 	}
