@@ -122,6 +122,7 @@ type (
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetHistoryBuilder() *historyBuilder
 		GetHistoryEvent(serializedEvent []byte) (*workflow.HistoryEvent, bool)
+		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastUpdatedTimestamp() int64
 		GetLastWriteVersion() int64
@@ -1110,9 +1111,8 @@ func (e *mutableStateBuilder) DeleteUserTimer(timerID string) {
 	e.deleteTimerInfos[timerID] = struct{}{}
 }
 
-// GetPendingDecision returns details about the in-progress decision task
-func (e *mutableStateBuilder) GetPendingDecision(scheduleEventID int64) (*decisionInfo, bool) {
-	di := &decisionInfo{
+func (e *mutableStateBuilder) getDecisionInfo() *decisionInfo {
+	return &decisionInfo{
 		Version:         e.executionInfo.DecisionVersion,
 		ScheduleID:      e.executionInfo.DecisionScheduleID,
 		StartedID:       e.executionInfo.DecisionStartedID,
@@ -1121,6 +1121,11 @@ func (e *mutableStateBuilder) GetPendingDecision(scheduleEventID int64) (*decisi
 		Attempt:         e.executionInfo.DecisionAttempt,
 		Timestamp:       e.executionInfo.DecisionTimestamp,
 	}
+}
+
+// GetPendingDecision returns details about the in-progress decision task
+func (e *mutableStateBuilder) GetPendingDecision(scheduleEventID int64) (*decisionInfo, bool) {
+	di := e.getDecisionInfo()
 	if scheduleEventID == di.ScheduleID {
 		return di, true
 	}
@@ -1145,6 +1150,16 @@ func (e *mutableStateBuilder) HasPendingDecisionTask() bool {
 
 func (e *mutableStateBuilder) HasInFlightDecisionTask() bool {
 	return e.executionInfo.DecisionStartedID > 0
+}
+
+func (e *mutableStateBuilder) GetInFlightDecisionTask() (*decisionInfo, bool) {
+	if e.executionInfo.DecisionScheduleID == common.EmptyEventID ||
+		e.executionInfo.DecisionStartedID == common.EmptyEventID {
+		return nil, false
+	}
+
+	di := e.getDecisionInfo()
+	return di, true
 }
 
 func (e *mutableStateBuilder) HasBufferedEvents() bool {

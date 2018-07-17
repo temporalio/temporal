@@ -1347,6 +1347,28 @@ func (_m *mockMutableState) GetHistoryEvent(serializedEvent []byte) (*shared.His
 	return r0, r1
 }
 
+func (_m *mockMutableState) GetInFlightDecisionTask() (*decisionInfo, bool) {
+	ret := _m.Called()
+
+	var r0 *decisionInfo
+	if rf, ok := ret.Get(0).(func() *decisionInfo); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*decisionInfo)
+		}
+	}
+
+	var r1 bool
+	if rf, ok := ret.Get(1).(func() bool); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	return r0, r1
+}
+
 // GetLastFirstEventID provides a mock function with given fields:
 func (_m *mockMutableState) GetLastFirstEventID() int64 {
 	ret := _m.Called()

@@ -659,19 +659,12 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 ) error {
 	executionInfo := msBuilder.GetExecutionInfo()
 	var transferTasks []persistence.Task
+	var err error
 	if scheduleNewDecision {
 		// Schedule a new decision.
-		di := msBuilder.AddDecisionTaskScheduledEvent()
-		transferTasks = []persistence.Task{&persistence.DecisionTask{
-			DomainID:   executionInfo.DomainID,
-			TaskList:   di.TaskList,
-			ScheduleID: di.ScheduleID,
-		}}
-		if msBuilder.IsStickyTaskListEnabled() {
-			tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
-			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
-				executionInfo.StickyScheduleToStartTimeout)
-			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+		transferTasks, timerTasks, err = context.scheduleNewDecision(transferTasks, timerTasks)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -691,13 +684,51 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err1
 	}
 
-	err := context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
+	err = context.updateWorkflowExecutionWithDeleteTask(transferTasks, timerTasks, clearTimerTask, transactionID)
 	if err != nil {
 		if isShardOwnershiptLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates
 			t.timerQueueProcessorBase.Stop()
+			return err
+		}
+
+		// Check if the processing is blocked due to limit exceeded error and fail any outstanding decision to
+		// unblock processing
+		if err == ErrBufferedEventsLimitExceeded {
+			context.clear()
+
+			var err1 error
+			// Reload workflow execution so we can apply the decision task failure event
+			msBuilder, err1 = context.loadWorkflowExecution()
+			if err1 != nil {
+				return err1
+			}
+
+			if di, ok := msBuilder.GetInFlightDecisionTask(); ok {
+				msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
+					workflow.DecisionTaskFailedCauseForceCloseDecision, nil, identityHistoryService)
+
+				var transT, timerT []persistence.Task
+				transT, timerT, err1 = context.scheduleNewDecision(transT, timerT)
+				if err1 != nil {
+					return err1
+				}
+
+				// Generate a transaction ID for appending events to history
+				transactionID, err1 := t.historyService.shard.GetNextTransferTaskID()
+				if err1 != nil {
+					return err1
+				}
+				err1 = context.updateWorkflowExecution(transT, timerT, transactionID)
+				if err1 != nil {
+					return err1
+				}
+			}
+
+			return err
 		}
 	}
+
 	t.notifyNewTimers(timerTasks)
 	return err
 }

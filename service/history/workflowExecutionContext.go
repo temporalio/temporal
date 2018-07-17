@@ -430,3 +430,34 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithRetry(
 func (c *workflowExecutionContext) clear() {
 	c.msBuilder = nil
 }
+
+// scheduleNewDecision is helper method which has the logic for scheduling new decision for a workflow execution.
+// This function takes in a slice of transferTasks and timerTasks already scheduled for the current transaction
+// and may append more tasks to it.  It also returns back the slice with new tasks appended to it.  It is expected
+// caller to assign returned slice to original passed in slices.  For this reason we return the original slices
+// even if the method fails due to an error on loading workflow execution.
+func (c *workflowExecutionContext) scheduleNewDecision(transferTasks []persistence.Task,
+	timerTasks []persistence.Task) ([]persistence.Task, []persistence.Task, error) {
+	msBuilder, err := c.loadWorkflowExecution()
+	if err != nil {
+		return transferTasks, timerTasks, err
+	}
+
+	executionInfo := msBuilder.GetExecutionInfo()
+	if !msBuilder.HasPendingDecisionTask() {
+		di := msBuilder.AddDecisionTaskScheduledEvent()
+		transferTasks = append(transferTasks, &persistence.DecisionTask{
+			DomainID:   executionInfo.DomainID,
+			TaskList:   di.TaskList,
+			ScheduleID: di.ScheduleID,
+		})
+		if msBuilder.IsStickyTaskListEnabled() {
+			tBuilder := newTimerBuilder(c.shard.GetConfig(), c.logger, common.NewRealTimeSource())
+			stickyTaskTimeoutTimer := tBuilder.AddScheduleToStartDecisionTimoutTask(di.ScheduleID, di.Attempt,
+				executionInfo.StickyScheduleToStartTimeout)
+			timerTasks = append(timerTasks, stickyTaskTimeoutTimer)
+		}
+	}
+
+	return transferTasks, timerTasks, nil
+}
