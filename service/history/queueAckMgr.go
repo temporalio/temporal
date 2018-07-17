@@ -114,7 +114,7 @@ TaskFilterLoop:
 	for _, task := range tasks {
 		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
 		if isLoaded {
-			// timer already loaded
+			// task already loaded
 			a.logger.Debugf("Skipping transfer task: %v.", task)
 			continue TaskFilterLoop
 		}
