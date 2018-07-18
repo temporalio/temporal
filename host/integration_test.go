@@ -3504,7 +3504,6 @@ func (s *integrationSuite) TestVisibility() {
 	closedCount = len(resp.Executions)
 	s.Equal(1, closedCount)
 
-ListOpenLoop:
 	for i := 0; i < 10; i++ {
 		resp, err4 := s.engine.ListOpenWorkflowExecutions(createContext(), &workflow.ListOpenWorkflowExecutionsRequest{
 			Domain:          common.StringPtr(s.domainName),
@@ -3513,12 +3512,11 @@ ListOpenLoop:
 		})
 		s.Nil(err4)
 		openCount = len(resp.Executions)
-		if openCount == 0 {
-			s.logger.Info("Open WorkflowExecution is not yet visibile")
-			time.Sleep(100 * time.Millisecond)
-			continue ListOpenLoop
+		if openCount == 1 {
+			break
 		}
-		break ListOpenLoop
+		s.logger.Info("Open WorkflowExecution is not yet visible")
+		time.Sleep(100 * time.Millisecond)
 	}
 	s.Equal(1, openCount)
 }
@@ -6171,8 +6169,14 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	})
 	s.Nil(err)
 
-	listResp, err = s.engine.ListOpenWorkflowExecutions(createContext(), listOpenRequest)
-	s.NoError(err)
+	for i := 0; i < 10; i++ { // retry
+		listResp, err = s.engine.ListOpenWorkflowExecutions(createContext(), listOpenRequest)
+		s.NoError(err)
+		if len(listResp.Executions) == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	s.Equal(0, len(listResp.Executions))
 
 	listClosedRequest := &workflow.ListClosedWorkflowExecutionsRequest{
