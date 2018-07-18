@@ -6142,6 +6142,53 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
 	s.Equal(signalInput, signalEvent.WorkflowExecutionSignaledEventAttributes.Input)
 	s.Equal(identity, *signalEvent.WorkflowExecutionSignaledEventAttributes.Identity)
+
+	// Assert visibility is correct
+	listOpenRequest := &workflow.ListOpenWorkflowExecutionsRequest{
+		Domain:          common.StringPtr(s.domainName),
+		MaximumPageSize: common.Int32Ptr(100),
+		StartTimeFilter: &workflow.StartTimeFilter{
+			EarliestTime: common.Int64Ptr(0),
+			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+		},
+		ExecutionFilter: &workflow.WorkflowExecutionFilter{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+	listResp, err := s.engine.ListOpenWorkflowExecutions(createContext(), listOpenRequest)
+	s.NoError(err)
+	s.Equal(1, len(listResp.Executions))
+
+	// Terminate workflow execution and assert visibility is correct
+	err = s.engine.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+		Reason:   common.StringPtr("kill workflow"),
+		Details:  nil,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	listResp, err = s.engine.ListOpenWorkflowExecutions(createContext(), listOpenRequest)
+	s.NoError(err)
+	s.Equal(0, len(listResp.Executions))
+
+	listClosedRequest := &workflow.ListClosedWorkflowExecutionsRequest{
+		Domain:          common.StringPtr(s.domainName),
+		MaximumPageSize: common.Int32Ptr(100),
+		StartTimeFilter: &workflow.StartTimeFilter{
+			EarliestTime: common.Int64Ptr(0),
+			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+		},
+		ExecutionFilter: &workflow.WorkflowExecutionFilter{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+	listClosedResp, err := s.engine.ListClosedWorkflowExecutions(createContext(), listClosedRequest)
+	s.NoError(err)
+	s.Equal(1, len(listClosedResp.Executions))
 }
 
 func (s *integrationSuite) TestTransientDecisionTimeout() {
