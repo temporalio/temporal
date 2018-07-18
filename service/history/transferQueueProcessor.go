@@ -117,7 +117,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 
 // NotifyNewTask - Notify the processor about the new active / standby transfer task arrival.
 // This should be called each time new transfer task arrives, otherwise tasks maybe delayed.
-func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, currentTime time.Time, transferTasks []persistence.Task) {
+func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferTasks []persistence.Task) {
 	if clusterName == t.currentClusterName {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
@@ -130,8 +130,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, currentTi
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
-	currentClusterTime := t.shard.GetCurrentTime(t.currentClusterName)
-	if currentClusterTime.Sub(currentTime) >= t.config.TransferProcessorStandbyTaskDelay() && len(transferTasks) != 0 {
+	if len(transferTasks) != 0 {
 		standbyTaskProcessor.notifyNewTask()
 	}
 	standbyTaskProcessor.retryTasks()
@@ -156,6 +155,11 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 		t.shard, t.historyService, t.visibilityMgr, t.matchingClient, t.historyClient,
 		domainID, standbyClusterName, minLevel, maxLevel, t.logger,
 	)
+
+	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
+		standbyTaskProcessor.retryTasks()
+	}
+
 	failoverTaskProcessor.Start()
 }
 

@@ -141,13 +141,13 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithDeleteTask(transfe
 }
 
 func (c *workflowExecutionContext) replicateWorkflowExecution(request *h.ReplicateEventsRequest,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64) error {
+	transferTasks []persistence.Task, timerTasks []persistence.Task, lastEventID, transactionID int64, now time.Time) error {
 	nextEventID := lastEventID + 1
 	c.msBuilder.GetExecutionInfo().NextEventID = nextEventID
 
 	builder := newHistoryBuilderFromEvents(request.History.Events, c.logger)
 	return c.updateHelper(builder, transferTasks, timerTasks, false, request.GetSourceCluster(), request.GetVersion(),
-		transactionID)
+		transactionID, now)
 }
 
 func (c *workflowExecutionContext) updateVersion() error {
@@ -187,12 +187,13 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 			c.msBuilder.GetExecutionInfo().LastFirstEventID, c.msBuilder.GetExecutionInfo().NextEventID)
 	}
 
-	return c.updateHelper(nil, transferTasks, timerTasks, c.createReplicationTask, "", currentVersion, transactionID)
+	now := time.Now()
+	return c.updateHelper(nil, transferTasks, timerTasks, c.createReplicationTask, "", currentVersion, transactionID, now)
 }
 
 func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transferTasks []persistence.Task,
 	timerTasks []persistence.Task, createReplicationTask bool, sourceCluster string, lastWriteVersion int64,
-	transactionID int64) (errRet error) {
+	transactionID int64, now time.Time) (errRet error) {
 
 	defer func() {
 		if errRet != nil {
@@ -266,7 +267,7 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		replicationTasks = append(replicationTasks, c.msBuilder.CreateReplicationTask())
 	}
 
-	setTaskVersion(c.msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
+	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	if err1 := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:                 executionInfo,

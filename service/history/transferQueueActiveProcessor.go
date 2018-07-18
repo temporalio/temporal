@@ -113,7 +113,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(currentClusterName), logger)
-	queueProcessorBase := newQueueProcessorBase(shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 
@@ -170,7 +170,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel),
 	}
 	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
-	queueProcessorBase := newQueueProcessorBase(shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

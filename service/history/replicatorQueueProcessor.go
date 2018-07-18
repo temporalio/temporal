@@ -64,6 +64,8 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager,
 	hSerializerFactory persistence.HistorySerializerFactory, logger bark.Logger) queueProcessor {
 
+	currentClusterNamer := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                       config.ReplicatorProcessorStartDelay,
@@ -82,7 +84,7 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 	})
 
 	processor := &replicatorQueueProcessorImpl{
-		currentClusterNamer: shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterNamer: currentClusterNamer,
 		shard:               shard,
 		executionMgr:        executionMgr,
 		historyMgr:          historyMgr,
@@ -94,7 +96,7 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetReplicatorAckLevel(), logger)
-	queueProcessorBase := newQueueProcessorBase(shard, options, processor, queueAckMgr, logger)
+	queueProcessorBase := newQueueProcessorBase(currentClusterNamer, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
 

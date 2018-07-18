@@ -506,7 +506,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 		FirstEventId:      common.Int64Ptr(incomingFirstEventID),
 		NextEventId:       common.Int64Ptr(incomingNextEventID),
 		ForceBufferEvents: common.BoolPtr(true),
-		History:           &shared.History{},
+		History:           &shared.History{Events: []*shared.HistoryEvent{&shared.HistoryEvent{}}},
 	}
 
 	serializedHistoryBatch := &persistence.SerializedHistoryEventBatch{
@@ -626,10 +626,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	}
 	sBuilder := &mockStateBuilder{}
 	requestID := uuid.New()
+	now := time.Now()
 	history := &shared.History{
 		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1)},
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2)},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -701,6 +702,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
+	s.True(now.Equal(transferTasks[0].GetVisibilityTimestamp()))
 	s.Equal(1, len(timerTasks))
 	s.Equal(version, timerTasks[0].GetVersion())
 }
@@ -999,10 +1001,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}
 	sBuilder := &mockStateBuilder{}
 	requestID := uuid.New()
+	now := time.Now()
 	history := &shared.History{
 		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1)},
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2)},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -1116,6 +1119,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
+	s.True(now.Equal(transferTasks[0].GetVisibilityTimestamp()))
 	s.Equal(1, len(timerTasks))
 	s.Equal(version, timerTasks[0].GetVersion())
 }
@@ -1151,10 +1155,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	}
 	sBuilder := &mockStateBuilder{}
 	requestID := uuid.New()
+	now := time.Now()
 	history := &shared.History{
 		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1)},
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2)},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -1268,6 +1273,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
+	s.True(now.Equal(transferTasks[0].GetVisibilityTimestamp()))
 	s.Equal(1, len(timerTasks))
 	s.Equal(version, timerTasks[0].GetVersion())
 }
@@ -1503,10 +1509,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	}
 	sBuilder := &mockStateBuilder{}
 	requestID := uuid.New()
+	now := time.Now()
 	history := &shared.History{
 		Events: []*shared.HistoryEvent{
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1)},
-			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2)},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(1), Timestamp: common.Int64Ptr(now.UnixNano())},
+			&shared.HistoryEvent{Version: common.Int64Ptr(version), EventId: common.Int64Ptr(2), Timestamp: common.Int64Ptr(now.UnixNano())},
 		},
 	}
 	nextEventID := di.ScheduleID + 1
@@ -1649,6 +1656,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	s.Nil(err)
 	s.Equal(1, len(transferTasks))
 	s.Equal(version, transferTasks[0].GetVersion())
+	s.True(now.Equal(transferTasks[0].GetVisibilityTimestamp()))
 	s.Equal(1, len(timerTasks))
 	s.Equal(version, timerTasks[0].GetVersion())
 }

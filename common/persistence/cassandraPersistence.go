@@ -162,6 +162,7 @@ const (
 		`domain_id: ?, ` +
 		`workflow_id: ?, ` +
 		`run_id: ?, ` +
+		`visibility_ts: ?, ` +
 		`task_id: ?, ` +
 		`target_domain_id: ?, ` +
 		`target_workflow_id: ?, ` +
@@ -2470,6 +2471,7 @@ func (d *cassandraPersistence) createTransferTasks(batch *gocql.Batch, transferT
 			domainID,
 			workflowID,
 			runID,
+			task.GetVisibilityTimestamp(),
 			task.GetTaskID(),
 			targetDomainID,
 			targetWorkflowID,
@@ -3156,6 +3158,8 @@ func createTransferTaskInfo(result map[string]interface{}) *TransferTaskInfo {
 			info.WorkflowID = v.(string)
 		case "run_id":
 			info.RunID = v.(gocql.UUID).String()
+		case "visibility_ts":
+			info.VisibilityTimestamp = v.(time.Time)
 		case "task_id":
 			info.TaskID = v.(int64)
 		case "target_domain_id":

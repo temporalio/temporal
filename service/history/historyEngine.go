@@ -237,7 +237,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				// its length > 0 and has correct timestamp, to trkgger a db scan
 				fakeDecisionTask := []persistence.Task{&persistence.DecisionTask{}}
 				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
-				e.txProcessor.NotifyNewTask(e.currentClusterName, now, fakeDecisionTask)
+				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, now, fakeDecisionTimeoutTask)
 			})
 			e.shard.UpdateDomainNotificationVersion(nextDomain.GetNotificationVersion() + 1)
@@ -356,7 +356,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			replicationTasks = append(replicationTasks, replicationTask)
 		}
 	}
-	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
+	setTaskInfo(msBuilder.GetCurrentVersion(), time.Now(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
@@ -1998,7 +1998,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			replicationTasks = append(replicationTasks, replicationTask)
 		}
 	}
-	setTaskVersion(msBuilder.GetCurrentVersion(), transferTasks, timerTasks)
+	setTaskInfo(msBuilder.GetCurrentVersion(), time.Now(), transferTasks, timerTasks)
 
 	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
 		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
@@ -2203,7 +2203,7 @@ func (e *historyEngineImpl) SyncShardStatus(ctx context.Context, request *h.Sync
 	// 2. notify the timer gate in the timer queue standby processor
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
-	e.txProcessor.NotifyNewTask(clusterName, now, []persistence.Task{})
+	e.txProcessor.NotifyNewTask(clusterName, []persistence.Task{})
 	e.timerProcessor.NotifyNewTimers(clusterName, now, []persistence.Task{})
 	return nil
 }
@@ -2402,7 +2402,7 @@ func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *tim
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	err := s.ShardContext.UpdateWorkflowExecution(request)
 	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
+		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}
@@ -2414,7 +2414,7 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 	*persistence.CreateWorkflowExecutionResponse, error) {
 	resp, err := s.ShardContext.CreateWorkflowExecution(request)
 	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
+		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}
@@ -2759,9 +2759,11 @@ func getStartRequest(domainID string,
 	return startRequest
 }
 
-func setTaskVersion(version int64, transferTasks []persistence.Task, timerTasks []persistence.Task) {
+func setTaskInfo(version int64, timestamp time.Time, transferTasks []persistence.Task, timerTasks []persistence.Task) {
+	// set both the task version, as well as the timestamp on the transfer tasks
 	for _, task := range transferTasks {
 		task.SetVersion(version)
+		task.SetVisibilityTimestamp(timestamp)
 	}
 	for _, task := range timerTasks {
 		task.SetVersion(version)

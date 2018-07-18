@@ -78,6 +78,7 @@ var keys = map[Key]string{
 	HistoryCacheMaxSize:                                 "history.cacheMaxSize",
 	HistoryCacheTTL:                                     "history.cacheTTL",
 	AcquireShardInterval:                                "history.acquireShardInterval",
+	StandbyClusterDelay:                                 "history.standbyClusterDelay",
 	TimerTaskBatchSize:                                  "history.timerTaskBatchSize",
 	TimerTaskWorkerCount:                                "history.timerTaskWorkerCount",
 	TimerTaskMaxRetryCount:                              "history.timerTaskMaxRetryCount",
@@ -92,7 +93,6 @@ var keys = map[Key]string{
 	TimerProcessorMaxPollRPS:                            "history.timerProcessorMaxPollRPS",
 	TimerProcessorMaxPollInterval:                       "history.timerProcessorMaxPollInterval",
 	TimerProcessorMaxPollIntervalJitterCoefficient:      "history.timerProcessorMaxPollIntervalJitterCoefficient",
-	TimerProcessorStandbyTaskDelay:                      "history.timerProcessorStandbyTaskDelay",
 	TransferTaskBatchSize:                               "history.transferTaskBatchSize",
 	TransferProcessorFailoverMaxPollRPS:                 "history.transferProcessorFailoverMaxPollRPS",
 	TransferProcessorMaxPollRPS:                         "history.transferProcessorMaxPollRPS",
@@ -106,7 +106,6 @@ var keys = map[Key]string{
 	TransferProcessorMaxPollIntervalJitterCoefficient:   "history.transferProcessorMaxPollIntervalJitterCoefficient",
 	TransferProcessorUpdateAckInterval:                  "history.transferProcessorUpdateAckInterval",
 	TransferProcessorCompleteTransferInterval:           "history.transferProcessorCompleteTransferInterval",
-	TransferProcessorStandbyTaskDelay:                   "history.transferProcessorStandbyTaskDelay",
 	ReplicatorTaskBatchSize:                             "history.replicatorTaskBatchSize",
 	ReplicatorTaskWorkerCount:                           "history.replicatorTaskWorkerCount",
 	ReplicatorTaskMaxRetryCount:                         "history.replicatorTaskMaxRetryCount",
@@ -198,6 +197,8 @@ const (
 	HistoryCacheTTL
 	// AcquireShardInterval is interval that timer used to acquire shard
 	AcquireShardInterval
+	// StandbyClusterDelay is the atrificial delay added to standby cluster's view of active cluster's time
+	StandbyClusterDelay
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize
 	// TimerTaskWorkerCount is number of task workers for timer processor
@@ -226,8 +227,6 @@ const (
 	TimerProcessorMaxPollInterval
 	// TimerProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	TimerProcessorMaxPollIntervalJitterCoefficient
-	// TimerProcessorStandbyTaskDelay is task delay for standby task in timer processor
-	TimerProcessorStandbyTaskDelay
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -254,8 +253,6 @@ const (
 	TransferProcessorUpdateAckInterval
 	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
 	TransferProcessorCompleteTransferInterval
-	// TransferProcessorStandbyTaskDelay is delay time for standby task in transferQueueProcessor
-	TransferProcessorStandbyTaskDelay
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor

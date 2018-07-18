@@ -77,6 +77,7 @@ CREATE TYPE transfer_task (
   workflow_id                text,   -- The workflow ID that this transfer task belongs to
   run_id                     uuid,   -- The run ID that this transfer task belongs to
   task_id                    bigint,
+  visibility_ts              timestamp, -- The timestamp when the transfer task is generated
   target_domain_id           uuid,   -- The external domain ID that this transfer task is doing work for.
   target_workflow_id         text,   -- The external workflow ID that this transfer task is doing work for.
   target_run_id              uuid,   -- The external run ID that this transfer task is doing work for.

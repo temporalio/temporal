@@ -53,6 +53,7 @@ type (
 	}
 
 	queueProcessorBase struct {
+		clusterName   string
 		shard         ShardContext
 		options       *QueueProcessorOptions
 		processor     processor
@@ -78,13 +79,14 @@ var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
 )
 
-func newQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger bark.Logger) *queueProcessorBase {
+func newQueueProcessorBase(clusterName string, shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger bark.Logger) *queueProcessorBase {
 	workerNotificationChans := []chan struct{}{}
 	for index := 0; index < options.WorkerCount(); index++ {
 		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
 	}
 
 	p := &queueProcessorBase{
+		clusterName:             clusterName,
 		shard:                   shard,
 		options:                 options,
 		processor:               processor,

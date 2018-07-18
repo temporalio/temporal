@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.9",
   "MinCompatibleVersion": "0.9",
-  "Description": "Support domain customized key-value data.",
+  "Description": "Support domain customized key-value data, adding timestamp to transfer task.",
   "SchemaUpdateCqlFiles": [
-    "domain_data.cql"
+    "domain_data.cql",
+    "transfer_timestamp.cql"
   ]
 }

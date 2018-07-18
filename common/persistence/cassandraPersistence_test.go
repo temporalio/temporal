@@ -993,13 +993,14 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	targetWorkflowID := "some random target domain ID"
 	targetRunID := uuid.New()
 	currentTransferID := s.GetTransferReadLevel()
+	now := time.Now()
 	tasks := []Task{
-		&ActivityTask{currentTransferID + 10001, domainID, tasklist, scheduleID, 111},
-		&DecisionTask{currentTransferID + 10002, domainID, tasklist, scheduleID, 222},
-		&CloseExecutionTask{currentTransferID + 10003, 333},
-		&CancelExecutionTask{currentTransferID + 10004, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 444},
-		&SignalExecutionTask{currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
-		&StartChildExecutionTask{currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
+		&ActivityTask{now, currentTransferID + 10001, domainID, tasklist, scheduleID, 111},
+		&DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222},
+		&CloseExecutionTask{now, currentTransferID + 10003, 333},
+		&CancelExecutionTask{now, currentTransferID + 10004, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
 	s.Nil(err2, "No error expected.")
@@ -1008,6 +1009,9 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Nil(err1, "No error expected.")
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
+	for index := range tasks {
+		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, timePrecision))
+	}
 	s.Equal(TransferTaskTypeActivityTask, txTasks[0].TaskType)
 	s.Equal(TransferTaskTypeDecisionTask, txTasks[1].TaskType)
 	s.Equal(TransferTaskTypeCloseExecution, txTasks[2].TaskType)

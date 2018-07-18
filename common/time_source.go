@@ -33,8 +33,8 @@ type (
 	// RealTimeSource serves real wall-clock time
 	RealTimeSource struct{}
 
-	// FakeTimeSource serves fake controlled time
-	FakeTimeSource struct {
+	// EventTimeSource serves fake controlled time
+	EventTimeSource struct {
 		now time.Time
 	}
 )
@@ -50,18 +50,19 @@ func (ts *RealTimeSource) Now() time.Time {
 	return time.Now()
 }
 
-// NewFakeTimeSource returns a time source that servers
+// NewEventTimeSource returns a time source that servers
 // fake controlled time
-func NewFakeTimeSource() *FakeTimeSource {
-	return &FakeTimeSource{}
+func NewEventTimeSource() *EventTimeSource {
+	return &EventTimeSource{}
 }
 
 // Now return the fake current time
-func (ts *FakeTimeSource) Now() time.Time {
+func (ts *EventTimeSource) Now() time.Time {
 	return ts.now
 }
 
 // Update update the fake current time
-func (ts *FakeTimeSource) Update(now time.Time) {
+func (ts *EventTimeSource) Update(now time.Time) *EventTimeSource {
 	ts.now = now
+	return ts
 }

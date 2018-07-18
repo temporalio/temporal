@@ -21,8 +21,6 @@
 package history
 
 import (
-	"time"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -48,6 +46,6 @@ func (_m *MockTransferQueueProcessor) FailoverDomain(domainID string) {
 }
 
 // NotifyNewTask is mock implementation for NotifyNewTask of Processor
-func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, currentTime time.Time, transferTask []persistence.Task) {
-	_m.Called(clusterName, currentTime, transferTask)
+func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, transferTask []persistence.Task) {
+	_m.Called(clusterName, transferTask)
 }

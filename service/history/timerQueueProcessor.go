@@ -120,7 +120,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 	if !ok {
 		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
-	standbyTimerProcessor.setCurrentTime(currentTime.Add(-t.config.TimerProcessorStandbyTaskDelay()))
+	standbyTimerProcessor.setCurrentTime(currentTime)
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
 	standbyTimerProcessor.retryTasks()
 }
@@ -142,6 +142,10 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	// we should consider make the failover idempotent
 	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
 		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
+
+	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
+		standbyTimerProcessor.retryTasks()
+	}
 
 	failoverTimerProcessor.Start()
 }

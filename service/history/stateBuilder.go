@@ -488,7 +488,7 @@ func (b *stateBuilderImpl) getTaskList(msBuilder mutableState) string {
 }
 
 func (b *stateBuilderImpl) getTimerBuilder(event *shared.HistoryEvent) *timerBuilder {
-	timeSource := common.NewFakeTimeSource()
+	timeSource := common.NewEventTimeSource()
 	now := time.Unix(0, event.GetTimestamp())
 	timeSource.Update(now)
 	return newTimerBuilder(b.shard.GetConfig(), b.logger, timeSource)
