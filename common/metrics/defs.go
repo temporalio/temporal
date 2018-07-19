@@ -436,6 +436,8 @@ const (
 	ReplicatorTaskHistoryScope
 	// ReplicateHistoryEventsScope is the scope used by historyReplicator API for applying events
 	ReplicateHistoryEventsScope
+	// ShardInfoScope is the scope used when updating shard info
+	ShardInfoScope
 
 	NumHistoryScopes
 )
@@ -644,6 +646,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicatorQueueProcessorScope:                {operation: "ReplicatorQueueProcessor"},
 		ReplicatorTaskHistoryScope:                   {operation: "ReplicatorTaskHistory"},
 		ReplicateHistoryEventsScope:                  {operation: "ReplicateHistoryEvents"},
+		ShardInfoScope:                               {operation: "ShardInfo"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -738,6 +741,8 @@ const (
 	ShardClosedCounter
 	ShardItemCreatedCounter
 	ShardItemRemovedCounter
+	ShardInfoTransferDiffTimer
+	ShardInfoTimerDiffTimer
 	MembershipChangedCounter
 	NumShardsGauge
 	GetEngineForShardErrorCounter
@@ -848,6 +853,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardClosedCounter:                           {metricName: "shard-closed-count", metricType: Counter},
 		ShardItemCreatedCounter:                      {metricName: "sharditem-created-count", metricType: Counter},
 		ShardItemRemovedCounter:                      {metricName: "sharditem-removed-count", metricType: Counter},
+		ShardInfoTransferDiffTimer:                   {metricName: "shardinfo-transfer-diff", metricType: Timer},
+		ShardInfoTimerDiffTimer:                      {metricName: "shardinfo-timer-diff", metricType: Timer},
 		MembershipChangedCounter:                     {metricName: "membership-changed-count", metricType: Counter},
 		NumShardsGauge:                               {metricName: "numshards-gauge", metricType: Gauge},
 		GetEngineForShardErrorCounter:                {metricName: "get-engine-for-shard-errors", metricType: Counter},

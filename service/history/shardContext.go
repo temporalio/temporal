@@ -593,6 +593,7 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 		return nil
 	}
 	updatedShardInfo := copyShardInfo(s.shardInfo)
+	s.emitShardInfoMetricsLogsLocked()
 
 	err = s.shardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
@@ -609,6 +610,35 @@ func (s *shardContextImpl) updateShardInfoLocked() error {
 	}
 
 	return err
+}
+
+func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
+	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
+	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[s.currentCluster]
+	for _, v := range s.shardInfo.ClusterTransferAckLevel {
+		if v < minTransferLevel {
+			minTransferLevel = v
+		}
+		if v > maxTransferLevel {
+			maxTransferLevel = v
+		}
+	}
+	diffTransferLevel := maxTransferLevel - minTransferLevel
+
+	minTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
+	maxTimerLevel := s.shardInfo.ClusterTimerAckLevel[s.currentCluster]
+	for _, v := range s.shardInfo.ClusterTimerAckLevel {
+		if v.Before(minTimerLevel) {
+			minTimerLevel = v
+		}
+		if v.After(maxTimerLevel) {
+			maxTimerLevel = v
+		}
+	}
+	diffTimerLevel := maxTimerLevel.Sub(minTimerLevel)
+
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, time.Duration(diffTransferLevel))
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
 }
 
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {
