@@ -657,6 +657,17 @@ const (
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
 
+	templateClearBufferedReplicationTaskQuery = `UPDATE executions ` +
+		`SET buffered_replication_tasks_map = {} ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF next_event_id = ?`
+
 	templateDeleteWorkflowExecutionMutableStateQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -1732,6 +1743,8 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 	d.resetSignalRequested(batch, request.InsertSignalRequestedIDs, executionInfo.DomainID, executionInfo.WorkflowID,
 		executionInfo.RunID, request.Condition)
 
+	d.resetBufferedEvents(batch, executionInfo.DomainID, executionInfo.WorkflowID, executionInfo.RunID, request.Condition)
+
 	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
@@ -2646,6 +2659,29 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			rowTypeExecutionTaskID,
 			condition)
 	}
+}
+
+func (d *cassandraPersistence) resetBufferedEvents(batch *gocql.Batch, domainID, workflowID, runID string,
+	condition int64) {
+	batch.Query(templateDeleteBufferedEventsQuery,
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
+
+	batch.Query(templateClearBufferedReplicationTaskQuery,
+		d.shardID,
+		rowTypeExecution,
+		domainID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		condition)
 }
 
 func (d *cassandraPersistence) resetActivityInfos(batch *gocql.Batch, activityInfos []*ActivityInfo, domainID,

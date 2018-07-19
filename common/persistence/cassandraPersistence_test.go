@@ -2002,6 +2002,52 @@ func (s *cassandraPersistenceSuite) TestResetMutableState() {
 	updatedInfo.LastProcessedEvent = int64(2)
 	currentTime := time.Now().UTC()
 	expiryTime := currentTime.Add(10 * time.Second)
+	eventsBatch1 := []*gen.HistoryEvent{
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(5),
+			EventType: gen.EventTypeDecisionTaskCompleted.Ptr(),
+			Version:   common.Int64Ptr(11),
+			DecisionTaskCompletedEventAttributes: &gen.DecisionTaskCompletedEventAttributes{
+				ScheduledEventId: common.Int64Ptr(2),
+				StartedEventId:   common.Int64Ptr(3),
+				Identity:         common.StringPtr("test_worker"),
+			},
+		},
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(6),
+			EventType: gen.EventTypeTimerStarted.Ptr(),
+			Version:   common.Int64Ptr(11),
+			TimerStartedEventAttributes: &gen.TimerStartedEventAttributes{
+				TimerId:                      common.StringPtr("ID1"),
+				StartToFireTimeoutSeconds:    common.Int64Ptr(101),
+				DecisionTaskCompletedEventId: common.Int64Ptr(5),
+			},
+		},
+	}
+	bufferedTask1 := &BufferedReplicationTask{
+		FirstEventID: int64(5),
+		NextEventID:  int64(7),
+		Version:      int64(11),
+		History:      s.serializeHistoryEvents(eventsBatch1),
+	}
+
+	eventsBatch2 := []*gen.HistoryEvent{
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(21),
+			EventType: gen.EventTypeTimerFired.Ptr(),
+			Version:   common.Int64Ptr(12),
+			TimerFiredEventAttributes: &gen.TimerFiredEventAttributes{
+				TimerId:        common.StringPtr("2"),
+				StartedEventId: common.Int64Ptr(3),
+			},
+		},
+	}
+	bufferedTask2 := &BufferedReplicationTask{
+		FirstEventID: int64(21),
+		NextEventID:  int64(22),
+		Version:      int64(12),
+		History:      s.serializeHistoryEvents(eventsBatch2),
+	}
 	updatedState := &WorkflowMutableState{
 		ExecutionInfo: updatedInfo,
 		ActivitInfos: map[int64]*ActivityInfo{
@@ -2100,6 +2146,24 @@ func (s *cassandraPersistenceSuite) TestResetMutableState() {
 	err2 := s.UpdateAllMutableState(updatedState, int64(3))
 	s.Nil(err2, "No error expected.")
 
+	partialState, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err2, "No error expected.")
+	s.NotNil(partialState, "expected valid state.")
+	partialInfo := partialState.ExecutionInfo
+	s.NotNil(partialInfo, "Valid Workflow info expected.")
+
+	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
+	s.Nil(err2, "No error expected.")
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
+	s.Nil(err2, "No error expected.")
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
+		s.serializeHistoryEvents(eventsBatch1))
+	s.Nil(err2, "No error expected.")
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
+		s.serializeHistoryEvents(eventsBatch2))
+	s.Nil(err2, "No error expected.")
+
 	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err1, "No error expected.")
 	s.NotNil(state1, "expected valid state.")
@@ -2194,6 +2258,9 @@ func (s *cassandraPersistenceSuite) TestResetMutableState() {
 	s.True(contains)
 	_, contains = state1.SignalRequestedIDs["00000000-0000-0000-0000-000000000003"]
 	s.True(contains)
+
+	s.Equal(2, len(state1.BufferedReplicationTasks))
+	s.Equal(2, len(state1.BufferedEvents))
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedInfo1.NextEventID = int64(3)
@@ -2354,6 +2421,9 @@ func (s *cassandraPersistenceSuite) TestResetMutableState() {
 	s.Equal([]byte("signal_control_c"), si.Control)
 
 	s.Equal(0, len(state4.SignalRequestedIDs))
+
+	s.Equal(0, len(state4.BufferedReplicationTasks))
+	s.Equal(0, len(state4.BufferedEvents))
 }
 
 func copyWorkflowExecutionInfo(sourceInfo *WorkflowExecutionInfo) *WorkflowExecutionInfo {
