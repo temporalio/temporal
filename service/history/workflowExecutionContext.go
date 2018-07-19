@@ -208,23 +208,23 @@ func (c *workflowExecutionContext) updateHelper(builder *historyBuilder, transfe
 		return err
 	}
 
-	// Replication state should only be updated after the UpdateSession is closed.  IDs for certain events are only
-	// generated on CloseSession as they could be buffered events.  The value for NextEventID will be wrong on
-	// mutable state if read before flushing the buffered events.
-	crossDCEnabled := c.msBuilder.GetReplicationState() != nil
-	if crossDCEnabled {
-		lastEventID := c.msBuilder.GetNextEventID() - 1
-		c.msBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastWriteVersion, lastEventID)
-	}
-
 	// Replicator passes in a custom builder as it already has the events
 	if builder == nil {
 		// If no builder is passed in then use the one as part of the updates
 		builder = updates.newEventsBuilder
 	}
 	executionInfo := c.msBuilder.GetExecutionInfo()
+	hasNewHistoryEvents := len(builder.history) > 0
 
-	hasNewHistoryEvents := builder.history != nil && len(builder.history) > 0
+	// Replication state should only be updated after the UpdateSession is closed.  IDs for certain events are only
+	// generated on CloseSession as they could be buffered events.  The value for NextEventID will be wrong on
+	// mutable state if read before flushing the buffered events.
+	crossDCEnabled := c.msBuilder.GetReplicationState() != nil
+	if crossDCEnabled && hasNewHistoryEvents {
+		lastEventID := c.msBuilder.GetNextEventID() - 1
+		c.msBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastWriteVersion, lastEventID)
+	}
+
 	// Some operations only update the mutable state. For example RecordActivityTaskHeartbeat.
 	if hasNewHistoryEvents {
 		firstEvent := builder.GetFirstEvent()
