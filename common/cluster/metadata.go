@@ -22,6 +22,7 @@ package cluster
 
 import (
 	"fmt"
+
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -35,6 +36,8 @@ type (
 		IsMasterCluster() bool
 		// GetNextFailoverVersion return the next failover version for domain failover
 		GetNextFailoverVersion(string, int64) int64
+		// IsVersionFromSameCluster return true if 2 version are used for the same cluster
+		IsVersionFromSameCluster(version1 int64, version2 int64) bool
 		// GetMasterClusterName return the master cluster name
 		GetMasterClusterName() string
 		// GetCurrentClusterName return the current cluster name
@@ -130,6 +133,11 @@ func (metadata *metadataImpl) GetNextFailoverVersion(cluster string, currentFail
 		return failoverVersion + metadata.failoverVersionIncrement
 	}
 	return failoverVersion
+}
+
+// IsVersionFromSameCluster return true if 2 version are used for the same cluster
+func (metadata *metadataImpl) IsVersionFromSameCluster(version1 int64, version2 int64) bool {
+	return (version1-version2)%metadata.failoverVersionIncrement == 0
 }
 
 func (metadata *metadataImpl) IsMasterCluster() bool {

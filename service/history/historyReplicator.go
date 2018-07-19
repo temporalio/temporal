@@ -273,6 +273,13 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 	logger.Info("First Event after replication.")
 	ri, ok := replicationInfo[previousActiveCluster]
 	if !ok {
+		// it is possible that a workflow will not generate any event in few rounds of failover
+		// meaning that the incoming version > last write version and
+		// (incoming version - last write version) % failover version increment == 0
+		if r.clusterMetadata.IsVersionFromSameCluster(incomingVersion, rState.LastWriteVersion) {
+			return msBuilder, nil
+		}
+
 		r.logError(logger, "No ReplicationInfo Found For Previous Active Cluster.", ErrMissingReplicationInfo)
 		// TODO: Handle missing replication information, #840
 		// Returning BadRequestError to force the message to land into DLQ

@@ -199,7 +199,10 @@ func (p *replicationTaskProcessor) processWithRetry(msg kafka.Message, workerID 
 	forceBuffer := false
 	remainingRetryCount := p.config.ReplicationTaskMaxRetry
 
+	attempt := 0
+	startTime := time.Now()
 	op := func() error {
+		attempt++
 		processErr := p.process(msg, forceBuffer)
 		if processErr != nil && p.isRetryTaskError(processErr) {
 			// Enable buffering of replication tasks for next attempt
@@ -210,7 +213,7 @@ func (p *replicationTaskProcessor) processWithRetry(msg kafka.Message, workerID 
 	}
 
 ProcessRetryLoop:
-	for attempt := 0; ; attempt++ {
+	for {
 		select {
 		case <-p.shutdownCh:
 			return
@@ -227,7 +230,10 @@ ProcessRetryLoop:
 							logging.TagErr:          err,
 							logging.TagPartitionKey: msg.Partition(),
 							logging.TagOffset:       msg.Offset(),
-						}).Warn("Error processing replication task.")
+							logging.TagAttemptCount: attempt,
+							logging.TagAttemptStart: startTime,
+							logging.TagAttemptEnd:   time.Now(),
+						}).Warn("Error (transient) processing replication task.")
 					}
 
 					// Keep on retrying transient errors for ever
@@ -258,6 +264,9 @@ ProcessRetryLoop:
 			logging.TagErr:          err,
 			logging.TagPartitionKey: msg.Partition(),
 			logging.TagOffset:       msg.Offset(),
+			logging.TagAttemptCount: attempt,
+			logging.TagAttemptStart: startTime,
+			logging.TagAttemptEnd:   time.Now(),
 		}).Error("Error processing replication task.")
 		msg.Nack()
 	}
@@ -346,8 +355,14 @@ Loop:
 		}
 	}
 	if !processTask {
-		p.logger.Debugf("Dropping non-targeted history task with domainID: %v, workflowID: %v, runID: %v, firstEventID: %v, nextEventID: %v.",
-			attr.GetDomainId(), attr.GetWorkflowId(), attr.GetRunId(), attr.GetFirstEventId(), attr.GetNextEventId())
+		p.logger.WithFields(bark.Fields{
+			logging.TagDomainID:            attr.GetDomainId(),
+			logging.TagWorkflowExecutionID: attr.GetWorkflowId(),
+			logging.TagWorkflowRunID:       attr.GetRunId(),
+			logging.TagFirstEventID:        attr.GetFirstEventId(),
+			logging.TagNextEventID:         attr.GetNextEventId(),
+			logging.TagVersion:             attr.GetVersion(),
+		}).Warn("Dropping non-targeted history task.")
 		return nil
 	}
 

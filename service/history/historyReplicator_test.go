@@ -374,6 +374,70 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.Nil(err)
 }
 
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_MissingReplicationInfo_SameCluster() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	incomingVersion := currentLastWriteVersion + 10
+
+	prevActiveCluster := cluster.TestAlternativeClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		History: &shared.History{},
+	}
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+	})
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+	s.mockClusterMetadata.On("IsVersionFromSameCluster", incomingVersion, currentLastWriteVersion).Return(true)
+
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
+		request, s.logger)
+	s.Equal(msBuilderIn, msBuilderOut)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_MissingReplicationInfo_DiffCluster() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	incomingVersion := currentLastWriteVersion + 10
+
+	prevActiveCluster := cluster.TestAlternativeClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		History: &shared.History{},
+	}
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+	})
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+	s.mockClusterMetadata.On("IsVersionFromSameCluster", incomingVersion, currentLastWriteVersion).Return(false)
+
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
+		request, s.logger)
+	s.Nil(msBuilderOut)
+	s.Equal(ErrMissingReplicationInfo, err)
+}
+
 func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_Err() {
 	domainID := validDomainID
 	workflowID := "some random workflow ID"

@@ -85,7 +85,7 @@ func (_m *ClusterMetadata) GetMasterClusterName() string {
 	return r0
 }
 
-// GetNextFailoverVersion provides a mock function with given fields: _a0
+// GetNextFailoverVersion provides a mock function with given fields: _a0, _a1
 func (_m *ClusterMetadata) GetNextFailoverVersion(_a0 string, _a1 int64) int64 {
 	ret := _m.Called(_a0, _a1)
 
@@ -94,6 +94,20 @@ func (_m *ClusterMetadata) GetNextFailoverVersion(_a0 string, _a1 int64) int64 {
 		r0 = rf(_a0, _a1)
 	} else {
 		r0 = ret.Get(0).(int64)
+	}
+
+	return r0
+}
+
+// IsVersionFromSameCluster provides a mock function with given fields: _a0, _a1
+func (_m *ClusterMetadata) IsVersionFromSameCluster(_a0 int64, _a1 int64) bool {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(int64, int64) bool); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Get(0).(bool)
 	}
 
 	return r0

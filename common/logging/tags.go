@@ -59,6 +59,9 @@ const (
 	TagNextEventID          = "next-event-id"
 	TagTimeoutType          = "timeout-type"
 	TagReplicationInfo      = "replication-info"
+	TagAttemptCount         = "attempt-count"
+	TagAttemptStart         = "attempt-start"
+	TagAttemptEnd           = "attempt-end"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values
