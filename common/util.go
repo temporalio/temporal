@@ -171,6 +171,10 @@ func IsServiceNonRetryableError(err error) bool {
 
 // IsWhitelistServiceTransientError checks if the error is a transient error.
 func IsWhitelistServiceTransientError(err error) bool {
+	if err == context.DeadlineExceeded {
+		return true
+	}
+
 	switch err.(type) {
 	case *workflow.InternalServiceError:
 		return true
