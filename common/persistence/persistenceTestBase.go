@@ -708,7 +708,7 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 	})
 }
 
-// UpdateWorkflowExecutionForSignal is a utility method to update workflow execution
+// UpdateWorkflowExecutionForBufferEvents is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 	updatedInfo *WorkflowExecutionInfo, rState *ReplicationState, condition int64,
 	bufferEvents *SerializedHistoryEventBatch) error {

@@ -697,11 +697,13 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 
 	if msBuilder.IsWorkflowExecutionRunning() {
 		// workflow still running, no continued as new edge case to solve
+		logger.Info("Conflict resolution workflow running, skip.")
 		return nil
 	}
 
 	if msBuilder.GetExecutionInfo().CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
 		// workflow close status not being continue as new
+		logger.Info("Conflict resolution workflow finished not continue as new.")
 		return nil
 	}
 
@@ -714,6 +716,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
 	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
 	if err != nil {
+		logger.Info("Conflict resolution error getting current workflow.")
 		return err
 	}
 	currentRunID := currentMutableState.GetExecutionInfo().RunID
@@ -722,6 +725,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 	if currentCloseStatus != persistence.WorkflowCloseStatusNone {
 		// current workflow finished
 		// note, it is impassoble that a current workflow ends with continue as new as close status
+		logger.Info("Conflict resolution current workflow finished.")
 		return nil
 	}
 
@@ -738,6 +742,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 			NextPageToken: nil,
 		})
 		if err != nil {
+			r.logError(logger, "Conflict resolution current workflow finished.", err)
 			return "", err
 		}
 		if len(response.Events) == 0 {
@@ -752,10 +757,12 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 		persistence.SetSerializedHistoryDefaults(&serializedHistoryEventBatch)
 		serializer, err := persistence.NewHistorySerializerFactory().Get(serializedHistoryEventBatch.EncodingType)
 		if err != nil {
+			r.logError(logger, "Conflict resolution error getting serializer.", err)
 			return "", err
 		}
 		history, err := serializer.Deserialize(&serializedHistoryEventBatch)
 		if err != nil {
+			r.logError(logger, "Conflict resolution error deserialize events.", err)
 			return "", err
 		}
 		if len(history.Events) == 0 {
@@ -781,6 +788,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 	}
 	if runID == "" {
 		// cannot relate the current running workflow to the workflow which events are being resetted.
+		logger.Info("Conflict resolution current workflow is not related.")
 		return nil
 	}
 
@@ -793,7 +801,11 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 	// we will retry on the worker level
 
 	// same workflow ID, same shard
-	return r.terminateWorkflow(ctx, domainID, workflowID, currentRunID)
+	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID)
+	if err != nil {
+		r.logError(logger, "Conflict resolution err terminating current workflow.", err)
+	}
+	return err
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {

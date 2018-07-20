@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -73,9 +74,10 @@ func (r *conflictResolverImpl) reset(requestID string, replayEventID int64, star
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		history, nextPageToken, lastFirstEventID, err = r.getHistory(domainID, execution, common.FirstEventID,
 			replayNextEventID, nextPageToken)
-		r.logger.Debugf("Conflict Resolver GetHistory.  History Length: %v, token: %v, err: %v",
+		r.logger.Debugf("Conflict Resolver GetHistory. History Length: %v, token: %v, err: %v",
 			len(history.Events), nextPageToken, err)
 		if err != nil {
+			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
 		}
 
@@ -103,6 +105,7 @@ func (r *conflictResolverImpl) reset(requestID string, replayEventID int64, star
 
 		_, _, _, err = sBuilder.applyEvents(domainID, requestID, execution, history, nil)
 		if err != nil {
+			r.logError("Conflict resolution err applying events.", err)
 			return nil, err
 		}
 		resetMutableStateBuilder.executionInfo.LastFirstEventID = lastFirstEventID
@@ -117,10 +120,12 @@ func (r *conflictResolverImpl) reset(requestID string, replayEventID int64, star
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastEvent.GetVersion())
 	resetMutableStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, lastEvent.GetVersion(), replayEventID)
 
-	r.logger.Infof("All events applied for execution.  WorkflowID: %v, RunID: %v, NextEventID: %v",
-		execution.GetWorkflowId(), execution.GetRunId(), resetMutableStateBuilder.GetNextEventID())
-
-	return r.context.resetWorkflowExecution(resetMutableStateBuilder)
+	r.logger.WithField(logging.TagResetNextEventID, resetMutableStateBuilder.GetNextEventID()).Info("All events applied for execution.")
+	msBuilder, err := r.context.resetWorkflowExecution(resetMutableStateBuilder)
+	if err != nil {
+		r.logError("Conflict resolution err reset workflow.", err)
+	}
+	return msBuilder, err
 }
 
 func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
@@ -157,4 +162,10 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 	executionHistory := &shared.History{}
 	executionHistory.Events = historyEvents
 	return executionHistory, response.NextPageToken, lastFirstEventID, nil
+}
+
+func (r *conflictResolverImpl) logError(msg string, err error) {
+	r.logger.WithFields(bark.Fields{
+		logging.TagErr: err,
+	}).Error(msg)
 }

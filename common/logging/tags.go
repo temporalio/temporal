@@ -57,6 +57,7 @@ const (
 	TagIncomingVersion      = "incoming-version"
 	TagFirstEventID         = "first-event-id"
 	TagNextEventID          = "next-event-id"
+	TagResetNextEventID     = "reset-next-event-id"
 	TagTimeoutType          = "timeout-type"
 	TagReplicationInfo      = "replication-info"
 	TagAttemptCount         = "attempt-count"
