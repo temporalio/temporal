@@ -1,8 +1,8 @@
 hash: 00ba73194b255643850bcf2a42d7848719c0dc6b9d048ed53ad4700480b2a84e
-updated: 2018-07-03T16:18:50.061172-07:00
+updated: 2018-07-20T09:35:56.545155-07:00
 imports:
 - name: github.com/apache/thrift
-  version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
+  version: b2a4d4ae21c789b689dd162deb819665567f481c
   subpackages:
   - lib/go/thrift
 - name: github.com/benbjohnson/clock
@@ -18,7 +18,7 @@ imports:
   subpackages:
   - statsd
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
   - spew
 - name: github.com/dgryski/go-farm
@@ -45,7 +45,7 @@ imports:
 - name: github.com/fatih/color
   version: 2d684516a8861da43017284349b7e303e809ac21
 - name: github.com/gocql/gocql
-  version: e06f8c1bcd787e6bf0608288b314522f08cc7848
+  version: 56a164ee9f3135e9cfe725a6d25939f24cb2d044
   subpackages:
   - internal/lru
   - internal/murmur
@@ -80,7 +80,7 @@ imports:
   - ext
   - log
 - name: github.com/pborman/uuid
-  version: c65b2f87fee37d1c7854c9164a450713c28d50cd
+  version: e790cca94e6cc75c7064b1332e63811d4aae1a53
 - name: github.com/pierrec/lz4
   version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
   subpackages:
@@ -99,13 +99,13 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 7600349dcfe1abd18d72d3a1770870d9800a7801
+  version: 2f17f4a9d485bf34b4bfaccc273805040e4f86c8
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 40f013a808ec4fa79def444a1a56de4d1727efcb
+  version: 780932d4fbbe0e69b84c34c20f5c8d0981e109ea
   subpackages:
   - internal/util
   - nfs
@@ -113,20 +113,20 @@ imports:
 - name: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
 - name: github.com/Shopify/sarama
-  version: 5d35641fb5a1327c06d31f0bc341f6742a208e71
+  version: 35324cf48e33d8260e1c7c18854465a904ade249
 - name: github.com/sirupsen/logrus
-  version: e54a77765aca7bbdd8e56c1c54f60579968b2dc9
+  version: f006c2ac4710855cf0f916dd6b77acf6b048dc6e
 - name: github.com/stretchr/objx
   version: b8b73a35e9830ae509858c10dec5866b4d5c8bff
 - name: github.com/stretchr/testify
-  version: f35b8ab0b5a2cef36673838d662e249dd9c94686
+  version: e964b172ca7f4c322ee4c39ea605ff53fab44f79
   subpackages:
   - assert
   - mock
   - require
   - suite
 - name: github.com/uber-common/bark
-  version: ccbdb38cd12f61e426257603fd840c99f124d87b
+  version: 02d883c81a4e7b76904d97efb176efdf4be791bd
 - name: github.com/uber-go/atomic
   version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
   subpackages:
@@ -144,7 +144,7 @@ imports:
   subpackages:
   - internal/mapstructure
 - name: github.com/uber-go/tally
-  version: 79f2a33b0e55b1255ffbbaf824dcafb09ff34dda
+  version: ff17f3c43c065c3c2991f571e740eee43ea3a14a
   subpackages:
   - m3
   - m3/customtransports
@@ -186,6 +186,9 @@ imports:
 - name: go.uber.org/cadence
   version: 80466fafbf8535a9855b7940525dd2bf45f3b283
   subpackages:
+  - .gen/go/admin
+  - .gen/go/admin/adminserviceclient
+  - .gen/go/admin/adminservicetest
   - .gen/go/cadence
   - .gen/go/cadence/workflowserviceclient
   - .gen/go/cadence/workflowservicetest
@@ -220,7 +223,7 @@ imports:
   - version
   - wire
 - name: go.uber.org/yarpc
-  version: f890b9f2fd812eb3f81efac46ccddf0e46d15210
+  version: fc2d75d3b5e30fc81e5dc2375667bbd6333b0099
   subpackages:
   - api/backoff
   - api/encoding
@@ -257,7 +260,7 @@ imports:
   - yarpcconfig
   - yarpcerrors
 - name: go.uber.org/zap
-  version: eeedf312bc6c57391d84767a4cd413f02a917974
+  version: 4d45f9617f7d90f7a663ff21c7a4321dbe78098b
   subpackages:
   - buffer
   - internal/bufferpool
@@ -269,7 +272,7 @@ imports:
   subpackages:
   - ssh/terminal
 - name: golang.org/x/net
-  version: ed29d75add3d7c4bf7ca65aac0c6df3d1420216f
+  version: db08ff08e8622530d9ed3a0e8ac279f6d4c02196
   repo: https://github.com/golang/net
   subpackages:
   - bpf
@@ -279,7 +282,7 @@ imports:
   - ipv4
   - ipv6
 - name: golang.org/x/sys
-  version: 7138fd3d9dc8335c567ca206f4333fb75eb05d56
+  version: 1d206c9fa8975fb4cf00df1dc8bf3283dc24ba0e
   repo: https://github.com/golang/sys
   subpackages:
   - unix
