@@ -1356,14 +1356,23 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))
 	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
+	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() {
+		logging.LogDecisionTimeoutLargerThanWorkflowTimeout(wh.Service.GetLogger(),
+			startRequest.GetTaskStartToCloseTimeoutSeconds(),
+			startRequest.GetDomain(),
+			startRequest.GetWorkflowId(),
+			startRequest.WorkflowType.GetName(),
+		)
+		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(startRequest.GetExecutionStartToCloseTimeoutSeconds())
+	}
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
 		logging.LogDecisionTimeoutTooLarge(wh.Service.GetLogger(),
 			startRequest.GetTaskStartToCloseTimeoutSeconds(),
 			startRequest.GetDomain(),
 			startRequest.GetWorkflowId(),
 			startRequest.WorkflowType.GetName(),
 		)
+		startRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
 	}
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() > startRequest.GetExecutionStartToCloseTimeoutSeconds() ||
 		startRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
@@ -1645,14 +1654,23 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(signalWithStartRequest.GetDomain()))
 	// TODO: remove this assignment and logging in future, so that frontend will just return bad request for large decision timeout
+	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() {
+		logging.LogDecisionTimeoutLargerThanWorkflowTimeout(wh.Service.GetLogger(),
+			signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds(),
+			signalWithStartRequest.GetDomain(),
+			signalWithStartRequest.GetWorkflowId(),
+			signalWithStartRequest.WorkflowType.GetName(),
+		)
+		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds())
+	}
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {
-		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
 		logging.LogDecisionTimeoutTooLarge(wh.Service.GetLogger(),
 			signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds(),
 			signalWithStartRequest.GetDomain(),
 			signalWithStartRequest.GetWorkflowId(),
 			signalWithStartRequest.WorkflowType.GetName(),
 		)
+		signalWithStartRequest.TaskStartToCloseTimeoutSeconds = common.Int32Ptr(maxDecisionTimeout)
 	}
 	if signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > signalWithStartRequest.GetExecutionStartToCloseTimeoutSeconds() ||
 		signalWithStartRequest.GetTaskStartToCloseTimeoutSeconds() > maxDecisionTimeout {

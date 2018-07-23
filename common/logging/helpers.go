@@ -442,3 +442,13 @@ func LogDecisionTimeoutTooLarge(logger bark.Logger, t int32, domain, wid, wfType
 		"DecisionTimeout": t,
 	}).Warn("Decision timeout is too large")
 }
+
+// LogDecisionTimeoutLargerThanWorkflowTimeout is used to log warning msg for workflow that contains large decision timeout
+func LogDecisionTimeoutLargerThanWorkflowTimeout(logger bark.Logger, t int32, domain, wid, wfType string) {
+	logger.WithFields(bark.Fields{
+		"Domain":          domain,
+		"WorkflowID":      wid,
+		"WorkflowType":    wfType,
+		"DecisionTimeout": t,
+	}).Warn("Decision timeout is larger than workflow timeout")
+}
