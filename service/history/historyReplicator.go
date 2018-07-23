@@ -359,7 +359,7 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 		history := request.GetHistory()
 		lastEvent := history.Events[len(history.Events)-1]
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		return context.updateHelper(nil, nil, nil, false, sourceCluster, lastWriteVersion, transactionID, now)
+		return context.updateHelper(nil, nil, transactionID, now, false, nil, sourceCluster)
 	}
 
 	// Apply the replication task
