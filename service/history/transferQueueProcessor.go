@@ -137,7 +137,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferT
 }
 
 func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
-	// TODO we should consider make the failover idempotent, #646
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
@@ -161,6 +160,17 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 	}
 
 	failoverTaskProcessor.Start()
+
+	// err is ignored
+	t.shard.UpdateTransferFailoverLevel(
+		domainID,
+		persistence.TransferFailoverLevel{
+			MinLevel:     minLevel,
+			CurrentLevel: minLevel,
+			MaxLevel:     maxLevel,
+			DomainIDs:    []string{domainID},
+		},
+	)
 }
 
 func (t *transferQueueProcessorImpl) completeTransferLoop() {
@@ -199,6 +209,12 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()
 			if upperAckLevel > ackLevel {
 				upperAckLevel = ackLevel
+			}
+		}
+
+		for _, failoverInfo := range t.shard.GetAllTransferFailoverLevels() {
+			if upperAckLevel > failoverInfo.MinLevel {
+				upperAckLevel = failoverInfo.MinLevel
 			}
 		}
 	}

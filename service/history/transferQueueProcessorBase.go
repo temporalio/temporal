@@ -25,25 +25,29 @@ import "github.com/uber/cadence/common/persistence"
 type (
 	maxReadAckLevel func() int64
 
-	updateClusterAckLevel func(ackLevel int64) error
+	updateTransferAckLevel func(ackLevel int64) error
+	transferQueueShutdown  func() error
 
 	transferQueueProcessorBase struct {
-		shard                 ShardContext
-		options               *QueueProcessorOptions
-		executionManager      persistence.ExecutionManager
-		maxReadAckLevel       maxReadAckLevel
-		updateClusterAckLevel updateClusterAckLevel
+		shard                  ShardContext
+		options                *QueueProcessorOptions
+		executionManager       persistence.ExecutionManager
+		maxReadAckLevel        maxReadAckLevel
+		updateTransferAckLevel updateTransferAckLevel
+		transferQueueShutdown  transferQueueShutdown
 	}
 )
 
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
-	maxReadAckLevel maxReadAckLevel, updateClusterAckLevel updateClusterAckLevel) *transferQueueProcessorBase {
+	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
+	transferQueueShutdown transferQueueShutdown) *transferQueueProcessorBase {
 	return &transferQueueProcessorBase{
-		shard:                 shard,
-		options:               options,
-		executionManager:      shard.GetExecutionManager(),
-		maxReadAckLevel:       maxReadAckLevel,
-		updateClusterAckLevel: updateClusterAckLevel,
+		shard:                  shard,
+		options:                options,
+		executionManager:       shard.GetExecutionManager(),
+		maxReadAckLevel:        maxReadAckLevel,
+		updateTransferAckLevel: updateTransferAckLevel,
+		transferQueueShutdown:  transferQueueShutdown,
 	}
 }
 
@@ -72,5 +76,9 @@ func (t *transferQueueProcessorBase) completeTask(taskID int64) error {
 }
 
 func (t *transferQueueProcessorBase) updateAckLevel(ackLevel int64) error {
-	return t.updateClusterAckLevel(ackLevel)
+	return t.updateTransferAckLevel(ackLevel)
+}
+
+func (t *transferQueueProcessorBase) queueShutdown() error {
+	return t.transferQueueShutdown()
 }

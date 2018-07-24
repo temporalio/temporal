@@ -191,19 +191,18 @@ MoveAckLevelLoop:
 	a.ackLevel = ackLevel
 
 	if a.isFailover && a.isReadFinished && len(a.outstandingTasks) == 0 {
+		a.Unlock()
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown
-		a.logger.Debugf("Queue ack manager shutdoen.")
+		a.logger.Debugf("Queue ack manager shutdown.")
 		a.finishedChan <- struct{}{}
+		a.processor.queueShutdown()
+		return
 	}
-	a.Unlock()
 
-	if !a.isFailover {
-		if err := a.processor.updateAckLevel(ackLevel); err != nil {
-			a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
-			logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
-		}
-	} else {
-		// TODO deal with failover ack level persistence, issue #646
+	a.Unlock()
+	if err := a.processor.updateAckLevel(ackLevel); err != nil {
+		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+		logging.LogOperationFailedEvent(a.logger, "Error updating ack level for shard", err)
 	}
 }

@@ -74,6 +74,9 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	updateClusterAckLevel := func(ackLevel int64) error {
 		return shard.UpdateTransferClusterAckLevel(clusterName, ackLevel)
 	}
+	transferQueueShutdown := func() error {
+		return nil
+	}
 
 	processor := &transferQueueStandbyProcessorImpl{
 		clusterName:                clusterName,
@@ -86,7 +89,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 		transferTaskFilter:         transferTaskFilter,
 		logger:                     logger,
 		metricsClient:              historyService.metricsClient,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel),
+		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown),
 	}
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
 	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, logger)

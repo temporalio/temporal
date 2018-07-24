@@ -246,6 +246,66 @@ func (s *TestShardContext) UpdateTimerClusterAckLevel(cluster string, ackLevel t
 	return nil
 }
 
+// UpdateTransferFailoverLevel test implementation
+func (s *TestShardContext) UpdateTransferFailoverLevel(failoverID string, level persistence.TransferFailoverLevel) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TransferFailoverLevels[failoverID] = level
+	return nil
+}
+
+// DeleteTransferFailoverLevel test implementation
+func (s *TestShardContext) DeleteTransferFailoverLevel(failoverID string) error {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.shardInfo.TransferFailoverLevels, failoverID)
+	return nil
+}
+
+// GetAllTransferFailoverLevels test implementation
+func (s *TestShardContext) GetAllTransferFailoverLevels() map[string]persistence.TransferFailoverLevel {
+	s.RLock()
+	defer s.RUnlock()
+
+	ret := map[string]persistence.TransferFailoverLevel{}
+	for k, v := range s.shardInfo.TransferFailoverLevels {
+		ret[k] = v
+	}
+	return ret
+}
+
+// UpdateTimerFailoverLevel test implementation
+func (s *TestShardContext) UpdateTimerFailoverLevel(failoverID string, level persistence.TimerFailoverLevel) error {
+	s.Lock()
+	defer s.Unlock()
+
+	s.shardInfo.TimerFailoverLevels[failoverID] = level
+	return nil
+}
+
+// DeleteTimerFailoverLevel test implementation
+func (s *TestShardContext) DeleteTimerFailoverLevel(failoverID string) error {
+	s.Lock()
+	defer s.Unlock()
+
+	delete(s.shardInfo.TimerFailoverLevels, failoverID)
+	return nil
+}
+
+// GetAllTimerFailoverLevels test implementation
+func (s *TestShardContext) GetAllTimerFailoverLevels() map[string]persistence.TimerFailoverLevel {
+	s.RLock()
+	defer s.RUnlock()
+
+	ret := map[string]persistence.TimerFailoverLevel{}
+	for k, v := range s.shardInfo.TimerFailoverLevels {
+		ret[k] = v
+	}
+	return ret
+}
+
 // GetDomainNotificationVersion test implementation
 func (s *TestShardContext) GetDomainNotificationVersion() int64 {
 	s.RLock()

@@ -33,8 +33,9 @@ import (
 )
 
 type (
-	timeNow func() time.Time
-
+	timeNow                 func() time.Time
+	updateTimerAckLevel     func(TimerSequenceID) error
+	timerQueueShutdown      func() error
 	timerTaskFilter         func(timer *persistence.TimerTaskInfo) (bool, error)
 	timerQueueProcessorImpl struct {
 		isGlobalDomainEnabled  bool
@@ -126,7 +127,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 }
 
 func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
-	// TODO we should consider make the failover idempotent, #646
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
@@ -148,6 +148,17 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	}
 
 	failoverTimerProcessor.Start()
+
+	// err is ignored
+	t.shard.UpdateTimerFailoverLevel(
+		domainID,
+		persistence.TimerFailoverLevel{
+			MinLevel:     minLevel,
+			CurrentLevel: minLevel,
+			MaxLevel:     maxLevel,
+			DomainIDs:    []string{domainID},
+		},
+	)
 }
 
 func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 {
@@ -197,6 +208,12 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 			ackLevel := standbyTimerProcessor.timerQueueAckMgr.getAckLevel()
 			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {
 				upperAckLevel = ackLevel
+			}
+		}
+
+		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
+			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel) {
+				upperAckLevel = TimerSequenceID{VisibilityTimestamp: failoverInfo.MinLevel}
 			}
 		}
 	}

@@ -56,6 +56,9 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
+	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
+	}
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
 	})
@@ -63,7 +66,15 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		return verifyActiveTask(shard, logger, timer.DomainID, timer)
 	}
 
-	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerActiveQueueProcessorScope, shard, historyService.metricsClient, currentClusterName, logger)
+	timerQueueAckMgr := newTimerQueueAckMgr(
+		metrics.TimerActiveQueueProcessorScope,
+		shard,
+		historyService.metricsClient,
+		shard.GetTimerClusterAckLevel(currentClusterName),
+		timeNow,
+		updateShardAckLevel,
+		logger,
+	)
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
@@ -82,7 +93,6 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 			shard,
 			historyService,
 			timerQueueAckMgr,
-			timeNow,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
@@ -95,13 +105,29 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 
 func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string,
 	minLevel time.Time, maxLevel time.Time, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
-	clusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing domain failover
-		return shard.GetCurrentTime(clusterName)
+		return shard.GetCurrentTime(currentClusterName)
 	}
+	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+		return shard.UpdateTimerFailoverLevel(
+			domainID,
+			persistence.TimerFailoverLevel{
+				MinLevel:     minLevel,
+				CurrentLevel: ackLevel.VisibilityTimestamp,
+				MaxLevel:     maxLevel,
+				DomainIDs:    []string{domainID},
+			},
+		)
+	}
+
+	timerAckMgrShutdown := func() error {
+		return shard.DeleteTimerFailoverLevel(domainID)
+	}
+
 	logger = logger.WithFields(bark.Fields{
-		logging.TagWorkflowCluster: clusterName,
+		logging.TagWorkflowCluster: currentClusterName,
 		logging.TagDomainID:        domainID,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
@@ -109,8 +135,16 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		return verifyFailoverActiveTask(logger, domainID, timer.DomainID, timer)
 	}
 
-	timerQueueAckMgr := newTimerQueueFailoverAckMgr(shard, historyService.metricsClient, standbyClusterName, minLevel,
-		maxLevel, logger)
+	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
+		shard,
+		historyService.metricsClient,
+		minLevel,
+		maxLevel,
+		timeNow,
+		updateShardAckLevel,
+		timerAckMgrShutdown,
+		logger,
+	)
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 	processor := &timerQueueActiveProcessorImpl{
@@ -128,7 +162,6 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 			shard,
 			historyService,
 			timerQueueAckMgr,
-			timeNow,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 			shard.GetConfig().TimerProcessorFailoverStartDelay,
 			logger,

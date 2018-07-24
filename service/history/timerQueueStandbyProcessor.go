@@ -51,6 +51,9 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
 	}
+	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
+		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
+	}
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: clusterName,
 	})
@@ -60,7 +63,15 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 
 	timerGate := NewRemoteTimerGate()
 	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
-	timerQueueAckMgr := newTimerQueueAckMgr(metrics.TimerStandbyQueueProcessorScope, shard, historyService.metricsClient, clusterName, logger)
+	timerQueueAckMgr := newTimerQueueAckMgr(
+		metrics.TimerStandbyQueueProcessorScope,
+		shard,
+		historyService.metricsClient,
+		shard.GetTimerClusterAckLevel(clusterName),
+		timeNow,
+		updateShardAckLevel,
+		logger,
+	)
 	processor := &timerQueueStandbyProcessorImpl{
 		shard:           shard,
 		historyService:  historyService,
@@ -75,7 +86,6 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 			shard,
 			historyService,
 			timerQueueAckMgr,
-			timeNow,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
 			logger,

@@ -39,14 +39,16 @@ type (
 	timerSequenceIDs []TimerSequenceID
 
 	timerQueueAckMgrImpl struct {
-		scope         int
-		isFailover    bool
-		clusterName   string
-		shard         ShardContext
-		executionMgr  persistence.ExecutionManager
-		logger        bark.Logger
-		metricsClient metrics.Client
-		config        *Config
+		scope               int
+		isFailover          bool
+		shard               ShardContext
+		executionMgr        persistence.ExecutionManager
+		logger              bark.Logger
+		metricsClient       metrics.Client
+		config              *Config
+		timeNow             timeNow
+		updateTimerAckLevel updateTimerAckLevel
+		timerQueueShutdown  timerQueueShutdown
 		// immutable max possible timer level
 		maxQueryLevel time.Time
 		// isReadFinished indicate timer queue ack manager
@@ -93,54 +95,60 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 	return compareTimerIDLess(&t[i], &t[j])
 }
 
-func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client, clusterName string, logger bark.Logger) *timerQueueAckMgrImpl {
-	ackLevel := TimerSequenceID{VisibilityTimestamp: shard.GetTimerClusterAckLevel(clusterName)}
+func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client,
+	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger bark.Logger) *timerQueueAckMgrImpl {
+	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 	maxQueryLevel := timerQueueAckMgrMaxQueryLevel
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:            scope,
-		isFailover:       false,
-		clusterName:      clusterName,
-		shard:            shard,
-		executionMgr:     shard.GetExecutionManager(),
-		metricsClient:    metricsClient,
-		logger:           logger,
-		config:           shard.GetConfig(),
-		outstandingTasks: make(map[TimerSequenceID]bool),
-		ackLevel:         ackLevel,
-		readLevel:        ackLevel,
-		minQueryLevel:    ackLevel.VisibilityTimestamp,
-		pageToken:        nil,
-		maxQueryLevel:    maxQueryLevel,
-		isReadFinished:   false,
-		finishedChan:     nil,
+		scope:               scope,
+		isFailover:          false,
+		shard:               shard,
+		executionMgr:        shard.GetExecutionManager(),
+		metricsClient:       metricsClient,
+		logger:              logger,
+		config:              shard.GetConfig(),
+		timeNow:             timeNow,
+		updateTimerAckLevel: updateTimerAckLevel,
+		timerQueueShutdown:  func() error { return nil },
+		outstandingTasks:    make(map[TimerSequenceID]bool),
+		ackLevel:            ackLevel,
+		readLevel:           ackLevel,
+		minQueryLevel:       ackLevel.VisibilityTimestamp,
+		pageToken:           nil,
+		maxQueryLevel:       maxQueryLevel,
+		isReadFinished:      false,
+		finishedChan:        nil,
 	}
 
 	return timerQueueAckMgrImpl
 }
 
-func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client, standbyClusterName string,
-	minLevel time.Time, maxLevel time.Time, logger bark.Logger) *timerQueueAckMgrImpl {
+func newTimerQueueFailoverAckMgr(shard ShardContext, metricsClient metrics.Client,
+	minLevel time.Time, maxLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel,
+	timerQueueShutdown timerQueueShutdown, logger bark.Logger) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:            metrics.TimerActiveQueueProcessorScope,
-		isFailover:       true,
-		clusterName:      standbyClusterName,
-		shard:            shard,
-		executionMgr:     shard.GetExecutionManager(),
-		metricsClient:    metricsClient,
-		logger:           logger,
-		config:           shard.GetConfig(),
-		outstandingTasks: make(map[TimerSequenceID]bool),
-		ackLevel:         ackLevel,
-		readLevel:        ackLevel,
-		minQueryLevel:    ackLevel.VisibilityTimestamp,
-		pageToken:        nil,
-		maxQueryLevel:    maxLevel,
-		isReadFinished:   false,
-		finishedChan:     make(chan struct{}, 1),
+		scope:               metrics.TimerActiveQueueProcessorScope,
+		isFailover:          true,
+		shard:               shard,
+		executionMgr:        shard.GetExecutionManager(),
+		metricsClient:       metricsClient,
+		logger:              logger,
+		config:              shard.GetConfig(),
+		timeNow:             timeNow,
+		updateTimerAckLevel: updateTimerAckLevel,
+		timerQueueShutdown:  timerQueueShutdown,
+		outstandingTasks:    make(map[TimerSequenceID]bool),
+		ackLevel:            ackLevel,
+		readLevel:           ackLevel,
+		minQueryLevel:       ackLevel.VisibilityTimestamp,
+		pageToken:           nil,
+		maxQueryLevel:       maxLevel,
+		isReadFinished:      false,
+		finishedChan:        make(chan struct{}, 1),
 	}
 
 	return timerQueueAckMgrImpl
@@ -272,14 +280,20 @@ MoveAckLevelLoop:
 	t.ackLevel = ackLevel
 
 	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
+		t.Unlock()
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shundown
-		t.logger.Debugf("Timer ack manager shutdoen.")
+		t.logger.Debugf("Timer ack manager shutdown.")
 		t.finishedChan <- struct{}{}
+		t.timerQueueShutdown()
+		return
 	}
-	t.Unlock()
 
-	t.updateTimerAckLevel(ackLevel)
+	t.Unlock()
+	if err := t.updateTimerAckLevel(ackLevel); err != nil {
+		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
+		t.logger.Errorf("Error updating timer ack level for shard: %v", err)
+	}
 }
 
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
@@ -304,30 +318,6 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 	return nil, nil, ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueAckMgrImpl) updateTimerAckLevel(ackLevel TimerSequenceID) {
-	t.logger.Debugf("Updating timer ack level for shard: %v", ackLevel)
-
-	// not failover ack level updating
-	if !t.isFailover {
-		// Always update ackLevel to detect if the shared is stolen
-		if err := t.shard.UpdateTimerClusterAckLevel(t.clusterName, ackLevel.VisibilityTimestamp); err != nil {
-			t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
-			t.logger.Errorf("Error updating timer ack level for shard: %v", err)
-		}
-	} else {
-		// TODO failover ack manager should persist failover ack level to Cassandra: issue #646
-	}
-}
-
 func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
-	var now time.Time
-	if !t.isFailover {
-		// not failover, use the cluster's local time
-		now = t.shard.GetCurrentTime(t.clusterName)
-	} else {
-		// if ack manager is a failover manager, we need to use the current local time
-		now = t.shard.GetCurrentTime(t.shard.GetService().GetClusterMetadata().GetCurrentClusterName())
-	}
-
-	return !expiryTime.IsZero() && expiryTime.UnixNano() <= now.UnixNano()
+	return !expiryTime.IsZero() && expiryTime.UnixNano() <= t.timeNow().UnixNano()
 }

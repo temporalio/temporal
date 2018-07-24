@@ -358,7 +358,7 @@ func (s *queueFailoverAckMgrSuite) TearDownTest() {
 
 }
 
-func (s *queueFailoverAckMgrSuite) TestReadTimerTasks() {
+func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	readLevel := s.queueFailoverAckMgr.readLevel
 	// when the ack manager is first initialized, read == ack level
 	s.Equal(s.queueFailoverAckMgr.getQueueAckLevel(), readLevel)
@@ -410,7 +410,7 @@ func (s *queueFailoverAckMgrSuite) TestReadTimerTasks() {
 	s.True(s.queueFailoverAckMgr.isReadFinished)
 }
 
-func (s *queueFailoverAckMgrSuite) TestReadCompleteTimerTasks() {
+func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	readLevel := s.queueFailoverAckMgr.readLevel
 	// when the ack manager is first initialized, read == ack level
 	s.Equal(s.queueFailoverAckMgr.getQueueAckLevel(), readLevel)
@@ -450,6 +450,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteTimerTasks() {
 	s.mockProcessor.On("completeTask", taskID2).Return(nil).Once()
 	s.queueFailoverAckMgr.completeQueueTask(taskID2)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
+	s.mockProcessor.On("updateAckLevel", s.queueFailoverAckMgr.getQueueAckLevel()).Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {
 	case <-s.queueFailoverAckMgr.getFinishedChan():
@@ -460,6 +461,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteTimerTasks() {
 	s.mockProcessor.On("completeTask", taskID1).Return(nil).Once()
 	s.queueFailoverAckMgr.completeQueueTask(taskID1)
 	s.Equal(map[int64]bool{taskID1: true, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
+	s.mockProcessor.On("queueShutdown").Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {
 	case <-s.queueFailoverAckMgr.getFinishedChan():

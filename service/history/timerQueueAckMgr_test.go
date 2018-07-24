@@ -75,7 +75,7 @@ type (
 		mockClusterMetadata      *mocks.ClusterMetadata
 		metricsClient            metrics.Client
 		logger                   bark.Logger
-		standbyClusterName       string
+		domainID                 string
 		timerQueueFailoverAckMgr *timerQueueAckMgrImpl
 		minLevel                 time.Time
 		maxLevel                 time.Time
@@ -139,7 +139,19 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 
 	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.clusterName = cluster.TestCurrentClusterName
-	s.timerQueueAckMgr = newTimerQueueAckMgr(0, s.mockShard, s.metricsClient, s.clusterName, s.logger)
+	s.timerQueueAckMgr = newTimerQueueAckMgr(
+		0,
+		s.mockShard,
+		s.metricsClient,
+		s.mockShard.GetTimerClusterAckLevel(s.clusterName),
+		func() time.Time {
+			return s.mockShard.GetCurrentTime(s.clusterName)
+		},
+		func(ackLevel TimerSequenceID) error {
+			return s.mockShard.UpdateTimerClusterAckLevel(s.clusterName, ackLevel.VisibilityTimestamp)
+		},
+		s.logger,
+	)
 }
 
 func (s *timerQueueAckMgrSuite) TearDownTest() {
@@ -580,12 +592,33 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
-	s.standbyClusterName = cluster.TestAlternativeClusterName
+	s.domainID = "some random failover domain ID"
 	s.minLevel = time.Now().Add(-10 * time.Minute)
 	s.maxLevel = time.Now().Add(10 * time.Minute)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(s.mockShard, s.metricsClient,
-		s.standbyClusterName, s.minLevel, s.maxLevel, s.logger)
+	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
+		s.mockShard,
+		s.metricsClient,
+		s.minLevel,
+		s.maxLevel,
+		func() time.Time {
+			return s.mockShard.GetCurrentTime(s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName())
+		},
+		func(ackLevel TimerSequenceID) error {
+			return s.mockShard.UpdateTimerFailoverLevel(
+				s.domainID,
+				persistence.TimerFailoverLevel{
+					MinLevel:  ackLevel.VisibilityTimestamp,
+					MaxLevel:  s.maxLevel,
+					DomainIDs: []string{s.domainID},
+				},
+			)
+		},
+		func() error {
+			return s.mockShard.DeleteTimerFailoverLevel(s.domainID)
+		},
+		s.logger,
+	)
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
@@ -798,10 +831,10 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	// there will be no call to update shard
 	timerSequenceID2 := TimerSequenceID{VisibilityTimestamp: timer2.VisibilityTimestamp, TaskID: timer2.TaskID}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
+	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -809,10 +842,10 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	// there will be no call to update shard
 	timerSequenceID3 := TimerSequenceID{VisibilityTimestamp: timer3.VisibilityTimestamp, TaskID: timer3.TaskID}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID3])
+	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -820,10 +853,10 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	// there will be no call to update shard, see issue #646
 	timerSequenceID1 := TimerSequenceID{VisibilityTimestamp: timer1.VisibilityTimestamp, TaskID: timer1.TaskID}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID1])
+	s.mockShardMgr.On("UpdateShard", mock.Anything).Return(nil).Once()
 	s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():

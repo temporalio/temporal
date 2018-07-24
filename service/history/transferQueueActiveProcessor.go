@@ -43,19 +43,18 @@ const identityHistoryService = "history-service"
 
 type (
 	transferQueueActiveProcessorImpl struct {
-		currentClusterName    string
-		shard                 ShardContext
-		historyService        *historyEngineImpl
-		options               *QueueProcessorOptions
-		visibilityManager     persistence.VisibilityManager
-		matchingClient        matching.Client
-		historyClient         history.Client
-		cache                 *historyCache
-		transferTaskFilter    transferTaskFilter
-		logger                bark.Logger
-		metricsClient         metrics.Client
-		maxReadAckLevel       maxReadAckLevel
-		updateClusterAckLevel updateClusterAckLevel
+		currentClusterName string
+		shard              ShardContext
+		historyService     *historyEngineImpl
+		options            *QueueProcessorOptions
+		visibilityManager  persistence.VisibilityManager
+		matchingClient     matching.Client
+		historyClient      history.Client
+		cache              *historyCache
+		transferTaskFilter transferTaskFilter
+		logger             bark.Logger
+		metricsClient      metrics.Client
+		maxReadAckLevel    maxReadAckLevel
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
@@ -90,8 +89,12 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
 	}
-	updateClusterAckLevel := func(ackLevel int64) error {
+	updateTransferAckLevel := func(ackLevel int64) error {
 		return shard.UpdateTransferClusterAckLevel(currentClusterName, ackLevel)
+	}
+
+	transferQueueShutdown := func() error {
+		return nil
 	}
 
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
@@ -109,7 +112,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		metricsClient:              historyService.metricsClient,
 		cache:                      historyService.historyCache,
 		transferTaskFilter:         transferTaskFilter,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel),
+		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown),
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(currentClusterName), logger)
@@ -147,9 +150,19 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
 	}
-	updateClusterAckLevel := func(ackLevel int64) error {
-		// TODO, the failover processor should have the ability to persist the ack level progress, #646
-		return nil
+	updateTransferAckLevel := func(ackLevel int64) error {
+		return shard.UpdateTransferFailoverLevel(
+			domainID,
+			persistence.TransferFailoverLevel{
+				MinLevel:     minLevel,
+				CurrentLevel: ackLevel,
+				MaxLevel:     maxLevel,
+				DomainIDs:    []string{domainID},
+			},
+		)
+	}
+	transferQueueShutdown := func() error {
+		return shard.DeleteTransferFailoverLevel(domainID)
 	}
 
 	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
@@ -167,13 +180,12 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		metricsClient:              historyService.metricsClient,
 		cache:                      historyService.historyCache,
 		transferTaskFilter:         transferTaskFilter,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel),
+		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown),
 	}
 	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
 	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
-
 	return processor
 }
 

@@ -126,6 +126,11 @@ func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) error {
 	return err
 }
 
+func (p *replicatorQueueProcessorImpl) queueShutdown() error {
+	// there is no shutdown specific behavior for replication queue
+	return nil
+}
+
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {
 	p.metricsClient.IncCounter(metrics.ReplicatorTaskHistoryScope, metrics.TaskRequests)
 	sw := p.metricsClient.StartTimer(metrics.ReplicatorTaskHistoryScope, metrics.TaskLatency)
