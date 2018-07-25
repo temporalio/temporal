@@ -119,6 +119,10 @@ const (
 	FlagClustersWithAlias          = FlagClusters + ", cl"
 	FlagDomainData                 = "domain_data"
 	FlagDomainDataWithAlias        = FlagDomainData + ", dmd"
+	FlagEventID                    = "event_id"
+	FlagEventIDWithAlias           = FlagEventID + ", eid"
+	FlagMaxFieldLength             = "max_field_length"
+	FlagMaxFieldLengthWithAlias    = FlagMaxFieldLength + ", maxl"
 )
 
 const (
@@ -126,6 +130,8 @@ const (
 
 	maxOutputStringLength = 200 // max length for output string
 	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
+	defaultMaxFieldLength = 500 // default max length for each attribute field
+	maxWordLength         = 120 // if text length is larger than maxWordLength, it will be inserted spaces
 
 	defaultTimeFormat                = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
 	defaultDateTimeFormat            = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
@@ -410,8 +416,11 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 	printRawTime := c.Bool(FlagPrintRawTime)
 	printFully := c.Bool(FlagPrintFullyDetail)
 	printVersion := c.Bool(FlagPrintEventVersion)
-
 	outputFileName := c.String(FlagOutputFilename)
+	var maxFieldLength int
+	if c.IsSet(FlagMaxFieldLength) || !printFully {
+		maxFieldLength = c.Int(FlagMaxFieldLength)
+	}
 
 	ctx, cancel := newContext()
 	defer cancel()
@@ -420,34 +429,39 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 		ExitIfError(err)
 	}
 
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetBorder(false)
-	table.SetColumnSeparator("")
-	for _, e := range history.Events {
-		columns := []string{}
-		if printFully {
-			columns = append(columns, anyToString(e))
+	if printFully { // dump everything
+		for _, e := range history.Events {
+			fmt.Println(anyToString(e, true, maxFieldLength))
+		}
+	} else if c.IsSet(FlagEventID) { // only dump that event
+		eventID := c.Int(FlagEventID)
+		if eventID <= 0 || eventID > len(history.Events) {
+			ErrorAndExit("EventId out of range.", fmt.Errorf("number should be 1 - %d inclusive", len(history.Events)))
+		}
+		e := history.Events[eventID-1]
+		fmt.Println(anyToString(e, true, 0))
+	} else { // use table to pretty output, will trim long text
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetBorder(false)
+		table.SetColumnSeparator("")
+		for _, e := range history.Events {
+			columns := []string{}
+			columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
+
+			if printRawTime {
+				columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
+			} else if printDateTime {
+				columns = append(columns, convertTime(e.GetTimestamp(), false))
+			}
+			if printVersion {
+				columns = append(columns, fmt.Sprintf("(Version: %v)", *e.Version))
+			}
+
+			columns = append(columns, ColorEvent(e), HistoryEventToString(e, false, maxFieldLength))
 			table.Append(columns)
-			continue
 		}
-
-		columns = append(columns, strconv.FormatInt(e.GetEventId(), 10))
-
-		if printRawTime {
-			columns = append(columns, strconv.FormatInt(e.GetTimestamp(), 10))
-		} else if printDateTime {
-			columns = append(columns, convertTime(e.GetTimestamp(), false))
-		}
-
-		if printVersion {
-			columns = append(columns, fmt.Sprintf("(Version: %v)", *e.Version))
-		}
-
-		columns = append(columns, ColorEvent(e), HistoryEventToString(e))
-
-		table.Append(columns)
+		table.Render()
 	}
-	table.Render()
 
 	if outputFileName != "" {
 		serializer := &JSONHistorySerializer{}
@@ -592,6 +606,10 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 	defer cancel()
 
 	showDetails := c.Bool(FlagShowDetail)
+	var maxFieldLength int
+	if c.IsSet(FlagMaxFieldLength) {
+		maxFieldLength = c.Int(FlagMaxFieldLength)
+	}
 
 	go func() {
 		iter := wfClient.GetWorkflowHistory(tcCtx, wid, rid, true, s.HistoryEventFilterTypeAllEvent)
@@ -605,7 +623,7 @@ func printWorkflowProgress(c *cli.Context, wid, rid string) {
 				isTimeElapseExist = false
 			}
 			if showDetails {
-				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event))
+				fmt.Printf("  %d, %s, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event), HistoryEventToString(event, true, maxFieldLength))
 			} else {
 				fmt.Printf("  %d, %s, %s\n", event.GetEventId(), convertTime(event.GetTimestamp(), false), ColorEvent(event))
 			}

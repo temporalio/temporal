@@ -56,6 +56,15 @@ func newWorkflowCommands() []cli.Command {
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "Serialize history event to a file",
 				},
+				cli.IntFlag{
+					Name:  FlagEventIDWithAlias,
+					Usage: "Print specific event details",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxFieldLengthWithAlias,
+					Usage: "Maximum length for each attribute field",
+					Value: defaultMaxFieldLength,
+				},
 			},
 			Action: func(c *cli.Context) {
 				ShowHistory(c)
@@ -77,6 +86,23 @@ func newWorkflowCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "Serialize history event to a file",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintFullyDetailWithAlias,
+					Usage: "Print fully event detail",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintEventVersionWithAlias,
+					Usage: "Print event version",
+				},
+				cli.IntFlag{
+					Name:  FlagEventIDWithAlias,
+					Usage: "Print specific event details",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxFieldLengthWithAlias,
+					Usage: "Maximum length for each attribute field",
+					Value: defaultMaxFieldLength,
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -163,6 +189,10 @@ func newWorkflowCommands() []cli.Command {
 				cli.BoolFlag{
 					Name:  FlagShowDetailWithAlias,
 					Usage: "Show event details",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxFieldLengthWithAlias,
+					Usage: "Maximum length for each attribute field",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -437,7 +467,11 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagShowDetailWithAlias,
-					Usage: "Show event details",
+					Usage: "Optional show event details",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxFieldLengthWithAlias,
+					Usage: "Optional maximum length for each attribute field when show details",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -455,7 +489,11 @@ func newWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagShowDetailWithAlias,
-					Usage: "Show event details",
+					Usage: "Optional show event details",
+				},
+				cli.IntFlag{
+					Name:  FlagMaxFieldLengthWithAlias,
+					Usage: "Optional maximum length for each attribute field when show details",
 				},
 			},
 			Action: func(c *cli.Context) {

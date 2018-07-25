@@ -25,17 +25,18 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
-
 	"go.uber.org/cadence/.gen/go/admin"
 	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
 	"go.uber.org/cadence/.gen/go/admin/adminservicetest"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/cadence/workflowservicetest"
 	"go.uber.org/cadence/.gen/go/shared"
+	"strings"
 )
 
 type cliAppSuite struct {
@@ -452,4 +453,38 @@ func (s *cliAppSuite) TestParseTime() {
 	s.Equal(int64(100), parseTime("", 100))
 	s.Equal(int64(1528383845000000000), parseTime("2018-06-07T15:04:05+00:00", 0))
 	s.Equal(int64(1528383845000000000), parseTime("1528383845000000000", 0))
+}
+
+func (s *cliAppSuite) TestBreakLongWords() {
+	s.Equal("111 222 333 4", breakLongWords("1112223334", 3))
+	s.Equal("111 2 223", breakLongWords("1112 223", 3))
+	s.Equal("11 122 23", breakLongWords("11 12223", 3))
+	s.Equal("111", breakLongWords("111", 3))
+	s.Equal("", breakLongWords("", 3))
+	s.Equal("111  222", breakLongWords("111 222", 3))
+}
+
+func (s *cliAppSuite) TestAnyToString() {
+	arg := strings.Repeat("LongText", 80)
+	event := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(1),
+		EventType: &eventType,
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			WorkflowType: &shared.WorkflowType{Name: common.StringPtr("code.uber.internal/devexp/cadence-samples.git/cmd/samples/recipes/helloworld.Workflow")},
+			TaskList:     &shared.TaskList{Name: common.StringPtr("taskList")},
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(60),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+			Identity:                            common.StringPtr("tester"),
+			Input:                               []byte(arg),
+		},
+	}
+	res := anyToString(event, false, defaultMaxFieldLength)
+	ss, l := tablewriter.WrapString(res, 10)
+	s.Equal(8, len(ss))
+	s.Equal(147, l)
+}
+
+func (s *cliAppSuite) TestIsAttributeName() {
+	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
+	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
 }
