@@ -51,15 +51,16 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	visibilityMgr persistence.VisibilityManager, logger bark.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                       config.TransferProcessorStartDelay,
-		BatchSize:                        config.TransferTaskBatchSize,
-		WorkerCount:                      config.TransferTaskWorkerCount,
-		MaxPollRPS:                       config.TransferProcessorMaxPollRPS,
-		MaxPollInterval:                  config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient: config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                config.TransferProcessorUpdateAckInterval,
-		MaxRetryCount:                    config.TransferTaskMaxRetryCount,
-		MetricScope:                      metrics.TransferStandbyQueueProcessorScope,
+		StartDelay:                         config.TransferProcessorStartDelay,
+		BatchSize:                          config.TransferTaskBatchSize,
+		WorkerCount:                        config.TransferTaskWorkerCount,
+		MaxPollRPS:                         config.TransferProcessorMaxPollRPS,
+		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                      config.TransferTaskMaxRetryCount,
+		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: clusterName,

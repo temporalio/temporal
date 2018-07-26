@@ -279,8 +279,11 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	))
 	defer pollTimer.Stop()
 
-	updateAckTicker := time.NewTicker(t.shard.GetConfig().TimerProcessorUpdateAckInterval())
-	defer updateAckTicker.Stop()
+	updateAckTimer := time.NewTimer(jitter.JitDuration(
+		t.config.TimerProcessorUpdateAckInterval(),
+		t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
+	))
+	defer updateAckTimer.Stop()
 
 	for {
 		// Wait until one of four things occurs:
@@ -321,7 +324,11 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					timerGate.Update(lookAheadTimer.VisibilityTimestamp)
 				}
 			}
-		case <-updateAckTicker.C:
+		case <-updateAckTimer.C:
+			updateAckTimer.Reset(jitter.JitDuration(
+				t.config.TimerProcessorUpdateAckInterval(),
+				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
+			))
 			t.timerQueueAckMgr.updateAckLevel()
 		case <-t.newTimerCh:
 			t.newTimeLock.Lock()

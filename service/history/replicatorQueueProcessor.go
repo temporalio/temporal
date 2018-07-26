@@ -68,15 +68,16 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		StartDelay:                       config.ReplicatorProcessorStartDelay,
-		BatchSize:                        config.ReplicatorTaskBatchSize,
-		WorkerCount:                      config.ReplicatorTaskWorkerCount,
-		MaxPollRPS:                       config.ReplicatorProcessorMaxPollRPS,
-		MaxPollInterval:                  config.ReplicatorProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient: config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                config.ReplicatorProcessorUpdateAckInterval,
-		MaxRetryCount:                    config.ReplicatorTaskMaxRetryCount,
-		MetricScope:                      metrics.ReplicatorQueueProcessorScope,
+		StartDelay:                         config.ReplicatorProcessorStartDelay,
+		BatchSize:                          config.ReplicatorTaskBatchSize,
+		WorkerCount:                        config.ReplicatorTaskWorkerCount,
+		MaxPollRPS:                         config.ReplicatorProcessorMaxPollRPS,
+		MaxPollInterval:                    config.ReplicatorProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.ReplicatorProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.ReplicatorProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.ReplicatorProcessorUpdateAckIntervalJitterCoefficient,
+		MaxRetryCount:                      config.ReplicatorTaskMaxRetryCount,
+		MetricScope:                        metrics.ReplicatorQueueProcessorScope,
 	}
 
 	logger = logger.WithFields(bark.Fields{

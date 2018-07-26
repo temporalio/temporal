@@ -41,15 +41,16 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		StartDelay                       dynamicconfig.DurationPropertyFn
-		BatchSize                        dynamicconfig.IntPropertyFn
-		WorkerCount                      dynamicconfig.IntPropertyFn
-		MaxPollRPS                       dynamicconfig.IntPropertyFn
-		MaxPollInterval                  dynamicconfig.DurationPropertyFn
-		MaxPollIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		UpdateAckInterval                dynamicconfig.DurationPropertyFn
-		MaxRetryCount                    dynamicconfig.IntPropertyFn
-		MetricScope                      int
+		StartDelay                         dynamicconfig.DurationPropertyFn
+		BatchSize                          dynamicconfig.IntPropertyFn
+		WorkerCount                        dynamicconfig.IntPropertyFn
+		MaxPollRPS                         dynamicconfig.IntPropertyFn
+		MaxPollInterval                    dynamicconfig.DurationPropertyFn
+		MaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+		UpdateAckInterval                  dynamicconfig.DurationPropertyFn
+		UpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxRetryCount                      dynamicconfig.IntPropertyFn
+		MetricScope                        int
 	}
 
 	queueProcessorBase struct {
@@ -155,11 +156,17 @@ func (p *queueProcessorBase) processorPump() {
 	}
 
 	jitter := backoff.NewJitter()
-	pollTimer := time.NewTimer(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
+	pollTimer := time.NewTimer(jitter.JitDuration(
+		p.options.MaxPollInterval(),
+		p.options.MaxPollIntervalJitterCoefficient(),
+	))
 	defer pollTimer.Stop()
 
-	updateAckTicker := time.NewTicker(p.options.UpdateAckInterval())
-	defer updateAckTicker.Stop()
+	updateAckTimer := time.NewTimer(jitter.JitDuration(
+		p.options.UpdateAckInterval(),
+		p.options.UpdateAckIntervalJitterCoefficient(),
+	))
+	defer updateAckTimer.Stop()
 
 processorPumpLoop:
 	for {
@@ -172,11 +179,18 @@ processorPumpLoop:
 		case <-p.notifyCh:
 			p.processBatch(tasksCh)
 		case <-pollTimer.C:
-			pollTimer.Reset(jitter.JitDuration(p.options.MaxPollInterval(), p.options.MaxPollIntervalJitterCoefficient()))
+			pollTimer.Reset(jitter.JitDuration(
+				p.options.MaxPollInterval(),
+				p.options.MaxPollIntervalJitterCoefficient(),
+			))
 			if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(time.Now()) {
 				p.processBatch(tasksCh)
 			}
-		case <-updateAckTicker.C:
+		case <-updateAckTimer.C:
+			updateAckTimer.Reset(jitter.JitDuration(
+				p.options.UpdateAckInterval(),
+				p.options.UpdateAckIntervalJitterCoefficient(),
+			))
 			p.ackMgr.updateQueueAckLevel()
 		}
 	}
