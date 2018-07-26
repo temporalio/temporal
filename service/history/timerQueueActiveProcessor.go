@@ -471,6 +471,7 @@ Update_History_Loop:
 				if err == ErrConflict {
 					continue Update_History_Loop
 				}
+				return err
 			}
 
 			t.notifyNewTimers(timerTasks)
