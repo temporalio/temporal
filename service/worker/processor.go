@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
-	"github.com/uber-go/kafka-client/kafka"
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -53,7 +52,7 @@ type (
 		topicName        string
 		consumerName     string
 		client           messaging.Client
-		consumer         kafka.Consumer
+		consumer         messaging.Consumer
 		isStarted        int32
 		isStopped        int32
 		shutdownWG       sync.WaitGroup
@@ -186,14 +185,11 @@ func (p *replicationTaskProcessor) messageProcessLoop(workerWG *sync.WaitGroup, 
 				return // channel closed
 			}
 			p.processWithRetry(msg, workerID)
-		case <-p.consumer.Closed():
-			p.logger.Info("Consumer closed. Processor shutting down.")
-			return
 		}
 	}
 }
 
-func (p *replicationTaskProcessor) processWithRetry(msg kafka.Message, workerID int) {
+func (p *replicationTaskProcessor) processWithRetry(msg messaging.Message, workerID int) {
 	var err error
 
 	forceBuffer := false
@@ -272,7 +268,7 @@ ProcessRetryLoop:
 	}
 }
 
-func (p *replicationTaskProcessor) process(msg kafka.Message, inRetry bool) error {
+func (p *replicationTaskProcessor) process(msg messaging.Message, inRetry bool) error {
 	scope := metrics.ReplicatorScope
 	task, err := deserialize(msg.Value())
 	if err != nil {

@@ -23,33 +23,88 @@ package messaging
 import (
 	"github.com/Shopify/sarama"
 	"github.com/uber-common/bark"
-	"github.com/uber-go/kafka-client"
-	"github.com/uber-go/kafka-client/kafka"
+	uberKafkaClient "github.com/uber-go/kafka-client"
+	uberKafka "github.com/uber-go/kafka-client/kafka"
 )
 
+const rcvBufferSize = 2 * 1024
+
 type (
+	// This is a default implementation of Client interface which makes use of uber-go/kafka-client as consumer
 	kafkaClient struct {
 		config *KafkaConfig
-		client kafkaclient.Client
+		client uberKafkaClient.Client
 		logger bark.Logger
+	}
+
+	// a wrapper of uberKafka.Consumer to let the compiler happy
+	kafkaConsumer struct {
+		uConsumer uberKafka.Consumer
+		logger    bark.Logger
+		msgC      chan Message
+		doneC     chan struct{}
 	}
 )
 
+var _ Client = (*kafkaClient)(nil)
+var _ Consumer = (*kafkaConsumer)(nil)
+
+func newKafkaConsumer(uConsumer uberKafka.Consumer, logger bark.Logger) Consumer {
+	return &kafkaConsumer{
+		uConsumer: uConsumer,
+		logger:    logger,
+		msgC:      make(chan Message, rcvBufferSize),
+		doneC:     make(chan struct{}),
+	}
+}
+
+func (c *kafkaConsumer) Start() error {
+	if err := c.uConsumer.Start(); err != nil {
+		return err
+	}
+	go func() {
+		for {
+			select {
+			case <-c.doneC:
+				c.logger.Info("Stop consuming messages from channel")
+				break
+				// our Message interface is just a subset of Message interface in kafka-client so we don't need a wrapper here
+			case uMsg := <-c.uConsumer.Messages():
+				c.msgC <- uMsg
+			}
+		}
+	}()
+	return nil
+}
+
+// Stop stops the consumer
+func (c *kafkaConsumer) Stop() {
+	c.logger.Info("Stopping consumer")
+	close(c.doneC)
+	close(c.msgC)
+	c.uConsumer.Stop()
+}
+
+// Messages return the message channel for this consumer
+func (c *kafkaConsumer) Messages() <-chan Message {
+	return c.msgC
+}
+
 // NewConsumer is used to create a Kafka consumer
-func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (kafka.Consumer, error) {
+func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (Consumer, error) {
 	currentTopics := c.config.getTopicsForCadenceCluster(currentCluster)
 	sourceTopics := c.config.getTopicsForCadenceCluster(sourceCluster)
 
 	topicKafkaCluster := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	dqlTopicKafkaCluster := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
-	topicList := kafka.ConsumerTopicList{
-		kafka.ConsumerTopic{
-			Topic: kafka.Topic{
+	topicList := uberKafka.ConsumerTopicList{
+		uberKafka.ConsumerTopic{
+			Topic: uberKafka.Topic{
 				Name:       sourceTopics.Topic,
 				Cluster:    topicKafkaCluster,
 				BrokerList: c.config.getBrokersForKafkaCluster(topicKafkaCluster),
 			},
-			DLQ: kafka.Topic{
+			DLQ: uberKafka.Topic{
 				Name:       currentTopics.DLQTopic,
 				Cluster:    dqlTopicKafkaCluster,
 				BrokerList: c.config.getBrokersForKafkaCluster(dqlTopicKafkaCluster),
@@ -57,12 +112,15 @@ func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName st
 		},
 	}
 
-	consumerConfig := kafka.NewConsumerConfig(consumerName, topicList)
+	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
-	consumerConfig.Offsets.Initial.Offset = kafka.OffsetNewest
+	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetNewest
 
-	consumer, err := c.client.NewConsumer(consumerConfig)
-	return consumer, err
+	uConsumer, err := c.client.NewConsumer(consumerConfig)
+	if err != nil {
+		return nil, err
+	}
+	return newKafkaConsumer(uConsumer, c.logger), nil
 }
 
 // NewProducer is used to create a Kafka producer for shipping replication tasks

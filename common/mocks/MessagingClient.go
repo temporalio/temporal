@@ -21,14 +21,13 @@
 package mocks
 
 import (
-	"github.com/uber-go/kafka-client/kafka"
 	"github.com/uber/cadence/common/messaging"
 )
 
 type (
 	// MessagingClient is the mock implementation for Service interface
 	MessagingClient struct {
-		consumerMock  kafka.Consumer
+		consumerMock  messaging.Consumer
 		publisherMock messaging.Producer
 	}
 )
@@ -36,7 +35,7 @@ type (
 var _ messaging.Client = (*MessagingClient)(nil)
 
 // NewMockMessagingClient generate a dummy implementation of messaging client
-func NewMockMessagingClient(publisher messaging.Producer, consumer kafka.Consumer) messaging.Client {
+func NewMockMessagingClient(publisher messaging.Producer, consumer messaging.Consumer) messaging.Client {
 	return &MessagingClient{
 		publisherMock: publisher,
 		consumerMock:  consumer,
@@ -44,7 +43,7 @@ func NewMockMessagingClient(publisher messaging.Producer, consumer kafka.Consume
 }
 
 // NewConsumer generates a dummy implementation of kafka consumer
-func (c *MessagingClient) NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (kafka.Consumer, error) {
+func (c *MessagingClient) NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (messaging.Consumer, error) {
 	return c.consumerMock, nil
 }
 
