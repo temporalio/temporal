@@ -97,8 +97,12 @@ func (r *conflictResolverImpl) reset(requestID string, replayEventID int64, star
 		firstEvent := history.Events[0]
 		lastEvent = history.Events[len(history.Events)-1]
 		if firstEvent.GetEventId() == common.FirstEventID {
-			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(r.shard.GetConfig(), r.logger,
-				firstEvent.GetVersion())
+			resetMutableStateBuilder = newMutableStateBuilderWithReplicationState(
+				r.clusterMetadata.GetCurrentClusterName(),
+				r.shard.GetConfig(),
+				r.logger,
+				firstEvent.GetVersion(),
+			)
 
 			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 		}

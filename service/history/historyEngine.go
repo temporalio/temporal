@@ -276,16 +276,27 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		initiatedID = *parentInfo.InitiatedId
 	}
 
+	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// TODO when the workflow is going to be replicated, use the
 	var msBuilder mutableState
-	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
+	if clusterMetadata.IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
-		msBuilder = newMutableStateBuilderWithReplicationState(e.shard.GetConfig(), e.logger, domainEntry.GetFailoverVersion())
+		msBuilder = newMutableStateBuilderWithReplicationState(
+			clusterMetadata.GetCurrentClusterName(),
+			e.shard.GetConfig(),
+			e.logger,
+			domainEntry.GetFailoverVersion(),
+		)
 	} else {
-		msBuilder = newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+		msBuilder = newMutableStateBuilder(
+			clusterMetadata.GetCurrentClusterName(),
+			e.shard.GetConfig(),
+			e.logger,
+		)
 	}
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
@@ -343,7 +354,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
 	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
+		msBuilder.UpdateReplicationStateLastEventID(
+			clusterMetadata.GetCurrentClusterName(),
+			msBuilder.GetCurrentVersion(),
+			msBuilder.GetNextEventID()-1,
+		)
 		replicationState = msBuilder.GetReplicationState()
 		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
 		if domainEntry.CanReplicateEvent() {
@@ -1921,16 +1936,27 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		RunId:      common.StringPtr(uuid.New()),
 	}
 
+	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+
 	// Generate first decision task event.
 	taskList := request.TaskList.GetName()
 	// TODO when the workflow is going to be replicated, use the
 	var msBuilder mutableState
-	if e.shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
+	if clusterMetadata.IsGlobalDomainEnabled() && domainEntry.IsGlobalDomain() {
 		// all workflows within a global domain should have replication state, no matter whether it will be replicated to multiple
 		// target clusters or not
-		msBuilder = newMutableStateBuilderWithReplicationState(e.shard.GetConfig(), e.logger, domainEntry.GetFailoverVersion())
+		msBuilder = newMutableStateBuilderWithReplicationState(
+			clusterMetadata.GetCurrentClusterName(),
+			e.shard.GetConfig(),
+			e.logger,
+			domainEntry.GetFailoverVersion(),
+		)
 	} else {
-		msBuilder = newMutableStateBuilder(e.shard.GetConfig(), e.logger)
+		msBuilder = newMutableStateBuilder(
+			clusterMetadata.GetCurrentClusterName(),
+			e.shard.GetConfig(),
+			e.logger,
+		)
 	}
 	startedEvent := msBuilder.AddWorkflowExecutionStartedEvent(execution, startRequest)
 	if startedEvent == nil {
@@ -1985,7 +2011,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	var replicationState *persistence.ReplicationState
 	var replicationTasks []persistence.Task
 	if msBuilder.GetReplicationState() != nil {
-		msBuilder.UpdateReplicationStateLastEventID("", msBuilder.GetCurrentVersion(), msBuilder.GetNextEventID()-1)
+		msBuilder.UpdateReplicationStateLastEventID(
+			clusterMetadata.GetCurrentClusterName(),
+			msBuilder.GetCurrentVersion(),
+			msBuilder.GetNextEventID()-1,
+		)
 		replicationState = msBuilder.GetReplicationState()
 		// this is a hack, only create replication task if have # target cluster > 1, for more see #868
 		if domainEntry.CanReplicateEvent() {

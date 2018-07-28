@@ -109,6 +109,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	}
 	s.mockMutableState = &mockMutableState{}
 	s.stateBuilder = newStateBuilder(s.mockShard, s.mockMutableState, s.logger)
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 }
 
@@ -482,7 +483,12 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}
 	_, _, newRunStateBuilder, err := s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory)
 	s.Nil(err)
-	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(s.mockShard.GetConfig(), s.logger, newRunStartedEvent.GetVersion())
+	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
+		s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(),
+		s.logger,
+		newRunStartedEvent.GetVersion(),
+	)
 	expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
 		domainID,
 		common.StringPtr(parentDomainID),

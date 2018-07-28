@@ -355,7 +355,12 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 			// Create mutable state updates for the new run
-			newRunStateBuilder = newMutableStateBuilderWithReplicationState(b.shard.GetConfig(), b.logger, startedEvent.GetVersion())
+			newRunStateBuilder = newMutableStateBuilderWithReplicationState(
+				b.clusterMetadata.GetCurrentClusterName(),
+				b.shard.GetConfig(),
+				b.logger,
+				startedEvent.GetVersion(),
+			)
 			newRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(domainID, parentDomainID, newExecution, uuid.New(),
 				startedAttributes)
 			di := newRunStateBuilder.ReplicateDecisionTaskScheduledEvent(

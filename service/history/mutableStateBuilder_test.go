@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -57,7 +58,7 @@ func (s *mutableStateSuite) TearDownSuite() {
 
 func (s *mutableStateSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.msBuilder = newMutableStateBuilder(NewConfig(dynamicconfig.NewNopCollection(), 1), s.logger)
+	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewConfig(dynamicconfig.NewNopCollection(), 1), s.logger)
 }
 
 func (s *mutableStateSuite) TearDownTest() {

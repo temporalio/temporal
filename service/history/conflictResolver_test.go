@@ -110,7 +110,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		WorkflowId: common.StringPtr("some random workflow ID"),
 		RunId:      common.StringPtr(validRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
-
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryMgr, s.logger)
 }
 

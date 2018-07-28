@@ -102,7 +102,12 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 			return newStateBuilder(shard, msBuilder, logger)
 		},
 		getNewMutableState: func(version int64, logger bark.Logger) mutableState {
-			return newMutableStateBuilderWithReplicationState(shard.GetConfig(), logger, version)
+			return newMutableStateBuilderWithReplicationState(
+				shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+				shard.GetConfig(),
+				logger,
+				version,
+			)
 		},
 	}
 
