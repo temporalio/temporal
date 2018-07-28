@@ -1270,8 +1270,8 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	taskList := &workflow.TaskList{}
 	taskList.Name = &tl
 
-	const taskCount = 2000
-	const rangeSize = 30
+	const taskCount = 1200
+	const rangeSize = 10
 	s.matchingEngine.config.RangeSize = rangeSize
 
 	// add taskCount tasks
@@ -1303,16 +1303,18 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
 	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	tasks, readLevel, err := tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err := tlMgr.getTaskBatch()
 	s.Nil(err)
 	s.EqualValues(0, len(tasks))
 	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), readLevel)
+	s.True(isReadBatchDone)
 
 	tlMgr.taskAckManager.setReadLevel(0)
-	tasks, readLevel, err = tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(tasks))
 	s.EqualValues(rangeSize, readLevel)
+	s.True(isReadBatchDone)
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -1358,13 +1360,44 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-
-	tasks, readLevel, err = tlMgr.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.EqualValues(rangeSize*2, readLevel)
+	s.True(isReadBatchDone)
 
 	tlMgr.engine.removeTaskListManager(tlMgr.taskListID)
+}
+
+func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch_ReadBatchDone() {
+	domainID := "domainId"
+	tl := "makeToast"
+	tlID := &taskListID{domainID: domainID, taskListName: tl, taskType: persistence.TaskListTypeActivity}
+	tlNormal := workflow.TaskListKindNormal
+
+	const rangeSize = 10
+	const maxReadLevel = int64(120)
+	config := defaultTestConfig()
+	config.RangeSize = rangeSize
+	tlMgr0, err := newTaskListManager(s.matchingEngine, tlID, &tlNormal, config)
+	s.NoError(err)
+	tlMgr, ok := tlMgr0.(*taskListManagerImpl)
+	s.True(ok, "taskListManger doesn't implement taskListManager interface")
+
+	tlMgr.taskAckManager.setReadLevel(0)
+	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
+	tasks, readLevel, isReadBatchDone, err := tlMgr.getTaskBatch()
+	s.Empty(tasks)
+	s.Equal(int64(rangeSize*10), readLevel)
+	s.False(isReadBatchDone)
+	s.NoError(err)
+
+	tlMgr.taskAckManager.setReadLevel(readLevel)
+	tasks, readLevel, isReadBatchDone, err = tlMgr.getTaskBatch()
+	s.Empty(tasks)
+	s.Equal(maxReadLevel, readLevel)
+	s.True(isReadBatchDone)
+	s.NoError(err)
 }
 
 func newActivityTaskScheduledEvent(eventID int64, decisionTaskCompletedEventID int64,

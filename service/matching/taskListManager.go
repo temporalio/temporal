@@ -562,26 +562,29 @@ func (c *taskListManagerImpl) CancelPoller(pollerID string) {
 
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
-func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, error) {
+// Also return a bool to indicate whether read is finished
+func (c *taskListManagerImpl) getTaskBatch() ([]*persistence.TaskInfo, int64, bool, error) {
 	var tasks []*persistence.TaskInfo
 	readLevel := c.taskAckManager.getReadLevel()
 	maxReadLevel := c.taskWriter.GetMaxReadLevel()
-	for readLevel < maxReadLevel {
+
+	// counter i is used to break and let caller check whether tasklist is still alive and need resume read.
+	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
 		upper := readLevel + c.config.RangeSize
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
 		tasks, err := c.getTaskBatchWithRange(readLevel, upper)
 		if err != nil {
-			return nil, readLevel, err
+			return nil, readLevel, true, err
 		}
 		// return as long as it grabs any tasks
 		if len(tasks) > 0 {
-			return tasks, upper, nil
+			return tasks, upper, true, nil
 		}
 		readLevel = upper
 	}
-	return tasks, readLevel, nil // caller will update readLevel when no task grabbed
+	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
 }
 
 func (c *taskListManagerImpl) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistence.TaskInfo, error) {
@@ -757,7 +760,7 @@ getTasksPumpLoop:
 			{
 				lastTimeWriteTask = time.Now()
 
-				tasks, readLevel, err := c.getTaskBatch()
+				tasks, readLevel, isReadBatchDone, err := c.getTaskBatch()
 				if err != nil {
 					c.signalNewTask() // re-enqueue the event
 					// TODO: Should we ever stop retrying on db errors?
@@ -780,7 +783,7 @@ getTasksPumpLoop:
 					}
 				}
 
-				if len(tasks) > 0 {
+				if len(tasks) > 0 || !isReadBatchDone {
 					// There maybe more tasks.
 					// We yield now, but signal pump to check again later.
 					c.signalNewTask()
