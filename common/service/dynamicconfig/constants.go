@@ -48,7 +48,8 @@ var keys = map[Key]string{
 	testGetBoolPropertyFilteredByTaskListInfoKey:     "testGetBoolPropertyFilteredByTaskListInfoKey",
 
 	// system settings
-	EnableGlobalDomain: "system.enableGlobalDomain",
+	EnableGlobalDomain:   "system.enableGlobalDomain",
+	EnableNewKafkaClient: "system.enableNewKafkaClient",
 
 	// frontend settings
 	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
@@ -145,6 +146,7 @@ const (
 
 	// EnableGlobalDomain is key for enable global domain
 	EnableGlobalDomain
+	EnableNewKafkaClient
 
 	// key for frontend
 
