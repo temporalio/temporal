@@ -63,6 +63,7 @@ type Service struct {
 
 // NewService builds a new cadence-frontend service
 func NewService(params *service.BootstrapParams) common.Daemon {
+	params.UpdateLoggerWithServiceName(common.FrontendServiceName)
 	return &Service{
 		params: params,
 		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),

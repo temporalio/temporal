@@ -39,7 +39,7 @@ type ClientImpl struct {
 
 // NewClient creates and returns a new instance of
 // Client implementation
-// reporter holds the common tags for the servcie
+// reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
 func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 	commonScopes := ScopeDefs[Common]

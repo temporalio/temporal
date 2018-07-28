@@ -99,7 +99,7 @@ type (
 func New(params *BootstrapParams) Service {
 	sVice := &serviceImpl{
 		sName:                 params.Name,
-		logger:                params.Logger.WithField("Service", params.Name),
+		logger:                params.Logger,
 		rpcFactory:            params.RPCFactory,
 		rpFactory:             params.RingpopFactory,
 		pprofInitializer:      params.PProfInitializer,
@@ -123,6 +123,11 @@ func New(params *BootstrapParams) Service {
 		sVice.hostName = hostName
 	}
 	return sVice
+}
+
+// UpdateLoggerWithServiceName tag logging with service name from the top level
+func (params *BootstrapParams) UpdateLoggerWithServiceName(name string) {
+	params.Logger = params.Logger.WithField("Service", name)
 }
 
 // GetHostName returns the name of host running the service

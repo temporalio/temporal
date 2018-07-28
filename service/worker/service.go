@@ -51,6 +51,7 @@ type (
 
 // NewService builds a new cadence-worker service
 func NewService(params *service.BootstrapParams) common.Daemon {
+	params.UpdateLoggerWithServiceName(common.WorkerServiceName)
 	return &Service{
 		params: params,
 		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),

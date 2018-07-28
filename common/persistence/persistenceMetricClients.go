@@ -472,6 +472,9 @@ func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+	case *workflow.ServiceBusyError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.WithFields(bark.Fields{
 			logging.TagScope: scope,
@@ -537,6 +540,9 @@ func (p *historyPersistenceClient) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+	case *workflow.ServiceBusyError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.WithFields(bark.Fields{
@@ -661,6 +667,9 @@ func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.CadenceErrEntityNotExistsCounter)
 	case *workflow.BadRequestError:
 		p.metricClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
+	case *workflow.ServiceBusyError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.WithFields(bark.Fields{
 			logging.TagScope: scope,

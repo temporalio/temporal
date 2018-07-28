@@ -185,6 +185,7 @@ type Service struct {
 
 // NewService builds a new cadence-history service
 func NewService(params *service.BootstrapParams) common.Daemon {
+	params.UpdateLoggerWithServiceName(common.HistoryServiceName)
 	return &Service{
 		params: params,
 		stopC:  make(chan struct{}),

@@ -77,6 +77,7 @@ type Service struct {
 
 // NewService builds a new cadence-matching service
 func NewService(params *service.BootstrapParams) common.Daemon {
+	params.UpdateLoggerWithServiceName(common.MatchingServiceName)
 	return &Service{
 		params: params,
 		config: NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)),
