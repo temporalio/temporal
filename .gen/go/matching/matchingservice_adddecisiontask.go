@@ -234,6 +234,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -265,6 +267,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddDecisionTask_Result.LimitExceededError")
 			}
 			return &MatchingService_AddDecisionTask_Result{LimitExceededError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for MatchingService_AddDecisionTask_Result.DomainNotActiveError")
+			}
+			return &MatchingService_AddDecisionTask_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -286,6 +293,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
+			return
+		}
 		return
 	}
 
@@ -299,6 +310,7 @@ type MatchingService_AddDecisionTask_Result struct {
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
 	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
 	LimitExceededError   *shared.LimitExceededError   `json:"limitExceededError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a MatchingService_AddDecisionTask_Result struct into a Thrift-level intermediate
@@ -318,7 +330,7 @@ type MatchingService_AddDecisionTask_Result struct {
 //   }
 func (v *MatchingService_AddDecisionTask_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -354,6 +366,14 @@ func (v *MatchingService_AddDecisionTask_Result) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
 		i++
 	}
 
@@ -418,6 +438,14 @@ func (v *MatchingService_AddDecisionTask_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -434,6 +462,9 @@ func (v *MatchingService_AddDecisionTask_Result) FromWire(w wire.Value) error {
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("MatchingService_AddDecisionTask_Result should have at most one field: got %v fields", count)
 	}
@@ -448,7 +479,7 @@ func (v *MatchingService_AddDecisionTask_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -464,6 +495,10 @@ func (v *MatchingService_AddDecisionTask_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -485,6 +520,9 @@ func (v *MatchingService_AddDecisionTask_Result) Equals(rhs *MatchingService_Add
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 
@@ -526,6 +564,16 @@ func (v *MatchingService_AddDecisionTask_Result) GetServiceBusyError() (o *share
 func (v *MatchingService_AddDecisionTask_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
 	if v.LimitExceededError != nil {
 		return v.LimitExceededError
+	}
+
+	return
+}
+
+// GetDomainNotActiveError returns the value of DomainNotActiveError if it is set or its
+// zero value if it is unset.
+func (v *MatchingService_AddDecisionTask_Result) GetDomainNotActiveError() (o *shared.DomainNotActiveError) {
+	if v.DomainNotActiveError != nil {
+		return v.DomainNotActiveError
 	}
 
 	return

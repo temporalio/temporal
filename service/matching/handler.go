@@ -259,6 +259,9 @@ func (h *Handler) handleErr(err error, scope int) error {
 	case *gen.ServiceBusyError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 		return err
+	case *gen.DomainNotActiveError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrDomainNotActiveCounter)
+		return err
 	default:
 		h.metricsClient.IncCounter(scope, metrics.CadenceFailures)
 		return &gen.InternalServiceError{Message: err.Error()}

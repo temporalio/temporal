@@ -132,6 +132,7 @@ service MatchingService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
+      5: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -144,6 +145,7 @@ service MatchingService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
+      5: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
