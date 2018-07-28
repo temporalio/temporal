@@ -6280,6 +6280,7 @@ const (
 	DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes                DecisionTaskFailedCause = 14
 	DecisionTaskFailedCauseBadStartChildExecutionAttributes                    DecisionTaskFailedCause = 15
 	DecisionTaskFailedCauseForceCloseDecision                                  DecisionTaskFailedCause = 16
+	DecisionTaskFailedCauseFailoverCloseDecision                               DecisionTaskFailedCause = 17
 )
 
 // DecisionTaskFailedCause_Values returns all recognized values of DecisionTaskFailedCause.
@@ -6302,6 +6303,7 @@ func DecisionTaskFailedCause_Values() []DecisionTaskFailedCause {
 		DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes,
 		DecisionTaskFailedCauseBadStartChildExecutionAttributes,
 		DecisionTaskFailedCauseForceCloseDecision,
+		DecisionTaskFailedCauseFailoverCloseDecision,
 	}
 }
 
@@ -6363,6 +6365,9 @@ func (v *DecisionTaskFailedCause) UnmarshalText(value []byte) error {
 	case "FORCE_CLOSE_DECISION":
 		*v = DecisionTaskFailedCauseForceCloseDecision
 		return nil
+	case "FAILOVER_CLOSE_DECISION":
+		*v = DecisionTaskFailedCauseFailoverCloseDecision
+		return nil
 	default:
 		return fmt.Errorf("unknown enum value %q for %q", value, "DecisionTaskFailedCause")
 	}
@@ -6410,6 +6415,8 @@ func (v DecisionTaskFailedCause) MarshalText() ([]byte, error) {
 		return []byte("BAD_START_CHILD_EXECUTION_ATTRIBUTES"), nil
 	case 16:
 		return []byte("FORCE_CLOSE_DECISION"), nil
+	case 17:
+		return []byte("FAILOVER_CLOSE_DECISION"), nil
 	}
 	return []byte(strconv.FormatInt(int64(v), 10)), nil
 }
@@ -6484,6 +6491,8 @@ func (v DecisionTaskFailedCause) String() string {
 		return "BAD_START_CHILD_EXECUTION_ATTRIBUTES"
 	case 16:
 		return "FORCE_CLOSE_DECISION"
+	case 17:
+		return "FAILOVER_CLOSE_DECISION"
 	}
 	return fmt.Sprintf("DecisionTaskFailedCause(%d)", w)
 }
@@ -6536,6 +6545,8 @@ func (v DecisionTaskFailedCause) MarshalJSON() ([]byte, error) {
 		return ([]byte)("\"BAD_START_CHILD_EXECUTION_ATTRIBUTES\""), nil
 	case 16:
 		return ([]byte)("\"FORCE_CLOSE_DECISION\""), nil
+	case 17:
+		return ([]byte)("\"FAILOVER_CLOSE_DECISION\""), nil
 	}
 	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
 }

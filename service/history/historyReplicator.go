@@ -299,7 +299,11 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		return nil, ErrCorruptedReplicationInfo
 	}
 
-	if ri.GetLastEventId() < rState.LastWriteEventID {
+	if ri.GetLastEventId() < rState.LastWriteEventID || msBuilder.HasBufferedEvents() {
+		// the reason to reset mutable state if mutable state has buffered events
+		// is: what buffered event actually do is delay generation of event ID,
+		// the actual action of those buffered event are already applied to mutable state.
+
 		logger.Info("Conflict detected.")
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.HistoryConflictsCounter)
 

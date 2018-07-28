@@ -60,6 +60,7 @@ const (
 	TagResetNextEventID     = "reset-next-event-id"
 	TagTimeoutType          = "timeout-type"
 	TagReplicationInfo      = "replication-info"
+	TagReplicationState     = "replication-state"
 	TagAttemptCount         = "attempt-count"
 	TagAttemptStart         = "attempt-start"
 	TagAttemptEnd           = "attempt-end"
