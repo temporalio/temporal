@@ -780,13 +780,14 @@ type (
 
 	// AppendHistoryEventsRequest is used to append new events to workflow execution history
 	AppendHistoryEventsRequest struct {
-		DomainID      string
-		Execution     workflow.WorkflowExecution
-		FirstEventID  int64
-		RangeID       int64
-		TransactionID int64
-		Events        *SerializedHistoryEventBatch
-		Overwrite     bool
+		DomainID          string
+		Execution         workflow.WorkflowExecution
+		FirstEventID      int64
+		EventBatchVersion int64
+		RangeID           int64
+		TransactionID     int64
+		Events            *SerializedHistoryEventBatch
+		Overwrite         bool
 	}
 
 	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution

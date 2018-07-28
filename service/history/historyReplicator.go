@@ -534,11 +534,12 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 	}
 
 	err = r.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-		DomainID:      domainID,
-		Execution:     execution,
-		TransactionID: transactionID,
-		FirstEventID:  firstEvent.GetEventId(),
-		Events:        serializedHistory,
+		DomainID:          domainID,
+		Execution:         execution,
+		TransactionID:     transactionID,
+		FirstEventID:      firstEvent.GetEventId(),
+		EventBatchVersion: firstEvent.GetVersion(),
+		Events:            serializedHistory,
 	})
 	if err != nil {
 		return err

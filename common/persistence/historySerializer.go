@@ -23,9 +23,10 @@ package persistence
 import (
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
+
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"sync/atomic"
 )
 
 type (

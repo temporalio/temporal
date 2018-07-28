@@ -342,9 +342,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		Execution: execution,
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
 		// no potential duplicates to override.
-		TransactionID: 0,
-		FirstEventID:  startedEvent.GetEventId(),
-		Events:        serializedHistory,
+		TransactionID:     0,
+		FirstEventID:      startedEvent.GetEventId(),
+		EventBatchVersion: startedEvent.GetVersion(),
+		Events:            serializedHistory,
 	})
 	if err != nil {
 		return nil, err
@@ -1999,9 +2000,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		Execution: execution,
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
 		// no potential duplicates to override.
-		TransactionID: 0,
-		FirstEventID:  startedEvent.GetEventId(),
-		Events:        serializedHistory,
+		TransactionID:     0,
+		FirstEventID:      startedEvent.GetEventId(),
+		EventBatchVersion: startedEvent.GetVersion(),
+		Events:            serializedHistory,
 	})
 	if err != nil {
 		return nil, err

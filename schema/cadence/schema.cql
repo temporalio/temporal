@@ -266,17 +266,18 @@ CREATE TABLE executions (
   };
 
 CREATE TABLE events (
-  domain_id      uuid,
-  workflow_id    text,
-  run_id         uuid,
+  domain_id           uuid,
+  workflow_id         text,
+  run_id              uuid,
   -- We insert a batch of events with each append transaction.
   -- This field stores the event id of first event in the batch.
-  first_event_id bigint,
-  range_id       bigint,
-  tx_id          bigint,
-  data           blob, -- Batch of workflow execution history events as a blob
-  data_encoding  text, -- Protocol used for history serialization
-  data_version   int,  -- history blob version
+  first_event_id      bigint,
+  event_batch_version bigint,
+  range_id            bigint,
+  tx_id               bigint,
+  data                blob, -- Batch of workflow execution history events as a blob
+  data_encoding       text, -- Protocol used for history serialization
+  data_version        int,  -- history blob version
   PRIMARY KEY ((domain_id, workflow_id, run_id), first_event_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

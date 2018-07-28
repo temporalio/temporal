@@ -57,6 +57,7 @@ func (s *VersionTestSuite) TestParseVersion() {
 	s.execParseTest("99", 99, 0, false)
 	s.execParseTest("0.0", 0, 0, false)
 	s.execParseTest("0.9", 0, 9, false)
+	s.execParseTest("0.10", 0, 10, false)
 	s.execParseTest("1.0", 1, 0, false)
 	s.execParseTest("9999.0", 9999, 0, false)
 	s.execParseTest("999.999", 999, 999, false)
@@ -100,7 +101,7 @@ func (s *VersionTestSuite) TestParseValidateVersion() {
 		s.execParseValidateTest("v"+in, in, false)
 	}
 
-	errInputs := []string{"1.2a", "ab", "0.88", "5.11"}
+	errInputs := []string{"1.2a", "ab", "5.11a"}
 	for _, in := range errInputs {
 		s.execParseValidateTest(in, "", true)
 		s.execParseValidateTest("v"+in, "", true)

@@ -396,11 +396,12 @@ func (c *workflowExecutionContext) appendHistoryEvents(builder *historyBuilder, 
 	}
 
 	if err0 := c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-		DomainID:      c.domainID,
-		Execution:     c.workflowExecution,
-		TransactionID: transactionID,
-		FirstEventID:  *firstEvent.EventId,
-		Events:        serializedHistory,
+		DomainID:          c.domainID,
+		Execution:         c.workflowExecution,
+		TransactionID:     transactionID,
+		FirstEventID:      firstEvent.GetEventId(),
+		EventBatchVersion: firstEvent.GetVersion(),
+		Events:            serializedHistory,
 	}); err0 != nil {
 		switch err0.(type) {
 		case *persistence.ConditionFailedError:
@@ -457,11 +458,12 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecutionHelper(context 
 	}
 
 	return c.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
-		DomainID:      domainID,
-		Execution:     newExecution,
-		TransactionID: transactionID,
-		FirstEventID:  *firstEvent.EventId,
-		Events:        serializedHistory,
+		DomainID:          domainID,
+		Execution:         newExecution,
+		TransactionID:     transactionID,
+		FirstEventID:      firstEvent.GetEventId(),
+		EventBatchVersion: firstEvent.GetVersion(),
+		Events:            serializedHistory,
 	})
 }
 

@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.10",
+  "MinCompatibleVersion": "0.10",
+  "Description": "Adding batch event verion to events table",
+  "SchemaUpdateCqlFiles": [
+    "event_batch_version.cql"
+  ]
+}

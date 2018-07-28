@@ -130,7 +130,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	// update the version to the latest
 	s.log.Infof("Ver: %v", ver)
-	s.Equal(0, cmpVersion(ver, "0.9"))
+	s.Equal(0, cmpVersion(ver, "0.10"))
 
 	dropAllTablesTypes(client)
 }
