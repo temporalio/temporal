@@ -419,6 +419,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	}
 
 	newRunDecisionEvenType := shared.EventTypeDecisionTaskScheduled
+	newRunDecisionAttempt := int64(123)
 	newRunDecisionEvent := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(2),
@@ -427,6 +428,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
 			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
+			Attempt:                    common.Int64Ptr(newRunDecisionAttempt),
 		},
 	}
 
@@ -471,7 +473,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			RequestID:       emptyUUID,
 			DecisionTimeout: decisionTimeoutSecond,
 			TaskList:        tasklist,
-			Attempt:         0,
+			Attempt:         newRunDecisionAttempt,
 		},
 		mock.Anything,
 	).Once()
@@ -496,6 +498,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunDecisionEvent.GetEventId(),
 		tasklist,
 		decisionTimeoutSecond,
+		newRunDecisionAttempt,
 	)
 	expectedNewRunStateBuilder.GetExecutionInfo().LastFirstEventID = newRunStartedEvent.GetEventId()
 	expectedNewRunStateBuilder.GetExecutionInfo().NextEventID = newRunDecisionEvent.GetEventId() + 1
@@ -1268,6 +1271,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 	tasklist := "some random tasklist"
 	timeoutSecond := int32(11)
 	evenType := shared.EventTypeDecisionTaskScheduled
+	decisionAttempt := int64(111)
 	event := &shared.HistoryEvent{
 		Version:   common.Int64Ptr(version),
 		EventId:   common.Int64Ptr(130),
@@ -1276,6 +1280,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
 			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
 			StartToCloseTimeoutSeconds: common.Int32Ptr(timeoutSecond),
+			Attempt:                    common.Int64Ptr(decisionAttempt),
 		},
 	}
 	di := &decisionInfo{
@@ -1285,13 +1290,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskScheduled() {
 		RequestID:       emptyUUID,
 		DecisionTimeout: timeoutSecond,
 		TaskList:        tasklist,
-		Attempt:         0,
+		Attempt:         decisionAttempt,
 	}
 	executionInfo := &persistence.WorkflowExecutionInfo{
 		TaskList: tasklist,
 	}
 	s.mockMutableState.On("GetExecutionInfo").Return(executionInfo)
-	s.mockMutableState.On("ReplicateDecisionTaskScheduledEvent", event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond).Return(di).Once()
+	s.mockMutableState.On("ReplicateDecisionTaskScheduledEvent",
+		event.GetVersion(), event.GetEventId(), tasklist, timeoutSecond, decisionAttempt,
+	).Return(di).Once()
 	s.mockMutableState.On("UpdateDecision", di).Once()
 	s.mockUpdateVersion(event)
 

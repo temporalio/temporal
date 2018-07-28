@@ -386,9 +386,11 @@ func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struc
 	op := func() error {
 		err = t.timerProcessor.process(task)
 		if err != nil && err != ErrTaskRetry {
-			attempt++
-			logger = t.initializeLoggerForTask(task, logger)
-			logging.LogTaskProcessingFailedEvent(logger, err)
+			if _, ok := err.(*workflow.DomainNotActiveError); !ok {
+				attempt++
+				logger = t.initializeLoggerForTask(task, logger)
+				logging.LogTaskProcessingFailedEvent(logger, err)
+			}
 		}
 		return err
 	}

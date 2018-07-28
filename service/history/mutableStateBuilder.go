@@ -163,7 +163,7 @@ type (
 		ReplicateChildWorkflowExecutionTimedOutEvent(*workflow.HistoryEvent)
 		ReplicateDecisionTaskCompletedEvent(int64, int64)
 		ReplicateDecisionTaskFailedEvent(int64, int64)
-		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32) *decisionInfo
+		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64) *decisionInfo
 		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) *decisionInfo
 		ReplicateDecisionTaskTimedOutEvent(int64, int64)
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent)
@@ -1426,11 +1426,17 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		scheduleID = newDecisionEvent.GetEventId()
 	}
 
-	return e.ReplicateDecisionTaskScheduledEvent(e.GetCurrentVersion(), scheduleID, taskList, startToCloseTimeoutSeconds)
+	return e.ReplicateDecisionTaskScheduledEvent(
+		e.GetCurrentVersion(),
+		scheduleID,
+		taskList,
+		startToCloseTimeoutSeconds,
+		e.executionInfo.DecisionAttempt,
+	)
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string,
-	startToCloseTimeoutSeconds int32) *decisionInfo {
+	startToCloseTimeoutSeconds int32, attempt int64) *decisionInfo {
 	di := &decisionInfo{
 		Version:         version,
 		ScheduleID:      scheduleID,
@@ -1438,7 +1444,7 @@ func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, sched
 		RequestID:       emptyUUID,
 		DecisionTimeout: startToCloseTimeoutSeconds,
 		TaskList:        taskList,
-		Attempt:         e.executionInfo.DecisionAttempt,
+		Attempt:         attempt,
 	}
 
 	e.UpdateDecision(di)

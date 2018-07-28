@@ -272,9 +272,11 @@ func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, 
 	op := func() error {
 		err = p.processor.process(task)
 		if err != nil && err != ErrTaskRetry {
-			retryCount++
-			logger = p.initializeLoggerForTask(task, logger)
-			logging.LogTaskProcessingFailedEvent(logger, err)
+			if _, ok := err.(*workflow.DomainNotActiveError); !ok {
+				retryCount++
+				logger = p.initializeLoggerForTask(task, logger)
+				logging.LogTaskProcessingFailedEvent(logger, err)
+			}
 		}
 		return err
 	}
