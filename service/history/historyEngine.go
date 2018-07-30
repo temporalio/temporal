@@ -45,6 +45,7 @@ import (
 )
 
 const (
+	signalInputSizeLimit                     = 256 * 1024
 	conditionalRetryCount                    = 5
 	activityCancelationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancelationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
@@ -101,6 +102,8 @@ var (
 	ErrWorkflowParent = &workflow.EntityNotExistsError{Message: "Workflow parent does not match."}
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = &workflow.BadRequestError{Message: "Error deserializing task token."}
+	// ErrSignalOverSize is the error to indicate signal input size is > 256K
+	ErrSignalOverSize = &workflow.BadRequestError{Message: "Signal input size is over 256K."}
 	// ErrCancellationAlreadyRequested is the error indicating cancellation for target workflow is already requested
 	ErrCancellationAlreadyRequested = &workflow.CancellationAlreadyRequestedError{Message: "Cancellation already requested for this workflow execution."}
 	// ErrBufferedEventsLimitExceeded is the error indicating limit reached for maximum number of buffered events
@@ -1221,6 +1224,11 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
 					break Process_Decision_Loop
 				}
+				if err = validateSignalInput(attributes.Input); err != nil {
+					failDecision = true
+					failCause = workflow.DecisionTaskFailedCauseBadSignalInputSize
+					break Process_Decision_Loop
+				}
 
 				foreignDomainID := ""
 				if attributes.GetDomain() == "" {
@@ -1805,6 +1813,10 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
+	if err := validateSignalInput(request.GetInput()); err != nil {
+		return err
+	}
+
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
 		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
@@ -1849,6 +1861,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := workflow.WorkflowExecution{
 		WorkflowId: sRequest.WorkflowId,
+	}
+
+	if err := validateSignalInput(sRequest.GetSignalInput()); err != nil {
+		return nil, err
 	}
 
 	isBrandNew := false
@@ -2713,6 +2729,13 @@ func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecut
 	}
 	if request.TaskList == nil || request.TaskList.Name == nil || request.TaskList.GetName() == "" {
 		return &workflow.BadRequestError{Message: "Missing Tasklist."}
+	}
+	return nil
+}
+
+func validateSignalInput(signalInput []byte) error {
+	if len(signalInput) > signalInputSizeLimit {
+		return ErrSignalOverSize
 	}
 	return nil
 }

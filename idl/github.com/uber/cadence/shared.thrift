@@ -186,6 +186,7 @@ enum DecisionTaskFailedCause {
   BAD_START_CHILD_EXECUTION_ATTRIBUTES,
   FORCE_CLOSE_DECISION,
   FAILOVER_CLOSE_DECISION,
+  BAD_SIGNAL_INPUT_SIZE,
 }
 
 enum CancelExternalWorkflowExecutionFailedCause {
