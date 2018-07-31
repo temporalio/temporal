@@ -152,6 +152,7 @@ struct RecordDecisionTaskStartedResponse {
   60: optional i64 (js.type = "Long") attempt
   70: optional bool stickyExecutionEnabled
   80: optional shared.TransientDecisionInfo decisionInfo
+  90: optional shared.TaskList WorkflowExecutionTaskList
 }
 
 struct SignalWorkflowExecutionRequest {

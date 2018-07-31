@@ -1384,17 +1384,18 @@ func (v *PollForDecisionTaskRequest) GetPollRequest() (o *shared.PollForDecision
 }
 
 type PollForDecisionTaskResponse struct {
-	TaskToken              []byte                        `json:"taskToken,omitempty"`
-	WorkflowExecution      *shared.WorkflowExecution     `json:"workflowExecution,omitempty"`
-	WorkflowType           *shared.WorkflowType          `json:"workflowType,omitempty"`
-	PreviousStartedEventId *int64                        `json:"previousStartedEventId,omitempty"`
-	StartedEventId         *int64                        `json:"startedEventId,omitempty"`
-	Attempt                *int64                        `json:"attempt,omitempty"`
-	NextEventId            *int64                        `json:"nextEventId,omitempty"`
-	BacklogCountHint       *int64                        `json:"backlogCountHint,omitempty"`
-	StickyExecutionEnabled *bool                         `json:"stickyExecutionEnabled,omitempty"`
-	Query                  *shared.WorkflowQuery         `json:"query,omitempty"`
-	DecisionInfo           *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
+	TaskToken                 []byte                        `json:"taskToken,omitempty"`
+	WorkflowExecution         *shared.WorkflowExecution     `json:"workflowExecution,omitempty"`
+	WorkflowType              *shared.WorkflowType          `json:"workflowType,omitempty"`
+	PreviousStartedEventId    *int64                        `json:"previousStartedEventId,omitempty"`
+	StartedEventId            *int64                        `json:"startedEventId,omitempty"`
+	Attempt                   *int64                        `json:"attempt,omitempty"`
+	NextEventId               *int64                        `json:"nextEventId,omitempty"`
+	BacklogCountHint          *int64                        `json:"backlogCountHint,omitempty"`
+	StickyExecutionEnabled    *bool                         `json:"stickyExecutionEnabled,omitempty"`
+	Query                     *shared.WorkflowQuery         `json:"query,omitempty"`
+	DecisionInfo              *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
+	WorkflowExecutionTaskList *shared.TaskList              `json:"WorkflowExecutionTaskList,omitempty"`
 }
 
 // ToWire translates a PollForDecisionTaskResponse struct into a Thrift-level intermediate
@@ -1414,7 +1415,7 @@ type PollForDecisionTaskResponse struct {
 //   }
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1506,6 +1507,14 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.WorkflowExecutionTaskList != nil {
+		w, err = v.WorkflowExecutionTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
 		i++
 	}
 
@@ -1652,6 +1661,14 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecutionTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1665,7 +1682,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [12]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -1709,6 +1726,10 @@ func (v *PollForDecisionTaskResponse) String() string {
 	}
 	if v.DecisionInfo != nil {
 		fields[i] = fmt.Sprintf("DecisionInfo: %v", v.DecisionInfo)
+		i++
+	}
+	if v.WorkflowExecutionTaskList != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecutionTaskList: %v", v.WorkflowExecutionTaskList)
 		i++
 	}
 
@@ -1761,6 +1782,9 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 		return false
 	}
 	if !((v.DecisionInfo == nil && rhs.DecisionInfo == nil) || (v.DecisionInfo != nil && rhs.DecisionInfo != nil && v.DecisionInfo.Equals(rhs.DecisionInfo))) {
+		return false
+	}
+	if !((v.WorkflowExecutionTaskList == nil && rhs.WorkflowExecutionTaskList == nil) || (v.WorkflowExecutionTaskList != nil && rhs.WorkflowExecutionTaskList != nil && v.WorkflowExecutionTaskList.Equals(rhs.WorkflowExecutionTaskList))) {
 		return false
 	}
 
@@ -1872,6 +1896,16 @@ func (v *PollForDecisionTaskResponse) GetQuery() (o *shared.WorkflowQuery) {
 func (v *PollForDecisionTaskResponse) GetDecisionInfo() (o *shared.TransientDecisionInfo) {
 	if v.DecisionInfo != nil {
 		return v.DecisionInfo
+	}
+
+	return
+}
+
+// GetWorkflowExecutionTaskList returns the value of WorkflowExecutionTaskList if it is set or its
+// zero value if it is unset.
+func (v *PollForDecisionTaskResponse) GetWorkflowExecutionTaskList() (o *shared.TaskList) {
+	if v.WorkflowExecutionTaskList != nil {
+		return v.WorkflowExecutionTaskList
 	}
 
 	return

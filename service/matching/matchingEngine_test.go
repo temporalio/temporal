@@ -89,6 +89,7 @@ func (s *matchingEngineSuite) SetupSuite() {
 
 // Renders content of taskManager and matchingEngine when called at http://localhost:6060/test/tasks
 // Uncomment HTTP server initialization in SetupSuite method to enable.
+
 func (s *matchingEngineSuite) TasksHandler(w http.ResponseWriter, r *http.Request) {
 	s.Lock()
 	defer s.Unlock()
@@ -197,6 +198,90 @@ func (s *matchingEngineSuite) TestPollForActivityTasksEmptyResult() {
 
 func (s *matchingEngineSuite) TestPollForDecisionTasksEmptyResult() {
 	s.PollForTasksEmptyResultTest(persistence.TaskListTypeDecision)
+}
+
+func (s *matchingEngineSuite) TestPollForDecisionTasks() {
+	s.PollForDecisionTasksResultTest()
+}
+
+func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
+
+	domainID := "domainId"
+	tl := "makeToast"
+	stickyTl := "makeStickyToast"
+	stickyTlKind := workflow.TaskListKindSticky
+	identity := "selfDrivingToaster"
+
+	stickyTaskList := &workflow.TaskList{}
+	stickyTaskList.Name = &stickyTl
+	stickyTaskList.Kind = &stickyTlKind
+
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskListInfo(10 * time.Millisecond)
+
+	runID := "run1"
+	workflowID := "workflow1"
+	workflowType := workflow.WorkflowType{
+		Name: common.StringPtr("workflow"),
+	}
+	execution := workflow.WorkflowExecution{RunId: &runID, WorkflowId: &workflowID}
+	scheduleID := int64(0)
+
+	// History service is using mock
+	s.historyClient.On("RecordDecisionTaskStarted", nil,
+		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
+		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
+			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
+			response := &gohistory.RecordDecisionTaskStartedResponse{}
+			response.WorkflowType = &workflowType
+			response.PreviousStartedEventId = common.Int64Ptr(scheduleID)
+			response.ScheduledEventId = common.Int64Ptr(scheduleID + 1)
+			response.Attempt = common.Int64Ptr(0)
+			response.StickyExecutionEnabled = common.BoolPtr(true)
+			response.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
+				Name: &tl,
+				Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+			})
+			return response
+		}, nil)
+
+	addRequest := matching.AddDecisionTaskRequest{
+		DomainUUID:                    common.StringPtr(domainID),
+		Execution:                     &execution,
+		ScheduleId:                    &scheduleID,
+		TaskList:                      stickyTaskList,
+		ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
+	}
+
+	err := s.matchingEngine.AddDecisionTask(&addRequest)
+	s.NoError(err)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = &tl
+
+	resp, err := s.matchingEngine.PollForDecisionTask(s.callContext, &matching.PollForDecisionTaskRequest{
+		DomainUUID: common.StringPtr(domainID),
+		PollRequest: &workflow.PollForDecisionTaskRequest{
+			TaskList: stickyTaskList,
+			Identity: &identity},
+	})
+
+	expectedResp := &matching.PollForDecisionTaskResponse{
+		TaskToken:              resp.TaskToken,
+		WorkflowExecution:      &execution,
+		WorkflowType:           &workflowType,
+		PreviousStartedEventId: common.Int64Ptr(scheduleID),
+		Attempt:                common.Int64Ptr(0),
+		BacklogCountHint:       common.Int64Ptr(1),
+		StickyExecutionEnabled: common.BoolPtr(true),
+		WorkflowExecutionTaskList: common.TaskListPtr(workflow.TaskList{
+			Name: &tl,
+			Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+		}),
+	}
+
+	s.Nil(err)
+	s.Equal(expectedResp, resp)
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(taskType int) {

@@ -2398,6 +2398,11 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 	response.StickyExecutionEnabled = common.BoolPtr(msBuilder.IsStickyTaskListEnabled())
 	response.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID())
 	response.Attempt = common.Int64Ptr(di.Attempt)
+	response.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
+		Name: &executionInfo.TaskList,
+		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+	})
+
 	if di.Attempt > 0 {
 		// This decision is retried from mutable state
 		// Also return schedule and started which are not written to history yet

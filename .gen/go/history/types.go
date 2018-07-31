@@ -2777,14 +2777,15 @@ func (v *RecordDecisionTaskStartedRequest) GetPollRequest() (o *shared.PollForDe
 }
 
 type RecordDecisionTaskStartedResponse struct {
-	WorkflowType           *shared.WorkflowType          `json:"workflowType,omitempty"`
-	PreviousStartedEventId *int64                        `json:"previousStartedEventId,omitempty"`
-	ScheduledEventId       *int64                        `json:"scheduledEventId,omitempty"`
-	StartedEventId         *int64                        `json:"startedEventId,omitempty"`
-	NextEventId            *int64                        `json:"nextEventId,omitempty"`
-	Attempt                *int64                        `json:"attempt,omitempty"`
-	StickyExecutionEnabled *bool                         `json:"stickyExecutionEnabled,omitempty"`
-	DecisionInfo           *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
+	WorkflowType              *shared.WorkflowType          `json:"workflowType,omitempty"`
+	PreviousStartedEventId    *int64                        `json:"previousStartedEventId,omitempty"`
+	ScheduledEventId          *int64                        `json:"scheduledEventId,omitempty"`
+	StartedEventId            *int64                        `json:"startedEventId,omitempty"`
+	NextEventId               *int64                        `json:"nextEventId,omitempty"`
+	Attempt                   *int64                        `json:"attempt,omitempty"`
+	StickyExecutionEnabled    *bool                         `json:"stickyExecutionEnabled,omitempty"`
+	DecisionInfo              *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
+	WorkflowExecutionTaskList *shared.TaskList              `json:"WorkflowExecutionTaskList,omitempty"`
 }
 
 // ToWire translates a RecordDecisionTaskStartedResponse struct into a Thrift-level intermediate
@@ -2804,7 +2805,7 @@ type RecordDecisionTaskStartedResponse struct {
 //   }
 func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [8]wire.Field
+		fields [9]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2872,6 +2873,14 @@ func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 80, Value: w}
+		i++
+	}
+	if v.WorkflowExecutionTaskList != nil {
+		w, err = v.WorkflowExecutionTaskList.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 90, Value: w}
 		i++
 	}
 
@@ -2982,6 +2991,14 @@ func (v *RecordDecisionTaskStartedResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 90:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecutionTaskList, err = _TaskList_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2995,7 +3012,7 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [8]string
+	var fields [9]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -3029,6 +3046,10 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 		fields[i] = fmt.Sprintf("DecisionInfo: %v", v.DecisionInfo)
 		i++
 	}
+	if v.WorkflowExecutionTaskList != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecutionTaskList: %v", v.WorkflowExecutionTaskList)
+		i++
+	}
 
 	return fmt.Sprintf("RecordDecisionTaskStartedResponse{%v}", strings.Join(fields[:i], ", "))
 }
@@ -3060,6 +3081,9 @@ func (v *RecordDecisionTaskStartedResponse) Equals(rhs *RecordDecisionTaskStarte
 		return false
 	}
 	if !((v.DecisionInfo == nil && rhs.DecisionInfo == nil) || (v.DecisionInfo != nil && rhs.DecisionInfo != nil && v.DecisionInfo.Equals(rhs.DecisionInfo))) {
+		return false
+	}
+	if !((v.WorkflowExecutionTaskList == nil && rhs.WorkflowExecutionTaskList == nil) || (v.WorkflowExecutionTaskList != nil && rhs.WorkflowExecutionTaskList != nil && v.WorkflowExecutionTaskList.Equals(rhs.WorkflowExecutionTaskList))) {
 		return false
 	}
 
@@ -3141,6 +3165,16 @@ func (v *RecordDecisionTaskStartedResponse) GetStickyExecutionEnabled() (o bool)
 func (v *RecordDecisionTaskStartedResponse) GetDecisionInfo() (o *shared.TransientDecisionInfo) {
 	if v.DecisionInfo != nil {
 		return v.DecisionInfo
+	}
+
+	return
+}
+
+// GetWorkflowExecutionTaskList returns the value of WorkflowExecutionTaskList if it is set or its
+// zero value if it is unset.
+func (v *RecordDecisionTaskStartedResponse) GetWorkflowExecutionTaskList() (o *shared.TaskList) {
+	if v.WorkflowExecutionTaskList != nil {
+		return v.WorkflowExecutionTaskList
 	}
 
 	return

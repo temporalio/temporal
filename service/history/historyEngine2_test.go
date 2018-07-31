@@ -157,6 +157,81 @@ func (s *engine2Suite) TearDownTest() {
 	s.mockProducer.AssertExpectations(s.T())
 }
 
+func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	stickyTl := "stickyTaskList"
+	identity := "testIdentity"
+
+	msBuilder := newMutableStateBuilder("test", s.config, bark.NewLoggerFromLogrus(log.New()))
+	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo.StickyTaskList = stickyTl
+
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, []byte("input"), 100, 200, identity)
+	di := addDecisionTaskScheduledEvent(msBuilder)
+
+	ms := createMutableState(msBuilder)
+
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(gwmsResponse, nil).Once()
+	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.Anything).Return(nil).Once()
+	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			TableVersion: persistence.DomainTableVersionV1,
+		},
+		nil,
+	)
+
+	request := h.RecordDecisionTaskStartedRequest{
+		DomainUUID:        common.StringPtr(domainID),
+		WorkflowExecution: &we,
+		ScheduleId:        common.Int64Ptr(2),
+		TaskId:            common.Int64Ptr(100),
+		RequestId:         common.StringPtr("reqId"),
+		PollRequest: &workflow.PollForDecisionTaskRequest{
+			TaskList: &workflow.TaskList{
+				Name: common.StringPtr(stickyTl),
+			},
+			Identity: common.StringPtr(identity),
+		},
+	}
+
+	expectedResponse := h.RecordDecisionTaskStartedResponse{}
+	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
+	executionInfo = msBuilder.GetExecutionInfo()
+	if executionInfo.LastProcessedEvent != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = common.Int64Ptr(executionInfo.LastProcessedEvent)
+	}
+	expectedResponse.ScheduledEventId = common.Int64Ptr(di.ScheduleID)
+	expectedResponse.StartedEventId = common.Int64Ptr(di.ScheduleID + 1)
+	expectedResponse.StickyExecutionEnabled = common.BoolPtr(true)
+	expectedResponse.NextEventId = common.Int64Ptr(msBuilder.GetNextEventID() + 1)
+	expectedResponse.Attempt = common.Int64Ptr(di.Attempt)
+	expectedResponse.WorkflowExecutionTaskList = common.TaskListPtr(workflow.TaskList{
+		Name: &executionInfo.TaskList,
+		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
+	})
+
+	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
+	s.Nil(err)
+	s.NotNil(response)
+	s.Equal(&expectedResponse, response)
+}
+
 func (s *engine2Suite) TestRecordDecisionTaskStartedIfNoExecution() {
 	domainID := validDomainID
 	workflowExecution := &workflow.WorkflowExecution{
