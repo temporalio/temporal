@@ -595,11 +595,6 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 
 func (e *mutableStateBuilder) BufferReplicationTask(
 	request *h.ReplicateEventsRequest) error {
-	if _, ok := e.GetBufferedReplicationTask(request.GetFirstEventId()); ok {
-		// Have an existing replication task
-		return nil
-	}
-
 	var err error
 	var serializedHistoryBatch, serializedNewRunHistoryBatch *persistence.SerializedHistoryEventBatch
 	if request.History != nil {
