@@ -21,14 +21,11 @@
 package history
 
 import (
-	"time"
-
 	"github.com/uber-common/bark"
 
 	"errors"
 
 	h "github.com/uber/cadence/.gen/go/history"
-	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
@@ -47,8 +44,6 @@ type (
 		shard              ShardContext
 		historyService     *historyEngineImpl
 		options            *QueueProcessorOptions
-		visibilityManager  persistence.VisibilityManager
-		matchingClient     matching.Client
 		historyClient      history.Client
 		cache              *historyCache
 		transferTaskFilter transferTaskFilter
@@ -98,22 +93,19 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		return nil
 	}
 
-	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
-
 	processor := &transferQueueActiveProcessorImpl{
-		currentClusterName:         currentClusterName,
-		shard:                      shard,
-		historyService:             historyService,
-		options:                    options,
-		visibilityManager:          visibilityMgr,
-		matchingClient:             retryableMatchingClient,
-		historyClient:              historyClient,
-		logger:                     logger,
-		metricsClient:              historyService.metricsClient,
-		cache:                      historyService.historyCache,
-		transferTaskFilter:         transferTaskFilter,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown),
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		historyService:     historyService,
+		options:            options,
+		historyClient:      historyClient,
+		logger:             logger,
+		metricsClient:      historyService.metricsClient,
+		cache:              historyService.historyCache,
+		transferTaskFilter: transferTaskFilter,
+		transferQueueProcessorBase: newTransferQueueProcessorBase(
+			shard, options, visibilityMgr, matchingClient, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown, logger,
+		),
 	}
 
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(currentClusterName), logger)
@@ -167,22 +159,19 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		return shard.DeleteTransferFailoverLevel(domainID)
 	}
 
-	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
-
 	processor := &transferQueueActiveProcessorImpl{
-		currentClusterName:         currentClusterName,
-		shard:                      shard,
-		historyService:             historyService,
-		options:                    options,
-		visibilityManager:          visibilityMgr,
-		matchingClient:             retryableMatchingClient,
-		historyClient:              historyClient,
-		logger:                     logger,
-		metricsClient:              historyService.metricsClient,
-		cache:                      historyService.historyCache,
-		transferTaskFilter:         transferTaskFilter,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown),
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		historyService:     historyService,
+		options:            options,
+		historyClient:      historyClient,
+		logger:             logger,
+		metricsClient:      historyService.metricsClient,
+		cache:              historyService.historyCache,
+		transferTaskFilter: transferTaskFilter,
+		transferQueueProcessorBase: newTransferQueueProcessorBase(
+			shard, options, visibilityMgr, matchingClient, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown, logger,
+		),
 	}
 	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
 	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
@@ -260,16 +249,11 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 	defer sw.Stop()
 
 	var err error
-	domainID := task.DomainID
-	targetDomainID := task.TargetDomainID
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID)}
-	taskList := &workflow.TaskList{
-		Name: &task.TaskList,
-	}
 
-	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -288,7 +272,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TransferTaskTypeActivityTask, task.TaskID, task.ScheduleID)
 		return
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, ai.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -299,15 +283,7 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	err = t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
-		DomainUUID:                    common.StringPtr(targetDomainID),
-		SourceDomainUUID:              common.StringPtr(domainID),
-		Execution:                     &execution,
-		TaskList:                      taskList,
-		ScheduleId:                    &task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(timeout),
-	})
-
+	err = t.pushActivity(task, timeout)
 	return err
 }
 
@@ -317,17 +293,16 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	defer sw.Stop()
 
 	var err error
-	domainID := task.DomainID
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr(task.WorkflowID),
 		RunId:      common.StringPtr(task.RunID),
 	}
-	taskList := &workflow.TaskList{
+	tasklist := &workflow.TaskList{
 		Name: &task.TaskList,
 	}
 
 	// get workflow timeout
-	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(task.DomainID, execution)
 	if err != nil {
 		return err
 	}
@@ -346,7 +321,7 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 		logging.LogDuplicateTransferTaskEvent(t.logger, persistence.TaskTypeDecisionTimeout, task.TaskID, task.ScheduleID)
 		return nil
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, domainID, di.Version, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, di.Version, task.Version, task)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -359,38 +334,25 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 	wfTypeName := executionInfo.WorkflowTypeName
 	startTimestamp := executionInfo.StartTimestamp
 	if msBuilder.IsStickyTaskListEnabled() {
-		taskList.Name = common.StringPtr(executionInfo.StickyTaskList)
-		taskList.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
+		tasklist.Name = common.StringPtr(executionInfo.StickyTaskList)
+		tasklist.Kind = common.TaskListKindPtr(workflow.TaskListKindSticky)
 		decisionTimeout = executionInfo.StickyScheduleToStartTimeout
 	}
-
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	err = t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{
-		DomainUUID:                    common.StringPtr(domainID),
-		Execution:                     &execution,
-		TaskList:                      taskList,
-		ScheduleId:                    &task.ScheduleID,
-		ScheduleToStartTimeoutSeconds: common.Int32Ptr(decisionTimeout),
-	})
-
-	if err != nil {
-		return err
-	}
-
 	if task.ScheduleID <= common.FirstEventID+2 {
-		err = t.recordWorkflowExecutionStarted(execution, task, wfTypeName, startTimestamp, workflowTimeout)
-	}
-
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil
+		err = t.recordWorkflowStarted(task.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
+		if err != nil {
+			return err
 		}
 	}
 
-	return err
+	err = t.pushDecision(task, tasklist, decisionTimeout)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
@@ -400,8 +362,10 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 
 	var err error
 	domainID := task.DomainID
-	execution := workflow.WorkflowExecution{WorkflowId: common.StringPtr(task.WorkflowID),
-		RunId: common.StringPtr(task.RunID)}
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
 
 	context, release, err := t.cache.getOrCreateWorkflowExecution(domainID, execution)
 	if err != nil {
@@ -445,6 +409,13 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
+	err = t.recordWorkflowClosed(
+		domainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength,
+	)
+	if err != nil {
+		return err
+	}
+
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
 		err = t.historyClient.RecordChildExecutionCompleted(nil, &h.RecordChildExecutionCompletedRequest{
@@ -467,33 +438,7 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 			err = nil
 		}
 	}
-	if err != nil {
-		return err
-	}
-
-	// Record closing in visibility store
-	retentionSeconds := int64(0)
-	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(task.DomainID)
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-			return err
-		}
-		// it is possible that the domain got deleted. Use default retention.
-	} else {
-		// retention in domain config is in days, convert to seconds
-		retentionSeconds = int64(domainEntry.GetConfig().Retention) * 24 * 60 * 60
-	}
-
-	return t.visibilityManager.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-		DomainUUID:       task.DomainID,
-		Execution:        execution,
-		WorkflowTypeName: workflowTypeName,
-		StartTimestamp:   workflowStartTimestamp,
-		CloseTimestamp:   workflowCloseTimestamp,
-		Status:           workflowCloseStatus,
-		HistoryLength:    workflowHistoryLength,
-		RetentionSeconds: retentionSeconds,
-	})
+	return err
 }
 
 func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) (retError error) {
@@ -881,21 +826,6 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 		startedAttributes := startedEvent.ChildWorkflowExecutionStartedEventAttributes
 		err = t.createFirstDecisionTask(targetDomainID, startedAttributes.WorkflowExecution)
 	}
-
-	return err
-}
-
-func (t *transferQueueActiveProcessorImpl) recordWorkflowExecutionStarted(
-	execution workflow.WorkflowExecution, task *persistence.TransferTaskInfo, wfTypeName string,
-	startTimestamp time.Time, timeout int32,
-) error {
-	err := t.visibilityManager.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID:       task.DomainID,
-		Execution:        execution,
-		WorkflowTypeName: wfTypeName,
-		StartTimestamp:   startTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(timeout),
-	})
 
 	return err
 }

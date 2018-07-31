@@ -582,7 +582,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
 	s.NoError(err)
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, tlConfig,
+		s.matchingEngine, tlID, tlKind, s.domainCache, tlConfig,
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)
@@ -739,7 +739,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	tlConfig, err := newTaskListConfig(tlID, s.matchingEngine.config, s.domainCache)
 	s.NoError(err)
 	mgr := newTaskListManagerWithRateLimiter(
-		s.matchingEngine, tlID, tlKind, tlConfig,
+		s.matchingEngine, tlID, tlKind, s.domainCache, tlConfig,
 		newRateLimiter(&dPtr, dispatchTTL, _minBurst),
 	)
 	s.matchingEngine.updateTaskList(tlID, mgr)

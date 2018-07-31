@@ -66,7 +66,9 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != currentClusterName {
-			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(clusterName, shard, historyService, visibilityMgr, logger)
+			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
+				clusterName, shard, historyService, visibilityMgr, matchingClient, logger,
+			)
 		}
 	}
 

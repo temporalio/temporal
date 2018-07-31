@@ -23,6 +23,7 @@ package history
 import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
@@ -36,7 +37,6 @@ type (
 		historyService     *historyEngineImpl
 		options            *QueueProcessorOptions
 		executionManager   persistence.ExecutionManager
-		visibilityMgr      persistence.VisibilityManager
 		cache              *historyCache
 		transferTaskFilter transferTaskFilter
 		logger             bark.Logger
@@ -47,8 +47,12 @@ type (
 	}
 )
 
+var (
+	postActionNoOp = func() error { return nil }
+)
+
 func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager, logger bark.Logger) *transferQueueStandbyProcessorImpl {
+	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client, logger bark.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -80,17 +84,18 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	}
 
 	processor := &transferQueueStandbyProcessorImpl{
-		clusterName:                clusterName,
-		shard:                      shard,
-		historyService:             historyService,
-		options:                    options,
-		executionManager:           shard.GetExecutionManager(),
-		visibilityMgr:              visibilityMgr,
-		cache:                      historyService.historyCache,
-		transferTaskFilter:         transferTaskFilter,
-		logger:                     logger,
-		metricsClient:              historyService.metricsClient,
-		transferQueueProcessorBase: newTransferQueueProcessorBase(shard, options, maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown),
+		clusterName:        clusterName,
+		shard:              shard,
+		historyService:     historyService,
+		options:            options,
+		executionManager:   shard.GetExecutionManager(),
+		cache:              historyService.historyCache,
+		transferTaskFilter: transferTaskFilter,
+		logger:             logger,
+		metricsClient:      historyService.metricsClient,
+		transferQueueProcessorBase: newTransferQueueProcessorBase(
+			shard, options, visibilityMgr, matchingClient, maxReadAckLevel, updateClusterAckLevel, transferQueueShutdown, logger,
+		),
 	}
 	queueAckMgr := newQueueAckMgr(shard, options, processor, shard.GetTransferClusterAckLevel(clusterName), logger)
 	queueProcessorBase := newQueueProcessorBase(clusterName, shard, options, processor, queueAckMgr, logger)
@@ -163,6 +168,7 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskActivityScope, metrics.TaskLatency)
 	defer sw.Stop()
 
+	var activityScheduleToStartTimeout *int32
 	processTaskIfClosed := false
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		activityInfo, isPending := msBuilder.GetActivityInfo(transferTask.ScheduleID)
@@ -177,10 +183,26 @@ func (t *transferQueueStandbyProcessorImpl) processActivityTask(transferTask *pe
 			return nil
 		}
 
+		now := t.shard.GetCurrentTime(t.clusterName)
+		pushToMatching := now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
 		if activityInfo.StartedID == common.EmptyEventID {
-			return ErrTaskRetry
+			if !pushToMatching {
+				return ErrTaskRetry
+			}
+
+			activityScheduleToStartTimeout = common.Int32Ptr(common.MinInt32(activityInfo.ScheduleToStartTimeout, common.MaxTaskTimeout))
+			return nil
 		}
+
 		return nil
+	}, func() error {
+		if activityScheduleToStartTimeout == nil {
+			return nil
+		}
+
+		timeout := common.MinInt32(*activityScheduleToStartTimeout, common.MaxTaskTimeout)
+		err := t.pushActivity(transferTask, timeout)
+		return err
 	})
 }
 
@@ -189,16 +211,36 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 	sw := t.metricsClient.StartTimer(metrics.TransferStandbyTaskDecisionScope, metrics.TaskLatency)
 	defer sw.Stop()
 
+	var decisionScheduleToStartTimeout *int32
+	var tasklist *workflow.TaskList
 	processTaskIfClosed := false
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(transferTask.WorkflowID),
+		RunId:      common.StringPtr(transferTask.RunID),
+	}
+
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 		decisionInfo, isPending := msBuilder.GetPendingDecision(transferTask.ScheduleID)
 
+		executionInfo := msBuilder.GetExecutionInfo()
+		workflowTimeout := executionInfo.WorkflowTimeout
+		decisionTimeout := common.MinInt32(workflowTimeout, common.MaxTaskTimeout)
+		wfTypeName := executionInfo.WorkflowTypeName
+		startTimestamp := executionInfo.StartTimestamp
+
+		markWorkflowAsOpen := transferTask.ScheduleID <= common.FirstEventID+2 && msBuilder.IsWorkflowExecutionRunning()
+
 		if !isPending {
-			if transferTask.ScheduleID <= common.FirstEventID+2 {
-				return t.recordWorkflowStarted(msBuilder)
+			if markWorkflowAsOpen {
+				err := t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
+				if err != nil {
+					return err
+				}
 			}
 			return nil
 		}
+
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, decisionInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return err
@@ -206,15 +248,31 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 			return nil
 		}
 
-		if decisionInfo.StartedID == common.EmptyEventID {
-			return ErrTaskRetry
+		if markWorkflowAsOpen {
+			err = t.recordWorkflowStarted(transferTask.DomainID, execution, wfTypeName, startTimestamp.UnixNano(), workflowTimeout)
 		}
 
-		if transferTask.ScheduleID <= common.FirstEventID+2 {
-			return t.recordWorkflowStarted(msBuilder)
+		now := t.shard.GetCurrentTime(t.clusterName)
+		pushToMatching := now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
+		if decisionInfo.StartedID == common.EmptyEventID {
+			if !pushToMatching {
+				return ErrTaskRetry
+			}
+
+			decisionScheduleToStartTimeout = common.Int32Ptr(decisionTimeout)
+			tasklist = &workflow.TaskList{Name: &transferTask.TaskList}
+			return nil
 		}
 
 		return nil
+	}, func() error {
+		if decisionScheduleToStartTimeout == nil {
+			return nil
+		}
+
+		timeout := common.MinInt32(*decisionScheduleToStartTimeout, common.MaxTaskTimeout)
+		err := t.pushDecision(transferTask, tasklist, timeout)
+		return err
 	})
 }
 
@@ -224,12 +282,25 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 	defer sw.Stop()
 
 	processTaskIfClosed := true
+
+	execution := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(transferTask.WorkflowID),
+		RunId:      common.StringPtr(transferTask.RunID),
+	}
+
 	return t.processTransfer(processTaskIfClosed, transferTask, func(msBuilder mutableState) error {
 
 		if msBuilder.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
 			return nil
 		}
+
+		executionInfo := msBuilder.GetExecutionInfo()
+		workflowTypeName := executionInfo.WorkflowTypeName
+		workflowStartTimestamp := executionInfo.StartTimestamp.UnixNano()
+		workflowCloseTimestamp := msBuilder.GetLastUpdatedTimestamp()
+		workflowCloseStatus := getWorkflowExecutionCloseStatus(executionInfo.CloseStatus)
+		workflowHistoryLength := msBuilder.GetNextEventID()
 
 		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.DomainID, msBuilder.GetLastWriteVersion(), transferTask.Version, transferTask)
 		if err != nil {
@@ -241,21 +312,10 @@ func (t *transferQueueStandbyProcessorImpl) processCloseExecution(transferTask *
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 
-		// Record closing in visibility store
-		retentionSeconds := int64(0)
-		domainEntry, err := t.shard.GetDomainCache().GetDomainByID(transferTask.DomainID)
-		if err != nil {
-			if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-				return err
-			}
-			// it is possible that the domain got deleted. Use default retention.
-		} else {
-			// retention in domain config is in days, convert to seconds
-			retentionSeconds = int64(domainEntry.GetConfig().Retention) * 24 * 60 * 60
-		}
-
-		return t.recordWorkflowClosed(msBuilder, retentionSeconds)
-	})
+		return t.recordWorkflowClosed(
+			transferTask.DomainID, execution, workflowTypeName, workflowStartTimestamp, workflowCloseTimestamp, workflowCloseStatus, workflowHistoryLength,
+		)
+	}, postActionNoOp)
 }
 
 func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask *persistence.TransferTaskInfo) error {
@@ -278,7 +338,7 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 		}
 
 		return ErrTaskRetry
-	})
+	}, postActionNoOp)
 }
 
 func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask *persistence.TransferTaskInfo) error {
@@ -301,7 +361,7 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 		}
 
 		return ErrTaskRetry
-	})
+	}, postActionNoOp)
 }
 
 func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferTask *persistence.TransferTaskInfo) error {
@@ -327,10 +387,11 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 			return ErrTaskRetry
 		}
 		return nil
-	})
+	}, postActionNoOp)
 }
 
-func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo, fn func(mutableState) error) (retError error) {
+func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed bool, transferTask *persistence.TransferTaskInfo,
+	action func(mutableState) error, postAction func() error) (retError error) {
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(transferTask))
 	if err != nil {
 		return err
@@ -355,7 +416,14 @@ func (t *transferQueueStandbyProcessorImpl) processTransfer(processTaskIfClosed 
 		return nil
 	}
 
-	return fn(msBuilder)
+	err = action(msBuilder)
+	if err != nil {
+		return err
+	}
+
+	release(nil)
+	err = postAction()
+	return err
 }
 
 func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(transferTask *persistence.TransferTaskInfo) (string, workflow.WorkflowExecution) {
@@ -363,35 +431,4 @@ func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(tran
 		WorkflowId: common.StringPtr(transferTask.WorkflowID),
 		RunId:      common.StringPtr(transferTask.RunID),
 	}
-}
-
-func (t *transferQueueStandbyProcessorImpl) recordWorkflowStarted(msBuilder mutableState) error {
-	executionInfo := msBuilder.GetExecutionInfo()
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
-		DomainUUID: executionInfo.DomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-			RunId:      common.StringPtr(executionInfo.RunID),
-		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
-		WorkflowTimeout:  int64(executionInfo.WorkflowTimeout),
-	})
-}
-
-func (t *transferQueueStandbyProcessorImpl) recordWorkflowClosed(msBuilder mutableState, retentionSeconds int64) error {
-	executionInfo := msBuilder.GetExecutionInfo()
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-		DomainUUID: executionInfo.DomainID,
-		Execution: workflow.WorkflowExecution{
-			WorkflowId: common.StringPtr(executionInfo.WorkflowID),
-			RunId:      common.StringPtr(executionInfo.RunID),
-		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTimestamp:   executionInfo.StartTimestamp.UnixNano(),
-		CloseTimestamp:   msBuilder.GetLastUpdatedTimestamp(),
-		Status:           getWorkflowExecutionCloseStatus(executionInfo.CloseStatus),
-		HistoryLength:    msBuilder.GetNextEventID(),
-		RetentionSeconds: retentionSeconds,
-	})
 }
