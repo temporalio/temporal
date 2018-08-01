@@ -20,12 +20,11 @@ cd $GOPATH/src/github.com/uber/cadence
 
 ## Dependency management
 
-Dependencies are tracked via `glide.yaml`. If you're not familiar with `glide`,
-read the [docs](https://github.com/Masterminds/glide#usage).
-After you install gide, run below command to get all dependencies into vendor folder.
-```bash
-glide up
-```
+Dependencies are recorded in `Gopkg.toml` and managed by dep. If you're not 
+familiar with dep, read the [docs](https://golang.github.io/dep/). The Makefile 
+will call `install-dep.sh` to install dep on Mac or Linux. You can use this 
+script directly, but it will be run automatically with  `make` commands. To 
+check dependencies, run `dep ensure`. 
 
 ## Licence headers
 

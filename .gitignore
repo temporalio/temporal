@@ -9,6 +9,7 @@
 .tmp/
 .vscode/
 /vendor
+/_vendor-*
 /cadence
 .DS_Store
 test
