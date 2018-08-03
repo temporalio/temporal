@@ -136,7 +136,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 			standbyClusterName = cluster
 		}
 	}
-	// the ack manager is exclusive, so just add a cassandra min presicition
+	// the ack manager is exclusive, so just add a cassandra min precision
 	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
 	// we should consider make the failover idempotent

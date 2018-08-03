@@ -284,13 +284,17 @@ func (s *timerQueueProcessor2Suite) TestWorkflowTimeout() {
 	// Start timer Processor.
 	emptyResponse := &persistence.GetTimerIndexTasksResponse{Timers: []*persistence.TimerTaskInfo{}}
 	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
-		// Done.
 		waitCh <- struct{}{}
 	}).Once()
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil).Run(func(arguments mock.Arguments) {
+		waitCh <- struct{}{}
+	}).Once() // for lookAheadTask
 	s.mockHistoryEngine.timerProcessor.(*timerQueueProcessorImpl).activeTimerProcessor.Start()
 	<-waitCh
+	<-waitCh
 
-	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil)
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(timerIndexResponse, nil).Once()
+	s.mockExecutionMgr.On("GetTimerIndexTasks", mock.Anything).Return(emptyResponse, nil) // for lookAheadTask
 	s.mockHistoryEngine.timerProcessor.NotifyNewTimers(
 		cluster.TestCurrentClusterName,
 		s.mockShard.GetCurrentTime(cluster.TestCurrentClusterName),

@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	timerQueueAckMgrMaxQueryLevel = time.Unix(0, math.MaxInt64)
+	maximumTime = time.Unix(0, math.MaxInt64)
 )
 
 type (
@@ -49,8 +49,6 @@ type (
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
 		timerQueueShutdown  timerQueueShutdown
-		// immutable max possible timer level
-		maxQueryLevel time.Time
 		// isReadFinished indicate timer queue ack manager
 		// have no more task to send out
 		isReadFinished bool
@@ -64,10 +62,11 @@ type (
 		outstandingTasks map[TimerSequenceID]bool
 		// timer task ack level
 		ackLevel TimerSequenceID
-		// timer task read level
+		// timer task read level, used by failover
 		readLevel TimerSequenceID
-		// mutable min timer level
+		// mutable timer level
 		minQueryLevel time.Time
+		maxQueryLevel time.Time
 		pageToken     []byte
 	}
 	// for each cluster, the ack level is the point in time when
@@ -98,7 +97,6 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client,
 	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger bark.Logger) *timerQueueAckMgrImpl {
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
-	maxQueryLevel := timerQueueAckMgrMaxQueryLevel
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		scope:               scope,
@@ -116,7 +114,7 @@ func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Cl
 		readLevel:           ackLevel,
 		minQueryLevel:       ackLevel.VisibilityTimestamp,
 		pageToken:           nil,
-		maxQueryLevel:       maxQueryLevel,
+		maxQueryLevel:       ackLevel.VisibilityTimestamp,
 		isReadFinished:      false,
 		finishedChan:        nil,
 	}
@@ -159,11 +157,12 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 }
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
-	t.Lock()
+	if t.maxQueryLevel == t.minQueryLevel {
+		t.maxQueryLevel = t.shard.UpdateTimerMaxReadLevel()
+	}
 	minQueryLevel := t.minQueryLevel
 	maxQueryLevel := t.maxQueryLevel
 	pageToken := t.pageToken
-	t.Unlock()
 
 	var tasks []*persistence.TimerTaskInfo
 	morePage := false
@@ -174,11 +173,11 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *
 			return nil, nil, false, err
 		}
 		morePage = len(pageToken) != 0
-		t.logger.Debugf("readTimerTasks: ReadLevel: (%s) count: %v, more timer: %v", minQueryLevel, len(tasks), morePage)
+		t.logger.Debugf("readTimerTasks: minQueryLevel: (%s), maxQueryLevel: (%s), count: %v, more timer: %v",
+			minQueryLevel, maxQueryLevel, len(tasks), morePage)
 	}
 
 	t.Lock()
-	defer t.Unlock()
 	t.pageToken = pageToken
 	if t.isFailover && !morePage {
 		t.isReadFinished = true
@@ -203,23 +202,34 @@ TaskFilterLoop:
 		}
 
 		if !t.isProcessNow(task.VisibilityTimestamp) {
-			lookAheadTask = task
+			lookAheadTask = task                       // this means there is task in the time range (now, now + offset)
+			t.maxQueryLevel = task.VisibilityTimestamp // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
 
 		t.logger.Debugf("Moving timer read level: (%s)", timerSequenceID)
 		t.readLevel = timerSequenceID
+
 		t.outstandingTasks[timerSequenceID] = false
 		filteredTasks = append(filteredTasks, task)
 	}
 
-	if lookAheadTask != nil || t.pageToken == nil {
-		if !t.isReadFinished {
-			t.minQueryLevel = t.readLevel.VisibilityTimestamp
+	if lookAheadTask != nil || !morePage {
+		if t.isReadFinished {
+			t.minQueryLevel = maximumTime // set it to the maximum time to avoid any mistakenly read
 		} else {
 			t.minQueryLevel = t.maxQueryLevel
 		}
+		t.logger.Debugf("Moved timer minQueryLevel: (%s)", t.minQueryLevel)
 		t.pageToken = nil
+	}
+	t.Unlock()
+
+	if len(t.pageToken) == 0 && lookAheadTask == nil {
+		lookAheadTask, err = t.readLookAheadTask()
+		if err != nil {
+			return nil, nil, false, err
+		}
 	}
 
 	// We may have large number of timers which need to be fired immediately.  Return true in such case so the pump
@@ -227,6 +237,23 @@ TaskFilterLoop:
 	moreTasks := lookAheadTask == nil && morePage
 
 	return filteredTasks, lookAheadTask, moreTasks, nil
+}
+
+// read lookAheadTask from s.GetTimerMaxReadLevel to poll interval from there.
+func (t *timerQueueAckMgrImpl) readLookAheadTask() (*persistence.TimerTaskInfo, error) {
+	minQueryLevel := t.maxQueryLevel
+	maxQueryLevel := maximumTime
+
+	var tasks []*persistence.TimerTaskInfo
+	var err error
+	tasks, _, err = t.getTimerTasks(minQueryLevel, maxQueryLevel, 1, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(tasks) == 1 {
+		return tasks[0], nil
+	}
+	return nil, nil
 }
 
 func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
@@ -237,16 +264,16 @@ func (t *timerQueueAckMgrImpl) completeTimerTask(timerTask *persistence.TimerTas
 	t.outstandingTasks[timerSequenceID] = true
 }
 
-func (t *timerQueueAckMgrImpl) getAckLevel() TimerSequenceID {
-	t.Lock()
-	defer t.Unlock()
-	return t.ackLevel
-}
-
 func (t *timerQueueAckMgrImpl) getReadLevel() TimerSequenceID {
 	t.Lock()
 	defer t.Unlock()
 	return t.readLevel
+}
+
+func (t *timerQueueAckMgrImpl) getAckLevel() TimerSequenceID {
+	t.Lock()
+	defer t.Unlock()
+	return t.ackLevel
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() {
@@ -282,7 +309,7 @@ MoveAckLevelLoop:
 	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
 		t.Unlock()
 		// this means in failover mode, all possible failover timer tasks
-		// are processed and we are free to shundown
+		// are processed and we are free to shutdown
 		t.logger.Debugf("Timer ack manager shutdown.")
 		t.finishedChan <- struct{}{}
 		t.timerQueueShutdown()
@@ -319,5 +346,8 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 }
 
 func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
-	return !expiryTime.IsZero() && expiryTime.UnixNano() <= t.timeNow().UnixNano()
+	if expiryTime.IsZero() { // return true, but somewhere probably have bug creating empty timerTask.
+		t.logger.Warn("Timer task has timestamp zero")
+	}
+	return expiryTime.UnixNano() <= t.timeNow().UnixNano()
 }

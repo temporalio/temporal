@@ -75,6 +75,7 @@ type (
 		logger                    bark.Logger
 		metricsClient             metrics.Client
 		standbyClusterCurrentTime map[string]time.Time
+		timerMaxReadLevel         time.Time
 	}
 
 	// TestBase wraps the base setup needed to create workflows over engine layer.
@@ -117,6 +118,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 		logger:                    logger,
 		metricsClient:             metricsClient,
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
+		timerMaxReadLevel:         shardInfo.TimerAckLevel,
 	}
 }
 
@@ -333,6 +335,14 @@ func (s *TestShardContext) CreateWorkflowExecution(request *persistence.CreateWo
 func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	for _, task := range request.TimerTasks {
+		ts := persistence.GetVisibilityTSFrom(task)
+		if ts.Before(s.timerMaxReadLevel) {
+			// This can happen if shard move and new host have a time SKU, or there is db write delay.
+			// We generate a new timer ID using timerMaxReadLevel.
+			s.logger.Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+				time.Now(), ts, s.timerMaxReadLevel)
+			persistence.SetVisibilityTSFrom(task, s.timerMaxReadLevel.Add(time.Millisecond))
+		}
 		seqID, err := s.GetNextTransferTaskID()
 		if err != nil {
 			panic(err)
@@ -342,6 +352,20 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 			time.Now().UTC(), persistence.GetVisibilityTSFrom(task).UTC(), task.GetTaskID())
 	}
 	return s.executionMgr.UpdateWorkflowExecution(request)
+}
+
+// UpdateTimerMaxReadLevel test implementation
+func (s *TestShardContext) UpdateTimerMaxReadLevel() time.Time {
+	s.Lock()
+	defer s.Unlock()
+	s.timerMaxReadLevel = s.GetTimeSource().Now().Add(s.GetConfig().TimerProcessorMaxTimeShift())
+	return s.timerMaxReadLevel
+}
+
+// GetTimerMaxReadLevel test implementation
+func (s *TestShardContext) GetTimerMaxReadLevel() time.Time {
+	// This test method is called with shard lock
+	return s.timerMaxReadLevel
 }
 
 // ResetMutableState test implementation

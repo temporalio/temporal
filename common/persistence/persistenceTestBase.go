@@ -871,7 +871,7 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 	})
 }
 
-// GetTimerIndexTasks is a utility method to get tasks from transfer task queue
+// GetTimerIndexTasks is a utility method to get tasks from task queue
 func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*TimerTaskInfo, error) {
 	result := []*TimerTaskInfo{}
 	var token []byte
