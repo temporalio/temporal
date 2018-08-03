@@ -76,10 +76,14 @@ var (
 	// the target workflow has done continue as new.
 	// try this task again after a small delay.
 	ErrRetryExecutionAlreadyStarted = &shared.RetryTaskError{Message: "another workflow execution is running"}
-	// ErrMissingReplicationInfo is returned when replication task is missing replication information from source cluster
-	ErrMissingReplicationInfo = &shared.BadRequestError{Message: "replication task is missing cluster replication info"}
 	// ErrCorruptedReplicationInfo is returned when replication task has corrupted replication information from source cluster
 	ErrCorruptedReplicationInfo = &shared.BadRequestError{Message: "replication task is has corrupted cluster replication info"}
+	// ErrMoreThan2DC is returned when there are more than 2 data center
+	ErrMoreThan2DC = &shared.BadRequestError{Message: "more than 2 data center"}
+	// ErrImpossibleLocalRemoteMissingReplicationInfo is returned when replication task is missing replication info, as well as local replication info being empty
+	ErrImpossibleLocalRemoteMissingReplicationInfo = &shared.BadRequestError{Message: "local and remote both are missing replication info"}
+	// ErrImpossibleRemoteClaimSeenHigherVersion is returned when replication info contains higher version then this cluster ever emitted.
+	ErrImpossibleRemoteClaimSeenHigherVersion = &shared.BadRequestError{Message: "replication info contains higher version then this cluster ever emitted"}
 )
 
 func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, historyCache *historyCache, domainCache cache.DomainCache,
@@ -269,6 +273,9 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 
 	// we have rState.LastWriteVersion < incomingVersion
 
+	// the code below only deal with 2 data center case
+	// for multiple data center cases, wait for #840
+
 	// Check if this is the first event after failover
 	previousActiveCluster := r.clusterMetadata.ClusterNameForFailoverVersion(rState.LastWriteVersion)
 	logger.WithFields(bark.Fields{
@@ -276,21 +283,51 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		logging.TagReplicationInfo:   request.ReplicationInfo,
 	})
 	logger.Info("First Event after replication.")
-	ri, ok := replicationInfo[previousActiveCluster]
-	if !ok {
-		// it is possible that a workflow will not generate any event in few rounds of failover
-		// meaning that the incoming version > last write version and
-		// (incoming version - last write version) % failover version increment == 0
+
+	// first check whether the replication info
+	// the reason is, if current cluster was active, and sent out replication task
+	// to remote, there is no guarantee that the replication task is going to be applied,
+	// if not applied, the replication info will not be up to date.
+
+	if previousActiveCluster != r.clusterMetadata.GetCurrentClusterName() {
+		// this cluster is previously NOT active, this also means there is no buffered event
 		if r.clusterMetadata.IsVersionFromSameCluster(incomingVersion, rState.LastWriteVersion) {
+			// it is possible that a workflow will not generate any event in few rounds of failover
+			// meaning that the incoming version > last write version and
+			// (incoming version - last write version) % failover version increment == 0
 			return msBuilder, nil
 		}
 
-		r.logError(logger, "No ReplicationInfo Found For Previous Active Cluster.", ErrMissingReplicationInfo)
-		// TODO: Handle missing replication information, #840
-		// Returning BadRequestError to force the message to land into DLQ
-		return nil, ErrMissingReplicationInfo
+		err = ErrMoreThan2DC
+		r.logError(logger, err.Error(), err)
+		return nil, err
 	}
 
+	// previousActiveCluster == current cluster
+	ri, ok := replicationInfo[previousActiveCluster]
+	// this cluster is previously active, we need to check whether the events is applied by remote cluster
+	if !ok || rState.LastWriteVersion > ri.GetVersion() {
+		logger.Info("Encounter case where events are rejected by remote.")
+		// use the last valid version && event ID to do a reset
+		lastValidVersion, lastValidEventID := r.getLatestCheckpoint(replicationInfo, rState.LastReplicationInfo)
+
+		if lastValidVersion == common.EmptyVersion {
+			err = ErrImpossibleLocalRemoteMissingReplicationInfo
+			r.logError(logger, err.Error(), err)
+			return nil, err
+		}
+		logger.Info("Reset to latest common checkpoint.")
+
+		// NOTE: this conflict resolution do not handle fast >= 2 failover
+		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, logger)
+	}
+	if rState.LastWriteVersion < ri.GetVersion() {
+		err = ErrImpossibleRemoteClaimSeenHigherVersion
+		r.logError(logger, err.Error(), err)
+		return nil, err
+	}
+
+	// remote replication info last write version is the same as local last write version, check reset
 	// Detect conflict
 	if ri.GetLastEventId() > rState.LastWriteEventID {
 		// if there is any bug in the replication protocol or implementation, this case can happen
@@ -305,21 +342,10 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		// the actual action of those buffered event are already applied to mutable state.
 
 		logger.Info("Conflict detected.")
-		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.HistoryConflictsCounter)
-
-		// handling edge case when resetting a workflow, and this workflow has done continue
-		// we need to terminate the continue as new-ed workflow
-		err = r.conflictResolutionTerminateContinueAsNew(ctx, msBuilder, logger)
-		if err != nil {
-			return nil, err
-		}
-		resolver := r.getNewConflictResolver(context, logger)
-		msBuilder, err = resolver.reset(uuid.New(), ri.GetLastEventId(), msBuilder.GetExecutionInfo().StartTimestamp)
-		logger.Info("Completed Resetting of workflow execution.")
-		if err != nil {
-			return nil, err
-		}
+		return r.resetMutableState(ctx, context, msBuilder, ri.GetLastEventId(), logger)
 	}
+
+	// event ID match, no reset
 	return msBuilder, nil
 }
 
@@ -866,6 +892,51 @@ func (r *historyReplicator) terminateWorkflow(ctx context.Context, domainID stri
 			Identity: common.StringPtr("worker-service"),
 		},
 	})
+}
+
+func (r *historyReplicator) getLatestCheckpoint(replicationInfoRemote map[string]*h.ReplicationInfo,
+	replicationInfoLocal map[string]*persistence.ReplicationInfo) (int64, int64) {
+
+	// this only applies to 2 data center case
+
+	lastValidVersion := common.EmptyVersion
+	lastValidEventID := common.EmptyEventID
+
+	for _, ri := range replicationInfoRemote {
+		if lastValidVersion == common.EmptyVersion || ri.GetVersion() > lastValidVersion {
+			lastValidVersion = ri.GetVersion()
+			lastValidEventID = ri.GetLastEventId()
+		}
+	}
+
+	for _, ri := range replicationInfoLocal {
+		if lastValidVersion == common.EmptyVersion || ri.Version > lastValidVersion {
+			lastValidVersion = ri.Version
+			lastValidEventID = ri.LastEventID
+		}
+	}
+
+	return lastValidVersion, lastValidEventID
+}
+
+func (r *historyReplicator) resetMutableState(ctx context.Context, context *workflowExecutionContext,
+	msBuilder mutableState, lastEventID int64, logger bark.Logger) (mutableState, error) {
+
+	r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.HistoryConflictsCounter)
+
+	// handling edge case when resetting a workflow, and this workflow has done continue as new
+	// we need to terminate the continue as new-ed workflow
+	err := r.conflictResolutionTerminateContinueAsNew(ctx, msBuilder, logger)
+	if err != nil {
+		return nil, err
+	}
+	resolver := r.getNewConflictResolver(context, logger)
+	msBuilder, err = resolver.reset(uuid.New(), lastEventID, msBuilder.GetExecutionInfo().StartTimestamp)
+	logger.Info("Completed Resetting of workflow execution.")
+	if err != nil {
+		return nil, err
+	}
+	return msBuilder, nil
 }
 
 func (r *historyReplicator) updateBufferedReplicationTask(context *workflowExecutionContext, msBuilder mutableState) error {

@@ -285,144 +285,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingEqu
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_ResolveConflict() {
-	domainID := validDomainID
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-
-	currentLastWriteVersion := int64(10)
-	currentLastEventID := int64(98)
-	incomingVersion := currentLastWriteVersion + 10
-	incomingLastEventID := currentLastEventID - 10
-
-	prevActiveCluster := cluster.TestAlternativeClusterName
-	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}, s.mockShard, s.mockExecutionMgr, s.logger)
-	msBuilderIn := &mockMutableState{}
-	context.msBuilder = msBuilderIn
-
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*h.ReplicationInfo{prevActiveCluster: &h.ReplicationInfo{
-			LastEventId: common.Int64Ptr(incomingLastEventID),
-		}},
-		History: &shared.History{},
-	}
-	startTimeStamp := time.Now()
-	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
-		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
-	})
-	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
-
-	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
-		return mockConflictResolver
-	}
-	msBuilderMid := &mockMutableState{}
-	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", mock.Anything, incomingLastEventID, startTimeStamp).Return(msBuilderMid, nil)
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
-	s.Equal(msBuilderMid, msBuilderOut)
-	s.Nil(err)
-}
-
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_ResolveConflict_OtherCase() {
-	// other cases will be tested in TestConflictResolutionTerminateContinueAsNew
-}
-
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_NoBufferedEvent_NoOp() {
-	domainID := validDomainID
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-
-	currentLastWriteVersion := int64(10)
-	currentLastEventID := int64(98)
-	incomingVersion := currentLastWriteVersion + 10
-	incomingLastEventID := currentLastEventID
-
-	prevActiveCluster := cluster.TestAlternativeClusterName
-	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}, s.mockShard, s.mockExecutionMgr, s.logger)
-	msBuilderIn := &mockMutableState{}
-	context.msBuilder = msBuilderIn
-
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*h.ReplicationInfo{prevActiveCluster: &h.ReplicationInfo{
-			LastEventId: common.Int64Ptr(incomingLastEventID),
-		}},
-		History: &shared.History{},
-	}
-	startTimeStamp := time.Now()
-	msBuilderIn.On("HasBufferedEvents").Return(false)
-	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
-		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
-	})
-	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
-
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
-		request, s.logger)
-	s.Equal(msBuilderIn, msBuilderOut)
-	s.Nil(err)
-}
-
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_HasBufferedEvent_ResolveConflict() {
-	domainID := validDomainID
-	workflowID := "some random workflow ID"
-	runID := uuid.New()
-
-	currentLastWriteVersion := int64(10)
-	currentLastEventID := int64(98)
-	incomingVersion := currentLastWriteVersion + 10
-	incomingLastEventID := currentLastEventID
-
-	prevActiveCluster := cluster.TestAlternativeClusterName
-	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
-		WorkflowId: common.StringPtr(workflowID),
-		RunId:      common.StringPtr(runID),
-	}, s.mockShard, s.mockExecutionMgr, s.logger)
-	msBuilderIn := &mockMutableState{}
-	context.msBuilder = msBuilderIn
-
-	request := &h.ReplicateEventsRequest{
-		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*h.ReplicationInfo{prevActiveCluster: &h.ReplicationInfo{
-			LastEventId: common.Int64Ptr(incomingLastEventID),
-		}},
-		History: &shared.History{},
-	}
-	startTimeStamp := time.Now()
-	msBuilderIn.On("HasBufferedEvents").Return(true)
-	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
-		LastWriteVersion: currentLastWriteVersion,
-		LastWriteEventID: currentLastEventID,
-	})
-	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
-	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
-	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
-
-	mockConflictResolver := &mockConflictResolver{}
-	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
-		return mockConflictResolver
-	}
-	msBuilderMid := &mockMutableState{}
-	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
-	mockConflictResolver.On("reset", mock.Anything, incomingLastEventID, startTimeStamp).Return(msBuilderMid, nil)
-	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
-	s.Equal(msBuilderMid, msBuilderOut)
-	s.Nil(err)
-}
-
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_MissingReplicationInfo_SameCluster() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasNotActive_SameCluster() {
 	domainID := validDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -454,7 +317,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_MissingReplicationInfo_DiffCluster() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasNotActive_DiffCluster() {
 	domainID := validDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -483,20 +346,76 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
 		request, s.logger)
 	s.Nil(msBuilderOut)
-	s.Equal(ErrMissingReplicationInfo, err)
+	s.Equal(ErrMoreThan2DC, err)
 }
 
-func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_Err() {
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_MissingReplicationInfo() {
 	domainID := validDomainID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 
 	currentLastWriteVersion := int64(10)
 	currentLastEventID := int64(98)
+	currentReplicationInfoLastWriteVersion := currentLastWriteVersion - 10
+	currentReplicationInfoLastEventID := currentLastEventID - 11
 	incomingVersion := currentLastWriteVersion + 10
-	incomingLastEventID := currentLastEventID + 10
 
-	prevActiveCluster := cluster.TestAlternativeClusterName
+	incomingActiveCluster := cluster.TestAlternativeClusterName
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version:         common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{},
+		History:         &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+			incomingActiveCluster: &persistence.ReplicationInfo{
+				Version:     currentReplicationInfoLastWriteVersion,
+				LastEventID: currentReplicationInfoLastEventID,
+			},
+		},
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	mockConflictResolver := &mockConflictResolver{}
+	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
+		return mockConflictResolver
+	}
+	msBuilderMid := &mockMutableState{}
+	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
+	mockConflictResolver.On("reset", mock.Anything, currentReplicationInfoLastEventID, startTimeStamp).Return(msBuilderMid, nil)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Equal(msBuilderMid, msBuilderOut)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionLocalLarger() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(120)
+	currentLastEventID := int64(980)
+	currentReplicationInfoLastWriteVersion := currentLastWriteVersion - 20
+	currentReplicationInfoLastEventID := currentLastEventID - 15
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentReplicationInfoLastWriteVersion - 10
+	incomingReplicationInfoLastEventID := currentReplicationInfoLastEventID - 20
+
+	incomingActiveCluster := cluster.TestAlternativeClusterName
+	prevActiveCluster := cluster.TestCurrentClusterName
 	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(runID),
@@ -506,12 +425,212 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &h.ReplicateEventsRequest{
 		Version: common.Int64Ptr(incomingVersion),
-		ReplicationInfo: map[string]*h.ReplicationInfo{prevActiveCluster: &h.ReplicationInfo{
-			LastEventId: common.Int64Ptr(incomingLastEventID),
-		}},
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
 		History: &shared.History{},
 	}
 	startTimeStamp := time.Now()
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+		LastReplicationInfo: map[string]*persistence.ReplicationInfo{
+			incomingActiveCluster: &persistence.ReplicationInfo{
+				Version:     currentReplicationInfoLastWriteVersion,
+				LastEventID: currentReplicationInfoLastEventID,
+			},
+		},
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	mockConflictResolver := &mockConflictResolver{}
+	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
+		return mockConflictResolver
+	}
+	msBuilderMid := &mockMutableState{}
+	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
+	mockConflictResolver.On("reset", mock.Anything, currentReplicationInfoLastEventID, startTimeStamp).Return(msBuilderMid, nil)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Equal(msBuilderMid, msBuilderOut)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionLocalSmaller() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	currentLastEventID := int64(98)
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastEventID := currentLastEventID
+
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
+		History: &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Nil(msBuilderOut)
+	s.Equal(ErrImpossibleRemoteClaimSeenHigherVersion, err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_ResolveConflict() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	currentLastEventID := int64(98)
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
+	incomingReplicationInfoLastEventID := currentLastEventID - 10
+
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
+		History: &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	mockConflictResolver := &mockConflictResolver{}
+	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
+		return mockConflictResolver
+	}
+	msBuilderMid := &mockMutableState{}
+	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
+	mockConflictResolver.On("reset", mock.Anything, incomingReplicationInfoLastEventID, startTimeStamp).Return(msBuilderMid, nil)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Equal(msBuilderMid, msBuilderOut)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_Corrputed() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	currentLastEventID := int64(98)
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
+	incomingReplicationInfoLastEventID := currentLastEventID + 10
+
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
+		History: &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Nil(msBuilderOut)
+	s.Equal(ErrCorruptedReplicationInfo, err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_ResolveConflict_OtherCase() {
+	// other cases will be tested in TestConflictResolutionTerminateContinueAsNew
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_NoBufferedEvent_NoOp() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	currentLastEventID := int64(98)
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
+	incomingReplicationInfoLastEventID := currentLastEventID
+
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
+		History: &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("HasBufferedEvents").Return(false)
 	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
 		LastWriteVersion: currentLastWriteVersion,
 		LastWriteEventID: currentLastEventID,
@@ -521,8 +640,59 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn,
 		request, s.logger)
-	s.Nil(msBuilderOut)
-	s.Equal(ErrCorruptedReplicationInfo, err)
+	s.Equal(msBuilderIn, msBuilderOut)
+	s.Nil(err)
+}
+
+func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGreaterThanCurrent_CurrentWasActive_ReplicationInfoVersionEqual_HasBufferedEvent_ResolveConflict() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	currentLastWriteVersion := int64(10)
+	currentLastEventID := int64(98)
+	incomingVersion := currentLastWriteVersion + 10
+	incomingReplicationInfoLastWriteVersion := currentLastWriteVersion
+	incomingReplicationInfoLastEventID := currentLastEventID
+
+	prevActiveCluster := cluster.TestCurrentClusterName
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilderIn := &mockMutableState{}
+	context.msBuilder = msBuilderIn
+
+	request := &h.ReplicateEventsRequest{
+		Version: common.Int64Ptr(incomingVersion),
+		ReplicationInfo: map[string]*h.ReplicationInfo{
+			prevActiveCluster: &h.ReplicationInfo{
+				Version:     common.Int64Ptr(incomingReplicationInfoLastWriteVersion),
+				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
+			},
+		},
+		History: &shared.History{},
+	}
+	startTimeStamp := time.Now()
+	msBuilderIn.On("HasBufferedEvents").Return(true)
+	msBuilderIn.On("GetReplicationState").Return(&persistence.ReplicationState{
+		LastWriteVersion: currentLastWriteVersion,
+		LastWriteEventID: currentLastEventID,
+	})
+	msBuilderIn.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{StartTimestamp: startTimeStamp})
+	msBuilderIn.On("IsWorkflowExecutionRunning").Return(true)
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", currentLastWriteVersion).Return(prevActiveCluster)
+
+	mockConflictResolver := &mockConflictResolver{}
+	s.historyReplicator.getNewConflictResolver = func(context *workflowExecutionContext, logger bark.Logger) conflictResolver {
+		return mockConflictResolver
+	}
+	msBuilderMid := &mockMutableState{}
+	msBuilderMid.On("GetNextEventID").Return(int64(12345)) // this is used by log
+	mockConflictResolver.On("reset", mock.Anything, incomingReplicationInfoLastEventID, startTimeStamp).Return(msBuilderMid, nil)
+	msBuilderOut, err := s.historyReplicator.ApplyOtherEventsVersionChecking(ctx.Background(), context, msBuilderIn, request, s.logger)
+	s.Equal(msBuilderMid, msBuilderOut)
+	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingLessThanCurrent() {
