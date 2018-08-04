@@ -63,6 +63,7 @@ type (
 		config                *Config
 		historyEventNotifier  historyEventNotifier
 		publisher             messaging.Producer
+		rateLimiter           common.TokenBucket
 		service.Service
 	}
 )
@@ -79,6 +80,7 @@ var (
 	errSourceClusterNotSet     = &gen.BadRequestError{Message: "Source Cluster not set on request."}
 	errShardIDNotSet           = &gen.BadRequestError{Message: "Shard ID not set on request."}
 	errTimestampNotSet         = &gen.BadRequestError{Message: "Timestamp not set on request."}
+	errHistoryHostThrottle     = &gen.ServiceBusyError{Message: "History host rps exceeded"}
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -94,6 +96,7 @@ func NewHandler(sVice service.Service, config *Config, shardManager persistence.
 		visibilityMgr:       visibilityMgr,
 		executionMgrFactory: executionMgrFactory,
 		tokenSerializer:     common.NewJSONTaskTokenSerializer(),
+		rateLimiter:         common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -110,13 +113,15 @@ func (h *Handler) Start() error {
 	if err0 != nil {
 		return err0
 	}
-	h.matchingServiceClient = matchingServiceClient
+	h.matchingServiceClient = matching.NewRetryableClient(matchingServiceClient, common.CreateMatchingRetryPolicy(),
+		common.IsWhitelistServiceTransientError)
 
 	historyServiceClient, err0 := h.Service.GetClientFactory().NewHistoryClient()
 	if err0 != nil {
 		return err0
 	}
-	h.historyServiceClient = historyServiceClient
+	h.historyServiceClient = hc.NewRetryableClient(historyServiceClient, common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError)
 
 	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {
@@ -177,9 +182,15 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context,
 	wrappedRequest *hist.RecordActivityTaskHeartbeatRequest) (*gen.RecordActivityTaskHeartbeatResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -189,7 +200,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRecordActivityTaskHeartbeatScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return nil, err0
 	}
 
@@ -200,13 +211,13 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordActivityTaskHeartbeatScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordActivityTaskHeartbeatScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 
@@ -218,9 +229,15 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context,
 	recordRequest *hist.RecordActivityTaskStartedRequest) (*hist.RecordActivityTaskStartedResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskStartedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRecordActivityTaskStartedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRecordActivityTaskStartedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if recordRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -229,13 +246,13 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context,
 	workflowExecution := recordRequest.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordActivityTaskStartedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	response, err2 := engine.RecordActivityTaskStarted(ctx, recordRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordActivityTaskStartedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 
@@ -250,9 +267,15 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 		recordRequest.GetDomainUUID(), recordRequest.WorkflowExecution.GetWorkflowId(),
 		common.StringDefault(recordRequest.WorkflowExecution.RunId), recordRequest.GetScheduleId())
 
-	h.metricsClient.IncCounter(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRecordDecisionTaskStartedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRecordDecisionTaskStartedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if recordRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -270,13 +293,13 @@ func (h *Handler) RecordDecisionTaskStarted(ctx context.Context,
 			recordRequest.WorkflowExecution.GetWorkflowId(),
 			recordRequest.WorkflowExecution.GetRunId(),
 			recordRequest.GetScheduleId())
-		h.updateErrorMetric(metrics.HistoryRecordDecisionTaskStartedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	response, err2 := engine.RecordDecisionTaskStarted(ctx, recordRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordDecisionTaskStartedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 
@@ -288,9 +311,15 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context,
 	wrappedRequest *hist.RespondActivityTaskCompletedRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRespondActivityTaskCompletedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRespondActivityTaskCompletedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -300,7 +329,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCompletedScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return err0
 	}
 
@@ -311,13 +340,13 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCompletedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RespondActivityTaskCompleted(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCompletedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -329,9 +358,15 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context,
 	wrappedRequest *hist.RespondActivityTaskFailedRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRespondActivityTaskFailedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRespondActivityTaskFailedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -341,7 +376,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskFailedScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return err0
 	}
 
@@ -352,13 +387,13 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskFailedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RespondActivityTaskFailed(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskFailedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -370,9 +405,15 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 	wrappedRequest *hist.RespondActivityTaskCanceledRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRespondActivityTaskCanceledScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRespondActivityTaskCanceledScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -382,7 +423,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCanceledScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return err0
 	}
 
@@ -393,13 +434,13 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCanceledScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RespondActivityTaskCanceled(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondActivityTaskCanceledScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -411,9 +452,15 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 	wrappedRequest *hist.RespondDecisionTaskCompletedRequest) (*hist.RespondDecisionTaskCompletedResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRespondDecisionTaskCompletedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -423,7 +470,7 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return nil, err0
 	}
 
@@ -440,13 +487,13 @@ func (h *Handler) RespondDecisionTaskCompleted(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	response, err2 := engine.RespondDecisionTaskCompleted(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskCompletedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 
@@ -458,9 +505,15 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
 	wrappedRequest *hist.RespondDecisionTaskFailedRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskFailedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRespondDecisionTaskFailedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRespondDecisionTaskFailedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -470,7 +523,7 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
 		err0 = &gen.BadRequestError{Message: fmt.Sprintf("Error deserializing task token. Error: %v", err0)}
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, err0)
+		h.updateErrorMetric(scope, err0)
 		return err0
 	}
 
@@ -487,13 +540,13 @@ func (h *Handler) RespondDecisionTaskFailed(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(token.WorkflowID)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RespondDecisionTaskFailed(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRespondDecisionTaskFailedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -505,9 +558,15 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 	wrappedRequest *hist.StartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryStartWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryStartWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistoryStartWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -516,14 +575,14 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context,
 	startRequest := wrappedRequest.StartRequest
 	engine, err1 := h.controller.GetEngine(*startRequest.WorkflowId)
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryStartWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	response, err2 := engine.StartWorkflowExecution(wrappedRequest)
 	if err2 != nil {
 		tmpErr := h.convertError(err2)
-		h.updateErrorMetric(metrics.HistoryStartWorkflowExecutionScope, tmpErr)
+		h.updateErrorMetric(scope, tmpErr)
 		return nil, tmpErr
 	}
 
@@ -593,9 +652,15 @@ func (h *Handler) GetMutableState(ctx context.Context,
 	getRequest *hist.GetMutableStateRequest) (*hist.GetMutableStateResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryGetMutableStateScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryGetMutableStateScope, metrics.CadenceLatency)
+	scope := metrics.HistoryGetMutableStateScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if getRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -604,13 +669,13 @@ func (h *Handler) GetMutableState(ctx context.Context,
 	workflowExecution := getRequest.Execution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryGetMutableStateScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	resp, err2 := engine.GetMutableState(ctx, getRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryGetMutableStateScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 	return resp, nil
@@ -620,9 +685,15 @@ func (h *Handler) GetMutableState(ctx context.Context,
 func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *hist.DescribeWorkflowExecutionRequest) (*gen.DescribeWorkflowExecutionResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryDescribeWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryDescribeWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistoryDescribeWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if request.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -631,13 +702,13 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *hist.D
 	workflowExecution := request.Request.Execution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryDescribeWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryDescribeWorkflowExecutionScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return nil, h.convertError(err2)
 	}
 	return resp, nil
@@ -648,9 +719,15 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context,
 	request *hist.RequestCancelWorkflowExecutionRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRequestCancelWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRequestCancelWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRequestCancelWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if request.GetDomainUUID() == "" || request.CancelRequest.GetDomain() == "" {
 		return errDomainNotSet
@@ -665,13 +742,13 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context,
 
 	engine, err1 := h.controller.GetEngine(cancelRequest.WorkflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRequestCancelWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRequestCancelWorkflowExecutionScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -684,9 +761,15 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 	wrappedRequest *hist.SignalWorkflowExecutionRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistorySignalWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistorySignalWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistorySignalWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -695,13 +778,13 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context,
 	workflowExecution := wrappedRequest.SignalRequest.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistorySignalWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.SignalWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistorySignalWorkflowExecutionScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -717,9 +800,15 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context,
 	wrappedRequest *hist.SignalWithStartWorkflowExecutionRequest) (*gen.StartWorkflowExecutionResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistorySignalWithStartWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistorySignalWithStartWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistorySignalWithStartWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -728,14 +817,14 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context,
 	signalWithStartRequest := wrappedRequest.SignalWithStartRequest
 	engine, err1 := h.controller.GetEngine(signalWithStartRequest.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistorySignalWithStartWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return nil, err1
 	}
 
 	resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
 		tmpErr := h.convertError(err2)
-		h.updateErrorMetric(metrics.HistorySignalWithStartWorkflowExecutionScope, tmpErr)
+		h.updateErrorMetric(scope, tmpErr)
 		return nil, tmpErr
 	}
 
@@ -748,9 +837,15 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context,
 	wrappedRequest *hist.RemoveSignalMutableStateRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRemoveSignalMutableStateScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRemoveSignalMutableStateScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRemoveSignalMutableStateScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -759,7 +854,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context,
 	workflowExecution := wrappedRequest.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRemoveSignalMutableStateScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
@@ -774,9 +869,15 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 	wrappedRequest *hist.TerminateWorkflowExecutionRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryTerminateWorkflowExecutionScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryTerminateWorkflowExecutionScope, metrics.CadenceLatency)
+	scope := metrics.HistoryTerminateWorkflowExecutionScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if wrappedRequest.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -785,13 +886,13 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 	workflowExecution := wrappedRequest.TerminateRequest.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.TerminateWorkflowExecution(ctx, wrappedRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryTerminateWorkflowExecutionScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -805,9 +906,15 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context,
 func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.ScheduleDecisionTaskRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryScheduleDecisionTaskScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryScheduleDecisionTaskScope, metrics.CadenceLatency)
+	scope := metrics.HistoryScheduleDecisionTaskScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if request.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -820,13 +927,13 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.Schedu
 	workflowExecution := request.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.ScheduleDecisionTask(ctx, request)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryScheduleDecisionTaskScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -838,9 +945,15 @@ func (h *Handler) ScheduleDecisionTask(ctx context.Context, request *hist.Schedu
 func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hist.RecordChildExecutionCompletedRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryRecordChildExecutionCompletedScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryRecordChildExecutionCompletedScope, metrics.CadenceLatency)
+	scope := metrics.HistoryRecordChildExecutionCompletedScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if request.GetDomainUUID() == "" {
 		return errDomainNotSet
@@ -853,13 +966,13 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	workflowExecution := request.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordChildExecutionCompletedScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryRecordChildExecutionCompletedScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -876,9 +989,15 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.ResetStickyTaskListRequest) (*hist.ResetStickyTaskListResponse, error) {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryResetStickyTaskListScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryResetStickyTaskListScope, metrics.CadenceLatency)
+	scope := metrics.HistoryResetStickyTaskListScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return nil, errHistoryHostThrottle
+	}
 
 	if resetRequest.GetDomainUUID() == "" {
 		return nil, errDomainNotSet
@@ -886,13 +1005,13 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.Re
 
 	engine, err := h.controller.GetEngine(resetRequest.Execution.GetWorkflowId())
 	if err != nil {
-		h.updateErrorMetric(metrics.HistoryResetStickyTaskListScope, err)
+		h.updateErrorMetric(scope, err)
 		return nil, err
 	}
 
 	resp, err := engine.ResetStickyTaskList(ctx, resetRequest)
 	if err != nil {
-		h.updateErrorMetric(metrics.HistoryResetStickyTaskListScope, h.convertError(err))
+		h.updateErrorMetric(scope, h.convertError(err))
 		return nil, h.convertError(err)
 	}
 
@@ -903,9 +1022,15 @@ func (h *Handler) ResetStickyTaskList(ctx context.Context, resetRequest *hist.Re
 func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.ReplicateEventsRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistoryReplicateEventsScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistoryReplicateEventsScope, metrics.CadenceLatency)
+	scope := metrics.HistoryReplicateEventsScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if replicateRequest.DomainUUID == nil {
 		return errDomainNotSet
@@ -914,13 +1039,13 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 	workflowExecution := replicateRequest.WorkflowExecution
 	engine, err1 := h.controller.GetEngine(workflowExecution.GetWorkflowId())
 	if err1 != nil {
-		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, err1)
+		h.updateErrorMetric(scope, err1)
 		return err1
 	}
 
 	err2 := engine.ReplicateEvents(ctx, replicateRequest)
 	if err2 != nil {
-		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, h.convertError(err2))
+		h.updateErrorMetric(scope, h.convertError(err2))
 		return h.convertError(err2)
 	}
 
@@ -931,9 +1056,15 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 func (h *Handler) SyncShardStatus(ctx context.Context, syncShardStatusRequest *hist.SyncShardStatusRequest) error {
 	h.startWG.Wait()
 
-	h.metricsClient.IncCounter(metrics.HistorySyncShardStatusScope, metrics.CadenceRequests)
-	sw := h.metricsClient.StartTimer(metrics.HistorySyncShardStatusScope, metrics.CadenceLatency)
+	scope := metrics.HistorySyncShardStatusScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
 	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
 
 	if syncShardStatusRequest.SourceCluster == nil {
 		return errSourceClusterNotSet
@@ -950,13 +1081,13 @@ func (h *Handler) SyncShardStatus(ctx context.Context, syncShardStatusRequest *h
 	// shard ID is already provided in the request
 	engine, err := h.controller.getEngineForShard(int(syncShardStatusRequest.GetShardId()))
 	if err != nil {
-		h.updateErrorMetric(metrics.HistoryReplicateEventsScope, err)
+		h.updateErrorMetric(scope, err)
 		return err
 	}
 
 	err = engine.SyncShardStatus(ctx, syncShardStatusRequest)
 	if err != nil {
-		h.updateErrorMetric(metrics.HistorySyncShardStatusScope, h.convertError(err))
+		h.updateErrorMetric(scope, h.convertError(err))
 		return h.convertError(err)
 	}
 
@@ -1007,6 +1138,8 @@ func (h *Handler) updateErrorMetric(scope int, err error) {
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrLimitExceededCounter)
 	case *gen.RetryTaskError:
 		h.metricsClient.IncCounter(scope, metrics.CadenceErrRetryTaskCounter)
+	case *gen.ServiceBusyError:
+		h.metricsClient.IncCounter(scope, metrics.CadenceErrServiceBusyCounter)
 	case *yarpcerrors.Status:
 		if err.Code() == yarpcerrors.CodeDeadlineExceeded {
 			h.metricsClient.IncCounter(scope, metrics.CadenceErrContextTimeoutCounter)

@@ -31,7 +31,7 @@ import (
 
 // Config represents configuration for cadence-matching service
 type Config struct {
-	PersistenceMaxQPS dynamicconfig.FloatPropertyFn
+	PersistenceMaxQPS dynamicconfig.IntPropertyFn
 	EnableSyncMatch   dynamicconfig.BoolPropertyFnWithTaskListInfoFilters
 	RPS               dynamicconfig.IntPropertyFn
 
@@ -53,7 +53,7 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		PersistenceMaxQPS:               dc.GetFloat64Property(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
+		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskListInfo(dynamicconfig.MatchingEnableSyncMatch, true),
 		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,
@@ -95,7 +95,7 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
-	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
 	taskPersistence, err := persistence.NewCassandraTaskPersistence(p.CassandraConfig.Hosts,

@@ -31,7 +31,7 @@ import (
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
-	PersistenceMaxQPS     dynamicconfig.FloatPropertyFn
+	PersistenceMaxQPS     dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithDomainFilter
 	HistoryMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
 	RPS                   dynamicconfig.IntPropertyFn
@@ -45,7 +45,7 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		PersistenceMaxQPS:              dc.GetFloat64Property(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceMaxQPS:              dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		HistoryMaxPageSize:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, 1000),
 		RPS:                            dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
@@ -81,7 +81,7 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
-	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
 	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,

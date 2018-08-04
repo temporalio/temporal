@@ -42,7 +42,7 @@ type (
 	// Config contains all the service config for worker
 	Config struct {
 		// Replicator settings
-		PersistenceMaxQPS          dynamicconfig.FloatPropertyFn
+		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
 		ReplicatorConcurrency      int
 		ReplicatorBufferRetryCount int
 		ReplicationTaskMaxRetry    int
@@ -62,7 +62,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 // NewConfig builds the new Config for cadence-worker service
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		PersistenceMaxQPS:          dc.GetFloat64Property(dynamicconfig.WorkerPersistenceMaxQPS, 500),
+		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 		ReplicatorConcurrency:      1000,
 		ReplicatorBufferRetryCount: 8,
 		ReplicationTaskMaxRetry:    5,
@@ -78,7 +78,7 @@ func (s *Service) Start() {
 	log.Infof("%v starting", common.WorkerServiceName)
 	base.Start()
 
-	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
 	s.metricsClient = base.GetMetricsClient()

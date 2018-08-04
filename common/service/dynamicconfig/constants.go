@@ -60,6 +60,7 @@ var keys = map[Key]string{
 	MaxDecisionStartToCloseTimeout: "frontend.maxDecisionStartToCloseTimeout",
 
 	// matching settings
+	MatchingRPS:                             "matching.rps",
 	MatchingPersistenceMaxQPS:               "matching.persistenceMaxQPS",
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
@@ -70,9 +71,9 @@ var keys = map[Key]string{
 	MaxTasklistIdleTime:                     "matching.maxTasklistIdleTime",
 	MatchingOutstandingTaskAppendsThreshold: "matching.outstandingTaskAppendsThreshold",
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
-	MatchingRPS:                             "matching.rps",
 
 	// history settings
+	HistoryRPS:                                            "history.rps",
 	HistoryPersistenceMaxQPS:                              "history.persistenceMaxQPS",
 	HistoryLongPollExpirationInterval:                     "history.longPollExpirationInterval",
 	HistoryCacheInitialSize:                               "history.cacheInitialSize",
@@ -167,6 +168,8 @@ const (
 
 	// key for matching
 
+	// MatchingRPS is request rate per second for each matching host
+	MatchingRPS
 	// MatchingPersistenceMaxQPS is the max qps matching host can querty DB
 	MatchingPersistenceMaxQPS
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task list throttling
@@ -187,11 +190,11 @@ const (
 	MatchingOutstandingTaskAppendsThreshold
 	// MatchingMaxTaskBatchSize is max batch size for task writer
 	MatchingMaxTaskBatchSize
-	// MatchingRPS is request rate per second for each matching host
-	MatchingRPS
 
 	// key for history
 
+	// HistoryRPS is request rate per second for each history host
+	HistoryRPS
 	// HistoryPersistenceMaxQPS is the max qps history host can querty DB
 	HistoryPersistenceMaxQPS
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service

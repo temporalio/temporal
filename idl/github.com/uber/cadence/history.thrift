@@ -254,6 +254,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -267,6 +268,7 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -285,6 +287,7 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -301,6 +304,7 @@ service HistoryService {
       5: ShardOwnershipLostError shardOwnershipLostError,
       6: shared.DomainNotActiveError domainNotActiveError,
       7: shared.LimitExceededError limitExceededError,
+      8: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -317,6 +321,7 @@ service HistoryService {
       5: ShardOwnershipLostError shardOwnershipLostError,
       6: shared.DomainNotActiveError domainNotActiveError,
       7: shared.LimitExceededError limitExceededError,
+      8: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -334,6 +339,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -349,6 +355,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -366,6 +373,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -383,6 +391,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -400,6 +409,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -417,6 +427,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -448,6 +459,7 @@ service HistoryService {
       3: ShardOwnershipLostError shardOwnershipLostError,
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -462,6 +474,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -476,6 +489,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -493,6 +507,7 @@ service HistoryService {
       5: shared.CancellationAlreadyRequestedError cancellationAlreadyRequestedError,
       6: shared.DomainNotActiveError domainNotActiveError,
       7: shared.LimitExceededError limitExceededError,
+      8: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -509,6 +524,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -523,6 +539,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -535,6 +552,7 @@ service HistoryService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)
@@ -545,6 +563,7 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.RetryTaskError retryTaskError,
+      7: shared.ServiceBusyError serviceBusyError,
     )
 
   /**
@@ -556,6 +575,7 @@ service HistoryService {
       2: shared.InternalServiceError internalServiceError,
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
+      6: shared.ServiceBusyError serviceBusyError,
     )
 
   /**

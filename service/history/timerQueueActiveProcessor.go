@@ -75,8 +75,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		updateShardAckLevel,
 		logger,
 	)
-	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
+
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		historyService:     historyService,
@@ -84,7 +83,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		timerTaskFilter:    timerTaskFilter,
 		now:                timeNow,
 		logger:             logger,
-		matchingClient:     retryableMatchingClient,
+		matchingClient:     matchingClient,
 		metricsClient:      historyService.metricsClient,
 		currentClusterName: currentClusterName,
 		timerGate:          NewLocalTimerGate(),
@@ -145,8 +144,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		timerAckMgrShutdown,
 		logger,
 	)
-	retryableMatchingClient := matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(),
-		common.IsWhitelistServiceTransientError)
+
 	processor := &timerQueueActiveProcessorImpl{
 		shard:           shard,
 		historyService:  historyService,
@@ -155,7 +153,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		now:             timeNow,
 		logger:          logger,
 		metricsClient:   historyService.metricsClient,
-		matchingClient:  retryableMatchingClient,
+		matchingClient:  matchingClient,
 		timerGate:       NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(
 			metrics.TimerActiveQueueProcessorScope,

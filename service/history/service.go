@@ -37,7 +37,8 @@ import (
 type Config struct {
 	NumberOfShards int
 
-	PersistenceMaxQPS dynamicconfig.FloatPropertyFn
+	RPS               dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS dynamicconfig.IntPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -116,7 +117,8 @@ type Config struct {
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 	return &Config{
 		NumberOfShards:                                        numberOfShards,
-		PersistenceMaxQPS:                                     dc.GetFloat64Property(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
+		RPS:                                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 1200),
+		PersistenceMaxQPS:                                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		HistoryCacheInitialSize:                               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
@@ -209,7 +211,7 @@ func (s *Service) Start() {
 
 	base := service.New(p)
 
-	persistenceMaxQPS := int(s.config.PersistenceMaxQPS())
+	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
 	s.metricsClient = base.GetMetricsClient()

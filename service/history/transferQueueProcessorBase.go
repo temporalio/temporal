@@ -58,7 +58,7 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
 		visibilityMgr:          visibilityMgr,
-		matchingClient:         matching.NewRetryableClient(matchingClient, common.CreateMatchingRetryPolicy(), common.IsWhitelistServiceTransientError),
+		matchingClient:         matchingClient,
 		maxReadAckLevel:        maxReadAckLevel,
 		updateTransferAckLevel: updateTransferAckLevel,
 		transferQueueShutdown:  transferQueueShutdown,

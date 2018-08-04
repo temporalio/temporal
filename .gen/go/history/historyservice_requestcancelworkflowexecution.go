@@ -240,6 +240,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.ServiceBusyError:
+			return true
 		default:
 			return false
 		}
@@ -286,6 +288,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RequestCancelWorkflowExecution_Result.LimitExceededError")
 			}
 			return &HistoryService_RequestCancelWorkflowExecution_Result{LimitExceededError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_RequestCancelWorkflowExecution_Result.ServiceBusyError")
+			}
+			return &HistoryService_RequestCancelWorkflowExecution_Result{ServiceBusyError: e}, nil
 		}
 
 		return nil, err
@@ -319,6 +326,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
 		return
 	}
 
@@ -335,6 +346,7 @@ type HistoryService_RequestCancelWorkflowExecution_Result struct {
 	CancellationAlreadyRequestedError *shared.CancellationAlreadyRequestedError `json:"cancellationAlreadyRequestedError,omitempty"`
 	DomainNotActiveError              *shared.DomainNotActiveError              `json:"domainNotActiveError,omitempty"`
 	LimitExceededError                *shared.LimitExceededError                `json:"limitExceededError,omitempty"`
+	ServiceBusyError                  *shared.ServiceBusyError                  `json:"serviceBusyError,omitempty"`
 }
 
 // ToWire translates a HistoryService_RequestCancelWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -354,7 +366,7 @@ type HistoryService_RequestCancelWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_RequestCancelWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -414,6 +426,14 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) ToWire() (wire.Va
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 8, Value: w}
 		i++
 	}
 
@@ -508,6 +528,14 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) FromWire(w wire.V
 				}
 
 			}
+		case 8:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -533,6 +561,9 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) FromWire(w wire.V
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("HistoryService_RequestCancelWorkflowExecution_Result should have at most one field: got %v fields", count)
 	}
@@ -547,7 +578,7 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -575,6 +606,10 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
 		i++
 	}
 
@@ -605,6 +640,9 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) Equals(rhs *Histo
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
 
@@ -676,6 +714,16 @@ func (v *HistoryService_RequestCancelWorkflowExecution_Result) GetDomainNotActiv
 func (v *HistoryService_RequestCancelWorkflowExecution_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
 	if v.LimitExceededError != nil {
 		return v.LimitExceededError
+	}
+
+	return
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_RequestCancelWorkflowExecution_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v.ServiceBusyError != nil {
+		return v.ServiceBusyError
 	}
 
 	return

@@ -237,6 +237,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.ServiceBusyError:
+			return true
 		default:
 			return false
 		}
@@ -278,6 +280,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_StartWorkflowExecution_Result.LimitExceededError")
 			}
 			return &HistoryService_StartWorkflowExecution_Result{LimitExceededError: e}, nil
+		case *shared.ServiceBusyError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_StartWorkflowExecution_Result.ServiceBusyError")
+			}
+			return &HistoryService_StartWorkflowExecution_Result{ServiceBusyError: e}, nil
 		}
 
 		return nil, err
@@ -307,6 +314,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.ServiceBusyError != nil {
+			err = result.ServiceBusyError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -333,6 +344,7 @@ type HistoryService_StartWorkflowExecution_Result struct {
 	ShardOwnershipLostError  *ShardOwnershipLostError                     `json:"shardOwnershipLostError,omitempty"`
 	DomainNotActiveError     *shared.DomainNotActiveError                 `json:"domainNotActiveError,omitempty"`
 	LimitExceededError       *shared.LimitExceededError                   `json:"limitExceededError,omitempty"`
+	ServiceBusyError         *shared.ServiceBusyError                     `json:"serviceBusyError,omitempty"`
 }
 
 // ToWire translates a HistoryService_StartWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -352,7 +364,7 @@ type HistoryService_StartWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_StartWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -412,6 +424,14 @@ func (v *HistoryService_StartWorkflowExecution_Result) ToWire() (wire.Value, err
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		w, err = v.ServiceBusyError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
 		i++
 	}
 
@@ -506,6 +526,14 @@ func (v *HistoryService_StartWorkflowExecution_Result) FromWire(w wire.Value) er
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.ServiceBusyError, err = _ServiceBusyError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -531,6 +559,9 @@ func (v *HistoryService_StartWorkflowExecution_Result) FromWire(w wire.Value) er
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.ServiceBusyError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_StartWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -545,7 +576,7 @@ func (v *HistoryService_StartWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -573,6 +604,10 @@ func (v *HistoryService_StartWorkflowExecution_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.ServiceBusyError != nil {
+		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
 		i++
 	}
 
@@ -603,6 +638,9 @@ func (v *HistoryService_StartWorkflowExecution_Result) Equals(rhs *HistoryServic
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
 		return false
 	}
 
@@ -674,6 +712,16 @@ func (v *HistoryService_StartWorkflowExecution_Result) GetDomainNotActiveError()
 func (v *HistoryService_StartWorkflowExecution_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
 	if v.LimitExceededError != nil {
 		return v.LimitExceededError
+	}
+
+	return
+}
+
+// GetServiceBusyError returns the value of ServiceBusyError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_StartWorkflowExecution_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
+	if v.ServiceBusyError != nil {
+		return v.ServiceBusyError
 	}
 
 	return
