@@ -22,13 +22,6 @@ package messaging
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/uber-common/bark"
-	"github.com/uber-go/kafka-client"
-	"github.com/uber-go/kafka-client/kafka"
-	"github.com/uber-go/tally"
-	"go.uber.org/zap"
 )
 
 type (
@@ -57,37 +50,8 @@ type (
 	}
 )
 
-// NewKafkaClient is used to create an instance of KafkaClient
-func (k *KafkaConfig) NewKafkaClient(zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope) Client {
-	k.validate()
-
-	// mapping from cluster name to list of broker ip addresses
-	brokers := map[string][]string{}
-	for cluster, cfg := range k.Clusters {
-		brokers[cluster] = cfg.Brokers
-		for i := range brokers[cluster] {
-			if !strings.Contains(cfg.Brokers[i], ":") {
-				cfg.Brokers[i] += ":9092"
-			}
-		}
-	}
-
-	// mapping from topic name to cluster that has that topic
-	topicClusterAssignment := map[string][]string{}
-	for topic, cfg := range k.Topics {
-		topicClusterAssignment[topic] = []string{cfg.Cluster}
-	}
-
-	client := kafkaclient.New(kafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
-
-	return &kafkaClient{
-		config: k,
-		client: client,
-		logger: logger,
-	}
-}
-
-func (k *KafkaConfig) validate() {
+// Validate will validate config
+func (k *KafkaConfig) Validate() {
 	if len(k.Clusters) == 0 {
 		panic("Empty Kafka Cluster Config")
 	}

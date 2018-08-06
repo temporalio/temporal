@@ -84,7 +84,7 @@ ignored = ["github.com/uber/cadence/.gen"]
 
 [[constraint]]
   name = "github.com/uber-go/kafka-client"
-  version = "0.1.7"
+  version = "0.2.0"
 
 [[constraint]]
   name = "github.com/uber-go/tally"

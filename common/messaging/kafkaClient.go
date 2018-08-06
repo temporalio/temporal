@@ -21,10 +21,14 @@
 package messaging
 
 import (
+	"strings"
+
 	"github.com/Shopify/sarama"
 	"github.com/uber-common/bark"
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
+	"github.com/uber-go/tally"
+	"go.uber.org/zap"
 )
 
 const rcvBufferSize = 2 * 1024
@@ -45,6 +49,36 @@ type (
 		doneC     chan struct{}
 	}
 )
+
+// NewKafkaClient is used to create an instance of KafkaClient
+func NewKafkaClient(kc *KafkaConfig, zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope) Client {
+	kc.Validate()
+
+	// mapping from cluster name to list of broker ip addresses
+	brokers := map[string][]string{}
+	for cluster, cfg := range kc.Clusters {
+		brokers[cluster] = cfg.Brokers
+		for i := range brokers[cluster] {
+			if !strings.Contains(cfg.Brokers[i], ":") {
+				cfg.Brokers[i] += ":9092"
+			}
+		}
+	}
+
+	// mapping from topic name to cluster that has that topic
+	topicClusterAssignment := map[string][]string{}
+	for topic, cfg := range kc.Topics {
+		topicClusterAssignment[topic] = []string{cfg.Cluster}
+	}
+
+	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
+
+	return &kafkaClient{
+		config: kc,
+		client: client,
+		logger: logger,
+	}
+}
 
 var _ Client = (*kafkaClient)(nil)
 var _ Consumer = (*kafkaConsumer)(nil)
@@ -97,17 +131,16 @@ func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName st
 
 	topicKafkaCluster := c.config.getKafkaClusterForTopic(sourceTopics.Topic)
 	dqlTopicKafkaCluster := c.config.getKafkaClusterForTopic(currentTopics.DLQTopic)
+
 	topicList := uberKafka.ConsumerTopicList{
 		uberKafka.ConsumerTopic{
 			Topic: uberKafka.Topic{
-				Name:       sourceTopics.Topic,
-				Cluster:    topicKafkaCluster,
-				BrokerList: c.config.getBrokersForKafkaCluster(topicKafkaCluster),
+				Name:    sourceTopics.Topic,
+				Cluster: topicKafkaCluster,
 			},
 			DLQ: uberKafka.Topic{
-				Name:       currentTopics.DLQTopic,
-				Cluster:    dqlTopicKafkaCluster,
-				BrokerList: c.config.getBrokersForKafkaCluster(dqlTopicKafkaCluster),
+				Name:    currentTopics.DLQTopic,
+				Cluster: dqlTopicKafkaCluster,
 			},
 		},
 	}

@@ -122,7 +122,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8a3d83fd1e00c49786834ae376e61e3afee8f09a2dcebf1549b3db44a61b5be2"
+  digest = "1:1899d7e4fedddc614b1af27d533dd2ab6656c376cea3cdba1ba073916faeebac"
   name = "github.com/gocql/gocql"
   packages = [
     ".",
@@ -131,7 +131,7 @@
     "internal/streams",
   ]
   pruneopts = ""
-  revision = "e06f8c1bcd787e6bf0608288b314522f08cc7848"
+  revision = "045d8d6abc70b5bd02bb18b8fdb05ee54d8c87aa"
 
 [[projects]]
   digest = "1:73a7106c799f98af4f3da7552906efc6a2570329f4cd2d2f5fb8f9d6c053ff2f"
@@ -265,7 +265,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:bfbc121ef802d245ef67421cff206615357d9202337a3d492b8f668906b485a8"
+  digest = "1:f477ef7b65d94fb17574fc6548cef0c99a69c1634ea3b6da248b63a61ebe0498"
   name = "github.com/prometheus/common"
   packages = [
     "expfmt",
@@ -273,7 +273,7 @@
     "model",
   ]
   pruneopts = ""
-  revision = "7600349dcfe1abd18d72d3a1770870d9800a7801"
+  revision = "c7de2306084e37d54b8be01f3541a8464345e9a5"
 
 [[projects]]
   branch = "master"
@@ -298,11 +298,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d01d12385e282d582f1ca17c79d1572901a32dc240bc2cc5ed88626cf6cd669a"
+  digest = "1:56de39853758a4b6053a3f71e527305bbed11a0d876156e32e8cc7180d36198b"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   pruneopts = ""
-  revision = "c108f5553c369120b773da633aca62a8b42b1cf4"
+  revision = "d329d24db4313262a3b0a24d8aeb1dc4bd294fb0"
 
 [[projects]]
   digest = "1:711eebe744c0151a9d09af2315f0bb729b2ec7637ef4c410fa90a18ef74b65b6"
@@ -342,7 +342,7 @@
   version = "v1.3.2"
 
 [[projects]]
-  digest = "1:d8d00a763ee6f365d396e4887cdb5efd22e13ba6af6101d9028b5c62f6ba5951"
+  digest = "1:f5396ad35a4d3fa3a1f7b10a89d3b8c139627032f7c8ceb0033fc1cf81263c90"
   name = "github.com/uber-go/kafka-client"
   packages = [
     ".",
@@ -353,8 +353,8 @@
     "kafka",
   ]
   pruneopts = ""
-  revision = "b2484cf77be08c7d522e86cea2013a5b05421ca0"
-  version = "v0.1.8"
+  revision = "00989e791b59fd36721373f9b0bec0894e93088b"
+  version = "v0.2.0"
 
 [[projects]]
   digest = "1:861312e1c66a6935183495ad08db511fb7cf434a9da12c49d0be9b7725f3a22b"
@@ -562,15 +562,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:cae234a803b78380e4d769db6036b9fcc8c08ed4ff862571ffc1a958edc1f629"
+  digest = "1:6acb37854006d86279ba349ff9ae07103a0956569d0eb8dca9fe38732222e3a5"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
   pruneopts = ""
-  revision = "c126467f60eb25f8f27e5a981f32a87e3965053f"
+  revision = "56440b844dfe139a8ac053f4ecac0b20b79058f4"
 
 [[projects]]
   branch = "master"
-  digest = "1:96d281cfaaa12ac602772da38ac85f00d59b1d3aa7bfe69d8ba334d6ee41e3e6"
+  digest = "1:b970d5e8b11b4c8927a06298566eb8daf66a009702688b4142cc2a961e374e91"
   name = "golang.org/x/net"
   packages = [
     "bpf",
@@ -581,19 +581,19 @@
     "ipv6",
   ]
   pruneopts = ""
-  revision = "3673e40ba22529d22c3fd7c93e97b0ce50fa7bdd"
+  revision = "f4c29de78a2a91c00474a2e689954305c350adf9"
   source = "https://github.com/golang/net"
 
 [[projects]]
   branch = "master"
-  digest = "1:0e1506f3caef942bf9d08a91ebbe8bd87d263e7e440f8e0427b2f85b44eac3f7"
+  digest = "1:9ca540a348c8f7bc0eb140238fe1639beebe93f2b19ef326c455f4833ba708c0"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = ""
-  revision = "e072cadbbdc8dd3d3ffa82b8b4b9304c261d9311"
+  revision = "0ffbfd41fbef8ffcf9b62b0b0aa3a5873ed7a4fe"
 
 [[projects]]
   branch = "master"
