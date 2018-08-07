@@ -482,21 +482,22 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *WorkflowExecutionInfo, d
 }
 
 // UpdateWorkflowExecutionAndFinish is a utility method to update workflow execution
-func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *WorkflowExecutionInfo, condition int64) error {
+func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *WorkflowExecutionInfo, condition int64, retentionSecond int32) error {
 	transferTasks := []Task{}
 	transferTasks = append(transferTasks, &CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	return s.WorkflowMgr.UpdateWorkflowExecution(&UpdateWorkflowExecutionRequest{
-		ExecutionInfo:       updatedInfo,
-		TransferTasks:       transferTasks,
-		TimerTasks:          nil,
-		Condition:           condition,
-		DeleteTimerTask:     nil,
-		RangeID:             s.ShardInfo.RangeID,
-		UpsertActivityInfos: nil,
-		DeleteActivityInfos: nil,
-		UpserTimerInfos:     nil,
-		DeleteTimerInfos:    nil,
-		FinishExecution:     true,
+		ExecutionInfo:        updatedInfo,
+		TransferTasks:        transferTasks,
+		TimerTasks:           nil,
+		Condition:            condition,
+		DeleteTimerTask:      nil,
+		RangeID:              s.ShardInfo.RangeID,
+		UpsertActivityInfos:  nil,
+		DeleteActivityInfos:  nil,
+		UpserTimerInfos:      nil,
+		DeleteTimerInfos:     nil,
+		FinishedExecutionTTL: retentionSecond,
+		FinishExecution:      true,
 	})
 }
 

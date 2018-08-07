@@ -610,8 +610,8 @@ const (
 		`IF next_event_id = ?`
 
 	templateDeleteWorkflowExecutionQueryWithTTL = `INSERT INTO executions ` +
-		`(shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}) USING TTL ? `
+		`(shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution, replication_state) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?}) USING TTL ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
 		`FROM executions ` +
@@ -1545,6 +1545,12 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		if retentionInSeconds <= 0 {
 			retentionInSeconds = minCurrentExecutionRetentionTTL
 		}
+
+		startVersion := common.EmptyVersion
+		if request.ReplicationState != nil {
+			startVersion = request.ReplicationState.StartVersion
+		}
+
 		// Delete WorkflowExecution row representing current execution, by using a TTL
 		batch.Query(templateDeleteWorkflowExecutionQueryWithTTL,
 			d.shardID,
@@ -1559,6 +1565,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 			executionInfo.CreateRequestID,
 			executionInfo.State,
 			executionInfo.CloseStatus,
+			startVersion,
 			retentionInSeconds,
 		)
 	}
