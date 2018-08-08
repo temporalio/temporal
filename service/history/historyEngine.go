@@ -1224,7 +1224,8 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
 					break Process_Decision_Loop
 				}
-				if err = validateSignalInput(attributes.Input); err != nil {
+				if err = validateSignalInput(attributes.Input, e.metricsClient,
+					metrics.HistoryRespondDecisionTaskCompletedScope); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadSignalInputSize
 					break Process_Decision_Loop
@@ -1815,7 +1816,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	if err := validateSignalInput(request.GetInput()); err != nil {
+	if err := validateSignalInput(request.GetInput(), e.metricsClient,
+		metrics.HistorySignalWorkflowExecutionScope); err != nil {
 		return err
 	}
 
@@ -1865,7 +1867,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		WorkflowId: sRequest.WorkflowId,
 	}
 
-	if err := validateSignalInput(sRequest.GetSignalInput()); err != nil {
+	if err := validateSignalInput(sRequest.GetSignalInput(), e.metricsClient,
+		metrics.HistorySignalWithStartWorkflowExecutionScope); err != nil {
 		return nil, err
 	}
 
@@ -2740,8 +2743,14 @@ func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecut
 	return nil
 }
 
-func validateSignalInput(signalInput []byte) error {
-	if len(signalInput) > signalInputSizeLimit {
+func validateSignalInput(signalInput []byte, metricsClient metrics.Client, scope int) error {
+	size := len(signalInput)
+	metricsClient.RecordTimer(
+		scope,
+		metrics.SignalSizeTimer,
+		time.Duration(size),
+	)
+	if size > signalInputSizeLimit {
 		return ErrSignalOverSize
 	}
 	return nil
