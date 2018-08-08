@@ -88,7 +88,7 @@ func NewLocalTimerGate() LocalTimerGate {
 	timer := &LocalTimerGateImpl{
 		timer:          time.NewTimer(0),
 		nextWakeupTime: time.Time{},
-		fireChan:       make(chan struct{}),
+		fireChan:       make(chan struct{}, 1),
 		closeChan:      make(chan struct{}),
 	}
 	// the timer should be stopped when initialized
@@ -104,8 +104,11 @@ func NewLocalTimerGate() LocalTimerGate {
 		for {
 			select {
 			case <-timer.timer.C:
+				select {
 				// re-transmit on gateC
-				timer.fireChan <- struct{}{}
+				case timer.fireChan <- struct{}{}:
+				default:
+				}
 
 			case <-timer.closeChan:
 				// closed; cleanup and quit

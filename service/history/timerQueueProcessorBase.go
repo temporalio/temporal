@@ -138,6 +138,7 @@ func (t *timerQueueProcessorBase) Stop() {
 	}
 
 	close(t.shutdownCh)
+	t.retryTasks()
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Timer queue processor timedout on shutdown.")
@@ -356,7 +357,11 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 
 	for _, task := range timerTasks {
 		// We have a timer to fire.
-		t.tasksCh <- task
+		select {
+		case t.tasksCh <- task:
+		case <-t.shutdownCh:
+			return nil, nil
+		}
 	}
 
 	if !moreTasks {
