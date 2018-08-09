@@ -2238,7 +2238,9 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 	case *gen.InternalServiceError:
 		logging.LogInternalServiceError(wh.Service.GetLogger(), err)
 		wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-		return err
+		// NOTE: For internal error, we won't return thrift error from cadence-frontend.
+		// Because in uber internal metrics, thrift errors are counted as user errors
+		return fmt.Errorf("Cadence internal error, msg: %v", err.Message)
 	case *gen.BadRequestError:
 		wh.metricsClient.IncCounter(scope, metrics.CadenceErrBadRequestCounter)
 		return err
