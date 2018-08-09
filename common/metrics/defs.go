@@ -587,6 +587,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendQueryWorkflowScope:                    {operation: "QueryWorkflow"},
 		FrontendDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 		FrontendDescribeTaskListScope:                 {operation: "DescribeTaskList"},
+		FrontendResetStickyTaskListScope:              {operation: "ResetStickyTaskList"},
 	},
 	// History Scope Names
 	History: {
