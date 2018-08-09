@@ -766,6 +766,8 @@ const (
 	HistoryTaskStandbyRetryCounter
 	HistoryTaskNotActiveCounter
 	HistoryTaskBatchCompleteCounter
+
+	NumHistoryMetrics
 )
 
 // Matching metrics enum
@@ -779,6 +781,8 @@ const (
 	RespondQueryTaskFailedCounter
 	SyncThrottleCounter
 	BufferThrottleCounter
+
+	NumMatchingMetrics
 )
 
 // Worker metrics enum
@@ -786,6 +790,8 @@ const (
 	ReplicatorMessages = iota + NumCommonMetrics
 	ReplicatorFailures
 	ReplicatorLatency
+
+	NumWorkerMetrics
 )
 
 // MetricDefs record the metrics for all services
@@ -837,6 +843,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DecisionTypeRecordMarkerCounter:              {metricName: "record-marker-decision", metricType: Counter},
 		DecisionTypeCancelExternalWorkflowCounter:    {metricName: "cancel-external-workflow-decision", metricType: Counter},
 		DecisionTypeContinueAsNewCounter:             {metricName: "continue-as-new-decision", metricType: Counter},
+		DecisionTypeSignalExternalWorkflowCounter:    {metricName: "signal-external-workflow-decision", metricType: Counter},
 		DecisionTypeChildWorkflowCounter:             {metricName: "child-workflow-decision", metricType: Counter},
 		MultipleCompletionDecisionsCounter:           {metricName: "multiple-completion-decisions", metricType: Counter},
 		FailedDecisionsCounter:                       {metricName: "failed-decisions", metricType: Counter},
