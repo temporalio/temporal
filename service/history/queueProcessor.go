@@ -308,6 +308,7 @@ ProcessRetryLoop:
 					<-notificationChan
 				} else if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
 					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
+					p.ackMgr.completeQueueTask(task.GetTaskID())
 					return
 				}
 				continue ProcessRetryLoop
