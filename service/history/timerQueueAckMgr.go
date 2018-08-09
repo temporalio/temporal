@@ -225,7 +225,8 @@ TaskFilterLoop:
 	}
 	t.Unlock()
 
-	if len(t.pageToken) == 0 && lookAheadTask == nil {
+	// only do lookahead when not in failover mode
+	if len(t.pageToken) == 0 && lookAheadTask == nil && !t.isFailover {
 		lookAheadTask, err = t.readLookAheadTask()
 		if err != nil {
 			return nil, nil, false, err

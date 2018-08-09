@@ -146,15 +146,16 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 	)
 
 	processor := &timerQueueActiveProcessorImpl{
-		shard:           shard,
-		historyService:  historyService,
-		cache:           historyService.historyCache,
-		timerTaskFilter: timerTaskFilter,
-		now:             timeNow,
-		logger:          logger,
-		metricsClient:   historyService.metricsClient,
-		matchingClient:  matchingClient,
-		timerGate:       NewLocalTimerGate(),
+		shard:              shard,
+		historyService:     historyService,
+		cache:              historyService.historyCache,
+		timerTaskFilter:    timerTaskFilter,
+		now:                timeNow,
+		logger:             logger,
+		metricsClient:      historyService.metricsClient,
+		matchingClient:     matchingClient,
+		currentClusterName: currentClusterName,
+		timerGate:          NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(
 			metrics.TimerActiveQueueProcessorScope,
 			shard,
