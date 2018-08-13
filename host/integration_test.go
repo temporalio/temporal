@@ -6553,19 +6553,7 @@ func (s *integrationSuite) getHistoryFrom(domainID string, execution workflow.Wo
 		return nil, err
 	}
 
-	historyEvents := []*workflow.HistoryEvent{}
-	factory := persistence.NewHistorySerializerFactory()
-	for _, e := range resp.Events {
-		persistence.SetSerializedHistoryDefaults(&e)
-		s, _ := factory.Get(e.EncodingType)
-		history, err1 := s.Deserialize(&e)
-		if err1 != nil {
-			return nil, err1
-		}
-		historyEvents = append(historyEvents, history.Events...)
-	}
-
-	return historyEvents, nil
+	return resp.History.Events, nil
 }
 
 func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,

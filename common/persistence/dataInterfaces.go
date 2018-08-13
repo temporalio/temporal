@@ -806,11 +806,12 @@ type (
 
 	// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest
 	GetWorkflowExecutionHistoryResponse struct {
-		// Slice of history append transaction batches
-		Events []SerializedHistoryEventBatch
+		History *workflow.History
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on GetworkflowExecutionHistoryRequest to read the next page.
 		NextPageToken []byte
+		// the first_event_id of last loaded batch
+		LastFirstEventID int64
 	}
 
 	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history

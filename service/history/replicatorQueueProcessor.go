@@ -267,16 +267,7 @@ func (p *replicatorQueueProcessorImpl) getHistory(domainID, workflowID, runID st
 			return nil, err
 		}
 
-		for _, e := range response.Events {
-			persistence.SetSerializedHistoryDefaults(&e)
-			s, _ := p.hSerializerFactory.Get(e.EncodingType)
-			history, err1 := s.Deserialize(&e)
-			if err1 != nil {
-				return nil, err1
-			}
-			historyEvents = append(historyEvents, history.Events...)
-		}
-
+		historyEvents = append(historyEvents, response.History.Events...)
 		nextPageToken = response.NextPageToken
 	}
 

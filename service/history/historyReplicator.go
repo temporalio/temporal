@@ -778,27 +778,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 			r.logError(logger, "Conflict resolution current workflow finished.", err)
 			return "", err
 		}
-		if len(response.Events) == 0 {
-			logger.WithFields(bark.Fields{
-				logging.TagWorkflowExecutionID: workflowID,
-				logging.TagWorkflowRunID:       runID,
-			})
-			r.logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
-			return "", errNoHistoryFound
-		}
-		serializedHistoryEventBatch := response.Events[0]
-		persistence.SetSerializedHistoryDefaults(&serializedHistoryEventBatch)
-		serializer, err := persistence.NewHistorySerializerFactory().Get(serializedHistoryEventBatch.EncodingType)
-		if err != nil {
-			r.logError(logger, "Conflict resolution error getting serializer.", err)
-			return "", err
-		}
-		history, err := serializer.Deserialize(&serializedHistoryEventBatch)
-		if err != nil {
-			r.logError(logger, "Conflict resolution error deserialize events.", err)
-			return "", err
-		}
-		if len(history.Events) == 0 {
+		if len(response.History.Events) == 0 {
 			logger.WithFields(bark.Fields{
 				logging.TagWorkflowExecutionID: workflowID,
 				logging.TagWorkflowRunID:       runID,
@@ -807,7 +787,7 @@ func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context
 			return "", errNoHistoryFound
 		}
 
-		return history.Events[0].WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId(), nil
+		return response.History.Events[0].WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId(), nil
 	}
 
 	targetRunID := msBuilder.GetExecutionInfo().RunID

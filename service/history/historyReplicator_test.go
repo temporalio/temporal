@@ -2220,8 +2220,6 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 			// other attributes are not used
 		},
 	}
-	currentStartEventBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{currentStartEvent})
-	serializedStartEventBatch, err := persistence.NewJSONHistorySerializer().Serialize(currentStartEventBatch)
 	s.Nil(err)
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID: domainID,
@@ -2234,8 +2232,9 @@ func (s *historyReplicatorSuite) TestConflictResolutionTerminateContinueAsNew_Ta
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
-		Events:        []persistence.SerializedHistoryEventBatch{*serializedStartEventBatch},
-		NextPageToken: nil,
+		History:          &shared.History{Events: []*shared.HistoryEvent{currentStartEvent}},
+		NextPageToken:    nil,
+		LastFirstEventID: currentStartEvent.GetEventId(),
 	}, nil)
 
 	// return nil, to trigger the history engine to return err, so we can assert on it

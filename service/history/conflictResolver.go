@@ -148,24 +148,7 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 		return nil, nil, common.EmptyEventID, err
 	}
 
-	lastFirstEventID := common.EmptyEventID
-	historyEvents := []*shared.HistoryEvent{}
-	for _, e := range response.Events {
-		persistence.SetSerializedHistoryDefaults(&e)
-		s, _ := r.hSerializerFactory.Get(e.EncodingType)
-		history, err1 := s.Deserialize(&e)
-		if err1 != nil {
-			return nil, nil, common.EmptyEventID, err1
-		}
-		if len(history.Events) > 0 {
-			lastFirstEventID = history.Events[0].GetEventId()
-		}
-		historyEvents = append(historyEvents, history.Events...)
-	}
-
-	executionHistory := &shared.History{}
-	executionHistory.Events = historyEvents
-	return executionHistory, response.NextPageToken, lastFirstEventID, nil
+	return response.History, response.NextPageToken, response.LastFirstEventID, nil
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {

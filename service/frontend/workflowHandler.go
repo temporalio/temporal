@@ -1458,7 +1458,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	token := &getHistoryContinuationToken{}
 
 	var runID string
-	var lastFirstEventID int64
+	lastFirstEventID := common.FirstEventID
 	var nextEventID int64
 	var isWorkflowRunning bool
 
@@ -2191,16 +2191,7 @@ func (wh *WorkflowHandler) getHistory(domainID string, execution gen.WorkflowExe
 		return nil, nil, err
 	}
 
-	for _, e := range response.Events {
-		persistence.SetSerializedHistoryDefaults(&e)
-		s, _ := wh.hSerializerFactory.Get(e.EncodingType)
-		history, err1 := s.Deserialize(&e)
-		if err1 != nil {
-			return nil, nil, err1
-		}
-		historyEvents = append(historyEvents, history.Events...)
-	}
-
+	historyEvents = append(historyEvents, response.History.Events...)
 	nextPageToken = response.NextPageToken
 	if len(nextPageToken) == 0 && transientDecision != nil {
 		// Append the transient decision events once we are done enumerating everything from the events table

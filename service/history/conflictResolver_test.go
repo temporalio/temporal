@@ -143,11 +143,6 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
 	}
 
-	historySerializer := persistence.NewJSONHistorySerializer()
-	serializedBatch1, _ := historySerializer.Serialize(persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{event1, event2}))
-	serializedBatch2, _ := historySerializer.Serialize(persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{event3}))
-	serializedBatch3, _ := historySerializer.Serialize(persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{event4, event5}))
-
 	pageToken := []byte("some random token")
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
@@ -157,8 +152,9 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
-		Events:        []persistence.SerializedHistoryEventBatch{*serializedBatch1},
-		NextPageToken: pageToken,
+		History:          &shared.History{Events: []*shared.HistoryEvent{event1, event2}},
+		NextPageToken:    pageToken,
+		LastFirstEventID: event1.GetEventId(),
 	}, nil)
 	history, token, firstEventID, err := s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, nil)
 	s.Nil(err)
@@ -174,8 +170,9 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: pageToken,
 	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
-		Events:        []persistence.SerializedHistoryEventBatch{*serializedBatch2, *serializedBatch3},
-		NextPageToken: nil,
+		History:          &shared.History{Events: []*shared.HistoryEvent{event3, event4, event5}},
+		NextPageToken:    nil,
+		LastFirstEventID: event4.GetEventId(),
 	}, nil)
 	history, token, firstEventID, err = s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, token)
 	s.Nil(err)
@@ -208,9 +205,6 @@ func (s *conflictResolverSuite) TestReset() {
 		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{},
 	}
 
-	historySerializer := persistence.NewJSONHistorySerializer()
-	serializedBatch, _ := historySerializer.Serialize(persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), []*shared.HistoryEvent{event1, event2}))
-
 	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", event1.GetVersion()).Return(sourceCluster).Once()
 	s.mockHistoryMgr.On("GetWorkflowExecutionHistory", &persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
@@ -220,8 +214,9 @@ func (s *conflictResolverSuite) TestReset() {
 		PageSize:      defaultHistoryPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.GetWorkflowExecutionHistoryResponse{
-		Events:        []persistence.SerializedHistoryEventBatch{*serializedBatch},
-		NextPageToken: nil,
+		History:          &shared.History{Events: []*shared.HistoryEvent{event1, event2}},
+		NextPageToken:    nil,
+		LastFirstEventID: event1.GetEventId(),
 	}, nil)
 
 	s.mockContext.updateCondition = int64(59)
