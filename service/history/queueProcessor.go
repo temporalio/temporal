@@ -325,7 +325,8 @@ ProcessRetryLoop:
 		// raise and alert and move on
 		if _, ok := err.(*workflow.LimitExceededError); ok {
 			logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task.  Skipping.", err)
-			p.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CadenceCriticalFailures)
+			p.metricsClient.IncCounter(p.options.MetricScope, metrics.CadenceCriticalFailures)
+			p.ackMgr.completeQueueTask(task.GetTaskID())
 			return
 		}
 
@@ -335,7 +336,8 @@ ProcessRetryLoop:
 		// raise and alert and move on
 		if _, ok := err.(*workflow.LimitExceededError); ok {
 			logging.LogCriticalErrorEvent(logger, "Critical error processing replication task.  Skipping.", err)
-			p.metricsClient.IncCounter(metrics.ReplicatorQueueProcessorScope, metrics.CadenceCriticalFailures)
+			p.metricsClient.IncCounter(p.options.MetricScope, metrics.CadenceCriticalFailures)
+			p.ackMgr.completeQueueTask(task.GetTaskID())
 			return
 		}
 

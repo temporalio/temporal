@@ -437,7 +437,8 @@ ProcessRetryLoop:
 	logger = t.initializeLoggerForTask(task, logger)
 	if _, ok := err.(*workflow.LimitExceededError); ok {
 		logging.LogCriticalErrorEvent(logger, "Critical error processing timer task.  Skipping.", err)
-		t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.CadenceCriticalFailures)
+		t.metricsClient.IncCounter(t.scope, metrics.CadenceCriticalFailures)
+		t.timerQueueAckMgr.completeTimerTask(task)
 		return
 	}
 
