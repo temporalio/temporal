@@ -104,3 +104,80 @@ func (s *TokenBucketSuite) TestLowRpsEnforced() {
 	s.Equal(3, total, "Token bucket failed to enforce limit")
 	s.Equal(3, attempts, "Token bucket gave out tokens too quickly")
 }
+
+func (s *TokenBucketSuite) TestPriorityRpsEnforced() {
+	ts := &mockTimeSource{currTime: time.Now()}
+	tb := NewPriorityTokenBucket(1, 99, ts) // behavior same to tokenBucketImpl
+
+	for i := 0; i < 2; i++ {
+		total := 0
+		attempts := 1
+		for ; attempts < 11; attempts++ {
+			for c := 0; c < 2; c++ {
+				if ok, _ := tb.GetToken(0, 10); ok {
+					total += 10
+				}
+			}
+
+			if total >= 90 {
+				break
+			}
+			ts.advance(time.Millisecond * 101)
+		}
+		s.Equal(90, total, "Token bucket failed to enforce limit")
+		s.Equal(9, attempts, "Token bucket gave out tokens too quickly")
+
+		ts.advance(time.Millisecond * 101)
+		ok, _ := tb.GetToken(0, 9)
+		s.True(ok, "Token bucket failed to enforce limit")
+		ok, _ = tb.GetToken(0, 1)
+		s.False(ok, "Token bucket failed to enforce limit")
+		ts.advance(time.Second)
+	}
+}
+
+func (s *TokenBucketSuite) TestPriorityLowRpsEnforced() {
+	ts := &mockTimeSource{currTime: time.Now()}
+	tb := NewPriorityTokenBucket(1, 3, ts) // behavior same to tokenBucketImpl
+
+	total := 0
+	attempts := 1
+	for ; attempts < 10; attempts++ {
+		for c := 0; c < 2; c++ {
+			if ok, _ := tb.GetToken(0, 1); ok {
+				total++
+			}
+		}
+		if total >= 3 {
+			break
+		}
+		ts.advance(time.Millisecond * 101)
+	}
+	s.Equal(3, total, "Token bucket failed to enforce limit")
+	s.Equal(3, attempts, "Token bucket gave out tokens too quickly")
+}
+
+func (s *TokenBucketSuite) TestPriorityTokenBucket() {
+	ts := &mockTimeSource{currTime: time.Now()}
+	tb := NewPriorityTokenBucket(2, 100, ts)
+
+	for i := 0; i < 2; i++ {
+		ok2, _ := tb.GetToken(1, 1)
+		s.False(ok2)
+		ok, _ := tb.GetToken(0, 10)
+		s.True(ok)
+		ts.advance(time.Millisecond * 101)
+	}
+
+	for i := 0; i < 2; i++ {
+		ok, _ := tb.GetToken(0, 9)
+		s.True(ok) // 1 token remaining in 1st bucket, 0 in 2nd
+		ok2, _ := tb.GetToken(1, 1)
+		s.False(ok2)
+		ts.advance(time.Millisecond * 101)
+		ok2, _ = tb.GetToken(1, 2)
+		s.False(ok2)
+		ok2, _ = tb.GetToken(1, 1)
+		s.True(ok2)
+	}
+}

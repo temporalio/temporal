@@ -44,6 +44,15 @@ type (
 		Consume(count int, timeout time.Duration) bool
 	}
 
+	// PriorityTokenBucket is the interface for rate limiter with priority
+	PriorityTokenBucket interface {
+		// GetToken attempts to take count tokens from the
+		// bucket with that priority. Priority 0 is highest.
+		// Returns true on success, false
+		// otherwise along with the duration for the next refill
+		GetToken(priority, count int) (bool, time.Duration)
+	}
+
 	tokenBucketFactoryImpl struct{}
 
 	tokenBucketImpl struct {
@@ -59,6 +68,23 @@ type (
 		overflowRps            int
 		overflowTokens         int
 		nextRefillTime         int64
+		nextOverflowRefillTime int64
+		timeSource             TimeSource
+	}
+
+	priorityTokenBucketImpl struct {
+		sync.Mutex
+		tokens         []int
+		fillRate       int
+		fillInterval   int64
+		nextRefillTime int64
+		// Because we divide the per-second quota equally
+		// every 100 millis, there could be a remainder when
+		// the desired rate is not a multiple 10 (1second/100Millis)
+		// To overcome this, we keep track of left over remainder
+		// and distribute this evenly during every fillInterval
+		overflowRps            int
+		overflowTokens         int
 		nextOverflowRefillTime int64
 		timeSource             TimeSource
 	}
@@ -183,5 +209,81 @@ func (tb *tokenBucketImpl) isRefillDue(now int64) bool {
 }
 
 func (tb *tokenBucketImpl) isOverflowRefillDue(now int64) bool {
+	return now >= tb.nextOverflowRefillTime
+}
+
+// NewPriorityTokenBucket creates and returns a
+// new token bucket rate limiter support priority.
+// There are n buckets for n priorities. It
+// replenishes the top priority bucket every 100
+// milliseconds, unused tokens flows to next bucket.
+// The idea comes from Dual Token Bucket Algorithms.
+// Thread safe.
+//
+// @param numOfPriority
+//    Number of priorities
+// @param rps
+//    Desired rate per second
+//
+func NewPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) PriorityTokenBucket {
+	tb := new(priorityTokenBucketImpl)
+	tb.tokens = make([]int, numOfPriority)
+	tb.timeSource = timeSource
+	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillRate = (rps * 100) / millisPerSecond
+	tb.overflowRps = rps - (10 * tb.fillRate)
+	tb.refill(time.Now().UnixNano())
+	return tb
+}
+
+func (tb *priorityTokenBucketImpl) GetToken(priority, count int) (bool, time.Duration) {
+	now := tb.timeSource.Now().UnixNano()
+	tb.Lock()
+	defer tb.Unlock()
+	tb.refill(now)
+	nextRefillTime := time.Duration(tb.nextRefillTime - now)
+	if tb.tokens[priority] < count {
+		return false, nextRefillTime
+	}
+	tb.tokens[priority] -= count
+	return true, nextRefillTime
+}
+
+func (tb *priorityTokenBucketImpl) refill(now int64) {
+	tb.refillOverFlow(now)
+	if tb.isRefillDue(now) {
+		more := tb.fillRate
+		for i := 0; i < len(tb.tokens); i++ {
+			tb.tokens[i] += more
+			if tb.tokens[i] > tb.fillRate {
+				more = tb.tokens[i] - tb.fillRate
+				tb.tokens[i] = tb.fillRate
+			} else {
+				break
+			}
+		}
+		if tb.overflowTokens > 0 {
+			tb.tokens[0]++
+			tb.overflowTokens--
+		}
+		tb.nextRefillTime = now + tb.fillInterval
+	}
+}
+
+func (tb *priorityTokenBucketImpl) refillOverFlow(now int64) {
+	if tb.overflowRps < 1 {
+		return
+	}
+	if tb.isOverflowRefillDue(now) {
+		tb.overflowTokens = tb.overflowRps
+		tb.nextOverflowRefillTime = now + int64(time.Second)
+	}
+}
+
+func (tb *priorityTokenBucketImpl) isRefillDue(now int64) bool {
+	return now >= tb.nextRefillTime
+}
+
+func (tb *priorityTokenBucketImpl) isOverflowRefillDue(now int64) bool {
 	return now >= tb.nextOverflowRefillTime
 }
