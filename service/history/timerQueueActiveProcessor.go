@@ -249,6 +249,10 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		t.timerQueueAckMgr.completeTimerTask(timerTask)
 	}
 
+	if err == nil {
+		t.metricsClient.RecordTimer(scope, metrics.ActiveTimerTaskQueueLatency, time.Since(timerTask.GetVisibilityTimestamp()))
+	}
+
 	return err
 }
 

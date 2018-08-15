@@ -766,7 +766,10 @@ const (
 	HistoryTaskStandbyRetryCounter
 	HistoryTaskNotActiveCounter
 	HistoryTaskBatchCompleteCounter
-
+	ActiveTransferTaskQueueLatency
+	ActiveTimerTaskQueueLatency
+	StandbyTransferTaskQueueLatency
+	StandbyTimerTaskQueueLatency
 	NumHistoryMetrics
 )
 
@@ -830,7 +833,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	History: {
 		TaskRequests:                                 {metricName: "task.requests", metricType: Counter},
 		TaskFailures:                                 {metricName: "task.errors", metricType: Counter},
-		TaskLatency:                                  {metricName: "task.latency", metricType: Counter},
+		TaskLatency:                                  {metricName: "task.latency", metricType: Timer},
 		AckLevelUpdateCounter:                        {metricName: "ack-level-update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                  {metricName: "ack-level-update-failed", metricType: Counter},
 		DecisionTypeScheduleActivityCounter:          {metricName: "schedule-activity-decision", metricType: Counter},
@@ -886,6 +889,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryTaskStandbyRetryCounter:               {metricName: "history-task-standby-retry-counter", metricType: Counter},
 		HistoryTaskNotActiveCounter:                  {metricName: "history-task-not-active-counter", metricType: Counter},
 		HistoryTaskBatchCompleteCounter:              {metricName: "history-task-batch-complete-counter", metricType: Counter},
+		ActiveTransferTaskQueueLatency:               {metricName: "active.transfertask.queue.latency", metricType: Timer},
+		ActiveTimerTaskQueueLatency:                  {metricName: "active.timertask.queue.latency", metricType: Timer},
+		StandbyTransferTaskQueueLatency:              {metricName: "standby.transfertask.queue.latency", metricType: Timer},
+		StandbyTimerTaskQueueLatency:                 {metricName: "standby.timertask.queue.latency", metricType: Timer},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

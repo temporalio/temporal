@@ -21,6 +21,8 @@
 package history
 
 import (
+	"time"
+
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/matching"
@@ -158,6 +160,10 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 		}
 	} else {
 		t.queueAckMgr.completeQueueTask(task.TaskID)
+	}
+
+	if err == nil {
+		t.metricsClient.RecordTimer(scope, metrics.StandbyTransferTaskQueueLatency, time.Since(task.GetVisibilityTimestamp()))
 	}
 
 	return err
