@@ -191,6 +191,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeTimerCanceled:
 			b.msBuilder.ReplicateTimerCanceledEvent(event)
+			if timerTask := b.refreshUserTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
+			}
 
 		case shared.EventTypeCancelTimerFailed:
 			// No mutable state action is needed
@@ -460,6 +463,12 @@ func (b *stateBuilderImpl) scheduleUserTimerTask(event *shared.HistoryEvent,
 	ti *persistence.TimerInfo, msBuilder mutableState) persistence.Task {
 	timerBuilder := b.getTimerBuilder(event)
 	timerBuilder.AddUserTimer(ti, msBuilder)
+	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
+}
+
+func (b *stateBuilderImpl) refreshUserTimerTask(event *shared.HistoryEvent, msBuilder mutableState) persistence.Task {
+	timerBuilder := b.getTimerBuilder(event)
+	timerBuilder.loadUserTimers(msBuilder)
 	return timerBuilder.GetUserTimerTaskIfNeeded(msBuilder)
 }
 

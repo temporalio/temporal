@@ -742,6 +742,20 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 	}
 
 	now := time.Now()
+
+	// this is a timer which already got created and will be used to generate a new concrete timer
+	timerID := "timer ID"
+	timeoutSecond := int64(10)
+	ti := &persistence.TimerInfo{
+		Version:    version,
+		TimerID:    timerID,
+		ExpiryTime: time.Unix(0, now.UnixNano()).Add(time.Duration(timeoutSecond) * time.Second),
+		StartedID:  111,
+		TaskID:     TimerTaskStatusNone,
+	}
+	s.mockMutableState.On("GetPendingTimerInfos").Return(map[string]*persistence.TimerInfo{timerID: ti}).Once()
+	s.mockMutableState.On("UpdateUserTimer", ti.TimerID, ti).Once()
+
 	evenType := shared.EventTypeTimerCanceled
 	event := &shared.HistoryEvent{
 		Version:                      common.Int64Ptr(version),
@@ -755,7 +769,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 
 	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil)
 
-	s.Empty(s.stateBuilder.timerTasks)
+	s.Equal(1, len(s.stateBuilder.timerTasks))
+	timerTask, ok := s.stateBuilder.timerTasks[0].(*persistence.UserTimerTask)
+	s.True(ok)
+	s.True(timerTask.VisibilityTimestamp.Equal(ti.ExpiryTime))
+	s.Equal(ti.StartedID, timerTask.EventID)
 	s.Empty(s.stateBuilder.transferTasks)
 	s.Empty(s.stateBuilder.newRunTimerTasks)
 	s.Empty(s.stateBuilder.newRunTransferTasks)

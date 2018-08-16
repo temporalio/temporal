@@ -1164,6 +1164,11 @@ Update_History_Loop:
 				}
 				if msBuilder.AddTimerCanceledEvent(completedID, attributes, common.StringDefault(request.Identity)) == nil {
 					msBuilder.AddCancelTimerFailedEvent(completedID, attributes, common.StringDefault(request.Identity))
+				} else {
+					// timer deletion is success. we need to rebuild the timer builder
+					// since timer builder has a local cached version of timers
+					tBuilder = e.getTimerBuilder(&context.workflowExecution)
+					tBuilder.loadUserTimers(msBuilder)
 				}
 
 			case workflow.DecisionTypeRecordMarker:
