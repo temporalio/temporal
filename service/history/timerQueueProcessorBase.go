@@ -352,6 +352,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistence.TimerT
 	t.lastPollTime = time.Now()
 	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
 	if err != nil {
+		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, err
 	}
 

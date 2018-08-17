@@ -147,7 +147,7 @@ func (c *kafkaClient) NewConsumer(currentCluster, sourceCluster, consumerName st
 
 	consumerConfig := uberKafka.NewConsumerConfig(consumerName, topicList)
 	consumerConfig.Concurrency = concurrency
-	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetNewest
+	consumerConfig.Offsets.Initial.Offset = uberKafka.OffsetOldest
 
 	uConsumer, err := c.client.NewConsumer(consumerConfig)
 	if err != nil {
