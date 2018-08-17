@@ -784,6 +784,7 @@ const (
 	RespondQueryTaskFailedCounter
 	SyncThrottleCounter
 	BufferThrottleCounter
+	SyncMatchLatency
 
 	NumMatchingMetrics
 )
@@ -904,6 +905,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RespondQueryTaskFailedCounter: {metricName: "respond-query-failed"},
 		SyncThrottleCounter:           {metricName: "sync.throttle.count"},
 		BufferThrottleCounter:         {metricName: "buffer.throttle.count"},
+		SyncMatchLatency:              {metricName: "syncmatch.latency", metricType: Timer},
 	},
 	Worker: {
 		ReplicatorMessages: {metricName: "replicator.messages"},

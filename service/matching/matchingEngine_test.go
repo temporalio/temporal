@@ -253,7 +253,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 	}
 
-	err := s.matchingEngine.AddDecisionTask(&addRequest)
+	_, err := s.matchingEngine.AddDecisionTask(&addRequest)
 	s.NoError(err)
 
 	taskList := &workflow.TaskList{}
@@ -375,7 +375,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 				ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			}
 
-			err = s.matchingEngine.AddActivityTask(&addRequest)
+			_, err = s.matchingEngine.AddActivityTask(&addRequest)
 		} else {
 			addRequest := matching.AddDecisionTaskRequest{
 				DomainUUID:                    common.StringPtr(domainID),
@@ -385,7 +385,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType int) {
 				ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 			}
 
-			err = s.matchingEngine.AddDecisionTask(&addRequest)
+			_, err = s.matchingEngine.AddDecisionTask(&addRequest)
 		}
 		s.NoError(err)
 	}
@@ -434,12 +434,12 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	// now attempt to add a task
 	scheduleID := int64(5)
 	addRequest.ScheduleId = &scheduleID
-	err = s.matchingEngine.AddActivityTask(&addRequest)
+	_, err = s.matchingEngine.AddActivityTask(&addRequest)
 	s.Error(err)
 
 	// test race
 	tlmImpl.taskWriter.stopped = 0
-	err = s.matchingEngine.AddActivityTask(&addRequest)
+	_, err = s.matchingEngine.AddActivityTask(&addRequest)
 	s.Error(err)
 	tlmImpl.taskWriter.stopped = 1 // reset it back to old value
 }
@@ -476,7 +476,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
 
-		err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(&addRequest)
 		s.NoError(err)
 	}
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
@@ -650,7 +650,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			TaskList:                      taskList,
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
-		err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(&addRequest)
 		wg.Wait()
 		s.NoError(err)
 		s.NoError(pollErr)
@@ -764,7 +764,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				err := s.matchingEngine.AddActivityTask(&addRequest)
+				_, err := s.matchingEngine.AddActivityTask(&addRequest)
 				if err != nil {
 					s.logger.Infof("Failure in AddActivityTask: %v", err)
 					i--
@@ -891,7 +891,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				err := s.matchingEngine.AddDecisionTask(&addRequest)
+				_, err := s.matchingEngine.AddDecisionTask(&addRequest)
 				if err != nil {
 					panic(err)
 				}
@@ -1045,7 +1045,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				err := engine.AddActivityTask(&addRequest)
+				_, err := engine.AddActivityTask(&addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1197,7 +1197,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 					ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 				}
 
-				err := engine.AddDecisionTask(&addRequest)
+				_, err := engine.AddDecisionTask(&addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1322,7 +1322,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 	}
 
-	err := s.matchingEngine.AddActivityTask(&addRequest)
+	_, err := s.matchingEngine.AddActivityTask(&addRequest)
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
@@ -1371,7 +1371,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(1),
 		}
 
-		err := s.matchingEngine.AddActivityTask(&addRequest)
+		_, err := s.matchingEngine.AddActivityTask(&addRequest)
 		s.NoError(err)
 	}
 	tlMgr, ok := s.matchingEngine.taskLists[*tlID].(*taskListManagerImpl)

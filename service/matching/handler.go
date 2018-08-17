@@ -23,6 +23,7 @@ package matching
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/health"
@@ -115,6 +116,7 @@ func (h *Handler) startRequestProfile(api string, scope int) tally.Stopwatch {
 
 // AddActivityTask - adds an activity task.
 func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivityTaskRequest) error {
+	startT := time.Now()
 	scope := metrics.MatchingAddActivityTaskScope
 	sw := h.startRequestProfile("AddActivityTask", scope)
 	defer sw.Stop()
@@ -123,11 +125,17 @@ func (h *Handler) AddActivityTask(ctx context.Context, addRequest *m.AddActivity
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	return h.handleErr(h.engine.AddActivityTask(addRequest), scope)
+	syncMatch, err := h.engine.AddActivityTask(addRequest)
+	if syncMatch {
+		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
+	}
+
+	return h.handleErr(err, scope)
 }
 
 // AddDecisionTask - adds a decision task.
 func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecisionTaskRequest) error {
+	startT := time.Now()
 	scope := metrics.MatchingAddDecisionTaskScope
 	sw := h.startRequestProfile("AddDecisionTask", scope)
 	defer sw.Stop()
@@ -136,7 +144,11 @@ func (h *Handler) AddDecisionTask(ctx context.Context, addRequest *m.AddDecision
 		return h.handleErr(errMatchingHostThrottle, scope)
 	}
 
-	return h.handleErr(h.engine.AddDecisionTask(addRequest), scope)
+	syncMatch, err := h.engine.AddDecisionTask(addRequest)
+	if syncMatch {
+		h.metricsClient.RecordTimer(scope, metrics.SyncMatchLatency, time.Since(startT))
+	}
+	return h.handleErr(err, scope)
 }
 
 // PollForActivityTask - long poll for an activity task.

@@ -58,7 +58,7 @@ var errAddTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded
 type taskListManager interface {
 	Start() error
 	Stop()
-	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error
+	AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error)
 	GetTaskContext(ctx context.Context, maxDispatchPerSecond *float64) (*taskContext, error)
 	SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error
 	CancelPoller(pollerID string)
@@ -361,9 +361,9 @@ func (c *taskListManagerImpl) Stop() {
 	logging.LogTaskListUnloadedEvent(c.logger)
 }
 
-func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error {
+func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) (syncMatch bool, err error) {
 	c.startWG.Wait()
-	_, err := c.executeWithRetry(func(rangeID int64) (interface{}, error) {
+	_, err = c.executeWithRetry(func(rangeID int64) (interface{}, error) {
 
 		domainEntry, err := c.domainCache.GetDomainByID(taskInfo.DomainID)
 		if err != nil {
@@ -372,20 +372,23 @@ func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *
 		if domainEntry.GetDomainNotActiveErr() != nil {
 			// domain not active, do not do sync match
 			r, err := c.taskWriter.appendTask(execution, taskInfo, rangeID)
+			syncMatch = false
 			return r, err
 		}
 
 		r, err := c.trySyncMatch(taskInfo)
 		if (err != nil && err != errAddTasklistThrottled) || r != nil {
+			syncMatch = true
 			return r, err
 		}
 		r, err = c.taskWriter.appendTask(execution, taskInfo, rangeID)
+		syncMatch = false
 		return r, err
 	})
 	if err == nil {
 		c.signalNewTask()
 	}
-	return err
+	return syncMatch, err
 }
 
 func (c *taskListManagerImpl) SyncMatchQueryTask(ctx context.Context, queryTask *queryTaskInfo) error {

@@ -211,7 +211,7 @@ func (e *matchingEngineImpl) removeTaskListManager(id *taskListID) {
 }
 
 // AddDecisionTask either delivers task directly to waiting poller or save it into task list persistence.
-func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) error {
+func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskRequest) (bool, error) {
 	domainID := addRequest.GetDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
 	taskListKind := common.TaskListKindPtr(addRequest.TaskList.GetKind())
@@ -221,7 +221,7 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeDecision)
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
-		return err
+		return false, err
 	}
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               domainID,
@@ -234,7 +234,7 @@ func (e *matchingEngineImpl) AddDecisionTask(addRequest *m.AddDecisionTaskReques
 }
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task list persistence.
-func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) error {
+func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskRequest) (bool, error) {
 	domainID := addRequest.GetDomainUUID()
 	sourceDomainID := addRequest.GetSourceDomainUUID()
 	taskListName := addRequest.TaskList.GetName()
@@ -244,7 +244,7 @@ func (e *matchingEngineImpl) AddActivityTask(addRequest *m.AddActivityTaskReques
 	taskList := newTaskListID(domainID, taskListName, persistence.TaskListTypeActivity)
 	tlMgr, err := e.getTaskListManager(taskList, taskListKind)
 	if err != nil {
-		return err
+		return false, err
 	}
 	taskInfo := &persistence.TaskInfo{
 		DomainID:               sourceDomainID,
