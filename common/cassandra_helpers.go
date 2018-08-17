@@ -56,6 +56,8 @@ func NewCassandraCluster(clusterHosts string, port int, user, password, dc strin
 	if dc != "" {
 		cluster.HostFilter = gocql.DataCentreHostFilter(dc)
 	}
+
+	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 	return cluster
 }
 
