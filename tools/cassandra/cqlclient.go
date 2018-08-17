@@ -74,9 +74,9 @@ var errGetSchemaVersion = errors.New("Failed to get current schema version from 
 
 const (
 	newLineDelim         = '\n'
-	defaultTimeout       = 30       // timeout in seconds
-	cqlProtoVersion      = 4        // default CQL protocol version
-	defaultConsistency   = "QUORUM" // schema updates must always be QUORUM
+	defaultTimeout       = 30    // timeout in seconds
+	cqlProtoVersion      = 4     // default CQL protocol version
+	defaultConsistency   = "ALL" // schema updates must always be ALL
 	defaultCassandraPort = 9042
 )
 
