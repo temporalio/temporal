@@ -78,6 +78,7 @@ func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOpera
 			Status:      status,
 			Description: common.StringPtr(info.Description),
 			OwnerEmail:  common.StringPtr(info.OwnerEmail),
+			Data:        info.Data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),

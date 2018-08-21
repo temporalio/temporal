@@ -78,6 +78,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -100,6 +101,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 		Status:      persistence.DomainStatusRegistered,
 		Description: description,
 		OwnerEmail:  ownerEmail,
+		Data:        data,
 	}
 	config := &persistence.DomainConfig{
 		Retention:  retention,
@@ -120,6 +122,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 				Status:      &status,
 				Description: common.StringPtr(description),
 				OwnerEmail:  common.StringPtr(ownerEmail),
+				Data:        data,
 			},
 			Config: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -145,6 +148,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 	status := shared.DomainStatusDeprecated
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -167,6 +171,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 		Status:      persistence.DomainStatusDeprecated,
 		Description: description,
 		OwnerEmail:  ownerEmail,
+		Data:        data,
 	}
 	config := &persistence.DomainConfig{
 		Retention:  retention,
@@ -187,6 +192,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 				Status:      &status,
 				Description: common.StringPtr(description),
 				OwnerEmail:  common.StringPtr(ownerEmail),
+				Data:        data,
 			},
 			Config: &shared.DomainConfiguration{
 				WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),

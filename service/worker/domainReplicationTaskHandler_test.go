@@ -77,6 +77,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -100,6 +101,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -127,6 +129,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_RegisterDomainTask() {
 	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
+	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
@@ -214,6 +217,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -237,6 +241,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -258,6 +263,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	updateStatus := shared.DomainStatusDeprecated
 	updateDescription := "other random domain test description"
 	updateOwnerEmail := "other random domain test owner"
+	updatedData := map[string]string{"k": "v1"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
 	updateClusterActive := "other random active cluster name"
@@ -280,6 +286,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 			Status:      &updateStatus,
 			Description: common.StringPtr(updateDescription),
 			OwnerEmail:  common.StringPtr(updateOwnerEmail),
+			Data:        updatedData,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
@@ -305,6 +312,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(persistence.DomainStatusDeprecated, resp.Info.Status)
 	s.Equal(updateDescription, resp.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
+	s.Equal(updatedData, resp.Info.Data)
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
@@ -322,6 +330,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -345,6 +354,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -366,6 +376,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	updateStatus := shared.DomainStatusDeprecated
 	updateDescription := "other random domain test description"
 	updateOwnerEmail := "other random domain test owner"
+	updateData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
 	updateClusterActive := "other random active cluster name"
@@ -388,6 +399,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 			Status:      &updateStatus,
 			Description: common.StringPtr(updateDescription),
 			OwnerEmail:  common.StringPtr(updateOwnerEmail),
+			Data:        updateData,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
@@ -413,6 +425,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_UpdateC
 	s.Equal(persistence.DomainStatusDeprecated, resp.Info.Status)
 	s.Equal(updateDescription, resp.Info.Description)
 	s.Equal(updateOwnerEmail, resp.Info.OwnerEmail)
+	s.Equal(updateData, resp.Info.Data)
 	s.Equal(updateRetention, resp.Config.Retention)
 	s.Equal(updateEmitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
@@ -430,6 +443,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -453,6 +467,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -474,6 +489,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	updateStatus := shared.DomainStatusDeprecated
 	updateDescription := "other random domain test description"
 	updateOwnerEmail := "other random domain test owner"
+	updatedData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
 	updateClusterActive := "other random active cluster name"
@@ -496,6 +512,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 			Status:      &updateStatus,
 			Description: common.StringPtr(updateDescription),
 			OwnerEmail:  common.StringPtr(updateOwnerEmail),
+			Data:        updatedData,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
@@ -521,6 +538,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
+	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(updateClusterActive, resp.ReplicationConfig.ActiveClusterName)
@@ -538,6 +556,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	status := shared.DomainStatusRegistered
 	description := "some random test description"
 	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
 	retention := int32(10)
 	emitMetric := true
 	clusterActive := "some random active cluster name"
@@ -561,6 +580,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 			Status:      &status,
 			Description: common.StringPtr(description),
 			OwnerEmail:  common.StringPtr(ownerEmail),
+			Data:        data,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
@@ -584,6 +604,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	updateStatus := shared.DomainStatusDeprecated
 	updateDescription := "other random domain test description"
 	updateOwnerEmail := "other random domain test owner"
+	updatedData := map[string]string{"k": "v2"}
 	updateRetention := int32(122)
 	updateEmitMetric := true
 	updateClusterActive := "other random active cluster name"
@@ -606,6 +627,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 			Status:      &updateStatus,
 			Description: common.StringPtr(updateDescription),
 			OwnerEmail:  common.StringPtr(updateOwnerEmail),
+			Data:        updatedData,
 		},
 		Config: &shared.DomainConfiguration{
 			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(updateRetention),
@@ -628,6 +650,7 @@ func (s *domainReplicatorSuite) TestHandleReceivingTask_UpdateDomainTask_NoUpdat
 	s.Equal(persistence.DomainStatusRegistered, resp.Info.Status)
 	s.Equal(description, resp.Info.Description)
 	s.Equal(ownerEmail, resp.Info.OwnerEmail)
+	s.Equal(data, resp.Info.Data)
 	s.Equal(retention, resp.Config.Retention)
 	s.Equal(emitMetric, resp.Config.EmitMetric)
 	s.Equal(clusterActive, resp.ReplicationConfig.ActiveClusterName)
