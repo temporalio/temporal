@@ -39,6 +39,9 @@ import (
 
 var (
 	errNoHistoryFound = errors.New("no history events found")
+
+	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
+	workflowTerminationIdentity = "worker-service"
 )
 
 type (
@@ -319,7 +322,9 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		logger.Info("Reset to latest common checkpoint.")
 
 		// NOTE: this conflict resolution do not handle fast >= 2 failover
-		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, logger)
+		lastEvent := request.History.Events[len(request.History.Events)-1]
+		incomingTimestamp := lastEvent.GetTimestamp()
+		return r.resetMutableState(ctx, context, msBuilder, lastValidEventID, incomingVersion, incomingTimestamp, logger)
 	}
 	if rState.LastWriteVersion < ri.GetVersion() {
 		err = ErrImpossibleRemoteClaimSeenHigherVersion
@@ -342,7 +347,9 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		// the actual action of those buffered event are already applied to mutable state.
 
 		logger.Info("Conflict detected.")
-		return r.resetMutableState(ctx, context, msBuilder, ri.GetLastEventId(), logger)
+		lastEvent := request.History.Events[len(request.History.Events)-1]
+		incomingTimestamp := lastEvent.GetTimestamp()
+		return r.resetMutableState(ctx, context, msBuilder, ri.GetLastEventId(), incomingVersion, incomingTimestamp, logger)
 	}
 
 	// event ID match, no reset
@@ -690,7 +697,8 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 	// start the new workflow from the request
 
 	// same workflow ID, same shard
-	err = r.terminateWorkflow(ctx, domainID, executionInfo.WorkflowID, currentRunID)
+	incomingTimestamp := lastEvent.GetTimestamp()
+	err = r.terminateWorkflow(ctx, domainID, executionInfo.WorkflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
 		if _, ok := err.(*shared.EntityNotExistsError); !ok {
 			return err
@@ -724,7 +732,7 @@ func (r *historyReplicator) flushCurrentWorkflowBuffer(ctx context.Context, doma
 }
 
 func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(ctx context.Context,
-	msBuilder mutableState, logger bark.Logger) (currentRunID string, retError error) {
+	msBuilder mutableState, incomingVersion int64, incomingTimestamp int64, logger bark.Logger) (currentRunID string, retError error) {
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
 
@@ -758,7 +766,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 
 	// need to terminate the current workflow
 	// same workflow ID, same shard
-	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID)
+	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
 		r.logError(logger, "Conflict resolution err terminating current workflow.", err)
 	}
@@ -797,25 +805,52 @@ func (r *historyReplicator) getCurrentWorkflowMutableState(ctx context.Context, 
 }
 
 func (r *historyReplicator) terminateWorkflow(ctx context.Context, domainID string, workflowID string,
-	runID string) error {
-	domainEntry, err := r.domainCache.GetDomainByID(domainID)
+	runID string, incomingVersion int64, incomingTimestamp int64, logger bark.Logger) (retError error) {
+
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
 	if err != nil {
 		return err
 	}
-	// same workflow ID, same shard
-	return r.historyEngine.TerminateWorkflowExecution(ctx, &h.TerminateWorkflowExecutionRequest{
-		DomainUUID: common.StringPtr(domainID),
-		TerminateRequest: &shared.TerminateWorkflowExecutionRequest{
-			Domain: common.StringPtr(domainEntry.GetInfo().Name),
-			WorkflowExecution: &shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			Reason:   common.StringPtr("Terminate Workflow Due To Version Conflict."),
+	defer func() { release(retError) }()
+
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+	if !msBuilder.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	nextEventID := msBuilder.GetNextEventID()
+	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(incomingVersion)
+	terminationEvent := &shared.HistoryEvent{
+		EventId:   common.Int64Ptr(nextEventID),
+		Timestamp: common.Int64Ptr(incomingTimestamp),
+		Version:   common.Int64Ptr(incomingVersion),
+		EventType: shared.EventTypeWorkflowExecutionTerminated.Ptr(),
+		WorkflowExecutionTerminatedEventAttributes: &shared.WorkflowExecutionTerminatedEventAttributes{
+			Reason:   common.StringPtr(workflowTerminationReason),
+			Identity: common.StringPtr(workflowTerminationIdentity),
 			Details:  nil,
-			Identity: common.StringPtr("worker-service"),
 		},
-	})
+	}
+	history := &shared.History{Events: []*shared.HistoryEvent{terminationEvent}}
+
+	req := &h.ReplicateEventsRequest{
+		SourceCluster:     common.StringPtr(sourceCluster),
+		DomainUUID:        common.StringPtr(domainID),
+		WorkflowExecution: &execution,
+		FirstEventId:      common.Int64Ptr(nextEventID),
+		NextEventId:       common.Int64Ptr(nextEventID + 1),
+		Version:           common.Int64Ptr(incomingVersion),
+		History:           history,
+		NewRunHistory:     nil,
+	}
+	return r.ApplyReplicationTask(ctx, context, msBuilder, req, logger)
 }
 
 func (r *historyReplicator) getLatestCheckpoint(replicationInfoRemote map[string]*h.ReplicationInfo,
@@ -844,13 +879,13 @@ func (r *historyReplicator) getLatestCheckpoint(replicationInfoRemote map[string
 }
 
 func (r *historyReplicator) resetMutableState(ctx context.Context, context *workflowExecutionContext,
-	msBuilder mutableState, lastEventID int64, logger bark.Logger) (mutableState, error) {
+	msBuilder mutableState, lastEventID int64, incomingVersion int64, incomingTimestamp int64, logger bark.Logger) (mutableState, error) {
 
 	r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.HistoryConflictsCounter)
 
 	// handling edge case when resetting a workflow, and this workflow has done continue as new
 	// we need to terminate the continue as new-ed workflow
-	currentRunID, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx, msBuilder, logger)
+	currentRunID, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx, msBuilder, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
 		return nil, err
 	}

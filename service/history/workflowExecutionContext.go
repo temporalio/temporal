@@ -189,7 +189,7 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 		}
 
 		// Handling mutable state turn from standby to active, while having a decision on the fly
-		if di, ok := c.msBuilder.GetInFlightDecisionTask(); ok {
+		if di, ok := c.msBuilder.GetInFlightDecisionTask(); ok && c.msBuilder.IsWorkflowExecutionRunning() {
 			if di.Version < currentVersion {
 				// we have a decision on the fly with a lower version, fail it
 				c.msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
