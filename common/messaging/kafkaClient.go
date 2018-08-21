@@ -101,7 +101,7 @@ func (c *kafkaConsumer) Start() error {
 			select {
 			case <-c.doneC:
 				c.logger.Info("Stop consuming messages from channel")
-				break
+				return
 				// our Message interface is just a subset of Message interface in kafka-client so we don't need a wrapper here
 			case uMsg := <-c.uConsumer.Messages():
 				c.msgC <- uMsg
