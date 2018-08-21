@@ -1681,6 +1681,24 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 	if executionInfo.ParentRunID != "" {
 		parentRunID = executionInfo.ParentRunID
 	}
+
+	batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+		executionInfo.RunID,
+		executionInfo.RunID,
+		executionInfo.CreateRequestID,
+		executionInfo.State,
+		executionInfo.CloseStatus,
+		replicationState.StartVersion,
+		d.shardID,
+		rowTypeExecution,
+		executionInfo.DomainID,
+		executionInfo.WorkflowID,
+		permanentRunID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID,
+		request.PrevRunID,
+	)
+
 	batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
 		executionInfo.DomainID,
 		executionInfo.WorkflowID,

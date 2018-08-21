@@ -34,12 +34,12 @@ type mockConflictResolver struct {
 var _ conflictResolver = (*mockConflictResolver)(nil)
 
 // reset is mock implementation for reset of conflictResolver
-func (_m *mockConflictResolver) reset(requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
-	ret := _m.Called(requestID, replayEventID, startTime)
+func (_m *mockConflictResolver) reset(prevRunID string, requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
+	ret := _m.Called(prevRunID, requestID, replayEventID, startTime)
 
 	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, int64, time.Time) mutableState); ok {
-		r0 = rf(requestID, replayEventID, startTime)
+	if rf, ok := ret.Get(0).(func(string, string, int64, time.Time) mutableState); ok {
+		r0 = rf(prevRunID, requestID, replayEventID, startTime)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(mutableState)

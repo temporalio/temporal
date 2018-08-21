@@ -624,6 +624,7 @@ type (
 
 	// ResetMutableStateRequest is used to reset workflow execution state
 	ResetMutableStateRequest struct {
+		PrevRunID        string
 		ExecutionInfo    *WorkflowExecutionInfo
 		ReplicationState *ReplicationState
 		Condition        int64

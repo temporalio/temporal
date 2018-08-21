@@ -118,9 +118,9 @@ func (c *workflowExecutionContext) loadWorkflowExecutionInternal() error {
 	return nil
 }
 
-func (c *workflowExecutionContext) resetWorkflowExecution(resetBuilder mutableState) (mutableState,
+func (c *workflowExecutionContext) resetWorkflowExecution(prevRunID string, resetBuilder mutableState) (mutableState,
 	error) {
-	snapshotRequest := resetBuilder.ResetSnapshot()
+	snapshotRequest := resetBuilder.ResetSnapshot(prevRunID)
 	snapshotRequest.Condition = c.updateCondition
 
 	err := c.shard.ResetMutableState(snapshotRequest)

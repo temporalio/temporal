@@ -723,102 +723,46 @@ func (r *historyReplicator) flushCurrentWorkflowBuffer(ctx context.Context, doma
 	return nil
 }
 
-func (r *historyReplicator) conflictResolutionTerminateContinueAsNew(ctx context.Context,
-	msBuilder mutableState, logger bark.Logger) (retError error) {
+func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(ctx context.Context,
+	msBuilder mutableState, logger bark.Logger) (currentRunID string, retError error) {
 	// this function aims to solve the edge case when this workflow, when going through
 	// reset, has already started a next generation (continue as new-ed workflow)
 
 	if msBuilder.IsWorkflowExecutionRunning() {
 		// workflow still running, no continued as new edge case to solve
-		logger.Info("Conflict resolution workflow running, skip.")
-		return nil
+		logger.Info("Conflict resolution self workflow running, skip.")
+		return msBuilder.GetExecutionInfo().RunID, nil
 	}
 
-	if msBuilder.GetExecutionInfo().CloseStatus != persistence.WorkflowCloseStatusContinuedAsNew {
-		// workflow close status not being continue as new
-		logger.Info("Conflict resolution workflow finished not continue as new.")
-		return nil
-	}
-
-	// the close status is continue as new
-	// so it is impossible that the current running workflow (one with the same workflow ID)
-	// has the same run ID as "this" workflow
-	// meaning there is no chance that when we grab the current running workflow (same workflow ID)
-	// and enounter a dead lock
+	// terminate the current running workflow
+	// cannot use history cache to get current workflow since there can be deadlock
 	domainID := msBuilder.GetExecutionInfo().DomainID
 	workflowID := msBuilder.GetExecutionInfo().WorkflowID
-	_, currentMutableState, currentRelease, err := r.getCurrentWorkflowMutableState(ctx, domainID, workflowID)
+	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		DomainID:   domainID,
+		WorkflowID: workflowID,
+	})
 	if err != nil {
-		logger.Info("Conflict resolution error getting current workflow.")
-		return err
+		r.logError(logger, "Conflict resolution error getting current workflow.", err)
+		return "", err
 	}
-	currentRunID := currentMutableState.GetExecutionInfo().RunID
-	currentCloseStatus := currentMutableState.GetExecutionInfo().CloseStatus
-	currentRelease(nil)
+	currentRunID = resp.RunID
+	currentCloseStatus := resp.CloseStatus
+
 	if currentCloseStatus != persistence.WorkflowCloseStatusNone {
 		// current workflow finished
-		// note, it is impassoble that a current workflow ends with continue as new as close status
+		// note, it is impossible that a current workflow ends with continue as new as close status
 		logger.Info("Conflict resolution current workflow finished.")
-		return nil
+		return currentRunID, nil
 	}
 
-	getPrevRunID := func(domainID string, workflowID string, runID string) (string, error) {
-		response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-			DomainID: domainID,
-			Execution: shared.WorkflowExecution{
-				WorkflowId: common.StringPtr(workflowID),
-				RunId:      common.StringPtr(runID),
-			},
-			FirstEventID:  common.FirstEventID,
-			NextEventID:   common.FirstEventID + 1,
-			PageSize:      defaultHistoryPageSize,
-			NextPageToken: nil,
-		})
-		if err != nil {
-			r.logError(logger, "Conflict resolution current workflow finished.", err)
-			return "", err
-		}
-		if len(response.History.Events) == 0 {
-			logger.WithFields(bark.Fields{
-				logging.TagWorkflowExecutionID: workflowID,
-				logging.TagWorkflowRunID:       runID,
-			})
-			r.logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
-			return "", errNoHistoryFound
-		}
-
-		return response.History.Events[0].WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId(), nil
-	}
-
-	targetRunID := msBuilder.GetExecutionInfo().RunID
-	runID := currentRunID
-	for err == nil && runID != "" && runID != targetRunID {
-		// using the current running workflow to trace back (assuming continue as new)
-		runID, err = getPrevRunID(domainID, workflowID, runID)
-	}
-	if err != nil {
-		return err
-	}
-	if runID == "" {
-		// cannot relate the current running workflow to the workflow which events are being resetted.
-		logger.Info("Conflict resolution current workflow is not related.")
-		return nil
-	}
-
-	// we have runID == targetRunID
-	// meaning the current workflow is a result of continue as new of the workflow to be resetted
-
-	// if workflow is completed just when the call is made, will get EntityNotExistsError
-	// we are not sure whether the workflow to be terminated ends with continue as new or not
-	// so when encounter EntityNotExistsError, as well as other error, just return the err
-	// we will retry on the worker level
-
+	// need to terminate the current workflow
 	// same workflow ID, same shard
 	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID)
 	if err != nil {
 		r.logError(logger, "Conflict resolution err terminating current workflow.", err)
 	}
-	return err
+	return currentRunID, err
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {
@@ -906,12 +850,13 @@ func (r *historyReplicator) resetMutableState(ctx context.Context, context *work
 
 	// handling edge case when resetting a workflow, and this workflow has done continue as new
 	// we need to terminate the continue as new-ed workflow
-	err := r.conflictResolutionTerminateContinueAsNew(ctx, msBuilder, logger)
+	currentRunID, err := r.conflictResolutionTerminateCurrentRunningIfNotSelf(ctx, msBuilder, logger)
 	if err != nil {
 		return nil, err
 	}
+
 	resolver := r.getNewConflictResolver(context, logger)
-	msBuilder, err = resolver.reset(uuid.New(), lastEventID, msBuilder.GetExecutionInfo().StartTimestamp)
+	msBuilder, err = resolver.reset(currentRunID, uuid.New(), lastEventID, msBuilder.GetExecutionInfo().StartTimestamp)
 	logger.Info("Completed Resetting of workflow execution.")
 	if err != nil {
 		return nil, err

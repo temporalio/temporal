@@ -185,7 +185,7 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.WorkflowExecutionStartedEventAttributes)
 		ReplicateWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionTimedoutEvent(*workflow.HistoryEvent)
-		ResetSnapshot() *persistence.ResetMutableStateRequest
+		ResetSnapshot(string) *persistence.ResetMutableStateRequest
 		SetHistoryBuilder(hBuilder *historyBuilder)
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
@@ -377,7 +377,7 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 	return e.replicationState
 }
 
-func (e *mutableStateBuilder) ResetSnapshot() *persistence.ResetMutableStateRequest {
+func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.ResetMutableStateRequest {
 	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
 	for _, info := range e.pendingActivityInfoIDs {
 		insertActivities = append(insertActivities, info)
@@ -409,6 +409,7 @@ func (e *mutableStateBuilder) ResetSnapshot() *persistence.ResetMutableStateRequ
 	}
 
 	return &persistence.ResetMutableStateRequest{
+		PrevRunID:                 prevRunID,
 		ExecutionInfo:             e.executionInfo,
 		ReplicationState:          e.replicationState,
 		InsertActivityInfos:       insertActivities,

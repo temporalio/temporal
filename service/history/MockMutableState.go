@@ -2078,12 +2078,12 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionTimedoutEvent(_a0 *shared.
 }
 
 // ResetSnapshot provides a mock function with given fields:
-func (_m *mockMutableState) ResetSnapshot() *persistence.ResetMutableStateRequest {
-	ret := _m.Called()
+func (_m *mockMutableState) ResetSnapshot(_a0 string) *persistence.ResetMutableStateRequest {
+	ret := _m.Called(_a0)
 
 	var r0 *persistence.ResetMutableStateRequest
-	if rf, ok := ret.Get(0).(func() *persistence.ResetMutableStateRequest); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(string) *persistence.ResetMutableStateRequest); ok {
+		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*persistence.ResetMutableStateRequest)

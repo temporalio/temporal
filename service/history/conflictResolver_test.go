@@ -182,6 +182,7 @@ func (s *conflictResolverSuite) TestGetHistory() {
 }
 
 func (s *conflictResolverSuite) TestReset() {
+	prevRunID := uuid.New()
 	sourceCluster := "some random source cluster"
 	startTime := time.Now()
 	domainID := s.mockContext.domainID
@@ -225,6 +226,7 @@ func (s *conflictResolverSuite) TestReset() {
 	// the mutable state only has the minimal information
 	// so we can test the conflict resolver
 	s.mockExecutionMgr.On("ResetMutableState", &persistence.ResetMutableStateRequest{
+		PrevRunID: prevRunID,
 		ExecutionInfo: &persistence.WorkflowExecutionInfo{
 			DomainID:             domainID,
 			WorkflowID:           execution.GetWorkflowId(),
@@ -290,6 +292,6 @@ func (s *conflictResolverSuite) TestReset() {
 		},
 		nil,
 	)
-	_, err := s.conflictResolver.reset(createRequestID, nextEventID-1, startTime)
+	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, startTime)
 	s.Nil(err)
 }

@@ -768,10 +768,11 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *WorkflowMutableSta
 }
 
 // ResetMutableState is  utility method to reset mutable state
-func (s *TestBase) ResetMutableState(info *WorkflowExecutionInfo, replicationState *ReplicationState, nextEventID int64,
+func (s *TestBase) ResetMutableState(prevRunID string, info *WorkflowExecutionInfo, replicationState *ReplicationState, nextEventID int64,
 	activityInfos []*ActivityInfo, timerInfos []*TimerInfo, childExecutionInfos []*ChildExecutionInfo,
 	requestCancelInfos []*RequestCancelInfo, signalInfos []*SignalInfo, ids []string) error {
 	return s.WorkflowMgr.ResetMutableState(&ResetMutableStateRequest{
+		PrevRunID:                 prevRunID,
 		ExecutionInfo:             info,
 		ReplicationState:          replicationState,
 		Condition:                 nextEventID,
