@@ -206,6 +206,37 @@ func (s *localTimerGateSuite) TestTimerWillFire_Zero() {
 	// this test is to validate initial notification will trigger a scan of timer
 	s.localTimerGate.Update(time.Time{})
 	s.False(s.localTimerGate.FireAfter(time.Now()))
+
+	select { // this is to drain existing signal
+	case <-s.localTimerGate.FireChan():
+	case <-time.NewTimer(time.Second).C:
+	}
+
+	now := time.Now()
+	newTimer := now.Add(1 * time.Second)
+	deadline := now.Add(2 * time.Second)
+	s.localTimerGate.Update(newTimer)
+	select {
+	case <-s.localTimerGate.FireChan():
+	case <-time.NewTimer(deadline.Sub(now)).C:
+		s.Fail("timer should fire")
+	}
+	s.localTimerGate.Update(time.Time{})
+	select { // this is to drain existing signal
+	case <-s.localTimerGate.FireChan():
+	case <-time.NewTimer(time.Second).C:
+		s.Fail("timer should fire")
+	}
+
+	now = time.Now()
+	newTimer = now.Add(1 * time.Second)
+	s.localTimerGate.Update(newTimer)
+	s.localTimerGate.Update(time.Time{})
+	select { // this is to drain existing signal
+	case <-s.localTimerGate.FireChan():
+	case <-time.NewTimer(time.Second).C:
+		s.Fail("timer should fire")
+	}
 }
 
 func (s *localTimerGateSuite) TestTimerWillFire() {
