@@ -369,6 +369,12 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 		return nil
 	}
 	if firstEventID > msBuilder.GetNextEventID() {
+
+		if !msBuilder.IsWorkflowExecutionRunning() {
+			logger.Warnf("Workflow already terminated due to conflict resolution.")
+			return nil
+		}
+
 		// out of order replication task and store it in the buffer
 		logger.Debugf("Buffer out of order replication task.  NextEvent: %v, FirstEvent: %v",
 			msBuilder.GetNextEventID(), firstEventID)
@@ -415,6 +421,11 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 
 func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context *workflowExecutionContext,
 	msBuilder mutableState, request *h.ReplicateEventsRequest, logger bark.Logger) error {
+
+	if !msBuilder.IsWorkflowExecutionRunning() {
+		logger.Warnf("Workflow already terminated due to conflict resolution.")
+		return nil
+	}
 
 	domainID, err := validateDomainUUID(request.DomainUUID)
 	if err != nil {

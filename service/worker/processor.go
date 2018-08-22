@@ -191,21 +191,25 @@ func (p *replicationTaskProcessor) messageProcessLoop(workerWG *sync.WaitGroup, 
 
 func (p *replicationTaskProcessor) processWithRetry(msg messaging.Message, workerID int) {
 	var err error
+	logger := p.logger.WithFields(bark.Fields{
+		logging.TagPartitionKey: msg.Partition(),
+		logging.TagOffset:       msg.Offset(),
+		logging.TagAttemptStart: time.Now(),
+	})
 
 	forceBuffer := false
 	remainingRetryCount := p.config.ReplicationTaskMaxRetry
 
 	attempt := 0
-	startTime := time.Now()
 	op := func() error {
 		attempt++
-		processErr := p.process(msg, forceBuffer)
-		if processErr != nil && p.isRetryTaskError(processErr) {
+		logger, err = p.process(msg, logger, forceBuffer)
+		if err != nil && p.isRetryTaskError(err) {
 			// Enable buffering of replication tasks for next attempt
 			forceBuffer = true
 		}
 
-		return processErr
+		return err
 	}
 
 ProcessRetryLoop:
@@ -222,12 +226,9 @@ ProcessRetryLoop:
 				if common.IsWhitelistServiceTransientError(err) {
 					// Emit a warning log on every 100 transient error retries of replication task
 					if attempt%100 == 0 {
-						p.logger.WithFields(bark.Fields{
+						logger.WithFields(bark.Fields{
 							logging.TagErr:          err,
-							logging.TagPartitionKey: msg.Partition(),
-							logging.TagOffset:       msg.Offset(),
 							logging.TagAttemptCount: attempt,
-							logging.TagAttemptStart: startTime,
 							logging.TagAttemptEnd:   time.Now(),
 						}).Warn("Error (transient) processing replication task.")
 					}
@@ -256,49 +257,61 @@ ProcessRetryLoop:
 	} else {
 		// Task still failed after all retries.  This is most probably due to a bug in replication code.
 		// Nack the task to move it to DLQ to not block replication for other workflow executions.
-		p.logger.WithFields(bark.Fields{
+		logger.WithFields(bark.Fields{
 			logging.TagErr:          err,
-			logging.TagPartitionKey: msg.Partition(),
-			logging.TagOffset:       msg.Offset(),
 			logging.TagAttemptCount: attempt,
-			logging.TagAttemptStart: startTime,
 			logging.TagAttemptEnd:   time.Now(),
 		}).Error("Error processing replication task.")
 		msg.Nack()
 	}
 }
 
-func (p *replicationTaskProcessor) process(msg messaging.Message, inRetry bool) error {
+func (p *replicationTaskProcessor) process(msg messaging.Message, logger bark.Logger, inRetry bool) (bark.Logger, error) {
 	scope := metrics.ReplicatorScope
 	task, err := deserialize(msg.Value())
 	if err != nil {
 		p.updateFailureMetric(scope, err)
-		p.logger.WithFields(bark.Fields{
-			logging.TagErr:          err,
-			logging.TagPartitionKey: msg.Partition(),
-			logging.TagOffset:       msg.Offset(),
+		logger.WithFields(bark.Fields{
+			logging.TagErr: err,
 		}).Error("Failed to deserialize replication task.")
 
 		// return BadRequestError so processWithRetry can nack the message
-		return ErrDeserializeReplicationTask
+		return logger, ErrDeserializeReplicationTask
 	}
 
 	if task.TaskType == nil {
 		p.updateFailureMetric(scope, ErrEmptyReplicationTask)
-		return ErrEmptyReplicationTask
+		logger.WithFields(bark.Fields{
+			logging.TagErr: ErrEmptyReplicationTask,
+		}).Error("Task type is missing.")
+		return logger, ErrEmptyReplicationTask
 	}
 
 	switch task.GetTaskType() {
 	case replicator.ReplicationTaskTypeDomain:
+		attr := task.DomainTaskAttributes
+		logger = logger.WithFields(bark.Fields{
+			logging.TagDomainID: attr.GetID(),
+		})
 		scope = metrics.DomainReplicationTaskScope
-		err = p.handleDomainReplicationTask(task)
+		err = p.handleDomainReplicationTask(task, logger)
 	case replicator.ReplicationTaskTypeSyncShardStatus:
 		scope = metrics.SyncShardTaskScope
-		err = p.handleSyncShardTask(task)
+		err = p.handleSyncShardTask(task, logger)
 	case replicator.ReplicationTaskTypeHistory:
+		attr := task.HistoryTaskAttributes
+		logger = logger.WithFields(bark.Fields{
+			logging.TagDomainID:            attr.GetDomainId(),
+			logging.TagWorkflowExecutionID: attr.GetWorkflowId(),
+			logging.TagWorkflowRunID:       attr.GetRunId(),
+			logging.TagFirstEventID:        attr.GetFirstEventId(),
+			logging.TagNextEventID:         attr.GetNextEventId(),
+			logging.TagVersion:             attr.GetVersion(),
+		})
 		scope = metrics.HistoryReplicationTaskScope
-		err = p.handleHistoryReplicationTask(task, inRetry)
+		err = p.handleHistoryReplicationTask(task, logger, inRetry)
 	default:
+		logger.Error("Unknown task type.")
 		err = ErrUnknownReplicationTask
 	}
 
@@ -306,25 +319,25 @@ func (p *replicationTaskProcessor) process(msg messaging.Message, inRetry bool) 
 		p.updateFailureMetric(scope, err)
 	}
 
-	return err
+	return logger, err
 }
 
-func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask) error {
+func (p *replicationTaskProcessor) handleDomainReplicationTask(task *replicator.ReplicationTask, logger bark.Logger) error {
 	p.metricsClient.IncCounter(metrics.DomainReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.DomainReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	p.logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
+	logger.Debugf("Received domain replication task %v.", task.DomainTaskAttributes)
 	return p.domainReplicator.HandleReceivingTask(task.DomainTaskAttributes)
 }
 
-func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask) error {
+func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.ReplicationTask, logger bark.Logger) error {
 	p.metricsClient.IncCounter(metrics.SyncShardTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.SyncShardTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
 	attr := task.SyncShardStatusTaskAttributes
-	p.logger.Debugf("Received sync shard task %v.", attr)
+	logger.Debugf("Received sync shard task %v.", attr)
 
 	req := &h.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
@@ -336,7 +349,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	return p.historyClient.SyncShardStatus(ctx, req)
 }
 
-func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, inRetry bool) error {
+func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, logger bark.Logger, inRetry bool) error {
 	p.metricsClient.IncCounter(metrics.HistoryReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
@@ -351,14 +364,7 @@ Loop:
 		}
 	}
 	if !processTask {
-		p.logger.WithFields(bark.Fields{
-			logging.TagDomainID:            attr.GetDomainId(),
-			logging.TagWorkflowExecutionID: attr.GetWorkflowId(),
-			logging.TagWorkflowRunID:       attr.GetRunId(),
-			logging.TagFirstEventID:        attr.GetFirstEventId(),
-			logging.TagNextEventID:         attr.GetNextEventId(),
-			logging.TagVersion:             attr.GetVersion(),
-		}).Warn("Dropping non-targeted history task.")
+		logger.Warn("Dropping non-targeted history task.")
 		return nil
 	}
 

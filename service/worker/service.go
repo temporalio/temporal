@@ -65,7 +65,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 		ReplicatorConcurrency:      1000,
 		ReplicatorBufferRetryCount: 8,
-		ReplicationTaskMaxRetry:    5,
+		ReplicationTaskMaxRetry:    50,
 	}
 }
 
