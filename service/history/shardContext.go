@@ -35,6 +35,7 @@ import (
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/service"
 )
 
@@ -785,12 +786,52 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager, domainCache cache.DomainCache,
 	owner string, closeCh chan<- int, config *Config, logger bark.Logger, metricsClient metrics.Client) (ShardContext,
 	error) {
-	response, err0 := shardManager.GetShard(&persistence.GetShardRequest{ShardID: shardID})
-	if err0 != nil {
-		return nil, err0
+
+	var shardInfo *persistence.ShardInfo
+
+	retryPolicy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+	retryPolicy.SetMaximumInterval(time.Second)
+	retryPolicy.SetExpirationInterval(5 * time.Second)
+
+	retryPredicate := func(err error) bool {
+		if common.IsPersistenceTransientError(err) {
+			return true
+		}
+		_, ok := err.(*persistence.ShardAlreadyExistError)
+		return ok
+
 	}
 
-	shardInfo := response.ShardInfo
+	getShard := func() error {
+		resp, err := shardManager.GetShard(&persistence.GetShardRequest{
+			ShardID: shardID,
+		})
+		if err == nil {
+			shardInfo = resp.ShardInfo
+			return nil
+		}
+		if _, ok := err.(*shared.EntityNotExistsError); !ok {
+			return err
+		}
+
+		// EntityNotExistsError error
+		shardInfo = &persistence.ShardInfo{
+			ShardID:          shardID,
+			RangeID:          0,
+			TransferAckLevel: 0,
+		}
+		return shardManager.CreateShard(&persistence.CreateShardRequest{ShardInfo: shardInfo})
+	}
+
+	err := backoff.Retry(getShard, retryPolicy, retryPredicate)
+	if err != nil {
+		logger.WithFields(bark.Fields{
+			logging.TagHistoryShardID: shardID,
+			logging.TagErr:            err,
+		}).Error("Fail to acquire shard.")
+		return nil, err
+	}
+
 	updatedShardInfo := copyShardInfo(shardInfo)
 	updatedShardInfo.Owner = owner
 

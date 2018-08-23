@@ -23,10 +23,7 @@ package history
 import (
 	"time"
 
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -231,10 +228,6 @@ func (s *Service) Start() {
 	shardMgr = persistence.NewShardPersistenceRateLimitedClient(shardMgr, persistenceRateLimiter, log)
 	shardMgr = persistence.NewShardPersistenceMetricsClient(shardMgr, base.GetMetricsClient(), log)
 
-	// Hack to create shards for bootstrap purposes
-	// TODO: properly pre-create all shards before deployment.
-	s.createAllShards(p.CassandraConfig.NumHistoryShards, shardMgr, log)
-
 	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
@@ -317,46 +310,4 @@ func (s *Service) Stop() {
 	default:
 	}
 	s.params.Logger.Infof("%v stopped", common.HistoryServiceName)
-}
-
-func (s *Service) createAllShards(numShards int, shardMgr persistence.ShardManager, log bark.Logger) {
-	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
-	policy.SetMaximumInterval(time.Second)
-	policy.SetExpirationInterval(5 * time.Second)
-
-	log.Infof("Starting check for shard creation of '%v' shards.", numShards)
-	for shardID := 0; shardID < numShards; shardID++ {
-		getShardOperation := func() error {
-			_, err := shardMgr.GetShard(&persistence.GetShardRequest{
-				ShardID: shardID,
-			})
-
-			return err
-		}
-
-		err := backoff.Retry(getShardOperation, policy, common.IsPersistenceTransientError)
-		if err != nil {
-			if _, ok := err.(*shared.EntityNotExistsError); !ok {
-				log.Fatalf("failed to get shard for ShardId: %v, with error: %v", shardID, err)
-			}
-
-			// Shard not found.  Let's create shard for the very first time
-			createShardOperation := func() error {
-				return shardMgr.CreateShard(&persistence.CreateShardRequest{
-					ShardInfo: &persistence.ShardInfo{
-						ShardID:          shardID,
-						RangeID:          0,
-						TransferAckLevel: 0,
-					}})
-			}
-
-			err := backoff.Retry(createShardOperation, policy, common.IsPersistenceTransientError)
-			if err != nil {
-				if _, ok := err.(*persistence.ShardAlreadyExistError); !ok {
-					log.Fatalf("failed to create shard for ShardId: %v, with error: %v", shardID, err)
-				}
-			}
-		}
-	}
-	log.Infof("All '%v' shards are created.", numShards)
 }
