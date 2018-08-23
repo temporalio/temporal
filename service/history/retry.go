@@ -51,8 +51,7 @@ func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, 
 	a.RequestID = ""
 	a.StartedTime = time.Time{}
 	a.LastHeartBeatUpdatedTime = time.Time{}
-	// clear timer created bits except for ScheduleToClose
-	a.TimerTaskStatus = TimerTaskStatusNone | (a.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose)
+	a.TimerTaskStatus = TimerTaskStatusNone
 
 	return &persistence.ActivityRetryTimerTask{
 		Version:             a.Version,

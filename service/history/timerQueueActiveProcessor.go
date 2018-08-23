@@ -385,7 +385,7 @@ Update_History_Loop:
 				t.logger.Debugf("Activity TimeoutType: %v, scheduledID: %v, startedId: %v. \n",
 					timeoutType, ai.ScheduleID, ai.StartedID)
 
-				if td.Attempt < ai.Attempt && timeoutType != workflow.TimeoutTypeScheduleToClose {
+				if td.Attempt < ai.Attempt {
 					// retry could update ai.Attempt, and we should ignore further timeouts for previous attempt
 					continue
 				}

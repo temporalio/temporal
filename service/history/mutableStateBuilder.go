@@ -1688,14 +1688,17 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		TaskList:                 attributes.TaskList.GetName(),
 		HasRetryPolicy:           attributes.RetryPolicy != nil,
 	}
+	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 	if ai.HasRetryPolicy {
 		ai.InitialInterval = attributes.RetryPolicy.GetInitialIntervalInSeconds()
 		ai.BackoffCoefficient = attributes.RetryPolicy.GetBackoffCoefficient()
 		ai.MaximumInterval = attributes.RetryPolicy.GetMaximumIntervalInSeconds()
 		ai.MaximumAttempts = attributes.RetryPolicy.GetMaximumAttempts()
 		ai.NonRetriableErrors = attributes.RetryPolicy.NonRetriableErrorReasons
+		if attributes.RetryPolicy.GetExpirationIntervalInSeconds() > scheduleToCloseTimeout {
+			ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(attributes.RetryPolicy.GetExpirationIntervalInSeconds()) * time.Second)
+		}
 	}
-	ai.ExpirationTime = ai.ScheduledTime.Add(time.Duration(scheduleToCloseTimeout) * time.Second)
 
 	e.pendingActivityInfoIDs[scheduleEventID] = ai
 	e.pendingActivityInfoByActivityID[ai.ActivityID] = scheduleEventID

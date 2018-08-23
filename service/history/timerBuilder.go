@@ -275,10 +275,10 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder mutableState) {
 	tb.activityTimers = make(timers, 0, len(tb.pendingActivityTimers))
 	for _, v := range tb.pendingActivityTimers {
 		if v.ScheduleID != common.EmptyEventID {
-			scheduleToCloseExpiry := v.ExpirationTime
-			if scheduleToCloseExpiry.IsZero() {
-				// v.ExpirationTime could be zero for old activity_infos before this code change (for retry)
-				scheduleToCloseExpiry = v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
+			scheduleToCloseExpiry := v.ScheduledTime.Add(time.Duration(v.ScheduleToCloseTimeout) * time.Second)
+			if !v.ExpirationTime.IsZero() && v.ExpirationTime.Before(scheduleToCloseExpiry) {
+				// expire before scheduleToClose timeout
+				scheduleToCloseExpiry = v.ExpirationTime
 			}
 			td := &timerDetails{
 				TimerSequenceID: TimerSequenceID{VisibilityTimestamp: scheduleToCloseExpiry},
