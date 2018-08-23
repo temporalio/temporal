@@ -33,6 +33,7 @@ type (
 	// started execution
 	RecordWorkflowExecutionStartedRequest struct {
 		DomainUUID       string
+		Domain           string // domain name is not persisted, but used as config filter key
 		Execution        s.WorkflowExecution
 		WorkflowTypeName string
 		StartTimestamp   int64
@@ -43,6 +44,7 @@ type (
 	// closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		DomainUUID       string
+		Domain           string // domain name is not persisted, but used as config filter key
 		Execution        s.WorkflowExecution
 		WorkflowTypeName string
 		StartTimestamp   int64

@@ -236,6 +236,23 @@ func NewPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) Prior
 	return tb
 }
 
+// NewFullPriorityTokenBucket creates and returns a new priority token bucket with all bucket init with full tokens.
+// With all buckets full, get tokens from low priority buckets won't be missed initially, but may caused bursts.
+func NewFullPriorityTokenBucket(numOfPriority, rps int, timeSource TimeSource) PriorityTokenBucket {
+	tb := new(priorityTokenBucketImpl)
+	tb.tokens = make([]int, numOfPriority)
+	tb.timeSource = timeSource
+	tb.fillInterval = int64(time.Millisecond * 100)
+	tb.fillRate = (rps * 100) / millisPerSecond
+	tb.overflowRps = rps - (10 * tb.fillRate)
+	tb.refill(time.Now().UnixNano())
+	for i := 1; i < numOfPriority; i++ {
+		tb.nextRefillTime = int64(0)
+		tb.refill(time.Now().UnixNano())
+	}
+	return tb
+}
+
 func (tb *priorityTokenBucketImpl) GetToken(priority, count int) (bool, time.Duration) {
 	now := tb.timeSource.Now().UnixNano()
 	tb.Lock()

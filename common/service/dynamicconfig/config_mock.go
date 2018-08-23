@@ -29,6 +29,11 @@ func GetIntPropertyFn(value int) func(opts ...FilterOption) int {
 	return func(...FilterOption) int { return value }
 }
 
+// GetIntPropertyFilteredByDomain returns values as IntPropertyFnWithDomainFilters
+func GetIntPropertyFilteredByDomain(value int) func(domain string) int {
+	return func(domain string) int { return value }
+}
+
 // GetIntPropertyFilteredByTaskListInfo returns value as IntPropertyFnWithTaskListInfoFilters
 func GetIntPropertyFilteredByTaskListInfo(value int) func(domain string, taskList string, taskType int) int {
 	return func(domain string, taskList string, taskType int) int { return value }

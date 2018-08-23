@@ -108,7 +108,7 @@ func (s *Service) Start() {
 		p.Logger)
 
 	if err != nil {
-		log.Fatalf("failed to create visiblity manager: %v", err)
+		log.Fatalf("failed to create visibility manager: %v", err)
 	}
 	visibility = persistence.NewVisibilityPersistenceRateLimitedClient(visibility, persistenceRateLimiter, log)
 	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)

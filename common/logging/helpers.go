@@ -452,3 +452,23 @@ func LogDecisionTimeoutLargerThanWorkflowTimeout(logger bark.Logger, t int32, do
 		"DecisionTimeout": t,
 	}).Warn("Decision timeout is larger than workflow timeout")
 }
+
+// LogOpenWorkflowSampled is used to log msg for open visibility requests that are sampled
+func LogOpenWorkflowSampled(logger bark.Logger, domain, wid, rid, wfType string) {
+	logger.WithFields(bark.Fields{
+		"Domain":       domain,
+		"WorkflowID":   wid,
+		"RunID":        rid,
+		"WorkflowType": wfType,
+	}).Info("Request for open workflow is sampled")
+}
+
+// LogClosedWorkflowSampled is used to log msg for closed visibility requests that are sampled
+func LogClosedWorkflowSampled(logger bark.Logger, domain, wid, rid, wfType string) {
+	logger.WithFields(bark.Fields{
+		"Domain":       domain,
+		"WorkflowID":   wid,
+		"RunID":        rid,
+		"WorkflowType": wfType,
+	}).Info("Request for closed workflow is sampled")
+}

@@ -49,6 +49,8 @@ type (
 	}
 )
 
+const defaultDomainName = "defaultDomainName"
+
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
 	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
 	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
@@ -140,9 +142,19 @@ func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTask
 func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, workflowTimeout int32) error {
+	domain := defaultDomainName
+	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+	} else {
+		domain = domainEntry.GetInfo().Name
+	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
 		DomainUUID:       domainID,
+		Domain:           domain,
 		Execution:        execution,
 		WorkflowTypeName: workflowTypeName,
 		StartTimestamp:   startTimeUnixNano,
@@ -156,6 +168,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	historyLength int64) error {
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
+	domain := defaultDomainName
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
@@ -165,10 +178,12 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	} else {
 		// retention in domain config is in days, convert to seconds
 		retentionSeconds = int64(domainEntry.GetConfig().Retention) * 24 * 60 * 60
+		domain = domainEntry.GetInfo().Name
 	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       domainID,
+		Domain:           domain,
 		Execution:        execution,
 		WorkflowTypeName: workflowTypeName,
 		StartTimestamp:   startTimeUnixNano,

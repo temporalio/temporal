@@ -181,3 +181,32 @@ func (s *TokenBucketSuite) TestPriorityTokenBucket() {
 		s.True(ok2)
 	}
 }
+
+func (s *TokenBucketSuite) TestFullPriorityTokenBucket() {
+	ts := &mockTimeSource{currTime: time.Now()}
+	tb := NewFullPriorityTokenBucket(2, 100, ts)
+
+	ok2, _ := tb.GetToken(1, 10)
+	s.True(ok2)
+
+	for i := 0; i < 2; i++ {
+		ok2, _ := tb.GetToken(1, 1)
+		s.False(ok2)
+		ok, _ := tb.GetToken(0, 10)
+		s.True(ok)
+		ts.advance(time.Millisecond * 101)
+	}
+
+	ok2, _ = tb.GetToken(1, 1)
+	s.False(ok2)
+	ts.advance(time.Millisecond * 101)
+	ok2, _ = tb.GetToken(1, 5)
+	s.True(ok2)
+	ts.advance(time.Millisecond * 101)
+	ok2, _ = tb.GetToken(1, 15)
+	s.False(ok2)
+	ok2, _ = tb.GetToken(1, 10)
+	s.True(ok2)
+	ok, _ := tb.GetToken(0, 10)
+	s.True(ok)
+}
