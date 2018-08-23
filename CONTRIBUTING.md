@@ -41,6 +41,12 @@ Overcommit adds some requirements to your commit messages. At Uber, we follow th
 [Chris Beams](http://chris.beams.io/posts/git-commit/) guide to writing git
 commit messages. Read it, follow it, learn it, love it.
 
+## Issues to start with
+
+Take a look at the list of issues labeled 
+[up-for-grabs](https://github.com/uber/cadence/labels/up-for-grabs). These issues 
+are a great way to start contributing to Cadence.
+
 ## Building
 
 You can compile the `cadence` service and helper tools without running test:
