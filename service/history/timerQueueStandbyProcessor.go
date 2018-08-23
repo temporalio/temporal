@@ -163,7 +163,7 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 		err = nil // retry backoff timer should not get created on passive cluster
 
 	case persistence.TaskTypeWorkflowRetryTimer:
-		scope = metrics.TimerActiveTaskWorkflowRetryTimerScope
+		scope = metrics.TimerStandbyTaskWorkflowRetryTimerScope
 		err = t.processWorkflowRetryTimerTask(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
