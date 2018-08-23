@@ -206,7 +206,7 @@ func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.Replicat
 		logger.WithField(logging.TagCurrentVersion, msBuilder.GetReplicationState().LastWriteVersion)
 		err = r.FlushBuffer(ctx, context, msBuilder, logger)
 		if err != nil {
-			r.logError(logger, "Fail to pre-flush buffer.", err)
+			logError(logger, "Fail to pre-flush buffer.", err)
 			return err
 		}
 		msBuilder, err = r.ApplyOtherEventsVersionChecking(ctx, context, msBuilder, request, logger)
@@ -302,7 +302,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 		}
 
 		err = ErrMoreThan2DC
-		r.logError(logger, err.Error(), err)
+		logError(logger, err.Error(), err)
 		return nil, err
 	}
 
@@ -316,7 +316,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 
 		if lastValidVersion == common.EmptyVersion {
 			err = ErrImpossibleLocalRemoteMissingReplicationInfo
-			r.logError(logger, err.Error(), err)
+			logError(logger, err.Error(), err)
 			return nil, err
 		}
 		logger.Info("Reset to latest common checkpoint.")
@@ -328,7 +328,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 	}
 	if rState.LastWriteVersion < ri.GetVersion() {
 		err = ErrImpossibleRemoteClaimSeenHigherVersion
-		r.logError(logger, err.Error(), err)
+		logError(logger, err.Error(), err)
 		return nil, err
 	}
 
@@ -336,7 +336,7 @@ func (r *historyReplicator) ApplyOtherEventsVersionChecking(ctx context.Context,
 	// Detect conflict
 	if ri.GetLastEventId() > rState.LastWriteEventID {
 		// if there is any bug in the replication protocol or implementation, this case can happen
-		r.logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
+		logError(logger, "Conflict detected, but cannot resolve.", ErrCorruptedReplicationInfo)
 		// Returning BadRequestError to force the message to land into DLQ
 		return nil, ErrCorruptedReplicationInfo
 	}
@@ -397,7 +397,7 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 
 		err = msBuilder.BufferReplicationTask(request)
 		if err != nil {
-			r.logError(logger, "Failed to buffer out of order replication task.", err)
+			logError(logger, "Failed to buffer out of order replication task.", err)
 			return errors.New("failed to add buffered replication task")
 		}
 		return r.updateBufferedReplicationTask(context, msBuilder)
@@ -406,14 +406,14 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 	// Apply the replication task
 	err = r.ApplyReplicationTask(ctx, context, msBuilder, request, logger)
 	if err != nil {
-		r.logError(logger, "Fail to Apply Replication task.", err)
+		logError(logger, "Fail to Apply Replication task.", err)
 		return err
 	}
 
 	// Flush buffered replication tasks after applying the update
 	err = r.FlushBuffer(ctx, context, msBuilder, logger)
 	if err != nil {
-		r.logError(logger, "Fail to flush buffer.", err)
+		logError(logger, "Fail to flush buffer.", err)
 	}
 
 	return err
@@ -736,7 +736,7 @@ func (r *historyReplicator) flushCurrentWorkflowBuffer(ctx context.Context, doma
 	err = r.FlushBuffer(ctx, currentContext, currentMutableState, logger)
 	currentRelease(err)
 	if err != nil {
-		r.logError(logger, "Fail to flush buffer for current workflow.", err)
+		logError(logger, "Fail to flush buffer for current workflow.", err)
 		return err
 	}
 	return nil
@@ -762,7 +762,7 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 		WorkflowID: workflowID,
 	})
 	if err != nil {
-		r.logError(logger, "Conflict resolution error getting current workflow.", err)
+		logError(logger, "Conflict resolution error getting current workflow.", err)
 		return "", err
 	}
 	currentRunID = resp.RunID
@@ -779,9 +779,39 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 	// same workflow ID, same shard
 	err = r.terminateWorkflow(ctx, domainID, workflowID, currentRunID, incomingVersion, incomingTimestamp, logger)
 	if err != nil {
-		r.logError(logger, "Conflict resolution err terminating current workflow.", err)
+		logError(logger, "Conflict resolution err terminating current workflow.", err)
 	}
 	return currentRunID, err
+}
+
+func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, logger bark.Logger, domainID, workflowID, runID string) (*shared.HistoryEvent, error) {
+	response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
+		DomainID: domainID,
+		Execution: shared.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		FirstEventID:  common.FirstEventID,
+		NextEventID:   common.FirstEventID + 1,
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+	})
+	if err != nil {
+		logger.WithFields(bark.Fields{
+			logging.TagErr: err,
+		}).Error("Conflict resolution current workflow finished.", err)
+		return nil, err
+	}
+	if len(response.History.Events) == 0 {
+		logger.WithFields(bark.Fields{
+			logging.TagWorkflowExecutionID: workflowID,
+			logging.TagWorkflowRunID:       runID,
+		})
+		logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
+		return nil, errNoHistoryFound
+	}
+
+	return response.History.Events[0], nil
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {
@@ -932,7 +962,7 @@ func (r *historyReplicator) notify(clusterName string, now time.Time, transferTa
 	r.historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
 }
 
-func (r *historyReplicator) logError(logger bark.Logger, msg string, err error) {
+func logError(logger bark.Logger, msg string, err error) {
 	logger.WithFields(bark.Fields{
 		logging.TagErr: err,
 	}).Error(msg)

@@ -158,9 +158,13 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 		scope = metrics.TimerStandbyTaskWorkflowTimeoutScope
 		err = t.processWorkflowTimeout(timerTask)
 
-	case persistence.TaskTypeRetryTimer:
-		scope = metrics.TimerStandbyTaskRetryTimerScope
+	case persistence.TaskTypeActivityRetryTimer:
+		scope = metrics.TimerStandbyTaskActivityRetryTimerScope
 		err = nil // retry backoff timer should not get created on passive cluster
+
+	case persistence.TaskTypeWorkflowRetryTimer:
+		scope = metrics.TimerActiveTaskWorkflowRetryTimerScope
+		err = t.processWorkflowRetryTimerTask(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
 		scope = metrics.TimerStandbyTaskDeleteHistoryEvent
@@ -292,6 +296,37 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 		// active cluster will add an decision timeout event and schedule a decision
 		// standby cluster should just call ack manager to retry this task
 		// since we are stilling waiting for the decision timeout event / decision completion to be replicated
+		//
+		// we do not need to notity new timer to base, since if there is no new event being replicated
+		// checking again if the timer can be completed is meaningless
+		return ErrTaskRetry
+	})
+}
+
+func (t *timerQueueStandbyProcessorImpl) processWorkflowRetryTimerTask(timerTask *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowRetryTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskWorkflowRetryTimerScope, metrics.TaskLatency)
+	defer sw.Stop()
+
+	return t.processTimer(timerTask, func(msBuilder mutableState) error {
+
+		nextEventID := msBuilder.GetNextEventID()
+
+		if nextEventID > common.FirstEventID+1 {
+			// first decision already scheduled
+			return nil
+		}
+
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.DomainID, msBuilder.GetExecutionInfo().DecisionVersion, timerTask.Version, timerTask)
+		if err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+
+		// active cluster will add first decision task after backoff timeout.
+		// standby cluster should just call ack manager to retry this task
+		// since we are stilling waiting for the first DecisionSchedueldEvent to be replicated from active side.
 		//
 		// we do not need to notity new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless

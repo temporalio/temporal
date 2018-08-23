@@ -42,6 +42,8 @@ struct StartWorkflowExecutionRequest {
   10: optional string domainUUID
   20: optional shared.StartWorkflowExecutionRequest startRequest
   30: optional ParentExecutionInfo parentExecutionInfo
+  40: optional i32 attempt
+  50: optional i64 (js.type = "Long") expirationTimestamp
 }
 
 struct DescribeMutableStateRequest{

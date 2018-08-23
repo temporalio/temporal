@@ -223,9 +223,13 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 		scope = metrics.TimerActiveTaskWorkflowTimeoutScope
 		err = t.processWorkflowTimeout(timerTask)
 
-	case persistence.TaskTypeRetryTimer:
-		scope = metrics.TimerActiveTaskRetryTimerScope
-		err = t.processRetryTimer(timerTask)
+	case persistence.TaskTypeActivityRetryTimer:
+		scope = metrics.TimerActiveTaskActivityRetryTimerScope
+		err = t.processActivityRetryTimer(timerTask)
+
+	case persistence.TaskTypeWorkflowRetryTimer:
+		scope = metrics.TimerActiveTaskWorkflowRetryTimerScope
+		err = t.processWorkflowRetryTimer(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
 		scope = metrics.TimerActiveTaskDeleteHistoryEvent
@@ -395,7 +399,7 @@ Update_History_Loop:
 						createNewTimer = true
 
 						t.logger.Debugf("Ignore ActivityTimeout (%v) as retry is needed. New attempt: %v, retry backoff duration: %v.",
-							timeoutType, ai.Attempt, retryTask.(*persistence.RetryTimerTask).VisibilityTimestamp.Sub(time.Now()))
+							timeoutType, ai.Attempt, retryTask.(*persistence.ActivityRetryTimerTask).VisibilityTimestamp.Sub(time.Now()))
 
 						continue
 					}
@@ -562,9 +566,47 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueActiveProcessorImpl) processRetryTimer(task *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskRetryTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskRetryTimerScope, metrics.TaskLatency)
+func (t *timerQueueActiveProcessorImpl) processWorkflowRetryTimer(task *persistence.TimerTaskInfo) (retError error) {
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowRetryTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskWorkflowRetryTimerScope, metrics.TaskLatency)
+	defer sw.Stop()
+
+	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+	if err0 != nil {
+		return err0
+	}
+	defer func() { release(retError) }()
+
+Update_History_Loop:
+	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
+		msBuilder, err := loadMutableStateForTimerTask(context, task, t.metricsClient, t.logger)
+		if err != nil {
+			return err
+		} else if msBuilder == nil || !msBuilder.IsWorkflowExecutionRunning() {
+			return nil
+		}
+
+		if msBuilder.HasPendingDecisionTask() {
+			// already has decision task
+			return nil
+		}
+
+		// schedule first decision task
+		err = t.updateWorkflowExecution(context, msBuilder, true, false, nil, nil)
+		if err != nil {
+			if err == ErrConflict {
+				continue Update_History_Loop
+			}
+		}
+		return err
+	}
+
+	return ErrMaxAttemptsExceeded
+}
+
+func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persistence.TimerTaskInfo) error {
+	t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityRetryTimerScope, metrics.TaskRequests)
+	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskActivityRetryTimerScope, metrics.TaskLatency)
 	defer sw.Stop()
 
 	processFn := func() error {
@@ -642,7 +684,8 @@ func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence
 	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.TaskLatency)
 	defer sw.Stop()
 
-	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
+	domainID, workflowExecution := t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task)
+	context, release, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)
 	if err0 != nil {
 		return err0
 	}
@@ -667,15 +710,69 @@ Update_History_Loop:
 			}
 		}
 
-		if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
-			// If we failed to add the event that means the workflow is already completed.
-			// we drop this timeout event.
-			return nil
+		retryBackoffInterval := msBuilder.GetRetryBackoffDuration(getTimeoutErrorReason(workflow.TimeoutTypeStartToClose))
+		if retryBackoffInterval == common.NoRetryBackoff {
+			if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
+				// If we failed to add the event that means the workflow is already completed.
+				// we drop this timeout event.
+				return nil
+			}
+
+			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
+			// the history and try the operation again.
+			err = t.updateWorkflowExecution(context, msBuilder, false, true, nil, nil)
+			if err != nil {
+				if err == ErrConflict {
+					continue Update_History_Loop
+				}
+			}
+			return err
 		}
 
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
-		// the history and try the operation again.
-		err = t.updateWorkflowExecution(context, msBuilder, false, true, nil, nil)
+		// workflow timeout, but a retry is needed, so we do continue as new to retry
+		startEvent, err := getWorkflowStartedEvent(t.historyService.historyMgr, t.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
+		if err != nil {
+			return err
+		}
+
+		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
+		continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+			WorkflowType: startAttributes.WorkflowType,
+			TaskList:     startAttributes.TaskList,
+			RetryPolicy:  startAttributes.RetryPolicy,
+			Input:        startAttributes.Input,
+			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
+			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
+			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
+		}
+		domainEntry, err := getActiveDomainEntryFromShard(t.shard, &domainID)
+		if err != nil {
+			return err
+		}
+		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes)
+		if err != nil {
+			return err
+		}
+
+		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
+		var transferTasks, timerTasks []persistence.Task
+		tranT, timerT, err := getDeleteWorkflowTasksFromShard(t.shard, domainID, tBuilder)
+		if err != nil {
+			return err
+		}
+		transferTasks = append(transferTasks, tranT)
+		timerTasks = append(timerTasks, timerT)
+
+		// Generate a transaction ID for appending events to history
+		transactionID, err3 := t.shard.GetNextTransferTaskID()
+		if err3 != nil {
+			return err3
+		}
+
+		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
+		err = context.continueAsNewWorkflowExecution(nil, continueAsNewBuilder, transferTasks, timerTasks, transactionID)
+		t.notifyNewTimers(timersToNotify)
+
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop

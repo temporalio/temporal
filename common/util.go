@@ -272,3 +272,47 @@ func MinInt32(a, b int32) int32 {
 	}
 	return b
 }
+
+// ValidateRetryPolicy validates a retry policy
+func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
+	if policy == nil {
+		// nil policy is valid which means no retry
+		return nil
+	}
+	if policy.GetInitialIntervalInSeconds() <= 0 {
+		return &workflow.BadRequestError{Message: "InitialIntervalInSeconds must be greater than 0 on retry policy."}
+	}
+	if policy.GetBackoffCoefficient() < 1 {
+		return &workflow.BadRequestError{Message: "BackoffCoefficient cannot be less than 1 on retry policy."}
+	}
+	if policy.GetMaximumIntervalInSeconds() < 0 {
+		return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than 0 on retry policy."}
+	}
+	if policy.GetMaximumIntervalInSeconds() > 0 && policy.GetMaximumIntervalInSeconds() < policy.GetInitialIntervalInSeconds() {
+		return &workflow.BadRequestError{Message: "MaximumIntervalInSeconds cannot be less than InitialIntervalInSeconds on retry policy."}
+	}
+	if policy.GetMaximumAttempts() < 0 {
+		return &workflow.BadRequestError{Message: "MaximumAttempts cannot be less than 0 on retry policy."}
+	}
+	if policy.GetExpirationIntervalInSeconds() < 0 {
+		return &workflow.BadRequestError{Message: "ExpirationIntervalInSeconds cannot be less than 0 on retry policy."}
+	}
+	if policy.GetMaximumAttempts() == 0 && policy.GetExpirationIntervalInSeconds() == 0 {
+		return &workflow.BadRequestError{Message: "MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified."}
+	}
+	return nil
+}
+
+// CreateHistoryStartWorkflowRequest create a start workflow request for history
+func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.StartWorkflowExecutionRequest) *h.StartWorkflowExecutionRequest {
+	histRequest := &h.StartWorkflowExecutionRequest{
+		DomainUUID:   StringPtr(domainID),
+		StartRequest: startRequest,
+	}
+	if startRequest.RetryPolicy != nil && startRequest.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
+		expirationInSeconds := startRequest.RetryPolicy.GetExpirationIntervalInSeconds()
+		deadline := time.Now().Add(time.Second * time.Duration(expirationInSeconds))
+		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
+	}
+	return histRequest
+}

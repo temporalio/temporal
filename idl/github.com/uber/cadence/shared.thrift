@@ -352,6 +352,8 @@ struct ContinueAsNewWorkflowExecutionDecisionAttributes {
   30: optional binary input
   40: optional i32 executionStartToCloseTimeoutSeconds
   50: optional i32 taskStartToCloseTimeoutSeconds
+  60: optional i32 backoffStartIntervalInSeconds
+  70: optional RetryPolicy retryPolicy
 }
 
 struct StartChildWorkflowExecutionDecisionAttributes {
@@ -365,6 +367,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   80: optional ChildPolicy childPolicy
   90: optional binary control
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
+  110: optional RetryPolicy retryPolicy
 }
 
 struct Decision {
@@ -395,6 +398,9 @@ struct WorkflowExecutionStartedEventAttributes {
   52: optional ChildPolicy childPolicy
   54: optional string continuedExecutionRunId
   60: optional string identity
+  70: optional RetryPolicy retryPolicy
+  80: optional i32 attempt
+  90: optional i64 (js.type = "Long") expirationTimestamp
 }
 
 struct WorkflowExecutionCompletedEventAttributes {
@@ -420,6 +426,7 @@ struct WorkflowExecutionContinuedAsNewEventAttributes {
   50: optional i32 executionStartToCloseTimeoutSeconds
   60: optional i32 taskStartToCloseTimeoutSeconds
   70: optional i64 (js.type = "Long") decisionTaskCompletedEventId
+  80: optional i32 backoffStartIntervalInSeconds
 }
 
 struct DecisionTaskScheduledEventAttributes {
@@ -634,6 +641,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   90:  optional binary control
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
+  120: optional RetryPolicy retryPolicy
 }
 
 struct StartChildWorkflowExecutionFailedEventAttributes {
@@ -858,6 +866,7 @@ struct StartWorkflowExecutionRequest {
   90: optional string requestId
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional ChildPolicy childPolicy
+  120: optional RetryPolicy retryPolicy
 }
 
 struct StartWorkflowExecutionResponse {
@@ -1043,6 +1052,7 @@ struct SignalWithStartWorkflowExecutionRequest {
   110: optional string signalName
   120: optional binary signalInput
   130: optional binary control
+  140: optional RetryPolicy retryPolicy
 }
 
 struct TerminateWorkflowExecutionRequest {
@@ -1199,4 +1209,7 @@ struct RetryPolicy {
 
   // Non-Retriable errors. Will stop retrying if error matches this list.
   50: optional list<string> nonRetriableErrorReasons
+
+  // Expiration time for the whole retry process.
+  60: optional i32 expirationIntervalInSeconds
 }

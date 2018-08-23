@@ -54,6 +54,14 @@ CREATE TYPE workflow_execution (
   client_library_version           text,
   client_feature_version           text,
   client_impl                      text,
+  attempt                          int,    -- starting from 0 (for initial non-retry)
+  has_retry_policy                 boolean,-- If there is a retry policy
+  init_interval                    int,    -- initial retry interval, in seconds
+  backoff_coefficient              double,
+  max_interval                     int,    -- max retry interval in seconds
+  expiration_time                  timestamp, -- retry expiration time
+  max_attempts                     int,    -- max number of attempts including initial non-retry attempt
+  non_retriable_errors             list<text>,
 );
 
 -- Replication information for each cluster
