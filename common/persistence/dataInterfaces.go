@@ -705,9 +705,21 @@ type (
 		TaskID int64
 	}
 
+	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
+	RangeCompleteTransferTaskRequest struct {
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
 	// CompleteReplicationTaskRequest is used to complete a task in the replication task queue
 	CompleteReplicationTaskRequest struct {
 		TaskID int64
+	}
+
+	// RangeCompleteTimerTaskRequest is used to complete a range of tasks in the timer task queue
+	RangeCompleteTimerTaskRequest struct {
+		InclusiveBeginTimestamp time.Time
+		ExclusiveEndTimestamp   time.Time
 	}
 
 	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
@@ -970,8 +982,11 @@ type (
 		ResetMutableState(request *ResetMutableStateRequest) error
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+
+		// Transfer task related methods
 		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
+		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// Replication task related methods
 		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
@@ -980,6 +995,7 @@ type (
 		// Timer related methods.
 		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
+		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 	}
 
 	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard

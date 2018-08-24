@@ -225,45 +225,16 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
 
-	executionMgr := t.shard.GetExecutionManager()
-	minTimestamp := lowerAckLevel.VisibilityTimestamp
-	// relax the upper limit for scan since the query is [minTimestamp, maxTimestamp)
-	maxTimestamp := upperAckLevel.VisibilityTimestamp.Add(1 * time.Second)
-	batchSize := t.config.TimerTaskBatchSize()
-	request := &persistence.GetTimerIndexTasksRequest{
-		MinTimestamp: minTimestamp,
-		MaxTimestamp: maxTimestamp,
-		BatchSize:    batchSize,
-	}
-
-LoadCompleteLoop:
-	for {
-		response, err := executionMgr.GetTimerIndexTasks(request)
+	if lowerAckLevel.VisibilityTimestamp.Before(upperAckLevel.VisibilityTimestamp) {
+		err := t.shard.GetExecutionManager().RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{
+			InclusiveBeginTimestamp: lowerAckLevel.VisibilityTimestamp,
+			ExclusiveEndTimestamp:   upperAckLevel.VisibilityTimestamp,
+		})
 		if err != nil {
 			return err
 		}
-		request.NextPageToken = response.NextPageToken
-
-		for _, timer := range response.Timers {
-			timerSequenceID := TimerSequenceID{VisibilityTimestamp: timer.VisibilityTimestamp, TaskID: timer.TaskID}
-			if compareTimerIDLess(&upperAckLevel, &timerSequenceID) {
-				break LoadCompleteLoop
-			}
-			err := executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-				VisibilityTimestamp: timer.VisibilityTimestamp,
-				TaskID:              timer.TaskID})
-			if err != nil {
-				t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.CompleteTaskFailedCounter)
-				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timer, err)
-				return err
-			}
-			t.ackLevel = timerSequenceID
-		}
-
-		if len(response.NextPageToken) == 0 {
-			break LoadCompleteLoop
-		}
 	}
+
 	t.ackLevel = upperAckLevel
 
 	t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)

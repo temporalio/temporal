@@ -865,6 +865,14 @@ func (s *TestBase) CompleteTransferTask(taskID int64) error {
 	})
 }
 
+// RangeCompleteTransferTask is a utility method to complete a range of transfer tasks
+func (s *TestBase) RangeCompleteTransferTask(exclusiveBeginTaskID int64, inclusiveEndTaskID int64) error {
+	return s.WorkflowMgr.RangeCompleteTransferTask(&RangeCompleteTransferTaskRequest{
+		ExclusiveBeginTaskID: exclusiveBeginTaskID,
+		InclusiveEndTaskID:   inclusiveEndTaskID,
+	})
+}
+
 // CompleteReplicationTask is a utility method to complete a replication task
 func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 
@@ -905,6 +913,14 @@ func (s *TestBase) CompleteTimerTask(ts time.Time, taskID int64) error {
 	return s.WorkflowMgr.CompleteTimerTask(&CompleteTimerTaskRequest{
 		VisibilityTimestamp: ts,
 		TaskID:              taskID,
+	})
+}
+
+// RangeCompleteTimerTask is a utility method to complete a range of timer tasks
+func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exclusiveEndTimestamp time.Time) error {
+	return s.WorkflowMgr.RangeCompleteTimerTask(&RangeCompleteTimerTaskRequest{
+		InclusiveBeginTimestamp: inclusiveBeginTimestamp,
+		ExclusiveEndTimestamp:   exclusiveEndTimestamp,
 	})
 }
 

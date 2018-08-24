@@ -727,6 +727,16 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateRangeCompleteTransferTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
 	templateGetTimerTasksQuery = `SELECT timer ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -745,6 +755,15 @@ const (
 		`and run_id = ?` +
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
+
+	templateRangeCompleteTimerTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and domain_id = ? ` +
+		`and workflow_id = ?` +
+		`and run_id = ?` +
+		`and visibility_ts >= ? ` +
+		`and visibility_ts < ?`
 
 	templateCreateTaskQuery = `INSERT INTO tasks (` +
 		`domain_id, task_list_name, task_list_type, type, task_id, task) ` +
@@ -2086,6 +2105,33 @@ func (d *cassandraPersistence) CompleteTransferTask(request *CompleteTransferTas
 	return nil
 }
 
+func (d *cassandraPersistence) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
+	query := d.session.Query(templateRangeCompleteTransferTaskQuery,
+		d.shardID,
+		rowTypeTransferTask,
+		rowTypeTransferDomainID,
+		rowTypeTransferWorkflowID,
+		rowTypeTransferRunID,
+		defaultVisibilityTimestamp,
+		request.ExclusiveBeginTaskID,
+		request.InclusiveEndTaskID,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
 func (d *cassandraPersistence) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
@@ -2131,6 +2177,34 @@ func (d *cassandraPersistence) CompleteTimerTask(request *CompleteTimerTaskReque
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
+	start := common.UnixNanoToCQLTimestamp(request.InclusiveBeginTimestamp.UnixNano())
+	end := common.UnixNanoToCQLTimestamp(request.ExclusiveEndTimestamp.UnixNano())
+	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
+		d.shardID,
+		rowTypeTimerTask,
+		rowTypeTimerDomainID,
+		rowTypeTimerWorkflowID,
+		rowTypeTimerRunID,
+		start,
+		end,
+	)
+
+	err := query.Exec()
+	if err != nil {
+		if isThrottlingError(err) {
+			return &workflow.ServiceBusyError{
+				Message: fmt.Sprintf("RangeCompleteTimerTask operation failed. Error: %v", err),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("RangeCompleteTimerTask operation failed. Error: %v", err),
 		}
 	}
 

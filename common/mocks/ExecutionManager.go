@@ -47,12 +47,40 @@ func (_m *ExecutionManager) CompleteTimerTask(request *persistence.CompleteTimer
 	return r0
 }
 
+// RangeCompleteTimerTask provides a mock function with given fields: request
+func (_m *ExecutionManager) RangeCompleteTimerTask(request *persistence.RangeCompleteTimerTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.RangeCompleteTimerTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CompleteTransferTask provides a mock function with given fields: request
 func (_m *ExecutionManager) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
 	ret := _m.Called(request)
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*persistence.CompleteTransferTaskRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RangeCompleteTransferTask provides a mock function with given fields: request
+func (_m *ExecutionManager) RangeCompleteTransferTask(request *persistence.RangeCompleteTransferTaskRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*persistence.RangeCompleteTransferTaskRequest) error); ok {
 		r0 = rf(request)
 	} else {
 		r0 = ret.Error(0)

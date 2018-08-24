@@ -136,12 +136,16 @@ const (
 	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope
+	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTransferTaskScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer
 	PersistenceCompleteReplicationTaskScope
 	// PersistenceGetTimerIndexTasksScope tracks GetTimerIndexTasks calls made by service to persistence layer
 	PersistenceGetTimerIndexTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
 	PersistenceCompleteTimerTaskScope
+	// PersistenceRangeCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTimerTaskScope
 	// PersistenceCreateTaskScope tracks CreateTask calls made by service to persistence layer
 	PersistenceCreateTaskScope
 	// PersistenceGetTasksScope tracks GetTasks calls made by service to persistence layer
@@ -500,9 +504,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
 		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
 		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
+		PersistenceRangeCompleteTransferTaskScope:                {operation: "RangeCompleteTransferTask"},
 		PersistenceCompleteReplicationTaskScope:                  {operation: "CompleteReplicationTask"},
 		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
 		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
+		PersistenceRangeCompleteTimerTaskScope:                   {operation: "RangeCompleteTimerTask"},
 		PersistenceCreateTaskScope:                               {operation: "CreateTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceGetTasksScope:                                 {operation: "GetTasks", tags: map[string]string{ShardTagName: NoneShardsTagValue}},
 		PersistenceCompleteTaskScope:                             {operation: "CompleteTask", tags: map[string]string{ShardTagName: NoneShardsTagValue}},

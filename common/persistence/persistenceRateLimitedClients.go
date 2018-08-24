@@ -242,6 +242,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTransferTask(req
 	return err
 }
 
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteTransferTask(request)
+	return err
+}
+
 func (p *workflowExecutionRateLimitedPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return ErrPersistenceLimitExceeded
@@ -266,6 +275,15 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTimerTask(reques
 	}
 
 	err := p.persistence.CompleteTimerTask(request)
+	return err
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteTimerTask(request)
 	return err
 }
 

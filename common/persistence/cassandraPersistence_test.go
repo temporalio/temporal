@@ -994,10 +994,10 @@ func (s *cassandraPersistenceSuite) TestReplicationTasks() {
 	}
 }
 
-func (s *cassandraPersistenceSuite) TestTransferTasks() {
+func (s *cassandraPersistenceSuite) TestTransferTasks_Complete() {
 	domainID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d7"
 	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("get-transfer-tasks-test"),
+		WorkflowId: common.StringPtr("get-transfer-tasks-test-complete"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
 	tasklist := "some random tasklist"
@@ -1090,10 +1090,144 @@ func (s *cassandraPersistenceSuite) TestTransferTasks() {
 	s.Empty(txTasks, "expected empty task list.")
 }
 
-func (s *cassandraPersistenceSuite) TestTimerTasks() {
+func (s *cassandraPersistenceSuite) TestTransferTasks_RangeComplete() {
+	domainID := "8bfb47be-5b57-4d55-9109-5fb35e20b1d7"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-transfer-tasks-test-range-complete"),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+	}
+	tasklist := "some random tasklist"
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist, "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	tasks1, err1 := s.GetTransferTasks(1, false)
+	s.Nil(err1, "No error expected.")
+	s.NotNil(tasks1, "expected valid list of tasks.")
+	s.Equal(1, len(tasks1), "Expected 1 decision task.")
+	task1 := tasks1[0]
+	s.Equal(domainID, task1.DomainID)
+	s.Equal(workflowExecution.GetWorkflowId(), task1.WorkflowID)
+	s.Equal(workflowExecution.GetRunId(), task1.RunID)
+	s.Equal(tasklist, task1.TaskList)
+	s.Equal(TransferTaskTypeDecisionTask, task1.TaskType)
+	s.Equal(int64(2), task1.ScheduleID)
+	s.Equal(transferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
+	s.Equal("", task1.TargetRunID)
+	err3 := s.CompleteTransferTask(task1.TaskID)
+	s.Nil(err3)
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(6)
+	updatedInfo.LastProcessedEvent = int64(2)
+	scheduleID := int64(123)
+	targetDomainID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d0"
+	targetWorkflowID := "some random target domain ID"
+	targetRunID := uuid.New()
+	currentTransferID := s.GetTransferReadLevel()
+	now := time.Now()
+	tasks := []Task{
+		&ActivityTask{now, currentTransferID + 10001, domainID, tasklist, scheduleID, 111},
+		&DecisionTask{now, currentTransferID + 10002, domainID, tasklist, scheduleID, 222},
+		&CloseExecutionTask{now, currentTransferID + 10003, 333},
+		&CancelExecutionTask{now, currentTransferID + 10004, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&SignalExecutionTask{now, currentTransferID + 10005, targetDomainID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
+	}
+	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
+	s.Nil(err2, "No error expected.")
+
+	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
+	s.Nil(err1, "No error expected.")
+	s.NotNil(txTasks, "expected valid list of tasks.")
+	s.Equal(len(tasks), len(txTasks))
+	for index := range tasks {
+		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, timePrecision))
+	}
+	s.Equal(TransferTaskTypeActivityTask, txTasks[0].TaskType)
+	s.Equal(TransferTaskTypeDecisionTask, txTasks[1].TaskType)
+	s.Equal(TransferTaskTypeCloseExecution, txTasks[2].TaskType)
+	s.Equal(TransferTaskTypeCancelExecution, txTasks[3].TaskType)
+	s.Equal(TransferTaskTypeSignalExecution, txTasks[4].TaskType)
+	s.Equal(TransferTaskTypeStartChildExecution, txTasks[5].TaskType)
+	s.Equal(int64(111), txTasks[0].Version)
+	s.Equal(int64(222), txTasks[1].Version)
+	s.Equal(int64(333), txTasks[2].Version)
+	s.Equal(int64(444), txTasks[3].Version)
+	s.Equal(int64(555), txTasks[4].Version)
+	s.Equal(int64(666), txTasks[5].Version)
+
+	err2 = s.RangeCompleteTransferTask(txTasks[0].TaskID-1, txTasks[5].TaskID)
+	s.Nil(err2, "No error expected.")
+
+	txTasks, err2 = s.GetTransferTasks(100, false)
+	s.Nil(err2, "No error expected.")
+	s.Empty(txTasks, "expected empty task list.")
+}
+
+func (s *cassandraPersistenceSuite) TestTimerTasks_Complete() {
 	domainID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d7"
 	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("get-timer-tasks-test"),
+		WorkflowId: common.StringPtr("get-timer-tasks-test-complete"),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err1, "No error expected.")
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedInfo.NextEventID = int64(5)
+	updatedInfo.LastProcessedEvent = int64(2)
+	now := time.Now()
+	tasks := []Task{
+		&DecisionTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, int(gen.TimeoutTypeStartToClose), 11},
+		&WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
+		&DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
+		&ActivityTimeoutTask{now.Add(3 * time.Second), 4, int(gen.TimeoutTypeStartToClose), 7, 0, 14},
+		&UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
+	}
+	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
+	s.Nil(err2, "No error expected.")
+
+	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
+	s.Nil(err1, "No error expected.")
+	s.NotNil(timerTasks, "expected valid list of tasks.")
+	s.Equal(len(tasks), len(timerTasks))
+	s.Equal(TaskTypeDecisionTimeout, timerTasks[0].TaskType)
+	s.Equal(TaskTypeWorkflowTimeout, timerTasks[1].TaskType)
+	s.Equal(TaskTypeDeleteHistoryEvent, timerTasks[2].TaskType)
+	s.Equal(TaskTypeActivityTimeout, timerTasks[3].TaskType)
+	s.Equal(TaskTypeUserTimer, timerTasks[4].TaskType)
+	s.Equal(int64(11), timerTasks[0].Version)
+	s.Equal(int64(12), timerTasks[1].Version)
+	s.Equal(int64(13), timerTasks[2].Version)
+	s.Equal(int64(14), timerTasks[3].Version)
+	s.Equal(int64(15), timerTasks[4].Version)
+
+	err2 = s.RangeCompleteTimerTask(timerTasks[0].VisibilityTimestamp, timerTasks[4].VisibilityTimestamp.Add(1*time.Second))
+	s.Nil(err2, "No error expected.")
+
+	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
+	s.Nil(err2, "No error expected.")
+	s.Empty(timerTasks2, "expected empty task list.")
+}
+
+func (s *cassandraPersistenceSuite) TestTimerTasks_RangeComplete() {
+	domainID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d7"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("get-timer-tasks-test-range-complete"),
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 	}
 

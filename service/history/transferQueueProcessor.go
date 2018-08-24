@@ -228,39 +228,16 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
 
-	executionMgr := t.shard.GetExecutionManager()
-	maxLevel := upperAckLevel + 1
-	batchSize := t.config.TransferTaskBatchSize()
-	request := &persistence.GetTransferTasksRequest{
-		ReadLevel:    lowerAckLevel,
-		MaxReadLevel: maxLevel,
-		BatchSize:    batchSize,
-	}
-
-LoadCompleteLoop:
-	for {
-		response, err := executionMgr.GetTransferTasks(request)
+	if lowerAckLevel < upperAckLevel {
+		err := t.shard.GetExecutionManager().RangeCompleteTransferTask(&persistence.RangeCompleteTransferTaskRequest{
+			ExclusiveBeginTaskID: lowerAckLevel,
+			InclusiveEndTaskID:   upperAckLevel,
+		})
 		if err != nil {
 			return err
 		}
-		request.NextPageToken = response.NextPageToken
-
-		for _, task := range response.Tasks {
-			if upperAckLevel < task.GetTaskID() {
-				break LoadCompleteLoop
-			}
-			if err := executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: task.GetTaskID()}); err != nil {
-				t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CompleteTaskFailedCounter)
-				t.logger.Warnf("Transfer queue ack manager unable to complete transfer task: %v; %v", task, err)
-				return err
-			}
-			t.ackLevel = task.GetTaskID()
-		}
-
-		if len(response.NextPageToken) == 0 {
-			break LoadCompleteLoop
-		}
 	}
+
 	t.ackLevel = upperAckLevel
 
 	t.shard.UpdateTransferAckLevel(upperAckLevel)

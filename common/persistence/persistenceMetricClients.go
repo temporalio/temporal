@@ -324,6 +324,20 @@ func (p *workflowExecutionPersistenceClient) CompleteTransferTask(request *Compl
 	return err
 }
 
+func (p *workflowExecutionPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteTransferTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRangeCompleteTransferTaskScope, err)
+	}
+
+	return err
+}
+
 func (p *workflowExecutionPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceCompleteReplicationTaskScope, metrics.PersistenceRequests)
 
@@ -361,6 +375,20 @@ func (p *workflowExecutionPersistenceClient) CompleteTimerTask(request *Complete
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceCompleteTimerTaskScope, err)
+	}
+
+	return err
+}
+
+func (p *workflowExecutionPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteTimerTask(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRangeCompleteTimerTaskScope, err)
 	}
 
 	return err
