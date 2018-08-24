@@ -229,7 +229,10 @@ TaskFilterLoop:
 	if len(t.pageToken) == 0 && lookAheadTask == nil && !t.isFailover {
 		lookAheadTask, err = t.readLookAheadTask()
 		if err != nil {
-			return nil, nil, false, err
+			// NOTE do not return nil filtered task
+			// or otherwise the tasks are loaded and will never be dispatched
+			// return true so timer quque process base will do another call
+			return filteredTasks, nil, true, nil
 		}
 	}
 

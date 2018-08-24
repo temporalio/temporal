@@ -74,8 +74,6 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		history, nextPageToken, lastFirstEventID, err = r.getHistory(domainID, execution, common.FirstEventID,
 			replayNextEventID, nextPageToken)
-		r.logger.Debugf("Conflict Resolver GetHistory. History Length: %v, token: %v, err: %v",
-			len(history.Events), nextPageToken, err)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err

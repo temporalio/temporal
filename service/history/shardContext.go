@@ -114,7 +114,7 @@ type (
 var _ ShardContext = (*shardContextImpl)(nil)
 
 const (
-	logWarnTransferLevelDiff = 10000000 // 10 million
+	logWarnTransferLevelDiff = 3000000 // 3 million
 	logWarnTimerLevelDiff    = time.Duration(30 * time.Minute)
 )
 
@@ -721,11 +721,19 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTimerLevel := maxTimerLevel.Sub(minTimerLevel)
 
-	if logWarnTransferLevelDiff < diffTransferLevel {
-		s.logger.Warn("Transfer level diff exceeds warn threshold.")
-	}
-	if logWarnTimerLevelDiff < diffTimerLevel {
-		s.logger.Warn("Timer level diff exceeds warn threshold.")
+	if logWarnTransferLevelDiff < diffTransferLevel || logWarnTimerLevelDiff < diffTimerLevel {
+		logger := s.logger.WithFields(bark.Fields{
+			logging.TagHistoryShardTime:         s.standbyClusterCurrentTime,
+			logging.TagHistoryShardTransferAcks: s.shardInfo.ClusterTransferAckLevel,
+			logging.TagHistoryShardTimerAcks:    s.shardInfo.ClusterTimerAckLevel,
+		})
+
+		if logWarnTransferLevelDiff < diffTransferLevel {
+			logger.Warn("Transfer level diff exceeds warn threshold.")
+		}
+		if logWarnTimerLevelDiff < diffTimerLevel {
+			logger.Warn("Timer level diff exceeds warn threshold.")
+		}
 	}
 
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, time.Duration(diffTransferLevel))
