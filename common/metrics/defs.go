@@ -777,6 +777,8 @@ const (
 	ActiveTimerTaskQueueLatency
 	StandbyTransferTaskQueueLatency
 	StandbyTimerTaskQueueLatency
+	CompleteTaskFailedCounter
+
 	NumHistoryMetrics
 )
 
@@ -902,6 +904,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActiveTimerTaskQueueLatency:                  {metricName: "active.timertask.queue.latency", metricType: Timer},
 		StandbyTransferTaskQueueLatency:              {metricName: "standby.transfertask.queue.latency", metricType: Timer},
 		StandbyTimerTaskQueueLatency:                 {metricName: "standby.timertask.queue.latency", metricType: Timer},
+		CompleteTaskFailedCounter:                    {metricName: "complete-task-fail-count", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

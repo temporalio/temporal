@@ -249,10 +249,12 @@ LoadCompleteLoop:
 			if upperAckLevel < task.GetTaskID() {
 				break LoadCompleteLoop
 			}
-			lowerAckLevel = task.GetTaskID()
 			if err := executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{TaskID: task.GetTaskID()}); err != nil {
-				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", task, err)
+				t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.CompleteTaskFailedCounter)
+				t.logger.Warnf("Transfer queue ack manager unable to complete transfer task: %v; %v", task, err)
+				return err
 			}
+			t.ackLevel = task.GetTaskID()
 		}
 
 		if len(response.NextPageToken) == 0 {

@@ -201,8 +201,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 
 func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
-
 	upperAckLevel := t.activeTimerProcessor.timerQueueAckMgr.getAckLevel()
+
 	if t.isGlobalDomainEnabled {
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.timerQueueAckMgr.getAckLevel()
@@ -253,8 +253,11 @@ LoadCompleteLoop:
 				VisibilityTimestamp: timer.VisibilityTimestamp,
 				TaskID:              timer.TaskID})
 			if err != nil {
+				t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.CompleteTaskFailedCounter)
 				t.logger.Warnf("Timer queue ack manager unable to complete timer task: %v; %v", timer, err)
+				return err
 			}
+			t.ackLevel = timerSequenceID
 		}
 
 		if len(response.NextPageToken) == 0 {
