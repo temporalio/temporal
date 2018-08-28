@@ -2387,7 +2387,8 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 	// timeout includes workflow_timeout + backoff_interval
 	timeoutInSeconds := continueAsNewAttributes.GetExecutionStartToCloseTimeoutSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
 	timeoutDuration := time.Duration(timeoutInSeconds) * time.Second
-	timeoutDeadline := time.Now().Add(timeoutDuration)
+	startedTime := time.Unix(0, startedEvent.GetTimestamp())
+	timeoutDeadline := startedTime.Add(timeoutDuration)
 	if !e.executionInfo.ExpirationTime.IsZero() && timeoutDeadline.After(e.executionInfo.ExpirationTime) {
 		// expire before timeout
 		timeoutDeadline = e.executionInfo.ExpirationTime
@@ -2431,7 +2432,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 	}
 	setTaskInfo(
 		newStateBuilder.GetCurrentVersion(),
-		time.Unix(0, startedEvent.GetTimestamp()),
+		startedTime,
 		continueAsNew.TransferTasks,
 		continueAsNew.TimerTasks,
 	)

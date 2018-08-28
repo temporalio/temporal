@@ -451,8 +451,7 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context *w
 		if err != nil {
 			return err
 		}
-		err = context.replicateContinueAsNewWorkflowExecution(newRunStateBuilder, sBuilder.getNewRunTransferTasks(),
-			sBuilder.getNewRunTimerTasks(), transactionID)
+		err = context.replicateContinueAsNewWorkflowExecution(newRunStateBuilder, transactionID)
 		if err != nil {
 			return err
 		}
@@ -470,8 +469,7 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context *w
 			return err2
 		}
 		now := time.Unix(0, lastEvent.GetTimestamp())
-		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(),
-			lastEvent.GetEventId(), transactionID, now)
+		err = context.replicateWorkflowExecution(request, sBuilder.getTransferTasks(), sBuilder.getTimerTasks(), lastEvent.GetEventId(), transactionID, now)
 	}
 
 	if err == nil {

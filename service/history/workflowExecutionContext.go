@@ -417,14 +417,14 @@ func (c *workflowExecutionContext) appendHistoryEvents(builder *historyBuilder, 
 }
 
 func (c *workflowExecutionContext) replicateContinueAsNewWorkflowExecution(newStateBuilder mutableState,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
-	return c.continueAsNewWorkflowExecutionHelper(nil, newStateBuilder, transferTasks, timerTasks, transactionID)
+	transactionID int64) error {
+	return c.continueAsNewWorkflowExecutionHelper(nil, newStateBuilder, transactionID)
 }
 
 func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte, newStateBuilder mutableState,
 	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
 
-	err1 := c.continueAsNewWorkflowExecutionHelper(context, newStateBuilder, transferTasks, timerTasks, transactionID)
+	err1 := c.continueAsNewWorkflowExecutionHelper(context, newStateBuilder, transactionID)
 	if err1 != nil {
 		return err1
 	}
@@ -438,8 +438,7 @@ func (c *workflowExecutionContext) continueAsNewWorkflowExecution(context []byte
 	return err2
 }
 
-func (c *workflowExecutionContext) continueAsNewWorkflowExecutionHelper(context []byte, newStateBuilder mutableState,
-	transferTasks []persistence.Task, timerTasks []persistence.Task, transactionID int64) error {
+func (c *workflowExecutionContext) continueAsNewWorkflowExecutionHelper(context []byte, newStateBuilder mutableState, transactionID int64) error {
 	executionInfo := newStateBuilder.GetExecutionInfo()
 	domainID := executionInfo.DomainID
 	newExecution := workflow.WorkflowExecution{
