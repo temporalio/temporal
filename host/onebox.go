@@ -87,6 +87,7 @@ type (
 		clusterMetadata       cluster.Metadata
 		messagingClient       messaging.Client
 		metadataMgr           persistence.MetadataManager
+		metadataMgrV2         persistence.MetadataManager
 		shardMgr              persistence.ShardManager
 		historyMgr            persistence.HistoryManager
 		taskMgr               persistence.TaskManager
@@ -107,7 +108,7 @@ type (
 
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Client, metadataMgr persistence.MetadataManager,
-	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
 	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
 	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
 	logger bark.Logger, clusterNo int, enableWorker bool) Cadence {
@@ -119,6 +120,7 @@ func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Clie
 		clusterMetadata:       clusterMetadata,
 		messagingClient:       messagingClient,
 		metadataMgr:           metadataMgr,
+		metadataMgrV2:         metadataMgrV2,
 		visibilityMgr:         visibilityMgr,
 		shardMgr:              shardMgr,
 		historyMgr:            historyMgr,
@@ -365,10 +367,12 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to create history service client when start worker")
 	}
-	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
+	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 
+	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
+	workerConfig.ReplicatorConcurrency = 10
 	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
-		worker.NewConfig(dynamicconfig.NewNopCollection()), c.messagingClient, c.logger, service.GetMetricsClient())
+		workerConfig, c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
 		c.logger.WithField("error", err).Fatal("Fail to start replicator when start worker")

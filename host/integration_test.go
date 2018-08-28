@@ -22,7 +22,6 @@ package host
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -38,60 +37,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-	"go.uber.org/yarpc"
 
-	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
-)
-
-type (
-	integrationSuite struct {
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
-		*require.Assertions
-		suite.Suite
-		IntegrationBase
-		domainName        string
-		domainID          string
-		foreignDomainName string
-	}
-
-	decisionTaskHandler func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error)
-	activityTaskHandler func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
-		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
-
-	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
-
-	taskPoller struct {
-		engine                              frontend.Client
-		domain                              string
-		taskList                            *workflow.TaskList
-		sticktTaskList                      *workflow.TaskList
-		stickyScheduleToStartTimeoutSeconds *int32
-		identity                            string
-		decisionHandler                     decisionTaskHandler
-		activityHandler                     activityTaskHandler
-		queryHandler                        queryHandler
-		logger                              bark.Logger
-		suite                               *integrationSuite
-	}
-
-	IntegrationBase struct {
-		persistence.TestBase
-		mockMessagingClient messaging.Client
-		mockProducer        messaging.Producer
-		host                Cadence
-		engine              wsc.Interface
-		logger              bark.Logger
-	}
 )
 
 func (s *IntegrationBase) setupShards() {
@@ -160,7 +112,7 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
-	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataProxy, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	s.host = NewCadence(s.ClusterMetadata, s.mockMessagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
 	s.host.Start()
 
@@ -314,19 +266,19 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	terminateReason := "terminate reason."
@@ -485,32 +437,32 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		_, err := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
 		if i%2 == 0 {
-			err = poller.pollAndProcessActivityTask(false)
+			err = poller.PollAndProcessActivityTask(false)
 		} else { // just for testing respondActivityTaskCompleteByID
-			err = poller.pollAndProcessActivityTaskWithID(false)
+			err = poller.PollAndProcessActivityTaskWithID(false)
 		}
-		s.logger.Infof("pollAndProcessActivityTask: %v", err)
+		s.logger.Infof("PollAndProcessActivityTask: %v", err)
 		s.Nil(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.pollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 }
@@ -566,18 +518,18 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		sticktTaskList:  taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		StickyTaskList:  taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, newTask, err := poller.pollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, true, true, int64(0), 1, true)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
@@ -589,319 +541,6 @@ func (s *integrationSuite) TestCompleteDecisionTaskAndCreateNewOne() {
 	s.Equal(workflow.EventTypeMarkerRecorded, newTask.DecisionTask.History.Events[1].GetEventType())
 	s.Equal(workflow.EventTypeDecisionTaskScheduled, newTask.DecisionTask.History.Events[2].GetEventType())
 	s.Equal(workflow.EventTypeDecisionTaskStarted, newTask.DecisionTask.History.Events[3].GetEventType())
-}
-
-func (p *taskPoller) pollAndProcessDecisionTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.pollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, false, false, int64(0))
-}
-
-func (p *taskPoller) pollAndProcessDecisionTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.pollAndProcessDecisionTaskWithAttempt(dumpHistory, dropTask, true, true, int64(0))
-}
-
-func (p *taskPoller) pollAndProcessDecisionTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, int64(0), 1)
-}
-
-func (p *taskPoller) pollAndProcessDecisionTaskWithAttempt(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64) (isQueryTask bool, err error) {
-	return p.pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory, dropTask, pollStickyTaskList,
-		respondStickyTaskList, decisionAttempt, 5)
-}
-
-func (p *taskPoller) pollAndProcessDecisionTaskWithAttemptAndRetry(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64, retryCount int) (isQueryTask bool, err error) {
-	isQueryTask, _, err = p.pollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(dumpHistory, dropTask, pollStickyTaskList, respondStickyTaskList, decisionAttempt, retryCount, false)
-	return isQueryTask, err
-}
-
-func (p *taskPoller) pollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(dumpHistory bool, dropTask bool,
-	pollStickyTaskList bool, respondStickyTaskList bool, decisionAttempt int64, retryCount int, forceCreateNewDecision bool) (isQueryTask bool, newTask *workflow.RespondDecisionTaskCompletedResponse, err error) {
-Loop:
-	for attempt := 0; attempt < retryCount; attempt++ {
-
-		taskList := p.taskList
-		if pollStickyTaskList {
-			taskList = p.sticktTaskList
-		}
-		response, err1 := p.engine.PollForDecisionTask(createContext(), &workflow.PollForDecisionTaskRequest{
-			Domain:   common.StringPtr(p.domain),
-			TaskList: taskList,
-			Identity: common.StringPtr(p.identity),
-		})
-
-		if err1 == history.ErrDuplicate {
-			p.logger.Info("Duplicate Decision task: Polling again.")
-			continue Loop
-		}
-
-		if err1 != nil {
-			return false, nil, err1
-		}
-
-		if response == nil || len(response.TaskToken) == 0 {
-			p.logger.Info("Empty Decision task: Polling again.")
-			continue Loop
-		}
-
-		var events []*workflow.HistoryEvent
-		if response.Query == nil || !pollStickyTaskList {
-			// if not query task, should have some history events
-			// for non sticky query, there should be events returned
-			history := response.History
-			if history == nil {
-				p.logger.Fatal("History is nil")
-			}
-
-			events = history.Events
-			if events == nil || len(events) == 0 {
-				p.logger.Fatalf("History Events are empty: %v", events)
-			}
-
-			nextPageToken := response.NextPageToken
-			for nextPageToken != nil {
-				resp, err2 := p.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
-					Domain:        common.StringPtr(p.domain),
-					Execution:     response.WorkflowExecution,
-					NextPageToken: nextPageToken,
-				})
-
-				if err2 != nil {
-					return false, nil, err2
-				}
-
-				events = append(events, resp.History.Events...)
-				nextPageToken = resp.NextPageToken
-			}
-		} else {
-			// for sticky query, there should be NO events returned
-			// since worker side already has the state machine and we do not intend to update that.
-			history := response.History
-			nextPageToken := response.NextPageToken
-			if !(history == nil || (len(history.Events) == 0 && nextPageToken == nil)) {
-				// if history is not nil, and contains events or next token
-				p.logger.Fatal("History is not empty for sticky query")
-			}
-		}
-
-		if dropTask {
-			p.logger.Info("Dropping Decision task: ")
-			return false, nil, nil
-		}
-
-		if dumpHistory {
-			common.PrettyPrintHistory(response.History, p.logger)
-		}
-
-		// handle query task response
-		if response.Query != nil {
-			blob, err := p.queryHandler(response)
-
-			completeRequest := &workflow.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
-			if err != nil {
-				completeType := workflow.QueryTaskCompletedTypeFailed
-				completeRequest.CompletedType = &completeType
-				completeRequest.ErrorMessage = common.StringPtr(err.Error())
-			} else {
-				completeType := workflow.QueryTaskCompletedTypeCompleted
-				completeRequest.CompletedType = &completeType
-				completeRequest.QueryResult = blob
-			}
-
-			return true, nil, p.engine.RespondQueryTaskCompleted(createContext(), completeRequest)
-		}
-
-		// handle normal decirsion task / non query task response
-		var lastDecisionScheduleEvent *workflow.HistoryEvent
-		for _, e := range events {
-			if e.GetEventType() == workflow.EventTypeDecisionTaskScheduled {
-				lastDecisionScheduleEvent = e
-			}
-		}
-		if lastDecisionScheduleEvent != nil {
-			p.suite.Equal(decisionAttempt, lastDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt())
-		}
-
-		executionCtx, decisions, err := p.decisionHandler(response.WorkflowExecution, response.WorkflowType,
-			common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
-		if err != nil {
-			p.logger.Infof("Failing Decision. Decision handler failed with error: %v", err)
-			return isQueryTask, nil, p.engine.RespondDecisionTaskFailed(createContext(), &workflow.RespondDecisionTaskFailedRequest{
-				TaskToken: response.TaskToken,
-				Cause:     common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure),
-				Details:   []byte(err.Error()),
-				Identity:  common.StringPtr(p.identity),
-			})
-		}
-
-		p.logger.Infof("Completing Decision.  Decisions: %v", decisions)
-		if !respondStickyTaskList {
-			// non sticky tasklist
-			newTask, err := p.engine.RespondDecisionTaskCompleted(createContext(), &workflow.RespondDecisionTaskCompletedRequest{
-				TaskToken:                  response.TaskToken,
-				Identity:                   common.StringPtr(p.identity),
-				ExecutionContext:           executionCtx,
-				Decisions:                  decisions,
-				ReturnNewDecisionTask:      common.BoolPtr(forceCreateNewDecision),
-				ForceCreateNewDecisionTask: common.BoolPtr(forceCreateNewDecision),
-			})
-			return false, newTask, err
-		}
-		// sticky tasklist
-		newTask, err := p.engine.RespondDecisionTaskCompleted(
-			createContext(),
-			&workflow.RespondDecisionTaskCompletedRequest{
-				TaskToken:        response.TaskToken,
-				Identity:         common.StringPtr(p.identity),
-				ExecutionContext: executionCtx,
-				Decisions:        decisions,
-				StickyAttributes: &workflow.StickyExecutionAttributes{
-					WorkerTaskList:                p.sticktTaskList,
-					ScheduleToStartTimeoutSeconds: p.stickyScheduleToStartTimeoutSeconds,
-				},
-				ReturnNewDecisionTask:      common.BoolPtr(forceCreateNewDecision),
-				ForceCreateNewDecisionTask: common.BoolPtr(forceCreateNewDecision),
-			},
-			yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
-			yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
-			yarpc.WithHeader(common.ClientImplHeaderName, "go"),
-		)
-
-		return false, newTask, err
-	}
-
-	return false, nil, matching.ErrNoTasks
-}
-
-func (p *taskPoller) pollAndProcessActivityTask(dropTask bool) error {
-retry:
-	for attempt := 0; attempt < 5; attempt++ {
-		response, err1 := p.engine.PollForActivityTask(createContext(), &workflow.PollForActivityTaskRequest{
-			Domain:   common.StringPtr(p.domain),
-			TaskList: p.taskList,
-			Identity: common.StringPtr(p.identity),
-		})
-
-		if err1 == history.ErrDuplicate {
-			p.logger.Info("Duplicate Activity task: Polling again.")
-			continue retry
-		}
-
-		if err1 != nil {
-			return err1
-		}
-
-		if response == nil || len(response.TaskToken) == 0 {
-			p.logger.Info("Empty Activity task: Polling again.")
-			return nil
-		}
-
-		if dropTask {
-			p.logger.Info("Dropping Activity task: ")
-			return nil
-		}
-		p.logger.Debugf("Received Activity task: %v", response)
-
-		result, cancel, err2 := p.activityHandler(response.WorkflowExecution, response.ActivityType, *response.ActivityId,
-			response.Input, response.TaskToken)
-		if cancel {
-			p.logger.Info("Executing RespondActivityTaskCanceled")
-			return p.engine.RespondActivityTaskCanceled(createContext(), &workflow.RespondActivityTaskCanceledRequest{
-				TaskToken: response.TaskToken,
-				Details:   []byte("details"),
-				Identity:  common.StringPtr(p.identity),
-			})
-		}
-
-		if err2 != nil {
-			return p.engine.RespondActivityTaskFailed(createContext(), &workflow.RespondActivityTaskFailedRequest{
-				TaskToken: response.TaskToken,
-				Reason:    common.StringPtr(err2.Error()),
-				Identity:  common.StringPtr(p.identity),
-			})
-		}
-
-		return p.engine.RespondActivityTaskCompleted(createContext(), &workflow.RespondActivityTaskCompletedRequest{
-			TaskToken: response.TaskToken,
-			Identity:  common.StringPtr(p.identity),
-			Result:    result,
-		})
-	}
-
-	return matching.ErrNoTasks
-}
-
-// Similar to pollAndProcessActivityTask but using RespondActivityTask...ByID
-func (p *taskPoller) pollAndProcessActivityTaskWithID(dropTask bool) error {
-retry:
-	for attempt := 0; attempt < 5; attempt++ {
-		response, err1 := p.engine.PollForActivityTask(createContext(), &workflow.PollForActivityTaskRequest{
-			Domain:   common.StringPtr(p.domain),
-			TaskList: p.taskList,
-			Identity: common.StringPtr(p.identity),
-		})
-
-		if err1 == history.ErrDuplicate {
-			p.logger.Info("Duplicate Activity task: Polling again.")
-			continue retry
-		}
-
-		if err1 != nil {
-			return err1
-		}
-
-		if response == nil || len(response.TaskToken) == 0 {
-			p.logger.Info("Empty Activity task: Polling again.")
-			return nil
-		}
-
-		if response.GetActivityId() == "" {
-			p.logger.Info("Empty ActivityID")
-			return nil
-		}
-
-		if dropTask {
-			p.logger.Info("Dropping Activity task: ")
-			return nil
-		}
-		p.logger.Debugf("Received Activity task: %v", response)
-
-		result, cancel, err2 := p.activityHandler(response.WorkflowExecution, response.ActivityType, *response.ActivityId,
-			response.Input, response.TaskToken)
-		if cancel {
-			p.logger.Info("Executing RespondActivityTaskCanceled")
-			return p.engine.RespondActivityTaskCanceledByID(createContext(), &workflow.RespondActivityTaskCanceledByIDRequest{
-				Domain:     common.StringPtr(p.domain),
-				WorkflowID: common.StringPtr(response.WorkflowExecution.GetWorkflowId()),
-				RunID:      common.StringPtr(response.WorkflowExecution.GetRunId()),
-				ActivityID: common.StringPtr(response.GetActivityId()),
-				Details:    []byte("details"),
-				Identity:   common.StringPtr(p.identity),
-			})
-		}
-
-		if err2 != nil {
-			return p.engine.RespondActivityTaskFailedByID(createContext(), &workflow.RespondActivityTaskFailedByIDRequest{
-				Domain:     common.StringPtr(p.domain),
-				WorkflowID: common.StringPtr(response.WorkflowExecution.GetWorkflowId()),
-				RunID:      common.StringPtr(response.WorkflowExecution.GetRunId()),
-				ActivityID: common.StringPtr(response.GetActivityId()),
-				Reason:     common.StringPtr(err2.Error()),
-				Identity:   common.StringPtr(p.identity),
-			})
-		}
-
-		return p.engine.RespondActivityTaskCompletedByID(createContext(), &workflow.RespondActivityTaskCompletedByIDRequest{
-			Domain:     common.StringPtr(p.domain),
-			WorkflowID: common.StringPtr(response.WorkflowExecution.GetWorkflowId()),
-			RunID:      common.StringPtr(response.WorkflowExecution.GetRunId()),
-			ActivityID: common.StringPtr(response.GetActivityId()),
-			Identity:   common.StringPtr(p.identity),
-			Result:     result,
-		})
-	}
-
-	return matching.ErrNoTasks
 }
 
 func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
@@ -979,15 +618,15 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	for i := 0; i < 8; i++ {
@@ -995,9 +634,9 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		s.logger.Infof("Calling Decision Task: %d", i)
 		var err error
 		if dropDecisionTask {
-			_, err = poller.pollAndProcessDecisionTask(true, true)
+			_, err = poller.PollAndProcessDecisionTask(true, true)
 		} else {
-			_, err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
+			_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
@@ -1014,7 +653,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 		s.True(err == nil || err == matching.ErrNoTasks, "Error: %v", err)
 		if !dropDecisionTask {
 			s.logger.Infof("Calling Activity Task: %d", i)
-			err = poller.pollAndProcessActivityTask(i%4 == 0)
+			err = poller.PollAndProcessActivityTask(i%4 == 0)
 			s.True(err == nil || err == matching.ErrNoTasks)
 		}
 	}
@@ -1022,7 +661,7 @@ func (s *integrationSuite) TestDecisionAndActivityTimeoutsWorkflow() {
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 
 	s.False(workflowComplete)
-	_, err := poller.pollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 }
@@ -1110,27 +749,27 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 
 	s.False(workflowComplete)
-	_, err = poller.pollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 	s.True(activityExecutedCount == 1)
@@ -1263,24 +902,24 @@ func (s *integrationSuite) TestActivityRetry() {
 		return nil, false, err
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
 
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
@@ -1288,7 +927,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.False(workflowComplete)
 
 		s.logger.Infof("Processing decision task: %v", i)
-		_, err := poller.pollAndProcessDecisionTaskWithoutRetry(false, false)
+		_, err := poller.PollAndProcessDecisionTaskWithoutRetry(false, false)
 		if err != nil {
 			s.printWorkflowHistory(s.domainName, &workflow.WorkflowExecution{
 				WorkflowId: common.StringPtr(id),
@@ -1373,23 +1012,23 @@ func (s *integrationSuite) TestWorkflowRetry() {
 			}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
-	_, err = poller.pollAndProcessDecisionTask(false, false)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
-	_, err = poller.pollAndProcessDecisionTask(false, false)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil, err)
 
 	s.Equal(3, attemptCount)
@@ -1483,26 +1122,26 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 
 	s.False(workflowComplete)
-	_, err = poller.pollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 }
@@ -1706,23 +1345,23 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	for i := 0; i < 3; i++ {
 		go func() {
-			err = poller.pollAndProcessActivityTask(false)
+			err = poller.PollAndProcessActivityTask(false)
 			s.logger.Infof("Activity Processing Completed.  Error: %v", err)
 		}()
 	}
@@ -1730,7 +1369,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 	for i := 0; i < 10; i++ {
 		s.logger.Infof("Processing decision task: %v", i)
-		_, err := poller.pollAndProcessDecisionTask(false, false)
+		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.Nil(err, "Poll for decision task failed.")
 
 		if workflowComplete {
@@ -1894,23 +1533,23 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	for i := 0; i < activityCount; i++ {
 		go func() {
-			err := poller.pollAndProcessActivityTask(false)
+			err := poller.PollAndProcessActivityTask(false)
 			s.logger.Infof("Activity Processing Completed.  Error: %v", err)
 		}()
 	}
@@ -1918,7 +1557,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 	for i := 0; i < 10; i++ {
 		s.logger.Infof("Processing decision task: %v", i)
-		_, err := poller.pollAndProcessDecisionTask(false, false)
+		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.Nil(err, "Poll for decision task failed.")
 
 		if workflowComplete {
@@ -1996,25 +1635,25 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Info("pollAndProcessDecisionTask: completed")
+		_, err := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Info("PollAndProcessDecisionTask: completed")
 		s.Nil(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.pollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 }
@@ -2114,18 +1753,18 @@ func (s *integrationSuite) TestActivityCancellation() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	cancelCh := make(chan struct{})
@@ -2134,12 +1773,12 @@ func (s *integrationSuite) TestActivityCancellation() {
 		s.logger.Info("Trying to cancel the task in a different thread.")
 		scheduleActivity = false
 		requestCancellation = true
-		_, err := poller.pollAndProcessDecisionTask(false, false)
+		_, err := poller.PollAndProcessDecisionTask(false, false)
 		s.True(err == nil || err == matching.ErrNoTasks)
 		cancelCh <- struct{}{}
 	}()
 
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	<-cancelCh
@@ -2242,20 +1881,20 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send first signal using RunID
@@ -2274,8 +1913,8 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.Nil(err)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -2299,8 +1938,8 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.Nil(err)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -2415,25 +2054,25 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.printWorkflowHistory(s.domainName, workflowExecution)
@@ -2526,20 +2165,20 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send first signal
@@ -2561,8 +2200,8 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Nil(err)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -2577,8 +2216,8 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Nil(err)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -2665,20 +2304,20 @@ func (s *integrationSuite) TestBufferedEvents() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// first decision, which sends signal and the signal event should be buffered to append after first decision closed
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// check history, the signal event should be after the complete decision task
@@ -2697,8 +2336,8 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.Equal(histResp.History.Events[5].GetEventType(), workflow.EventTypeWorkflowExecutionSignaled)
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(signalEvent)
 	s.Equal(signalName, *signalEvent.WorkflowExecutionSignaledEventAttributes.SignalName)
@@ -2794,23 +2433,23 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &taskPoller{
-		engine:                              s.engine,
-		domain:                              s.domainName,
-		taskList:                            taskList,
-		identity:                            identity,
-		decisionHandler:                     dtHandler,
-		activityHandler:                     atHandler,
-		queryHandler:                        queryHandler,
-		logger:                              s.logger,
-		suite:                               s,
-		sticktTaskList:                      stickyTaskList,
-		stickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+	poller := &TaskPoller{
+		Engine:                              s.engine,
+		Domain:                              s.domainName,
+		TaskList:                            taskList,
+		Identity:                            identity,
+		DecisionHandler:                     dtHandler,
+		ActivityHandler:                     atHandler,
+		QueryHandler:                        queryHandler,
+		Logger:                              s.logger,
+		T:                                   s.T(),
+		StickyTaskList:                      stickyTaskList,
+		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -2837,8 +2476,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.pollAndProcessDecisionTaskWithSticky(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -2855,8 +2494,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	go queryWorkflowFn("invalid-query-type")
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.pollAndProcessDecisionTaskWithSticky(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		isQueryTask, errInner := poller.PollAndProcessDecisionTaskWithSticky(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -2957,23 +2596,23 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &taskPoller{
-		engine:                              s.engine,
-		domain:                              s.domainName,
-		taskList:                            taskList,
-		identity:                            identity,
-		decisionHandler:                     dtHandler,
-		activityHandler:                     atHandler,
-		queryHandler:                        queryHandler,
-		logger:                              s.logger,
-		suite:                               s,
-		sticktTaskList:                      stickyTaskList,
-		stickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+	poller := &TaskPoller{
+		Engine:                              s.engine,
+		Domain:                              s.domainName,
+		TaskList:                            taskList,
+		Identity:                            identity,
+		DecisionHandler:                     dtHandler,
+		ActivityHandler:                     atHandler,
+		QueryHandler:                        queryHandler,
+		Logger:                              s.logger,
+		T:                                   s.T(),
+		StickyTaskList:                      stickyTaskList,
+		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -3002,8 +2641,8 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 		// loop until process the query task
 		// here we poll on normal tasklist, to simulate a worker crash and restart
 		// on the server side, server will first try the sticky tasklist and then the normal tasklist
-		isQueryTask, errInner := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -3101,21 +2740,21 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		queryHandler:    queryHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		QueryHandler:    queryHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	type QueryResult struct {
@@ -3142,8 +2781,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -3159,8 +2798,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	go queryWorkflowFn("invalid-query-type")
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		isQueryTask, errInner := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(errInner)
 		if isQueryTask {
 			break
@@ -3252,20 +2891,20 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// first decision to schedule new activity
-	_, err = poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	dweResponse, err = describeWorkflowExecution()
@@ -3277,7 +2916,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(0), dweResponse.PendingActivities[0].GetLastHeartbeatTimestamp())
 
 	// process activity task
-	err = poller.pollAndProcessActivityTask(false)
+	err = poller.PollAndProcessActivityTask(false)
 
 	dweResponse, err = describeWorkflowExecution()
 	s.Nil(err)
@@ -3286,7 +2925,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Equal(0, len(dweResponse.PendingActivities))
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 
@@ -3360,24 +2999,24 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		_, err := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.pollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId())
@@ -3443,19 +3082,19 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// process the decision and continue as new
-	_, err := poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -3531,18 +3170,18 @@ func (s *integrationSuite) TestVisibility() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err1 := poller.pollAndProcessDecisionTask(false, false)
+	_, err1 := poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(err1)
 
 	// wait until the start workflow is done
@@ -3682,23 +3321,23 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	err = poller.pollAndProcessActivityTask(false)
-	s.logger.Infof("pollAndProcessActivityTask: %v", err)
+	err = poller.PollAndProcessActivityTask(false)
+	s.logger.Infof("PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	err = s.engine.RequestCancelWorkflowExecution(createContext(), &workflow.RequestCancelWorkflowExecutionRequest{
@@ -3720,8 +3359,8 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.NotNil(err)
 	s.IsType(&workflow.CancellationAlreadyRequestedError{}, err)
 
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	executionCancelled := false
@@ -3794,7 +3433,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.logger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -3835,15 +3474,15 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	foreignActivityCount := int32(1)
@@ -3878,33 +3517,33 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution() {
 		}}, nil
 	}
 
-	foreignPoller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.foreignDomainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: foreignDtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	foreignPoller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.foreignDomainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: foreignDtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	err = foreignPoller.pollAndProcessActivityTask(false)
-	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	err = foreignPoller.PollAndProcessActivityTask(false)
+	s.logger.Infof("foreign PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// Cancel the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	cancellationSent := false
@@ -3941,8 +3580,8 @@ CheckHistoryLoopForCancelSent:
 	s.True(cancellationSent)
 
 	// Accept cancellation.
-	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	executionCancelled := false
@@ -4056,25 +3695,25 @@ func (s *integrationSuite) TestRequestCancelWorkflowDecisionExecution_UnKnownTar
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Cancel the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	cancellationSentFailed := false
@@ -4195,15 +3834,15 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	upgradeRollbackStep := 2
@@ -4221,9 +3860,9 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 		s.logger.Infof("Calling Decision Task: %d", i)
 		var err error
 		if decisionFailed {
-			_, err = poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(1))
+			_, err = poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(1))
 		} else {
-			_, err = poller.pollAndProcessDecisionTask(false, false)
+			_, err = poller.PollAndProcessDecisionTask(false, false)
 		}
 
 		if i == testDecisionPollFailStep {
@@ -4240,7 +3879,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 
 		s.True(err == nil || err == matching.ErrNoTasks)
 		s.logger.Infof("Calling Activity Task: %d", i)
-		err = poller.pollAndProcessActivityTask(false)
+		err = poller.PollAndProcessActivityTask(false)
 		s.True(err == nil || err == matching.ErrNoTasks)
 
 		if i == upgradeRollbackStep {
@@ -4255,7 +3894,7 @@ func (s *integrationSuite) TestHistoryVersionCompatibilityCheck() {
 	s.logger.Infof("Waiting for workflow to complete: RunId: %v", *we.RunId)
 
 	s.False(workflowComplete)
-	_, err := poller.pollAndProcessDecisionTask(true, false)
+	_, err := poller.PollAndProcessDecisionTask(true, false)
 	s.Nil(err)
 	s.True(workflowComplete)
 }
@@ -4369,41 +4008,41 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 		}}, nil
 	}
 
-	pollerParent := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskListParent,
-		identity:        identity,
-		decisionHandler: dtHandlerParent,
-		logger:          s.logger,
-		suite:           s,
+	pollerParent := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskListParent,
+		Identity:        identity,
+		DecisionHandler: dtHandlerParent,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
-	pollerChild := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskListChild,
-		identity:        identity,
-		decisionHandler: dtHandlerChild,
-		logger:          s.logger,
-		suite:           s,
+	pollerChild := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskListChild,
+		Identity:        identity,
+		DecisionHandler: dtHandlerChild,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to start child execution
-	_, err := pollerParent.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := pollerParent.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childExecutionStarted)
 	s.Equal(workflow.ChildPolicyRequestCancel,
 		parentStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
-	_, err = pollerParent.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	_, err = pollerChild.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = pollerChild.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(startedEvent)
 	s.True(childComplete)
@@ -4417,8 +4056,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(workflow.ChildPolicyRequestCancel, childStartedEvent.WorkflowExecutionStartedEventAttributes.GetChildPolicy())
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = pollerParent.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = pollerParent.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
@@ -4548,27 +4187,27 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 		return nil, nil, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to start child execution
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.logger.Warnf("decision: %v", i)
-		_, err = poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+		_, err = poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 		s.Nil(err)
 	}
 
@@ -4576,14 +4215,14 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(startedEvent)
 
 	// Process Child Execution final decision to complete it
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.ChildWorkflowExecutionCompletedEventAttributes
@@ -4800,30 +4439,30 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// process activity
-	err = poller.pollAndProcessActivityTask(false)
-	s.logger.Infof("pollAndProcessActivityTask: %v", err)
+	err = poller.PollAndProcessActivityTask(false)
+	s.logger.Infof("PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// fail decision 5 times
 	for i := 0; i < 5; i++ {
-		_, err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(i))
+		_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(i))
 		s.Nil(err)
 	}
 
@@ -4831,8 +4470,8 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Nil(err, "failed to send signal to execution")
 
 	// process signal
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.Equal(1, signalCount)
 
@@ -4842,27 +4481,27 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// fail decision 2 more times
 	for i := 0; i < 2; i++ {
-		_, err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(i))
+		_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(i))
 		s.Nil(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed decision
 	sendSignal = true
-	_, err = poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(2))
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(2))
 	s.Nil(err)
 	s.Equal(4, signalCount)
 
 	// fail decision 1 more times
 	for i := 0; i < 2; i++ {
-		_, err := poller.pollAndProcessDecisionTaskWithAttempt(false, false, false, false, 3+int64(i))
+		_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, 3+int64(i))
 		s.Nil(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow decision
-	_, err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(5))
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(5))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
@@ -4967,15 +4606,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// this function poll events from history side
@@ -5009,8 +4648,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// here do a long pull and check # of events and time elapsed
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision1)
+		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errDecision1)
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -5021,12 +4660,12 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
-		errActivity := poller.pollAndProcessActivityTask(false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errActivity)
+		errActivity := poller.PollAndProcessActivityTask(false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errActivity)
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision2)
+		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errDecision2)
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -5133,15 +4772,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// this function poll events from history side
@@ -5177,8 +4816,8 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// here do a long pull and check # of events and time elapsed
 	// make first decision to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision1 := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision1)
+		_, errDecision1 := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errDecision1)
 	})
 	start = time.Now()
 	events, token = getHistory(s.domainName, workflowID, token, true)
@@ -5189,12 +4828,12 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	// finish the activity and poll all events
 	time.AfterFunc(time.Second*5, func() {
-		errActivity := poller.pollAndProcessActivityTask(false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errActivity)
+		errActivity := poller.PollAndProcessActivityTask(false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errActivity)
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errDecision2 := poller.pollAndProcessDecisionTask(false, false)
-		s.logger.Infof("pollAndProcessDecisionTask: %v", errDecision2)
+		_, errDecision2 := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", errDecision2)
 	})
 	for token != nil {
 		events, token = getHistory(s.domainName, workflowID, token, true)
@@ -5290,15 +4929,15 @@ func (s *integrationSuite) TestDescribeTaskList() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// this function poll events from history side
@@ -5321,7 +4960,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeDecision)
 	s.Empty(pollerInfos)
 
-	_, errDecision := poller.pollAndProcessDecisionTask(false, false)
+	_, errDecision := poller.PollAndProcessDecisionTask(false, false)
 	s.Nil(errDecision)
 	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeActivity)
 	s.Empty(pollerInfos)
@@ -5331,7 +4970,7 @@ func (s *integrationSuite) TestDescribeTaskList() {
 	s.True(time.Unix(0, pollerInfos[0].GetLastAccessTime()).After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 
-	errActivity := poller.pollAndProcessActivityTask(false)
+	errActivity := poller.PollAndProcessActivityTask(false)
 	s.Nil(errActivity)
 	pollerInfos = testDescribeTaskList(s.domainName, taskList, workflow.TaskListTypeActivity)
 	s.Equal(1, len(pollerInfos))
@@ -5387,7 +5026,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.logger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -5434,15 +5073,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	workflowComplete := false
@@ -5487,33 +5126,33 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision() {
 		}}, nil
 	}
 
-	foreignPoller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.foreignDomainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: foreignDtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	foreignPoller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.foreignDomainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: foreignDtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	err = foreignPoller.pollAndProcessActivityTask(false)
-	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	err = foreignPoller.PollAndProcessActivityTask(false)
+	s.logger.Infof("foreign PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// in source workflow
@@ -5552,8 +5191,8 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// process signal in decider for foreign workflow
-	_, err = foreignPoller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -5605,7 +5244,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(createContext(), foreignRequest)
 	s.Nil(err0)
-	s.logger.Infof("StartWorkflowExecution on foreign domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
+	s.logger.Infof("StartWorkflowExecution on foreign Domain: %v,  response: %v \n", s.foreignDomainName, *we2.RunId)
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -5652,15 +5291,15 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	workflowComplete := false
@@ -5705,33 +5344,33 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_WithoutRunID() {
 		}}, nil
 	}
 
-	foreignPoller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.foreignDomainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: foreignDtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	foreignPoller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.foreignDomainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: foreignDtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	_, err = foreignPoller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("foreign pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("foreign PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	err = foreignPoller.pollAndProcessActivityTask(false)
-	s.logger.Infof("foreign pollAndProcessActivityTask: %v", err)
+	err = foreignPoller.PollAndProcessActivityTask(false)
+	s.logger.Infof("foreign PollAndProcessActivityTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// in source workflow
@@ -5770,8 +5409,8 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// process signal in decider for foreign workflow
-	_, err = foreignPoller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = foreignPoller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -5854,25 +5493,25 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_UnKnownTarget() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	signalSentFailed := false
@@ -5982,25 +5621,25 @@ func (s *integrationSuite) TestSignalExternalWorkflowDecision_SignalSelf() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Signal the foreign workflow with this decision request.
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	signalSentFailed := false
@@ -6129,20 +5768,20 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		return []byte("Activity Result."), false, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: atHandler,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Make first decision to schedule activity
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send a signal
@@ -6166,8 +5805,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -6202,8 +5841,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -6225,8 +5864,8 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTask(true, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.False(workflowComplete)
@@ -6351,20 +5990,20 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// First decision immediately fails and schedules a transient decision
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Now send a signal when transient decision is scheduled
@@ -6372,8 +6011,8 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	s.Nil(err, "failed to send signal to execution")
 
 	// Drop decision task to cause a Decision Timeout
-	_, err = poller.pollAndProcessDecisionTask(true, true)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(true, true)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Print history after dropping decision
@@ -6383,8 +6022,8 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	})
 
 	// Now process signal and complete workflow execution
-	_, err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.Equal(1, signalCount)
@@ -6444,20 +6083,20 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// First decision task complete with a marker decision, and request to relay decision (immediately return a new decision task)
-	_, newTask, err := poller.pollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, false, false, 0, 3, true)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, newTask, err := poller.PollAndProcessDecisionTaskWithAttemptAndRetryAndForceNewDecision(false, false, false, false, 0, 3, true)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.NotNil(newTask)
 	s.NotNil(newTask.DecisionTask)
@@ -6479,8 +6118,8 @@ func (s *integrationSuite) TestRelayDecisionTimeout() {
 	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	// Now complete workflow
-	_, err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(1))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.True(workflowComplete)
@@ -6555,20 +6194,20 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 		}}, nil
 	}
 
-	poller := &taskPoller{
-		engine:          s.engine,
-		domain:          s.domainName,
-		taskList:        taskList,
-		identity:        identity,
-		decisionHandler: dtHandler,
-		activityHandler: nil,
-		logger:          s.logger,
-		suite:           s,
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
 	}
 
 	// Process first decision to create user timer
-	_, err := poller.pollAndProcessDecisionTask(false, false)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Send one signal to create a new decision
@@ -6579,8 +6218,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	}
 
 	// Drop decision to cause all events to be buffered from now on
-	_, err = poller.pollAndProcessDecisionTask(false, true)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTask(false, true)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	// Buffered Signals
@@ -6600,8 +6239,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	}
 
 	// Process signal in decider
-	_, err = poller.pollAndProcessDecisionTaskWithAttempt(true, false, false, false, 1)
-	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 1)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.printWorkflowHistory(s.domainName, workflowExecution)
@@ -6666,9 +6305,4 @@ func (s *integrationSuite) printWorkflowHistory(domain string, execution *workfl
 	history := &workflow.History{}
 	history.Events = events
 	common.PrettyPrintHistory(history, s.logger)
-}
-
-func createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
 }

@@ -28,7 +28,7 @@ import (
 	"go.uber.org/yarpc/yarpcerrors"
 	"golang.org/x/net/context"
 
-	farm "github.com/dgryski/go-farm"
+	"github.com/dgryski/go-farm"
 	"github.com/uber-common/bark"
 
 	"math/rand"

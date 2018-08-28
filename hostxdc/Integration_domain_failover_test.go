@@ -24,17 +24,20 @@
 package hostxdc
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"flag"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-
 	"github.com/uber-go/tally"
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -126,7 +129,8 @@ func (s *testCluster) setupCluster(no int) {
 	s.SetupWorkflowStoreWithOptions(options, metadata)
 	s.setupShards()
 	messagingClient := s.createMessagingClient()
-	s.host = host.NewCadence(s.ClusterMetadata, messagingClient, s.MetadataProxy, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
+	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster
+	s.host = host.NewCadence(s.ClusterMetadata, messagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.ExecutionMgrFactory, s.TaskMgr,
 		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, no, true)
 	s.host.Start()
 }
@@ -211,16 +215,17 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	logger.Formatter = formatter
 	//logger.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(logger)
+
+	s.cluster1 = s.newTestCluster(0)
+	s.cluster2 = s.newTestCluster(1)
 }
 
 func (s *integrationClustersTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.cluster1 = s.newTestCluster(0)
-	s.cluster2 = s.newTestCluster(1)
 }
 
-func (s *integrationClustersTestSuite) TearDownTest() {
+func (s *integrationClustersTestSuite) TearDownSuite() {
 	s.cluster1.tearDownCluster()
 	s.cluster2.tearDownCluster()
 }
@@ -243,20 +248,19 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	//// uncommented when domain cache background update is ready
-	//client2 := s.cluster2.host.GetFrontendClient() // standby
-	//var resp2 *workflow.DescribeDomainResponse
-	//for i := 0; i < 20; i++ { // retry to wait domain been replicated to cluster2
-	//	if resp2, err = client2.DescribeDomain(createContext(), descReq); err != nil {
-	//		s.Equal(&workflow.EntityNotExistsError{Message: "Domain " + domainName + " does not exist."}, err)
-	//		time.Sleep(500 * time.Millisecond)
-	//	} else {
-	//		break
-	//	}
-	//}
-	//s.NoError(err)
-	//s.NotNil(resp2)
-	//s.Equal(resp, resp2)
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+	var resp2 *workflow.DescribeDomainResponse
+	for i := 0; i < 30; i++ { // retry to wait domain been replicated to cluster2
+		if resp2, err = client2.DescribeDomain(createContext(), descReq); err != nil {
+			s.Equal(&workflow.EntityNotExistsError{Message: "Domain " + domainName + " does not exist."}, err)
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			break
+		}
+	}
+	s.NoError(err)
+	s.NotNil(resp2)
+	s.Equal(resp, resp2)
 
 	// update domain to fail over
 	updateReq := &workflow.UpdateDomainRequest{
@@ -271,23 +275,251 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
 	s.Equal(int64(1), updateResp.GetFailoverVersion())
 
-	//// uncommented when domain cache background update is ready
-	//updated := false
-	//var resp3 *workflow.DescribeDomainResponse
-	//for i := 0; i < 20; i++ {
-	//	resp3, err = client2.DescribeDomain(createContext(), descReq)
-	//	s.NoError(err)
-	//	if resp2.ReplicationConfiguration.GetActiveClusterName() == clusterName[1] {
-	//		updated = true
-	//		break
-	//	}
-	//	fmt.Println("vancexu waiting update replciation")
-	//	time.Sleep(500 * time.Millisecond)
-	//}
-	//s.True(updated)
-	//s.NotNil(resp3)
-	//fmt.Println("vancexu resp3:")
-	//fmt.Println(resp3)
+	updated := false
+	var resp3 *workflow.DescribeDomainResponse
+	for i := 0; i < 30; i++ {
+		resp3, err = client2.DescribeDomain(createContext(), descReq)
+		s.NoError(err)
+		if resp3.ReplicationConfiguration.GetActiveClusterName() == clusterName[1] {
+			updated = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.True(updated)
+	s.NotNil(resp3)
+	s.Equal(int64(1), resp3.GetFailoverVersion())
+
+	// start workflow in new cluster
+	id := "integration-domain-failover-test"
+	wt := "integration-domain-failover-test-type"
+	tl := "integration-domain-failover-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	var we *workflow.StartWorkflowExecutionResponse
+	for i := 0; i < 30; i++ {
+		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		if err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+}
+
+func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
+	domainName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+	var resp2 *workflow.DescribeDomainResponse
+	for i := 0; i < 30; i++ { // retry to wait domain been replicated to cluster2
+		if resp2, err = client2.DescribeDomain(createContext(), descReq); err != nil {
+			s.Equal(&workflow.EntityNotExistsError{Message: "Domain " + domainName + " does not exist."}, err)
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			break
+		}
+	}
+	s.NoError(err)
+	s.NotNil(resp2)
+	s.Equal(resp, resp2)
+
+	// start a workflow
+	id := "integration-simple-workflow-failover-test"
+	wt := "integration-simple-workflow-failover-test-type"
+	tl := "integration-simple-workflow-failover-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	var we *workflow.StartWorkflowExecutionResponse
+	for i := 0; i < 30; i++ {
+		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		if err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+	rid := we.GetRunId()
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	activityName := "activity_type1"
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	poller2 := host.TaskPoller{
+		Engine:          client2,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// make some progress in cluster 1
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// wait till failover completed
+	failoverDone := false
+	for i := 0; i < 15; i++ {
+		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		if _, failoverDone = err.(*workflow.WorkflowExecutionAlreadyStartedError); failoverDone {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.True(failoverDone)
+
+	// check history matched
+	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(rid),
+		},
+	}
+	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
+	eventsReplicated := false
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil && len(historyResponse.History.Events) == 5 {
+			eventsReplicated = true
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
+	s.True(eventsReplicated)
+
+	// make process in cluster 2
+	err = poller2.PollAndProcessActivityTask(false)
+	s.logger.Infof("PollAndProcessActivityTask 2: %v", err)
+	s.Nil(err)
+
+	s.False(workflowComplete)
+	_, err = poller2.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.Nil(err)
+	s.True(workflowComplete)
+
+	// check history replicated in cluster 1
+	eventsReplicated = false
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil && len(historyResponse.History.Events) == 11 {
+			eventsReplicated = true
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
 }
 
 func createContext() context.Context {
