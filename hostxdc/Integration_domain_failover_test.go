@@ -194,6 +194,11 @@ func (s *testCluster) setupShards() {
 	}
 }
 
+func createContext() context.Context {
+	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
+	return ctx
+}
+
 func TestIntegrationClustersTestSuite(t *testing.T) {
 	flag.Parse()
 	if *integration {
@@ -522,7 +527,547 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.Nil(err)
 }
 
-func createContext() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), 90*time.Second)
-	return ctx
+func (s *integrationClustersTestSuite) TestTerminateFailover() {
+	domainName := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+
+	// start a workflow
+	id := "integration-terminate-workflow-failover-test"
+	wt := "integration-terminate-workflow-failover-test-type"
+	tl := "integration-terminate-workflow-failover-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	var we *workflow.StartWorkflowExecutionResponse
+	for i := 0; i < 30; i++ {
+		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		if err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+
+	activityName := "activity_type1"
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:   common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// make some progress in cluster 1
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// wait till failover completed
+	failoverDone := false
+	for i := 0; i < 15; i++ {
+		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		if _, failoverDone = err.(*workflow.WorkflowExecutionAlreadyStartedError); failoverDone {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.True(failoverDone)
+
+	// terminate workflow at cluster 2
+	terminateReason := "terminate reason."
+	terminateDetails := []byte("terminate details.")
+	err = client2.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+		Reason:   common.StringPtr(terminateReason),
+		Details:  terminateDetails,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// check terminate done
+	executionTerminated := false
+	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+GetHistoryLoop:
+	for i := 0; i < 10; i++ {
+		historyResponse, err := client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		s.Nil(err)
+		history := historyResponse.History
+
+		lastEvent := history.Events[len(history.Events)-1]
+		if *lastEvent.EventType != workflow.EventTypeWorkflowExecutionTerminated {
+			s.logger.Warnf("Execution not terminated yet.")
+			time.Sleep(100 * time.Millisecond)
+			continue GetHistoryLoop
+		}
+
+		terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
+		s.Equal(terminateReason, *terminateEventAttributes.Reason)
+		s.Equal(terminateDetails, terminateEventAttributes.Details)
+		s.Equal(identity, *terminateEventAttributes.Identity)
+		executionTerminated = true
+		break GetHistoryLoop
+	}
+	s.True(executionTerminated)
+
+	// check history replicated to the other cluster
+	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
+	eventsReplicated := false
+GetHistoryLoop2:
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client1.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil {
+			history := historyResponse.History
+			lastEvent := history.Events[len(history.Events)-1]
+			if *lastEvent.EventType == workflow.EventTypeWorkflowExecutionTerminated {
+				terminateEventAttributes := lastEvent.WorkflowExecutionTerminatedEventAttributes
+				s.Equal(terminateReason, *terminateEventAttributes.Reason)
+				s.Equal(terminateDetails, terminateEventAttributes.Details)
+				s.Equal(identity, *terminateEventAttributes.Identity)
+				eventsReplicated = true
+				break GetHistoryLoop2
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
+	s.True(eventsReplicated)
+}
+
+func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
+	domainName := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+
+	// start a workflow
+	id := "integration-continueAsNew-workflow-failover-test"
+	wt := "integration-continueAsNew-workflow-failover-test-type"
+	tl := "integration-continueAsNew-workflow-failover-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	var we *workflow.StartWorkflowExecutionResponse
+	for i := 0; i < 30; i++ {
+		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		if err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+
+	workflowComplete := false
+	continueAsNewCount := int32(5)
+	continueAsNewCounter := int32(0)
+	var previousRunID string
+	var lastRunStartedEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if continueAsNewCounter < continueAsNewCount {
+			previousRunID = execution.GetRunId()
+			continueAsNewCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+
+			return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeContinueAsNewWorkflowExecution),
+				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					WorkflowType: workflowType,
+					TaskList:     &workflow.TaskList{Name: &tl},
+					Input:        buf.Bytes(),
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
+				},
+			}}, nil
+		}
+
+		lastRunStartedEvent = history.Events[0]
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(continueAsNewCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	poller2 := host.TaskPoller{
+		Engine:          client2,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// make some progress in cluster 1 and did some continueAsNew
+	for i := 0; i < 3; i++ {
+		_, err := poller.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(err, strconv.Itoa(i))
+	}
+
+	// update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// wait till failover completed
+	failoverDone := false
+	for i := 0; i < 20; i++ {
+		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		if _, failoverDone = err.(*workflow.WorkflowExecutionAlreadyStartedError); failoverDone {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.True(failoverDone)
+
+	// finish the rest in cluster 2
+	for i := 0; i < 2; i++ {
+		_, err := poller2.PollAndProcessDecisionTask(false, false)
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(err, strconv.Itoa(i))
+	}
+
+	s.False(workflowComplete)
+	_, err = poller2.PollAndProcessDecisionTask(false, false)
+	s.Nil(err)
+	s.True(workflowComplete)
+	s.Equal(previousRunID, lastRunStartedEvent.WorkflowExecutionStartedEventAttributes.GetContinuedExecutionRunId())
+}
+
+func (s *integrationClustersTestSuite) TestSignalFailover() {
+	domainName := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+
+	// Start a workflow
+	id := "integration-signal-workflow-failover-test"
+	wt := "integration-signal-workflow-failover-test-type"
+	tl := "integration-signal-workflow-failover-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:    common.StringPtr(uuid.New()),
+		Domain:       common.StringPtr(domainName),
+		WorkflowId:   common.StringPtr(id),
+		WorkflowType: workflowType,
+		TaskList:     taskList,
+		Input:        nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(300),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+	var we *workflow.StartWorkflowExecutionResponse
+	for i := 0; i < 30; i++ {
+		we, err = client1.StartWorkflowExecution(createContext(), startReq)
+		if err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", we.GetRunId())
+
+	workflowComplete := false
+	eventSignaled := false
+	var signalEvent *workflow.HistoryEvent
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if !eventSignaled {
+			for _, event := range history.Events[previousStartedEventID:] {
+				if *event.EventType == workflow.EventTypeWorkflowExecutionSignaled {
+					eventSignaled = true
+					signalEvent = event
+					return nil, []*workflow.Decision{}, nil
+				}
+			}
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	poller2 := &host.TaskPoller{
+		Engine:          client2,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// Send a signal in cluster 1
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	err = client1.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+			RunId:      common.StringPtr(we.GetRunId()),
+		},
+		SignalName: common.StringPtr(signalName),
+		Input:      signalInput,
+		Identity:   common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// Process signal in cluster 1
+	s.False(eventSignaled)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(eventSignaled)
+
+	// Update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// Wait till failover completed
+	time.Sleep(11 * time.Second)
+	failoverDone := false
+	for i := 0; i < 15; i++ {
+		we, err = client2.StartWorkflowExecution(createContext(), startReq)
+		if _, failoverDone = err.(*workflow.WorkflowExecutionAlreadyStartedError); failoverDone {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.True(failoverDone)
+
+	// check history matched
+	getHistoryReq := &workflow.GetWorkflowExecutionHistoryRequest{
+		Domain: common.StringPtr(domainName),
+		Execution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	}
+	var historyResponse *workflow.GetWorkflowExecutionHistoryResponse
+	eventsReplicated := false
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil && len(historyResponse.History.Events) == 5 {
+			eventsReplicated = true
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
+	s.True(eventsReplicated)
+
+	// Send another signal in cluster 2
+	signalName2 := "my signal 2"
+	signalInput2 := []byte("my signal input 2.")
+	err = client2.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain: common.StringPtr(domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+		SignalName: common.StringPtr(signalName2),
+		Input:      signalInput2,
+		Identity:   common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// Process signal in cluster 2
+	eventSignaled = false
+	_, err = poller2.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.Nil(err)
+	s.True(eventSignaled)
+
+	// check history matched
+	eventsReplicated = false
+	for i := 0; i < 15; i++ {
+		historyResponse, err = client2.GetWorkflowExecutionHistory(createContext(), getHistoryReq)
+		if err == nil && len(historyResponse.History.Events) == 9 {
+			eventsReplicated = true
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	s.Nil(err)
+	s.True(eventsReplicated)
 }
