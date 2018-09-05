@@ -1367,7 +1367,6 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
 	s.mockShardManager.On("UpdateShard", mock.Anything).Return(nil).Once() // this is called when err is returned, and shard will try to update
-	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 
 	errRet := &shared.InternalServiceError{}
 	// the test above already assert the create workflow request, so here jsut use anyting
