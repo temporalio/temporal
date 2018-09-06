@@ -104,5 +104,5 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 }
 
 func getTimeoutErrorReason(timeoutType shared.TimeoutType) string {
-	return "timeout:" + timeoutType.String()
+	return "cadenceInternal:Timeout"
 }

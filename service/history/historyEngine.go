@@ -2556,6 +2556,17 @@ func validateActivityScheduleAttributes(attributes *workflow.ScheduleActivityTas
 		return &workflow.BadRequestError{Message: "A valid timeout may not be negative."}
 	}
 
+	// ensure activity's SCHEDULE_TO_START and SCHEDULE_TO_CLOSE is as long as expiration on retry policy
+	p := attributes.RetryPolicy
+	if p != nil {
+		if attributes.GetScheduleToStartTimeoutSeconds() < p.GetExpirationIntervalInSeconds() {
+			attributes.ScheduleToStartTimeoutSeconds = common.Int32Ptr(p.GetExpirationIntervalInSeconds())
+		}
+		if attributes.GetScheduleToCloseTimeoutSeconds() < p.GetExpirationIntervalInSeconds() {
+			attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(p.GetExpirationIntervalInSeconds())
+		}
+	}
+
 	// ensure activity timeout never larger than workflow timeout
 	if attributes.GetScheduleToCloseTimeoutSeconds() > wfTimeout {
 		attributes.ScheduleToCloseTimeoutSeconds = common.Int32Ptr(wfTimeout)
