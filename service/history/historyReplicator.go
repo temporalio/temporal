@@ -668,9 +668,9 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 	errExist := err.(*persistence.WorkflowExecutionAlreadyStartedError)
 	currentRunID := errExist.RunID
 	currentState := errExist.State
-	currentStartVersion := errExist.StartVersion
+	currentLastWriteVersion := errExist.LastWriteVersion
 
-	logger.WithField(logging.TagCurrentVersion, currentStartVersion)
+	logger.WithField(logging.TagCurrentVersion, currentLastWriteVersion)
 	if currentRunID == execution.GetRunId() {
 		logger.Info("Dropping stale start replication task.")
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.DuplicateReplicationEventsCounter)
@@ -679,7 +679,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 
 	// current workflow is completed
 	if currentState == persistence.WorkflowStateCompleted {
-		if currentStartVersion > incomingVersion {
+		if currentLastWriteVersion > incomingVersion {
 			logger.Info("Dropping stale start replication task.")
 			r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 			deleteHistory()
@@ -691,13 +691,13 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 	}
 
 	// current workflow is still running
-	if currentStartVersion > incomingVersion {
+	if currentLastWriteVersion > incomingVersion {
 		logger.Info("Dropping stale start replication task.")
 		r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.StaleReplicationEventsCounter)
 		deleteHistory()
 		return nil
 	}
-	if currentStartVersion == incomingVersion {
+	if currentLastWriteVersion == incomingVersion {
 		err = r.flushCurrentWorkflowBuffer(ctx, domainID, execution.GetWorkflowId(), logger)
 		if err != nil {
 			return err

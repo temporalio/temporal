@@ -332,7 +332,7 @@ const (
 		`IF range_id = ?`
 
 	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions USING TTL 0 ` +
-		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, replication_state = {start_version: ?}` +
+		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, replication_state = {start_version: ?, last_write_version: ?}` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -344,7 +344,11 @@ const (
 
 	templateCreateCurrentWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution, replication_state) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?}) IF NOT EXISTS USING TTL 0 `
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?, last_write_version: ?}) IF NOT EXISTS USING TTL 0 `
+
+	templateDeleteCurrentWorkflowExecutionQueryWithTTL = `INSERT INTO executions ` +
+		`(shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution, replication_state) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?, last_write_version: ?}) USING TTL ? `
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, domain_id, workflow_id, run_id, type, execution, next_event_id, visibility_ts, task_id) ` +
@@ -616,10 +620,6 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
 		`IF next_event_id = ?`
-
-	templateDeleteWorkflowExecutionQueryWithTTL = `INSERT INTO executions ` +
-		`(shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, execution, replication_state) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, {start_version: ?}) USING TTL ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
 		`FROM executions ` +
@@ -1109,21 +1109,21 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *CreateWorkflowEx
 					// CreateWorkflowExecution failed because it already exists
 					executionInfo := createWorkflowExecutionInfo(execution)
 
-					startVersion := common.EmptyVersion
+					lastWriteVersion := common.EmptyVersion
 					replicationState := createReplicationState(previous["replication_state"].(map[string]interface{}))
 					if replicationState != nil {
-						startVersion = replicationState.StartVersion
+						lastWriteVersion = replicationState.LastWriteVersion
 					}
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
 						request.Execution.GetWorkflowId(), executionInfo.RunID, request.RangeID, strings.Join(columns, ","))
 					return nil, &WorkflowExecutionAlreadyStartedError{
-						Msg:            msg,
-						StartRequestID: executionInfo.CreateRequestID,
-						RunID:          executionInfo.RunID,
-						State:          executionInfo.State,
-						CloseStatus:    executionInfo.CloseStatus,
-						StartVersion:   startVersion,
+						Msg:              msg,
+						StartRequestID:   executionInfo.CreateRequestID,
+						RunID:            executionInfo.RunID,
+						State:            executionInfo.State,
+						CloseStatus:      executionInfo.CloseStatus,
+						LastWriteVersion: lastWriteVersion,
 					}
 				}
 			}
@@ -1171,8 +1171,10 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 	}
 
 	startVersion := common.EmptyVersion
+	lastWriteVersion := common.EmptyVersion
 	if request.ReplicationState != nil {
 		startVersion = request.ReplicationState.StartVersion
+		lastWriteVersion = request.ReplicationState.LastWriteVersion
 	}
 	if request.ContinueAsNew {
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
@@ -1182,6 +1184,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			state,
 			closeStatus,
 			startVersion,
+			lastWriteVersion,
 			d.shardID,
 			rowTypeExecution,
 			request.DomainID,
@@ -1206,6 +1209,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *Creat
 			state,
 			closeStatus,
 			startVersion,
+			lastWriteVersion,
 		)
 	}
 
@@ -1599,34 +1603,56 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 			startReq.Execution.GetRunId())
 		d.createTimerTasks(batch, startReq.TimerTasks, nil, startReq.DomainID, startReq.Execution.GetWorkflowId(),
 			startReq.Execution.GetRunId(), cqlNowTimestamp)
-	} else if request.FinishExecution {
-		retentionInSeconds := request.FinishedExecutionTTL
-		if retentionInSeconds <= 0 {
-			retentionInSeconds = minCurrentExecutionRetentionTTL
-		}
-
+	} else {
 		startVersion := common.EmptyVersion
+		lastWriteVersion := common.EmptyVersion
 		if request.ReplicationState != nil {
 			startVersion = request.ReplicationState.StartVersion
+			lastWriteVersion = request.ReplicationState.LastWriteVersion
 		}
+		if request.FinishExecution {
+			retentionInSeconds := request.FinishedExecutionTTL
+			if retentionInSeconds <= 0 {
+				retentionInSeconds = minCurrentExecutionRetentionTTL
+			}
 
-		// Delete WorkflowExecution row representing current execution, by using a TTL
-		batch.Query(templateDeleteWorkflowExecutionQueryWithTTL,
-			d.shardID,
-			rowTypeExecution,
-			executionInfo.DomainID,
-			executionInfo.WorkflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			executionInfo.RunID,
-			executionInfo.RunID,
-			executionInfo.CreateRequestID,
-			executionInfo.State,
-			executionInfo.CloseStatus,
-			startVersion,
-			retentionInSeconds,
-		)
+			// Delete WorkflowExecution row representing current execution, by using a TTL
+			batch.Query(templateDeleteCurrentWorkflowExecutionQueryWithTTL,
+				d.shardID,
+				rowTypeExecution,
+				executionInfo.DomainID,
+				executionInfo.WorkflowID,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				executionInfo.RunID,
+				executionInfo.RunID,
+				executionInfo.CreateRequestID,
+				executionInfo.State,
+				executionInfo.CloseStatus,
+				startVersion,
+				lastWriteVersion,
+				retentionInSeconds,
+			)
+		} else {
+			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+				executionInfo.RunID,
+				executionInfo.RunID,
+				executionInfo.CreateRequestID,
+				executionInfo.State,
+				executionInfo.CloseStatus,
+				startVersion,
+				lastWriteVersion,
+				d.shardID,
+				rowTypeExecution,
+				executionInfo.DomainID,
+				executionInfo.WorkflowID,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				executionInfo.RunID,
+			)
+		}
 	}
 
 	// Verifies that the RangeID has not changed
@@ -1748,6 +1774,7 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 		executionInfo.State,
 		executionInfo.CloseStatus,
 		replicationState.StartVersion,
+		replicationState.LastWriteVersion,
 		d.shardID,
 		rowTypeExecution,
 		executionInfo.DomainID,

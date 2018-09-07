@@ -119,12 +119,12 @@ type (
 
 	// WorkflowExecutionAlreadyStartedError is returned when creating a new workflow failed.
 	WorkflowExecutionAlreadyStartedError struct {
-		Msg            string
-		StartRequestID string
-		RunID          string
-		State          int
-		CloseStatus    int
-		StartVersion   int64
+		Msg              string
+		StartRequestID   string
+		RunID            string
+		State            int
+		CloseStatus      int
+		LastWriteVersion int64
 	}
 
 	// TimeoutError is returned when a write operation fails due to a timeout

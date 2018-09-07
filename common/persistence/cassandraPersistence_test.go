@@ -90,7 +90,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflow() {
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
 	s.Equal(WorkflowStateRunning, startedErr.State, startedErr.Msg)
 	s.Equal(WorkflowCloseStatusNone, startedErr.CloseStatus, startedErr.Msg)
-	s.Equal(common.EmptyVersion, startedErr.StartVersion, startedErr.Msg)
+	s.Equal(common.EmptyVersion, startedErr.LastWriteVersion, startedErr.Msg)
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
@@ -131,11 +131,12 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflowWithReplicationS
 		WorkflowId: common.StringPtr("start-workflow-test-replication-state"),
 		RunId:      common.StringPtr("7f9fe8a0-9237-11e6-ae22-56b6b6499611"),
 	}
-	version := int64(144)
+	startVersion := int64(144)
+	lastWriteVersion := int64(1444)
 	replicationState := &ReplicationState{
-		StartVersion:     version, // we are only testing this attribute
-		CurrentVersion:   version,
-		LastWriteVersion: version,
+		StartVersion:     startVersion, // we are only testing this attribute
+		CurrentVersion:   lastWriteVersion,
+		LastWriteVersion: lastWriteVersion,
 	}
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, "queue1", "wType", 20, 13, 3, 0, 2, replicationState, nil)
 	s.Nil(err0, "No error expected.")
@@ -149,7 +150,7 @@ func (s *cassandraPersistenceSuite) TestPersistenceStartWorkflowWithReplicationS
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
 	s.Equal(WorkflowStateRunning, startedErr.State, startedErr.Msg)
 	s.Equal(WorkflowCloseStatusNone, startedErr.CloseStatus, startedErr.Msg)
-	s.Equal(version, startedErr.StartVersion, startedErr.Msg)
+	s.Equal(lastWriteVersion, startedErr.LastWriteVersion, startedErr.Msg)
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.WorkflowMgr.CreateWorkflowExecution(&CreateWorkflowExecutionRequest{
