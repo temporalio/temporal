@@ -24,6 +24,7 @@
 package history
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -1996,6 +1997,7 @@ type RecordActivityTaskStartedResponse struct {
 	StartedTimestamp                *int64               `json:"startedTimestamp,omitempty"`
 	Attempt                         *int64               `json:"attempt,omitempty"`
 	ScheduledTimestampOfThisAttempt *int64               `json:"scheduledTimestampOfThisAttempt,omitempty"`
+	HeartbeatDetails                []byte               `json:"heartbeatDetails,omitempty"`
 }
 
 // ToWire translates a RecordActivityTaskStartedResponse struct into a Thrift-level intermediate
@@ -2015,7 +2017,7 @@ type RecordActivityTaskStartedResponse struct {
 //   }
 func (v *RecordActivityTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2051,6 +2053,14 @@ func (v *RecordActivityTaskStartedResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.HeartbeatDetails != nil {
+		w, err = wire.NewValueBinary(v.HeartbeatDetails), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
 		i++
 	}
 
@@ -2123,6 +2133,14 @@ func (v *RecordActivityTaskStartedResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				v.HeartbeatDetails, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2136,7 +2154,7 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.ScheduledEvent != nil {
 		fields[i] = fmt.Sprintf("ScheduledEvent: %v", v.ScheduledEvent)
@@ -2152,6 +2170,10 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 	}
 	if v.ScheduledTimestampOfThisAttempt != nil {
 		fields[i] = fmt.Sprintf("ScheduledTimestampOfThisAttempt: %v", *(v.ScheduledTimestampOfThisAttempt))
+		i++
+	}
+	if v.HeartbeatDetails != nil {
+		fields[i] = fmt.Sprintf("HeartbeatDetails: %v", v.HeartbeatDetails)
 		i++
 	}
 
@@ -2173,6 +2195,9 @@ func (v *RecordActivityTaskStartedResponse) Equals(rhs *RecordActivityTaskStarte
 		return false
 	}
 	if !_I64_EqualsPtr(v.ScheduledTimestampOfThisAttempt, rhs.ScheduledTimestampOfThisAttempt) {
+		return false
+	}
+	if !((v.HeartbeatDetails == nil && rhs.HeartbeatDetails == nil) || (v.HeartbeatDetails != nil && rhs.HeartbeatDetails != nil && bytes.Equal(v.HeartbeatDetails, rhs.HeartbeatDetails))) {
 		return false
 	}
 
@@ -2214,6 +2239,16 @@ func (v *RecordActivityTaskStartedResponse) GetAttempt() (o int64) {
 func (v *RecordActivityTaskStartedResponse) GetScheduledTimestampOfThisAttempt() (o int64) {
 	if v.ScheduledTimestampOfThisAttempt != nil {
 		return *v.ScheduledTimestampOfThisAttempt
+	}
+
+	return
+}
+
+// GetHeartbeatDetails returns the value of HeartbeatDetails if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetHeartbeatDetails() (o []byte) {
+	if v.HeartbeatDetails != nil {
+		return v.HeartbeatDetails
 	}
 
 	return

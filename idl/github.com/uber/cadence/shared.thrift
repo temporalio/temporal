@@ -939,6 +939,7 @@ struct PollForActivityTaskResponse {
   110: optional i32 heartbeatTimeoutSeconds
   120: optional i32 attempt
   130: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
+  140: optional binary heartbeatDetails
 }
 
 struct RecordActivityTaskHeartbeatRequest {

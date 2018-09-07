@@ -605,6 +605,7 @@ func (e *matchingEngineImpl) createPollForActivityTaskResponse(context *taskCont
 
 	response.TaskToken, _ = e.tokenSerializer.Serialize(token)
 	response.Attempt = common.Int32Ptr(int32(token.ScheduleAttempt))
+	response.HeartbeatDetails = historyResponse.HeartbeatDetails
 	return response
 }
 

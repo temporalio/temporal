@@ -134,6 +134,7 @@ struct RecordActivityTaskStartedResponse {
   30: optional i64 (js.type = "Long") startedTimestamp
   40: optional i64 (js.type = "Long") attempt
   50: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
+  60: optional binary heartbeatDetails
 }
 
 struct RecordDecisionTaskStartedRequest {

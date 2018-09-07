@@ -908,6 +908,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 
 			response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
 			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
+			response.HeartbeatDetails = ai.Details
 
 			// Start a timer for the activity task.
 			timerTasks := []persistence.Task{}
