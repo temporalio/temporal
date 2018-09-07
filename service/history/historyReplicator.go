@@ -482,6 +482,12 @@ func (r *historyReplicator) ApplyReplicationTask(ctx context.Context, context *w
 
 func (r *historyReplicator) FlushBuffer(ctx context.Context, context *workflowExecutionContext, msBuilder mutableState,
 	logger bark.Logger) error {
+
+	if !msBuilder.IsWorkflowExecutionRunning() {
+		logger.Warnf("Workflow already finished, cannot flush buffer.")
+		return nil
+	}
+
 	domainID := msBuilder.GetExecutionInfo().DomainID
 	execution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr(msBuilder.GetExecutionInfo().WorkflowID),

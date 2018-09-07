@@ -1182,8 +1182,25 @@ func (s *historyReplicatorSuite) TestApplyReplicationTask_WorkflowClosed() {
 	s.Nil(err)
 }
 
-func (s *historyReplicatorSuite) FlushBuffer() {
+func (s *historyReplicatorSuite) TestFlushBuffer() {
 	// TODO
+}
+
+func (s *historyReplicatorSuite) TestFlushBuffer_AlreadyFinished() {
+	domainID := validDomainID
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	context := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	msBuilder := &mockMutableState{}
+	context.msBuilder = msBuilder
+	msBuilder.On("IsWorkflowExecutionRunning").Return(false).Once()
+
+	err := s.historyReplicator.FlushBuffer(ctx.Background(), context, msBuilder, s.logger)
+	s.Nil(err)
 }
 
 func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
@@ -2043,6 +2060,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 		RunId:      common.StringPtr(currentRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	currentMsBuilder := &mockMutableState{}
+	currentMsBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	currentMsBuilder.On("HasBufferedReplicationTasks").Return(false)
 	// return empty since not actually used
 	currentMsBuilder.On("GetExecutionInfo").Return(&persistence.WorkflowExecutionInfo{})
