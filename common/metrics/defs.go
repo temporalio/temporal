@@ -66,7 +66,8 @@ const (
 	HostnameTagName  = "hostname"
 	OperationTagName = "operation"
 	// ShardTagName is temporary until we can get all metric data removed for the service
-	ShardTagName = "shard"
+	ShardTagName       = "shard"
+	CadenceRoleTagName = "cadence-role"
 )
 
 // This package should hold all the metrics and tags for cadence
@@ -74,6 +75,9 @@ const (
 	UnknownDirectoryTagValue = "Unknown"
 	AllShardsTagValue        = "ALL"
 	NoneShardsTagValue       = "NONE"
+
+	HistoryRoleTagValue  = "history"
+	MatchingRoleTagValue = "matching"
 )
 
 // Common service base metrics
@@ -535,35 +539,35 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
 		PersistenceGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 
-		HistoryClientStartWorkflowExecutionScope:           {operation: "HistoryClientStartWorkflowExecution"},
-		HistoryClientRecordActivityTaskHeartbeatScope:      {operation: "HistoryClientRecordActivityTaskHeartbeat"},
-		HistoryClientRespondDecisionTaskCompletedScope:     {operation: "HistoryClientRespondDecisionTaskCompleted"},
-		HistoryClientRespondDecisionTaskFailedScope:        {operation: "HistoryClientRespondDecisionTaskFailed"},
-		HistoryClientRespondActivityTaskCompletedScope:     {operation: "HistoryClientRespondActivityTaskCompleted"},
-		HistoryClientRespondActivityTaskFailedScope:        {operation: "HistoryClientRespondActivityTaskFailed"},
-		HistoryClientRespondActivityTaskCanceledScope:      {operation: "HistoryClientRespondActivityTaskCanceled"},
-		HistoryClientGetMutableStateScope:                  {operation: "HistoryClientGetMutableState"},
-		HistoryClientResetStickyTaskListScope:              {operation: "HistoryClientResetStickyTaskListScope"},
-		HistoryClientDescribeWorkflowExecutionScope:        {operation: "HistoryClientDescribeWorkflowExecution"},
-		HistoryClientRecordDecisionTaskStartedScope:        {operation: "HistoryClientRecordDecisionTaskStarted"},
-		HistoryClientRecordActivityTaskStartedScope:        {operation: "HistoryClientRecordActivityTaskStarted"},
-		HistoryClientRequestCancelWorkflowExecutionScope:   {operation: "HistoryClientRequestCancelWorkflowExecution"},
-		HistoryClientSignalWorkflowExecutionScope:          {operation: "HistoryClientSignalWorkflowExecution"},
-		HistoryClientSignalWithStartWorkflowExecutionScope: {operation: "HistoryClientSignalWithStartWorkflowExecution"},
-		HistoryClientRemoveSignalMutableStateScope:         {operation: "HistoryClientRemoveSignalMutableStateScope"},
-		HistoryClientTerminateWorkflowExecutionScope:       {operation: "HistoryClientTerminateWorkflowExecution"},
-		HistoryClientScheduleDecisionTaskScope:             {operation: "HistoryClientScheduleDecisionTask"},
-		HistoryClientRecordChildExecutionCompletedScope:    {operation: "HistoryClientRecordChildExecutionCompleted"},
-		HistoryClientReplicateEventsScope:                  {operation: "HistoryClientReplicateEvents"},
-		HistoryClientSyncShardStatusScope:                  {operation: "HistoryClientSyncShardStatusScope"},
-		MatchingClientPollForDecisionTaskScope:             {operation: "MatchingClientPollForDecisionTask"},
-		MatchingClientPollForActivityTaskScope:             {operation: "MatchingClientPollForActivityTask"},
-		MatchingClientAddActivityTaskScope:                 {operation: "MatchingClientAddActivityTask"},
-		MatchingClientAddDecisionTaskScope:                 {operation: "MatchingClientAddDecisionTask"},
-		MatchingClientQueryWorkflowScope:                   {operation: "MatchingClientQueryWorkflow"},
-		MatchingClientRespondQueryTaskCompletedScope:       {operation: "MatchingClientRespondQueryTaskCompleted"},
-		MatchingClientCancelOutstandingPollScope:           {operation: "MatchingClientCancelOutstandingPoll"},
-		MatchingClientDescribeTaskListScope:                {operation: "MatchingClientDescribeTaskList"},
+		HistoryClientStartWorkflowExecutionScope:           {operation: "HistoryClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordActivityTaskHeartbeatScope:      {operation: "HistoryClientRecordActivityTaskHeartbeat", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondDecisionTaskCompletedScope:     {operation: "HistoryClientRespondDecisionTaskCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondDecisionTaskFailedScope:        {operation: "HistoryClientRespondDecisionTaskFailed", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskCompletedScope:     {operation: "HistoryClientRespondActivityTaskCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskFailedScope:        {operation: "HistoryClientRespondActivityTaskFailed", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRespondActivityTaskCanceledScope:      {operation: "HistoryClientRespondActivityTaskCanceled", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetMutableStateScope:                  {operation: "HistoryClientGetMutableState", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientResetStickyTaskListScope:              {operation: "HistoryClientResetStickyTaskListScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeWorkflowExecutionScope:        {operation: "HistoryClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordDecisionTaskStartedScope:        {operation: "HistoryClientRecordDecisionTaskStarted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordActivityTaskStartedScope:        {operation: "HistoryClientRecordActivityTaskStarted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRequestCancelWorkflowExecutionScope:   {operation: "HistoryClientRequestCancelWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSignalWorkflowExecutionScope:          {operation: "HistoryClientSignalWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSignalWithStartWorkflowExecutionScope: {operation: "HistoryClientSignalWithStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRemoveSignalMutableStateScope:         {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientTerminateWorkflowExecutionScope:       {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientScheduleDecisionTaskScope:             {operation: "HistoryClientScheduleDecisionTask", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRecordChildExecutionCompletedScope:    {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateEventsScope:                  {operation: "HistoryClientReplicateEvents", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientSyncShardStatusScope:                  {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		MatchingClientPollForDecisionTaskScope:             {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollForActivityTaskScope:             {operation: "MatchingClientPollForActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddActivityTaskScope:                 {operation: "MatchingClientAddActivityTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddDecisionTaskScope:                 {operation: "MatchingClientAddDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientQueryWorkflowScope:                   {operation: "MatchingClientQueryWorkflow", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientRespondQueryTaskCompletedScope:       {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientCancelOutstandingPollScope:           {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientDescribeTaskListScope:                {operation: "MatchingClientDescribeTaskList", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
 		DomainCacheScope:                                   {operation: "DomainCache"},
 	},
 	// Frontend Scope Names
@@ -709,8 +713,9 @@ const (
 	PersistenceErrBusyCounter
 	PersistenceSampledCounter
 
-	HistoryClientFailures
-	MatchingClientFailures
+	CadenceClientRequests
+	CadenceClientFailures
+	CadenceClientLatency
 
 	DomainCacheTotalCallbacksLatency
 	DomainCacheBeforeCallbackLatency
@@ -840,8 +845,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrTimeoutCounter:                  {metricName: "persistence.errors.timeout", metricType: Counter},
 		PersistenceErrBusyCounter:                     {metricName: "persistence.errors.busy", metricType: Counter},
 		PersistenceSampledCounter:                     {metricName: "persistence.sampled", metricType: Counter},
-		HistoryClientFailures:                         {metricName: "client.history.errors", metricType: Counter},
-		MatchingClientFailures:                        {metricName: "client.matching.errors", metricType: Counter},
+		CadenceClientRequests:                         {metricName: "cadence.client.requests", metricType: Counter},
+		CadenceClientFailures:                         {metricName: "cadence.client.errors", metricType: Counter},
+		CadenceClientLatency:                          {metricName: "cadence.client.latency", metricType: Timer},
 		DomainCacheTotalCallbacksLatency:              {metricName: "domain-cache.total-callbacks.latency", metricType: Timer},
 		DomainCacheBeforeCallbackLatency:              {metricName: "domain-cache.before-callbacks.latency", metricType: Timer},
 		DomainCacheAfterCallbackLatency:               {metricName: "domain-cache.after-callbacks.latency", metricType: Timer},
