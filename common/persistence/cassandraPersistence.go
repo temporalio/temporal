@@ -1692,56 +1692,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	}
 
 	if !applied {
-		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
-		// the next_event_id check failed. Check the row info returned by Cassandra to figure out which one it is.
-	GetFailureReasonLoop:
-		for {
-			rowType, ok := previous["type"].(int)
-			if !ok {
-				// This should never happen, as all our rows have the type field.
-				break GetFailureReasonLoop
-			}
-
-			if rowType == rowTypeShard {
-				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
-					// UpdateWorkflowExecution failed because rangeID was modified
-					return &ShardOwnershipLostError{
-						ShardID: d.shardID,
-						Msg: fmt.Sprintf("Failed to update workflow execution.  Request RangeID: %v, Actual RangeID: %v",
-							request.RangeID, rangeID),
-					}
-				}
-			} else {
-				if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
-					// CreateWorkflowExecution failed because next event ID is unexpected
-					return &ConditionFailedError{
-						Msg: fmt.Sprintf("Failed to update workflow execution.  Request Condition: %v, Actual Value: %v",
-							request.Condition, nextEventID),
-					}
-				}
-			}
-
-			previous = make(map[string]interface{})
-			if !iter.MapScan(previous) {
-				// Cassandra returns the actual row that caused a condition failure, so we should always return
-				// from the checks above, but just in case.
-				break GetFailureReasonLoop
-			}
-		}
-
-		// At this point we only know that the write was not applied.
-		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
-		// shard to recover from such errors
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-
-		return &ShardOwnershipLostError{
-			ShardID: d.shardID,
-			Msg: fmt.Sprintf("Failed to update workflow execution.  RangeID: %v, Condition: %v, columns: (%v)",
-				request.RangeID, request.Condition, strings.Join(columns, ",")),
-		}
+		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.Condition, request.RangeID)
 	}
 
 	return nil
@@ -1901,59 +1852,81 @@ func (d *cassandraPersistence) ResetMutableState(request *ResetMutableStateReque
 	}
 
 	if !applied {
-		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
-		// the next_event_id check failed. Check the row info returned by Cassandra to figure out which one it is.
-	GetFailureReasonLoop:
-		for {
-			rowType, ok := previous["type"].(int)
-			if !ok {
-				// This should never happen, as all our rows have the type field.
-				break GetFailureReasonLoop
-			}
-
-			if rowType == rowTypeShard {
-				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
-					// UpdateWorkflowExecution failed because rangeID was modified
-					return &ShardOwnershipLostError{
-						ShardID: d.shardID,
-						Msg: fmt.Sprintf("Failed to reset mutable state.  Request RangeID: %v, Actual RangeID: %v",
-							request.RangeID, rangeID),
-					}
-				}
-			} else {
-				if nextEventID, ok := previous["next_event_id"].(int64); ok && nextEventID != request.Condition {
-					// CreateWorkflowExecution failed because next event ID is unexpected
-					return &ConditionFailedError{
-						Msg: fmt.Sprintf("Failed to reset mutable state.  Request Condition: %v, Actual Value: %v",
-							request.Condition, nextEventID),
-					}
-				}
-			}
-
-			previous = make(map[string]interface{})
-			if !iter.MapScan(previous) {
-				// Cassandra returns the actual row that caused a condition failure, so we should always return
-				// from the checks above, but just in case.
-				break GetFailureReasonLoop
-			}
-		}
-
-		// At this point we only know that the write was not applied.
-		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
-		// shard to recover from such errors
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-
-		return &ShardOwnershipLostError{
-			ShardID: d.shardID,
-			Msg: fmt.Sprintf("Failed to reset mutable state.  RangeID: %v, Condition: %v, columns: (%v)",
-				request.RangeID, request.Condition, strings.Join(columns, ",")),
-		}
+		return d.getExecutionConditionalUpdateFailure(previous, iter, executionInfo.RunID, request.Condition, request.RangeID)
 	}
 
 	return nil
+}
+
+func (d *cassandraPersistence) getExecutionConditionalUpdateFailure(previous map[string]interface{}, iter *gocql.Iter, requestRunID string, requestCondition int64, requestRangeID int64) error {
+	// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
+	// the next_event_id check failed. Check the row info returned by Cassandra to figure out which one it is.
+	rangeIDUnmatch := false
+	actualRangeID := int64(0)
+	nextEventIDUnmatch := false
+	actualNextEventID := int64(0)
+	allPrevious := []map[string]interface{}{}
+
+GetFailureReasonLoop:
+	for {
+		rowType, ok := previous["type"].(int)
+		if !ok {
+			// This should never happen, as all our rows have the type field.
+			break GetFailureReasonLoop
+		}
+
+		runID, runIDOk := previous["run_id"].(string)
+
+		if rowType == rowTypeShard {
+			if actualRangeID, ok = previous["range_id"].(int64); ok && actualRangeID != requestRangeID {
+				// UpdateWorkflowExecution failed because rangeID was modified
+				rangeIDUnmatch = true
+
+			}
+		} else if rowType == rowTypeExecution && runIDOk && runID == requestRunID {
+			if actualNextEventID, ok = previous["next_event_id"].(int64); ok && actualNextEventID != requestCondition {
+				// CreateWorkflowExecution failed because next event ID is unexpected
+				nextEventIDUnmatch = true
+			}
+		}
+
+		allPrevious = append(allPrevious, previous)
+		previous = make(map[string]interface{})
+		if !iter.MapScan(previous) {
+			// Cassandra returns the actual row that caused a condition failure, so we should always return
+			// from the checks above, but just in case.
+			break GetFailureReasonLoop
+		}
+	}
+
+	if rangeIDUnmatch {
+		return &ShardOwnershipLostError{
+			ShardID: d.shardID,
+			Msg: fmt.Sprintf("Failed to reset mutable state.  Request RangeID: %v, Actual RangeID: %v",
+				requestRangeID, actualRangeID),
+		}
+	}
+
+	if nextEventIDUnmatch {
+		return &ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to reset mutable state.  Request Condition: %v, Actual Value: %v",
+				requestCondition, actualNextEventID),
+		}
+	}
+
+	// At this point we only know that the write was not applied.
+	var columns []string
+	columnID := 0
+	for _, previous := range allPrevious {
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%v: %s=%v", columnID, k, v))
+		}
+		columnID++
+	}
+	return &ConditionFailedError{
+		Msg: fmt.Sprintf("Failed to reset mutable state. ShardID: %v, RangeID: %v, Condition: %v, columns: (%v)",
+			d.shardID, requestRangeID, requestCondition, strings.Join(columns, ",")),
+	}
 }
 
 func (d *cassandraPersistence) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
