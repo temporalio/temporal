@@ -659,7 +659,7 @@ func (e *historyEngineImpl) ResetStickyTaskList(ctx context.Context, resetReques
 	err = e.updateWorkflowExecution(ctx, domainID, *resetRequest.Execution, false, false,
 		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				return nil, nil
+				return nil, ErrWorkflowCompleted
 			}
 			msBuilder.ClearStickyness()
 			return nil, nil
