@@ -101,7 +101,12 @@ const (
 )
 
 type (
-	// ConditionFailedError represents a failed conditional put
+	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
+	CurrentWorkflowConditionFailedError struct {
+		Msg string
+	}
+
+	// ConditionFailedError represents a failed conditional update for execution record
 	ConditionFailedError struct {
 		Msg string
 	}
@@ -1036,6 +1041,10 @@ type (
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 )
+
+func (e *CurrentWorkflowConditionFailedError) Error() string {
+	return e.Msg
+}
 
 func (e *ConditionFailedError) Error() string {
 	return e.Msg
