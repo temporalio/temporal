@@ -312,6 +312,11 @@ func newWorkflowCommands() []cli.Command {
 					Name:  FlagPrintDateTimeWithAlias,
 					Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
 				},
+				cli.IntFlag{
+					Name:  FlagContextTimeoutWithAlias,
+					Value: 30,
+					Usage: "Optional timeout for list command context in seconds",
+				},
 			},
 			Action: func(c *cli.Context) {
 				ListWorkflow(c)
@@ -349,6 +354,11 @@ func newWorkflowCommands() []cli.Command {
 				cli.BoolFlag{
 					Name:  FlagPrintDateTimeWithAlias,
 					Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
+				},
+				cli.IntFlag{
+					Name:  FlagContextTimeoutWithAlias,
+					Value: 30,
+					Usage: "Optional timeout for list command context in seconds",
 				},
 			},
 			Action: func(c *cli.Context) {

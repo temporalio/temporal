@@ -952,6 +952,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 	if pageSize <= 0 {
 		pageSize = defaultPageSizeForList
 	}
+	timeout := time.Duration(c.Int(FlagContextTimeout)) * time.Second
 
 	if len(workflowID) > 0 && len(workflowType) > 0 {
 		ExitIfError(errors.New("you can filter on workflow_id or workflow_type, but not on both"))
@@ -961,9 +962,9 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 		var result []*s.WorkflowExecutionInfo
 		var nextPageToken []byte
 		if queryOpen {
-			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next)
+			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, timeout)
 		} else {
-			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next)
+			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, timeout)
 		}
 
 		for _, e := range result {
@@ -983,7 +984,9 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 	return prepareTable
 }
 
-func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string, nextPageToken []byte) ([]*s.WorkflowExecutionInfo, []byte) {
+func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+	nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
+
 	request := &s.ListOpenWorkflowExecutionsRequest{
 		MaximumPageSize: common.Int32Ptr(int32(pageSize)),
 		NextPageToken:   nextPageToken,
@@ -999,7 +1002,7 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 		request.TypeFilter = &s.WorkflowTypeFilter{Name: common.StringPtr(workflowType)}
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContextForLongPoll(timeout)
 	defer cancel()
 	response, err := client.ListOpenWorkflow(ctx, request)
 	if err != nil {
@@ -1008,7 +1011,9 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 	return response.Executions, response.NextPageToken
 }
 
-func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string, nextPageToken []byte) ([]*s.WorkflowExecutionInfo, []byte) {
+func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
+	nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
+
 	request := &s.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: common.Int32Ptr(int32(pageSize)),
 		NextPageToken:   nextPageToken,
@@ -1024,7 +1029,7 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 		request.TypeFilter = &s.WorkflowTypeFilter{Name: common.StringPtr(workflowType)}
 	}
 
-	ctx, cancel := newContext()
+	ctx, cancel := newContextForLongPoll(timeout)
 	defer cancel()
 	response, err := client.ListClosedWorkflow(ctx, request)
 	if err != nil {
