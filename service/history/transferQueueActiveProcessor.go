@@ -234,6 +234,10 @@ func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) error {
 			// In which case just ignore the error so we can complete the timer task.
 			t.queueAckMgr.completeQueueTask(task.TaskID)
 			err = nil
+		} else if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+			t.queueAckMgr.completeQueueTask(task.TaskID)
+			t.logger.WithField(logging.TagErr, err).Error("More than 2 workflow is running.")
+			err = nil
 		}
 		if err != nil {
 			t.metricsClient.IncCounter(scope, metrics.TaskFailures)

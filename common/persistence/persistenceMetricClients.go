@@ -404,6 +404,8 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
 	case *ConditionFailedError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
+	case *CurrentWorkflowConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)

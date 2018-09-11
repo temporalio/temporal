@@ -1113,6 +1113,9 @@ func (h *Handler) convertError(err error) error {
 			StartRequestId: common.StringPtr(err.StartRequestID),
 			RunId:          common.StringPtr(err.RunID),
 		}
+	case *persistence.CurrentWorkflowConditionFailedError:
+		err := err.(*persistence.CurrentWorkflowConditionFailedError)
+		return &gen.InternalServiceError{Message: err.Msg}
 	}
 
 	return err

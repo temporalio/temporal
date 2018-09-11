@@ -245,6 +245,10 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 			// In which case just ignore the error so we can complete the timer task.
 			t.timerQueueAckMgr.completeTimerTask(timerTask)
 			err = nil
+		} else if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+			t.timerQueueAckMgr.completeTimerTask(timerTask)
+			t.logger.WithField(logging.TagErr, err).Error("More than 2 workflow is running.")
+			err = nil
 		}
 		if err != nil {
 			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
