@@ -21,6 +21,7 @@
 package dynamicconfig
 
 import (
+	"sync"
 	"time"
 
 	"github.com/uber-common/bark"
@@ -28,7 +29,7 @@ import (
 
 // NewCollection creates a new collection
 func NewCollection(client Client, logger bark.Logger) *Collection {
-	return &Collection{client, logger}
+	return &Collection{client, logger, &sync.Map{}}
 }
 
 // Collection wraps dynamic config client with a closure so that across the code, the config values
@@ -37,10 +38,14 @@ func NewCollection(client Client, logger bark.Logger) *Collection {
 type Collection struct {
 	client Client
 	logger bark.Logger
+	keys   *sync.Map
 }
 
 func (c *Collection) logNoValue(key Key, err error) {
-	c.logger.Debugf("Failed to fetch key: %s from dynamic config with err: %s", key.String(), err.Error())
+	_, loaded := c.keys.LoadOrStore(key, key)
+	if !loaded {
+		c.logger.Debugf("Failed to fetch key: %s from dynamic config with err: %s", key.String(), err.Error())
+	}
 }
 
 // PropertyFn is a wrapper to get property from dynamic config
