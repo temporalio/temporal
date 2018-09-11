@@ -328,7 +328,7 @@ func (c *metricClient) RemoveSignalMutableState(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryClientRemoveSignalMutableStateScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.HistoryClientRemoveSignalMutableStateScope, metrics.CadenceClientFailures)
 	}
 
 	return err

@@ -422,7 +422,7 @@ func (m *cassandraMetadataPersistenceV2) GetMetadata() (*GetMetadataResponse, er
 	err := query.Scan(&notificationVersion)
 	if err != nil {
 		if err == gocql.ErrNotFound {
-			// this error can be thrown in the very begining,
+			// this error can be thrown in the very beginning,
 			// i.e. when domains_by_name_v2 is initialized
 			return &GetMetadataResponse{NotificationVersion: 0}, nil
 		}

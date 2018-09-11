@@ -174,7 +174,7 @@ func (c *metricClient) DescribeTaskList(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceFailures)
+		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskListScope, metrics.CadenceClientFailures)
 	}
 
 	return resp, err
