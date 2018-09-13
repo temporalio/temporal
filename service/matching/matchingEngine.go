@@ -316,10 +316,11 @@ pollLoop:
 				isStickyEnabled = true
 			}
 			resp := &h.RecordDecisionTaskStartedResponse{
-				PreviousStartedEventId: mutableStateResp.NextEventId,
-				NextEventId:            mutableStateResp.NextEventId,
-				WorkflowType:           mutableStateResp.WorkflowType,
-				StickyExecutionEnabled: common.BoolPtr(isStickyEnabled),
+				PreviousStartedEventId:    mutableStateResp.NextEventId,
+				NextEventId:               mutableStateResp.NextEventId,
+				WorkflowType:              mutableStateResp.WorkflowType,
+				StickyExecutionEnabled:    common.BoolPtr(isStickyEnabled),
+				WorkflowExecutionTaskList: mutableStateResp.TaskList,
 			}
 			tCtx.completeTask(nil)
 			return e.createPollForDecisionTaskResponse(tCtx, resp), nil
