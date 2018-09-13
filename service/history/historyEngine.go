@@ -766,6 +766,10 @@ Update_History_Loop:
 		if err0 != nil {
 			return nil, err0
 		}
+		if !msBuilder.IsWorkflowExecutionRunning() {
+			return nil, ErrWorkflowCompleted
+		}
+
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
 		di, isRunning := msBuilder.GetPendingDecision(scheduleID)
@@ -781,7 +785,7 @@ Update_History_Loop:
 
 		// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 		// task is not outstanding than it is most probably a duplicate and complete the task.
-		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning {
+		if !isRunning {
 			// Looks like DecisionTask already completed as a result of another call.
 			// It is OK to drop the task at this point.
 			logging.LogDuplicateTaskEvent(context.logger, persistence.TransferTaskTypeDecisionTask, common.Int64Default(request.TaskId), requestID,
@@ -963,6 +967,10 @@ Update_History_Loop:
 		if err1 != nil {
 			return nil, err1
 		}
+		if !msBuilder.IsWorkflowExecutionRunning() {
+			return nil, ErrWorkflowCompleted
+		}
+
 		executionInfo := msBuilder.GetExecutionInfo()
 		tBuilder := e.getTimerBuilder(&context.workflowExecution)
 
