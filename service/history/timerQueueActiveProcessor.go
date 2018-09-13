@@ -355,6 +355,9 @@ Update_History_Loop:
 		}
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 
+		var timerTasks []persistence.Task
+		updateHistory := false
+		updateState := false
 		ai, running := msBuilder.GetActivityInfo(timerTask.EventID)
 		if running {
 			// If current one is HB task then we may need to create the next heartbeat timer.  Clear the create flag for this
@@ -365,16 +368,13 @@ Update_History_Loop:
 			if isHeartBeatTask && ai.LastTimeoutVisibility <= timerTask.VisibilityTimestamp.Unix() {
 				ai.TimerTaskStatus = ai.TimerTaskStatus &^ TimerTaskStatusCreatedHeartbeat
 				msBuilder.UpdateActivity(ai)
+				updateState = true
 			}
 
 			// No need to check for attempt on the timer task.  ExpireActivityTimer logic below already checks if the
 			// activity should be timedout and it will not let the timer expire for earlier attempts.  And creation of
 			// duplicate timer task is protected by Created flag.
 		}
-
-		var timerTasks []persistence.Task
-		updateHistory := false
-		createNewTimer := false
 
 	ExpireActivityTimers:
 		for _, td := range tBuilder.GetActivityTimers(msBuilder) {
@@ -400,7 +400,7 @@ Update_History_Loop:
 					retryTask := msBuilder.CreateRetryTimer(ai, getTimeoutErrorReason(timeoutType))
 					if retryTask != nil {
 						timerTasks = append(timerTasks, retryTask)
-						createNewTimer = true
+						updateState = true
 
 						t.logger.Debugf("Ignore ActivityTimeout (%v) as retry is needed. New attempt: %v, retry backoff duration: %v.",
 							timeoutType, ai.Attempt, retryTask.(*persistence.ActivityRetryTimerTask).VisibilityTimestamp.Sub(time.Now()))
@@ -462,7 +462,7 @@ Update_History_Loop:
 					// Use second resolution for setting LastTimeoutVisibility, which is used for deduping heartbeat timer creation
 					ai.LastTimeoutVisibility = td.TimerSequenceID.VisibilityTimestamp.Unix()
 					msBuilder.UpdateActivity(ai)
-					createNewTimer = true
+					updateState = true
 
 					t.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
 						time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID)
@@ -473,7 +473,7 @@ Update_History_Loop:
 			}
 		}
 
-		if updateHistory || createNewTimer {
+		if updateHistory || updateState {
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 			// the history and try the operation again.
 			scheduleNewDecision := updateHistory && !msBuilder.HasPendingDecisionTask()
