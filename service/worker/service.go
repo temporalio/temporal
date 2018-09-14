@@ -24,6 +24,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -84,7 +85,7 @@ func (s *Service) Start() {
 	s.metricsClient = base.GetMetricsClient()
 
 	// worker only use the v2
-	metadataManager, err := persistence.NewCassandraMetadataPersistenceV2(p.CassandraConfig.Hosts,
+	metadataManager, err := cassandra.NewMetadataPersistenceV2(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,

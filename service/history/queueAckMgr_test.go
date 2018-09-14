@@ -35,7 +35,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
+	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -119,7 +119,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
-		shardInfo: copyShardInfo(&persistence.ShardInfo{
+		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
@@ -157,7 +157,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput := false
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -179,7 +179,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 	moreInput = true
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -207,7 +207,7 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 	moreInput := false
 	taskID := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -241,7 +241,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID2 := int64(60)
 	taskID3 := int64(61)
 	tasksInput := []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -250,7 +250,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -259,7 +259,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -328,7 +328,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.metricsClient, s.logger)
 	s.mockShard = &shardContextImpl{
 		service: s.mockService,
-		shardInfo: copyShardInfo(&persistence.ShardInfo{
+		shardInfo: copyShardInfo(&p.ShardInfo{
 			ShardID: 0,
 			RangeID: 1,
 			ClusterTimerAckLevel: map[string]time.Time{
@@ -366,7 +366,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput := true
 	taskID1 := int64(59)
 	tasksInput := []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -389,7 +389,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 	moreInput = false
 	taskID2 := int64(60)
 	tasksInput = []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -419,7 +419,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	taskID1 := int64(59)
 	taskID2 := int64(60)
 	tasksInput := []queueTaskInfo{
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),
@@ -428,7 +428,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 			TaskType:   1,
 			ScheduleID: 28,
 		},
-		&persistence.TransferTaskInfo{
+		&p.TransferTaskInfo{
 			DomainID:   "some random domain ID",
 			WorkflowID: "some random workflow ID",
 			RunID:      uuid.New(),

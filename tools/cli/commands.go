@@ -101,7 +101,7 @@ const (
 	FlagDescriptionWithAlias       = FlagDescription + ", desc"
 	FlagOwnerEmail                 = "owner_email"
 	FlagOwnerEmailWithAlias        = FlagOwnerEmail + ", oe"
-	FlagRetentionDays              = "retention_days"
+	FlagRetentionDays              = "retention"
 	FlagRetentionDaysWithAlias     = FlagRetentionDays + ", rd"
 	FlagEmitMetric                 = "emit_metric"
 	FlagEmitMetricWithAlias        = FlagEmitMetric + ", em"

@@ -37,11 +37,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	cassandra_persistence "github.com/uber/cadence/common/persistence/cassandra"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 )
@@ -98,13 +99,12 @@ func (s *integrationSuite) TearDownTest() {
 func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster bool) {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	options := persistence.TestBaseOptions{}
-	options.ClusterHost = "127.0.0.1"
+	options := persistencetests.TestBaseOptions{}
+	options.DBHost = "127.0.0.1"
 	options.DropKeySpace = true
-	options.SchemaDir = ".."
 	options.EnableGlobalDomain = enableGlobalDomain
 	options.IsMasterCluster = isMasterCluster
-	s.SetupWorkflowStoreWithOptions(options, nil)
+	cassandra_persistence.InitTestSuiteWithOptions(&s.TestBase, &options)
 
 	s.setupShards()
 

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package cassandra
 
 import (
 	"encoding/json"
@@ -26,10 +26,10 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 const (
@@ -65,13 +65,13 @@ type (
 	cassandraHistoryPersistence struct {
 		session           *gocql.Session
 		logger            bark.Logger
-		serializerFactory HistorySerializerFactory
+		serializerFactory p.HistorySerializerFactory
 	}
 )
 
-// NewCassandraHistoryPersistence is used to create an instance of HistoryManager implementation
-func NewCassandraHistoryPersistence(hosts string, port int, user, password, dc string, keyspace string,
-	numConns int, logger bark.Logger) (HistoryManager,
+// NewHistoryPersistence is used to create an instance of HistoryManager implementation
+func NewHistoryPersistence(hosts string, port int, user, password, dc string, keyspace string,
+	numConns int, logger bark.Logger) (p.HistoryManager,
 	error) {
 	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
@@ -86,7 +86,7 @@ func NewCassandraHistoryPersistence(hosts string, port int, user, password, dc s
 		return nil, err
 	}
 
-	return &cassandraHistoryPersistence{session: session, logger: logger, serializerFactory: NewHistorySerializerFactory()}, nil
+	return &cassandraHistoryPersistence{session: session, logger: logger, serializerFactory: p.NewHistorySerializerFactory()}, nil
 }
 
 // Close gracefully releases the resources held by this object
@@ -96,7 +96,7 @@ func (h *cassandraHistoryPersistence) Close() {
 	}
 }
 
-func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
+func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *p.AppendHistoryEventsRequest) error {
 	var query *gocql.Query
 
 	if request.Overwrite {
@@ -137,7 +137,7 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 		} else if isTimeoutError(err) {
 			// Write may have succeeded, but we don't know
 			// return this info to the caller so they have the option of trying to find out by executing a read
-			return &TimeoutError{Msg: fmt.Sprintf("AppendHistoryEvents timed out. Error: %v", err)}
+			return &p.TimeoutError{Msg: fmt.Sprintf("AppendHistoryEvents timed out. Error: %v", err)}
 		}
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("AppendHistoryEvents operation failed. Error: %v", err),
@@ -145,7 +145,7 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 	}
 
 	if !applied {
-		return &ConditionFailedError{
+		return &p.ConditionFailedError{
 			Msg: "Failed to append history events.",
 		}
 	}
@@ -153,8 +153,8 @@ func (h *cassandraHistoryPersistence) AppendHistoryEvents(request *AppendHistory
 	return nil
 }
 
-func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (
-	*GetWorkflowExecutionHistoryResponse, error) {
+func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.GetWorkflowExecutionHistoryRequest) (
+	*p.GetWorkflowExecutionHistoryResponse, error) {
 	execution := request.Execution
 	token, err := h.deserializeToken(request)
 	if err != nil {
@@ -180,7 +180,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 	eventBatchVersionPointer := new(int64)
 	eventBatchVersion := common.EmptyVersion
 	lastFirstEventID := common.EmptyEventID // first_event_id of last batch
-	eventBatch := SerializedHistoryEventBatch{}
+	eventBatch := p.SerializedHistoryEventBatch{}
 	history := &workflow.History{}
 	for iter.Scan(nil, &eventBatchVersionPointer, &eventBatch.Data, &eventBatch.EncodingType, &eventBatch.Version) {
 		found = true
@@ -216,7 +216,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 
 		eventBatchVersionPointer = new(int64)
 		eventBatchVersion = common.EmptyVersion
-		eventBatch = SerializedHistoryEventBatch{}
+		eventBatch = p.SerializedHistoryEventBatch{}
 	}
 
 	data, err := h.serializeToken(token)
@@ -238,7 +238,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 		}
 	}
 
-	response := &GetWorkflowExecutionHistoryResponse{
+	response := &p.GetWorkflowExecutionHistoryResponse{
 		NextPageToken:    data,
 		History:          history,
 		LastFirstEventID: lastFirstEventID,
@@ -247,14 +247,14 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *GetWo
 	return response, nil
 }
 
-func (h *cassandraHistoryPersistence) deserializeEvents(e *SerializedHistoryEventBatch) (*HistoryEventBatch, error) {
-	SetSerializedHistoryDefaults(e)
+func (h *cassandraHistoryPersistence) deserializeEvents(e *p.SerializedHistoryEventBatch) (*p.HistoryEventBatch, error) {
+	p.SetSerializedHistoryDefaults(e)
 	s, _ := h.serializerFactory.Get(e.EncodingType)
 	return s.Deserialize(e)
 }
 
 func (h *cassandraHistoryPersistence) DeleteWorkflowExecutionHistory(
-	request *DeleteWorkflowExecutionHistoryRequest) error {
+	request *p.DeleteWorkflowExecutionHistoryRequest) error {
 	execution := request.Execution
 	query := h.session.Query(templateDeleteWorkflowExecutionHistory,
 		request.DomainID,
@@ -288,7 +288,7 @@ func (h *cassandraHistoryPersistence) serializeToken(token *historyToken) ([]byt
 	return data, nil
 }
 
-func (h *cassandraHistoryPersistence) deserializeToken(request *GetWorkflowExecutionHistoryRequest) (*historyToken, error) {
+func (h *cassandraHistoryPersistence) deserializeToken(request *p.GetWorkflowExecutionHistoryRequest) (*historyToken, error) {
 	token := &historyToken{
 		LastEventBatchVersion: common.EmptyVersion,
 		LastEventID:           request.FirstEventID - 1,

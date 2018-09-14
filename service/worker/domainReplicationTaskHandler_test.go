@@ -21,6 +21,7 @@
 package worker
 
 import (
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"log"
 	"os"
 	"testing"
@@ -33,12 +34,13 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
+	cassandra_persistence "github.com/uber/cadence/common/persistence/cassandra"
 )
 
 type (
 	domainReplicatorSuite struct {
 		suite.Suite
-		persistence.TestBase
+		persistencetests.TestBase
 		domainReplicator *domainReplicatorImpl
 	}
 )
@@ -59,7 +61,7 @@ func (s *domainReplicatorSuite) TearDownSuite() {
 }
 
 func (s *domainReplicatorSuite) SetupTest() {
-	s.SetupWorkflowStore()
+	cassandra_persistence.InitTestSuite(&s.TestBase)
 	s.domainReplicator = NewDomainReplicator(
 		s.MetadataManagerV2,
 		bark.NewLoggerFromLogrus(logrus.New()),

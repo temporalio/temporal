@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package cassandra
 
 import (
 	"fmt"
@@ -26,9 +26,9 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 // Fixed domain values for now
@@ -133,9 +133,9 @@ type (
 	}
 )
 
-// NewCassandraVisibilityPersistence is used to create an instance of VisibilityManager implementation
-func NewCassandraVisibilityPersistence(
-	hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (VisibilityManager, error) {
+// NewVisibilityPersistence is used to create an instance of VisibilityManager implementation
+func NewVisibilityPersistence(
+	hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (p.VisibilityManager, error) {
 	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
@@ -159,7 +159,7 @@ func (v *cassandraVisibilityPersistence) Close() {
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
-	request *RecordWorkflowExecutionStartedRequest) error {
+	request *p.RecordWorkflowExecutionStartedRequest) error {
 	ttl := request.WorkflowTimeout + openExecutionTTLBuffer
 	var query *gocql.Query
 	if ttl > maxCassandraTTL {
@@ -199,7 +199,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
-	request *RecordWorkflowExecutionClosedRequest) error {
+	request *p.RecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
@@ -261,7 +261,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(
 }
 
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
-	request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutions,
 		request.DomainUUID,
 		domainPartition,
@@ -275,7 +275,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
@@ -301,7 +301,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 }
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
-	request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutions,
 		request.DomainUUID,
 		domainPartition,
@@ -315,7 +315,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
@@ -341,7 +341,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 }
 
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
-	request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByType,
 		request.DomainUUID,
 		domainPartition,
@@ -356,7 +356,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
@@ -382,7 +382,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 }
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
-	request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByTypeRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
 		request.DomainUUID,
 		domainPartition,
@@ -397,7 +397,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
@@ -423,7 +423,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 }
 
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
-	request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetOpenWorkflowExecutionsByID,
 		request.DomainUUID,
 		domainPartition,
@@ -438,7 +438,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
@@ -464,7 +464,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
-	request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByID,
 		request.DomainUUID,
 		domainPartition,
@@ -479,7 +479,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
@@ -505,7 +505,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 }
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
-	request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
+	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.ListWorkflowExecutionsResponse, error) {
 	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatus,
 		request.DomainUUID,
 		domainPartition,
@@ -520,7 +520,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 		}
 	}
 
-	response := &ListWorkflowExecutionsResponse{}
+	response := &p.ListWorkflowExecutionsResponse{}
 	response.Executions = make([]*workflow.WorkflowExecutionInfo, 0)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
@@ -546,7 +546,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
-	request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
+	request *p.GetClosedWorkflowExecutionRequest) (*p.GetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := v.session.Query(templateGetClosedWorkflowExecution,
 		request.DomainUUID,
@@ -580,7 +580,7 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 		}
 	}
 
-	return &GetClosedWorkflowExecutionResponse{
+	return &p.GetClosedWorkflowExecutionResponse{
 		Execution: wfexecution,
 	}, nil
 }

@@ -1,4 +1,5 @@
 cassandra:
+  name: "cassandra-cluster"
   hosts: "127.0.0.1"
   keyspace: "cadence"
   visibilityKeyspace: "cadence_visibility"

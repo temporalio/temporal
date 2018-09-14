@@ -25,6 +25,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -84,7 +85,7 @@ func (s *Service) Start() {
 	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
-	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
+	metadata, err := cassandra.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,
@@ -99,7 +100,7 @@ func (s *Service) Start() {
 	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
 	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
-	visibility, err := persistence.NewCassandraVisibilityPersistence(p.CassandraConfig.Hosts,
+	visibility, err := cassandra.NewVisibilityPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,
@@ -113,7 +114,7 @@ func (s *Service) Start() {
 	visibility = persistence.NewVisibilityPersistenceRateLimitedClient(visibility, persistenceRateLimiter, log)
 	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)
 
-	history, err := persistence.NewCassandraHistoryPersistence(p.CassandraConfig.Hosts,
+	history, err := cassandra.NewHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,

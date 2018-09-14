@@ -33,7 +33,7 @@ import (
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 type (
@@ -85,29 +85,29 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*persistence.ClusterReplicationConfig{
-		&persistence.ClusterReplicationConfig{
+	clusters := []*p.ClusterReplicationConfig{
+		{
 			ClusterName: clusterActive,
 		},
-		&persistence.ClusterReplicationConfig{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
 
 	domainOperation := replicator.DomainOperationCreate
-	info := &persistence.DomainInfo{
+	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
-		Status:      persistence.DomainStatusRegistered,
+		Status:      p.DomainStatusRegistered,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &persistence.DomainConfig{
+	config := &p.DomainConfig{
 		Retention:  retention,
 		EmitMetric: emitMetric,
 	}
-	replicationConfig := &persistence.DomainReplicationConfig{
+	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
@@ -155,29 +155,29 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
-	clusters := []*persistence.ClusterReplicationConfig{
-		&persistence.ClusterReplicationConfig{
+	clusters := []*p.ClusterReplicationConfig{
+		{
 			ClusterName: clusterActive,
 		},
-		&persistence.ClusterReplicationConfig{
+		{
 			ClusterName: clusterStandby,
 		},
 	}
 
 	domainOperation := replicator.DomainOperationUpdate
-	info := &persistence.DomainInfo{
+	info := &p.DomainInfo{
 		ID:          id,
 		Name:        name,
-		Status:      persistence.DomainStatusDeprecated,
+		Status:      p.DomainStatusDeprecated,
 		Description: description,
 		OwnerEmail:  ownerEmail,
 		Data:        data,
 	}
-	config := &persistence.DomainConfig{
+	config := &p.DomainConfig{
 		Retention:  retention,
 		EmitMetric: emitMetric,
 	}
-	replicationConfig := &persistence.DomainReplicationConfig{
+	replicationConfig := &p.DomainReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}

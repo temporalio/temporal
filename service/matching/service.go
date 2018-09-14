@@ -27,6 +27,8 @@ import (
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
+
+	"github.com/uber/cadence/common/persistence/cassandra"
 )
 
 // Config represents configuration for cadence-matching service
@@ -98,20 +100,21 @@ func (s *Service) Start() {
 	persistenceMaxQPS := s.config.PersistenceMaxQPS()
 	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
 
-	taskPersistence, err := persistence.NewCassandraTaskPersistence(p.CassandraConfig.Hosts,
+	taskPersistence, err := cassandra.NewTaskPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,
 		p.CassandraConfig.Datacenter,
 		p.CassandraConfig.Keyspace,
 		log)
+
 	if err != nil {
 		log.Fatalf("failed to create task persistence: %v", err)
 	}
 	taskPersistence = persistence.NewTaskPersistenceRateLimitedClient(taskPersistence, persistenceRateLimiter, log)
 	taskPersistence = persistence.NewTaskPersistenceMetricsClient(taskPersistence, base.GetMetricsClient(), log)
 
-	metadata, err := persistence.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
+	metadata, err := cassandra.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,

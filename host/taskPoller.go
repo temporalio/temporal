@@ -30,7 +30,7 @@ import (
 	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"go.uber.org/yarpc"
@@ -59,7 +59,7 @@ type (
 
 	// IntegrationBase is a base struct for integration tests
 	IntegrationBase struct {
-		persistence.TestBase
+		persistencetests.TestBase
 		mockMessagingClient messaging.Client
 		mockProducer        messaging.Producer
 		host                Cadence

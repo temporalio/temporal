@@ -18,40 +18,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package cassandra
 
 import (
 	"errors"
 
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 type (
 	// TODO, we should migrate the non global domain to new table, see #773
 	// WARN this struct should only be used by the domain cache ONLY
 	metadataManagerProxy struct {
-		metadataMgr   MetadataManager
-		metadataMgrV2 MetadataManager
+		metadataMgr   p.MetadataManager
+		metadataMgrV2 p.MetadataManager
 		logger        bark.Logger
 	}
 )
 
 // NewMetadataManagerProxy is used for merging the functionality the v1 and v2 MetadataManager
 func NewMetadataManagerProxy(hosts string, port int, user, password, dc string, keyspace string,
-	currentClusterName string, logger bark.Logger) (MetadataManager, error) {
-	metadataMgr, err := NewCassandraMetadataPersistence(hosts, port, user, password, dc, keyspace, currentClusterName, logger)
+	currentClusterName string, logger bark.Logger) (p.MetadataManager, error) {
+	metadataMgr, err := NewMetadataPersistence(hosts, port, user, password, dc, keyspace, currentClusterName, logger)
 	if err != nil {
 		return nil, err
 	}
-	metadataMgrV2, err := NewCassandraMetadataPersistenceV2(hosts, port, user, password, dc, keyspace, currentClusterName, logger)
+	metadataMgrV2, err := NewMetadataPersistenceV2(hosts, port, user, password, dc, keyspace, currentClusterName, logger)
 	if err != nil {
 		return nil, err
 	}
 	return &metadataManagerProxy{metadataMgr: metadataMgr, metadataMgrV2: metadataMgrV2, logger: logger}, nil
 }
 
-func (m *metadataManagerProxy) GetDomain(request *GetDomainRequest) (*GetDomainResponse, error) {
+func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.GetDomainResponse, error) {
 	// the reason this function does not call the v2 get domain is domain cache will
 	// use the list domain function to get all domain in the v2 table
 	resp, err := m.metadataMgrV2.GetDomain(request)
@@ -60,22 +61,22 @@ func (m *metadataManagerProxy) GetDomain(request *GetDomainRequest) (*GetDomainR
 			return nil, err
 		}
 	} else {
-		resp.TableVersion = DomainTableVersionV2
+		resp.TableVersion = p.DomainTableVersionV2
 		return resp, nil
 	}
 
 	resp, err = m.metadataMgr.GetDomain(request)
 	if err == nil {
-		resp.TableVersion = DomainTableVersionV1
+		resp.TableVersion = p.DomainTableVersionV1
 	}
 	return resp, err
 }
 
-func (m *metadataManagerProxy) ListDomains(request *ListDomainsRequest) (*ListDomainsResponse, error) {
+func (m *metadataManagerProxy) ListDomains(request *p.ListDomainsRequest) (*p.ListDomainsResponse, error) {
 	return m.metadataMgrV2.ListDomains(request)
 }
 
-func (m *metadataManagerProxy) GetMetadata() (*GetMetadataResponse, error) {
+func (m *metadataManagerProxy) GetMetadata() (*p.GetMetadataResponse, error) {
 	return m.metadataMgrV2.GetMetadata()
 }
 
@@ -84,7 +85,7 @@ func (m *metadataManagerProxy) Close() {
 	m.metadataMgrV2.Close()
 }
 
-func (m *metadataManagerProxy) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
+func (m *metadataManagerProxy) CreateDomain(request *p.CreateDomainRequest) (*p.CreateDomainResponse, error) {
 	if request.IsGlobalDomain {
 		return m.metadataMgrV2.CreateDomain(request)
 	}
@@ -92,18 +93,18 @@ func (m *metadataManagerProxy) CreateDomain(request *CreateDomainRequest) (*Crea
 	return m.metadataMgr.CreateDomain(request)
 }
 
-func (m *metadataManagerProxy) UpdateDomain(request *UpdateDomainRequest) error {
+func (m *metadataManagerProxy) UpdateDomain(request *p.UpdateDomainRequest) error {
 	switch request.TableVersion {
-	case DomainTableVersionV1:
+	case p.DomainTableVersionV1:
 		return m.metadataMgr.UpdateDomain(request)
-	case DomainTableVersionV2:
+	case p.DomainTableVersionV2:
 		return m.metadataMgrV2.UpdateDomain(request)
 	default:
 		return errors.New("domain table version is not set")
 	}
 }
 
-func (m *metadataManagerProxy) DeleteDomain(request *DeleteDomainRequest) error {
+func (m *metadataManagerProxy) DeleteDomain(request *p.DeleteDomainRequest) error {
 	err := m.metadataMgr.DeleteDomain(request)
 	if err != nil {
 		m.logger.Warnf("Error deleting domain from V1 table: %v", err)
@@ -115,7 +116,7 @@ func (m *metadataManagerProxy) DeleteDomain(request *DeleteDomainRequest) error 
 	return nil
 }
 
-func (m *metadataManagerProxy) DeleteDomainByName(request *DeleteDomainByNameRequest) error {
+func (m *metadataManagerProxy) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	err := m.metadataMgr.DeleteDomainByName(request)
 	if err != nil {
 		m.logger.Warnf("Error deleting domain by name from V1 table: %v", err)

@@ -28,6 +28,8 @@ import (
 	"context"
 	"encoding/binary"
 	"flag"
+	"github.com/uber/cadence/common/persistence/cassandra"
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"os"
 	"strconv"
 	"testing"
@@ -44,7 +46,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/host"
@@ -63,7 +64,7 @@ type (
 	}
 
 	testCluster struct {
-		persistence.TestBase
+		persistencetests.TestBase
 		host   host.Cadence
 		engine wsc.Interface
 		logger bark.Logger
@@ -113,11 +114,10 @@ func (s *integrationClustersTestSuite) newTestCluster(no int) *testCluster {
 }
 
 func (s *testCluster) setupCluster(no int) {
-	options := persistence.TestBaseOptions{}
-	options.ClusterHost = "127.0.0.1"
-	options.KeySpace = "integration_" + clusterName[no]
+	options := persistencetests.TestBaseOptions{}
+	options.DBHost = "127.0.0.1"
+	options.DatabaseName = "integration_" + clusterName[no]
 	options.DropKeySpace = true
-	options.SchemaDir = ".."
 	clusterInfo := clustersInfo[no]
 	metadata := cluster.NewMetadata(
 		dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
@@ -126,7 +126,7 @@ func (s *testCluster) setupCluster(no int) {
 		clusterInfo.CurrentClusterName,
 		clusterInfo.ClusterInitialFailoverVersions,
 	)
-	s.SetupWorkflowStoreWithOptions(options, metadata)
+	cassandra.InitTestSuiteWithMetadata(&s.TestBase, &options, metadata)
 	s.setupShards()
 	messagingClient := s.createMessagingClient()
 	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster

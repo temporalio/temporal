@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package persistencetests
 
 import (
 	"os"
@@ -30,10 +30,12 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	gen "github.com/uber/cadence/.gen/go/shared"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 type (
-	shardPersistenceSuite struct {
+	// ShardPersistenceSuite contains shard persistence tests
+	ShardPersistenceSuite struct {
 		suite.Suite
 		TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
@@ -42,39 +44,37 @@ type (
 	}
 )
 
-func TestShardPersistenceSuite(t *testing.T) {
-	s := new(shardPersistenceSuite)
-	suite.Run(t, s)
-}
-
-func (s *shardPersistenceSuite) SetupSuite() {
+// SetupSuite implementation
+func (s *ShardPersistenceSuite) SetupSuite() {
 	if testing.Verbose() {
 		log.SetOutput(os.Stdout)
 	}
-
-	s.SetupWorkflowStore()
 }
 
-func (s *shardPersistenceSuite) SetupTest() {
+// SetupTest implementation
+func (s *ShardPersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func (s *shardPersistenceSuite) TearDownSuite() {
+// TearDownSuite implementation
+func (s *ShardPersistenceSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
 }
 
-func (s *shardPersistenceSuite) TestCreateShard() {
+// TestCreateShard test
+func (s *ShardPersistenceSuite) TestCreateShard() {
 	err0 := s.CreateShard(19, "test_create_shard1", 123)
 	s.Nil(err0, "No error expected.")
 
 	err1 := s.CreateShard(19, "test_create_shard2", 124)
 	s.NotNil(err1, "expected non nil error.")
-	s.IsType(&ShardAlreadyExistError{}, err1)
+	s.IsType(&p.ShardAlreadyExistError{}, err1)
 	log.Infof("CreateShard failed with error: %v", err1)
 }
 
-func (s *shardPersistenceSuite) TestGetShard() {
+// TestGetShard test
+func (s *ShardPersistenceSuite) TestGetShard() {
 	shardID := 20
 	owner := "test_get_shard"
 	rangeID := int64(131)
@@ -95,7 +95,8 @@ func (s *shardPersistenceSuite) TestGetShard() {
 	log.Infof("GetShard failed with error: %v", err2)
 }
 
-func (s *shardPersistenceSuite) TestUpdateShard() {
+// TestUpdateShard test
+func (s *ShardPersistenceSuite) TestUpdateShard() {
 	shardID := 30
 	owner := "test_update_shard"
 	rangeID := int64(141)
@@ -142,7 +143,7 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	failedUpdateInfo.ReplicationAckLevel = int64(5000)
 	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.RangeID)
 	s.NotNil(err4)
-	s.IsType(&ShardOwnershipLostError{}, err4)
+	s.IsType(&p.ShardOwnershipLostError{}, err4)
 	log.Infof("Update shard failed with error: %v", err4)
 
 	info2, err5 := s.GetShard(shardID)
@@ -156,8 +157,8 @@ func (s *shardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTimerAckLevel.Unix(), info1.TimerAckLevel.Unix())
 }
 
-func copyShardInfo(sourceInfo *ShardInfo) *ShardInfo {
-	return &ShardInfo{
+func copyShardInfo(sourceInfo *p.ShardInfo) *p.ShardInfo {
+	return &p.ShardInfo{
 		ShardID:             sourceInfo.ShardID,
 		Owner:               sourceInfo.Owner,
 		RangeID:             sourceInfo.RangeID,

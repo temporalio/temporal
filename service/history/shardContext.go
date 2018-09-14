@@ -363,6 +363,7 @@ Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
+
 		response, err := s.executionManager.CreateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
@@ -743,7 +744,10 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	for _, task := range timerTasks {
-		ts := persistence.GetVisibilityTSFrom(task)
+		ts, err := persistence.GetVisibilityTSFrom(task)
+		if err != nil {
+			panic(err)
+		}
 		if ts.Before(s.timerMaxReadLevel) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
@@ -757,8 +761,12 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 			return err
 		}
 		task.SetTaskID(seqNum)
+		visibilityTs, err := persistence.GetVisibilityTSFrom(task)
+		if err != nil {
+			return err
+		}
 		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
-			persistence.GetVisibilityTSFrom(task), task.GetTaskID(), s.shardInfo.TimerAckLevel)
+			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel)
 	}
 	return nil
 }
