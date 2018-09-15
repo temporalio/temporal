@@ -98,7 +98,7 @@ func (s *historyCacheSuite) SetupTest() {
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
-	s.cache = newHistoryCache(s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard)
 
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
 }
@@ -110,7 +110,7 @@ func (s *historyCacheSuite) TearDownTest() {
 func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
 	domainID := "test_domain_id"
-	s.cache = newHistoryCache(s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wf-cache-test-pinning"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -145,7 +145,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	domainID := "test_domain_id"
-	s.cache = newHistoryCache(s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wf-cache-test-clear"),
 		RunId:      common.StringPtr(uuid.New()),
@@ -176,7 +176,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	domainID := "test_domain_id"
-	s.cache = newHistoryCache(s.mockShard, s.logger)
+	s.cache = newHistoryCache(s.mockShard)
 	we := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("wf-cache-test-pinning"),
 		RunId:      common.StringPtr(uuid.New()),

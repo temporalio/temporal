@@ -28,6 +28,7 @@ import (
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/pborman/uuid"
@@ -44,6 +45,7 @@ type (
 		executionManager persistence.ExecutionManager
 		disabled         bool
 		logger           bark.Logger
+		metricsClient    metrics.Client
 		config           *Config
 	}
 )
@@ -53,13 +55,7 @@ const (
 	cacheReleased    int32 = 1
 )
 
-var (
-	// ErrTryLock is a temporary error that is thrown by the API
-	// when it loses the race to create workflow execution context
-	ErrTryLock = &workflow.InternalServiceError{Message: "Failed to acquire lock, backoff and retry"}
-)
-
-func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
+func newHistoryCache(shard ShardContext) *historyCache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
@@ -70,10 +66,11 @@ func newHistoryCache(shard ShardContext, logger bark.Logger) *historyCache {
 		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
-		logger: logger.WithFields(bark.Fields{
+		logger: shard.GetLogger().WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryCacheComponent,
 		}),
-		config: config,
+		metricsClient: shard.GetMetricsClient(),
+		config:        config,
 	}
 }
 
@@ -107,8 +104,14 @@ func (c *historyCache) validateWorkflowExecutionInfo(domainID string, execution 
 
 // For analyzing mutableState, we have to try get workflowExecutionContext from cache and also load from database
 func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
-	execution workflow.WorkflowExecution) (*workflowExecutionContext, *workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
+	execution workflow.WorkflowExecution) (*workflowExecutionContext, *workflowExecutionContext,
+	releaseWorkflowExecutionFunc, bool, error) {
+	c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheLatency)
+	defer sw.Stop()
+
 	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheFailures)
 		return nil, nil, nil, false, err
 	}
 
@@ -120,9 +123,13 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 		if err := contextFromCache.locker.Lock(ctx); err != nil {
 			// ctx is done before lock can be acquired
 			c.Release(key)
+			c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheFailures)
+			c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.AcquireLockFailedCounter)
 			return nil, nil, nil, false, err
 		}
 		releaseFunc = c.makeReleaseFunc(key, cacheNotReleased, contextFromCache)
+	} else {
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.CacheMissCounter)
 	}
 
 	// Note, the one loaded from DB is not put into cache and don't affect any behavior
@@ -132,7 +139,12 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 
 func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
 	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+	c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheLatency)
+	defer sw.Stop()
+
 	if err := c.validateWorkflowExecutionInfo(domainID, &execution); err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheFailures)
 		return nil, nil, err
 	}
 
@@ -142,27 +154,31 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 	}
 
 	key := execution.GetRunId()
-	context, cacheHit := c.Get(key).(*workflowExecutionContext)
+	workflowCtx, cacheHit := c.Get(key).(*workflowExecutionContext)
 	if !cacheHit {
-		// Let's create the workflow execution context
-		context = newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
-		elem, err := c.PutIfNotExist(key, context)
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.CacheMissCounter)
+		// Let's create the workflow execution workflowCtx
+		workflowCtx = newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger)
+		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
+			c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheFailures)
 			return nil, nil, err
 		}
-		context = elem.(*workflowExecutionContext)
+		workflowCtx = elem.(*workflowExecutionContext)
 	}
 
 	// This will create a closure on every request.
 	// Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(key, cacheNotReleased, context)
+	releaseFunc := c.makeReleaseFunc(key, cacheNotReleased, workflowCtx)
 
-	if err := context.locker.Lock(ctx); err != nil {
+	if err := workflowCtx.locker.Lock(ctx); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheFailures)
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.AcquireLockFailedCounter)
 		return nil, nil, err
 	}
-	return context, releaseFunc, nil
+	return workflowCtx, releaseFunc, nil
 }
 
 func (c *historyCache) makeReleaseFunc(key string, status int32, context *workflowExecutionContext) func(error) {
@@ -180,6 +196,10 @@ func (c *historyCache) makeReleaseFunc(key string, status int32, context *workfl
 
 func (c *historyCache) getCurrentExecutionWithRetry(
 	request *persistence.GetCurrentExecutionRequest) (*persistence.GetCurrentExecutionResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryCacheGetCurrentExecutionScope, metrics.HistoryCacheRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetCurrentExecutionScope, metrics.HistoryCacheLatency)
+	defer sw.Stop()
+
 	var response *persistence.GetCurrentExecutionResponse
 	op := func() error {
 		var err error
@@ -190,6 +210,7 @@ func (c *historyCache) getCurrentExecutionWithRetry(
 
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryCacheGetCurrentExecutionScope, metrics.HistoryCacheFailures)
 		return nil, err
 	}
 

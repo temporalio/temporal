@@ -450,6 +450,14 @@ const (
 	ReplicateHistoryEventsScope
 	// ShardInfoScope is the scope used when updating shard info
 	ShardInfoScope
+	// WorkflowContextScope is the scope used by WorkflowContext component
+	WorkflowContextScope
+	// HistoryCacheGetAndCreateScope is the scope used by history cache
+	HistoryCacheGetAndCreateScope
+	// HistoryCacheGetOrCreateScope is the scope used by history cache
+	HistoryCacheGetOrCreateScope
+	// HistoryCacheGetCurrentExecutionScope is the scope used by history cache for getting current execution
+	HistoryCacheGetCurrentExecutionScope
 
 	NumHistoryScopes
 )
@@ -664,6 +672,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicatorTaskHistoryScope:                   {operation: "ReplicatorTaskHistory"},
 		ReplicateHistoryEventsScope:                  {operation: "ReplicateHistoryEvents"},
 		ShardInfoScope:                               {operation: "ShardInfo"},
+		WorkflowContextScope:                         {operation: "WorkflowContext"},
+		HistoryCacheGetAndCreateScope:                {operation: "HistoryCacheGetAndCreate"},
+		HistoryCacheGetOrCreateScope:                 {operation: "HistoryCacheGetOrCreate"},
+		HistoryCacheGetCurrentExecutionScope:         {operation: "HistoryCacheGetCurrentExecution"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -794,6 +806,12 @@ const (
 	StandbyTransferTaskQueueLatency
 	StandbyTimerTaskQueueLatency
 	CompleteTaskFailedCounter
+	HistoryCacheRequests
+	HistoryCacheFailures
+	HistoryCacheLatency
+	CacheMissCounter
+	AcquireLockFailedCounter
+	WorkflowContextCleared
 
 	NumHistoryMetrics
 )
@@ -927,6 +945,12 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		StandbyTransferTaskQueueLatency:              {metricName: "standby.transfertask.queue.latency", metricType: Timer},
 		StandbyTimerTaskQueueLatency:                 {metricName: "standby.timertask.queue.latency", metricType: Timer},
 		CompleteTaskFailedCounter:                    {metricName: "complete-task-fail-count", metricType: Counter},
+		HistoryCacheRequests:                         {metricName: "history-cache.requests", metricType: Counter},
+		HistoryCacheFailures:                         {metricName: "history-cache.errors", metricType: Counter},
+		HistoryCacheLatency:                          {metricName: "history-cache.latency", metricType: Timer},
+		CacheMissCounter:                             {metricName: "cache-miss", metricType: Counter},
+		AcquireLockFailedCounter:                     {metricName: "acquire-lock-failed", metricType: Counter},
+		WorkflowContextCleared:                       {metricName: "workflow-context-cleared", metricType: Counter},
 	},
 	Matching: {
 		PollSuccessCounter:            {metricName: "poll.success"},

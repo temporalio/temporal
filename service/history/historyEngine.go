@@ -131,7 +131,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
-	historyCache := newHistoryCache(shard, logger)
+	historyCache := newHistoryCache(shard)
 	historySerializerFactory := persistence.NewHistorySerializerFactory()
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName: currentClusterName,

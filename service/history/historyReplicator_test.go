@@ -111,7 +111,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 		standbyClusterCurrentTime: make(map[string]time.Time),
 	}
 	s.mockMutableState = &mockMutableState{}
-	historyCache := newHistoryCache(s.mockShard, s.logger)
+	historyCache := newHistoryCache(s.mockShard)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	h := &historyEngineImpl{

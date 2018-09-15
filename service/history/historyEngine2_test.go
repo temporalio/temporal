@@ -130,7 +130,7 @@ func (s *engine2Suite) SetupTest() {
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 
-	historyCache := newHistoryCache(mockShard, s.logger)
+	historyCache := newHistoryCache(mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              mockShard,

@@ -146,7 +146,7 @@ func (s *engineSuite) SetupTest() {
 		historyEventNotifier: historyEventNotifier,
 	}
 
-	historyCache := newHistoryCache(shardContextWrapper, s.logger)
+	historyCache := newHistoryCache(shardContextWrapper)
 	// this is used by shard context, not relevant to this test, so we do not care how many times "GetCurrentClusterName" os called
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)

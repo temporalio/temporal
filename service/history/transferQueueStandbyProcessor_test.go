@@ -132,7 +132,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		standbyClusterCurrentTime: make(map[string]time.Time),
 	}
 
-	historyCache := newHistoryCache(s.mockShard, s.logger)
+	historyCache := newHistoryCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,

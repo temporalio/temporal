@@ -32,6 +32,7 @@ import (
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -47,6 +48,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		logger            bark.Logger
+		metricsClient     metrics.Client
 
 		locker                common.Mutex
 		msBuilder             mutableState
@@ -74,6 +76,7 @@ func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExe
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
 		executionManager:  executionManager,
 		logger:            lg,
+		metricsClient:     shard.GetMetricsClient(),
 		locker:            common.NewMutex(),
 	}
 }
@@ -494,6 +497,7 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithRetry(
 }
 
 func (c *workflowExecutionContext) clear() {
+	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	c.msBuilder = nil
 }
 
