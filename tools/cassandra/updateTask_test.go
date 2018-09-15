@@ -122,7 +122,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	s.Nil(err)
 	defer client.Close()
 
-	dir := "../../schema/cadence/versioned"
+	dir := "../../schema/cassandra/cadence/versioned"
 	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "setup-schema", "-v", "0.0"})
 	RunTool([]string{"./tool", "-k", s.keyspace, "-q", "update-schema", "-d", dir})
 

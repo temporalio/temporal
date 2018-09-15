@@ -161,10 +161,10 @@ clean:
 install-schema: bins
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence update-schema -d ./schema/cadence/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence update-schema -d ./schema/cassandra/cadence/versioned
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility update-schema -d ./schema/visibility/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility update-schema -d ./schema/cassandra/visibility/versioned
 
 start: bins
 	./cadence-server start
@@ -173,17 +173,17 @@ install-schema-cdc: bins
 	@echo Setting up cadence_active key space
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_active --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_active setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_active update-schema -d ./schema/cadence/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_active update-schema -d ./schema/cassandra/cadence/versioned
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_active --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_active setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_active update-schema -d ./schema/visibility/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
 	@echo Setting up cadence_standby key space
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_standby --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_standby setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_standby update-schema -d ./schema/cadence/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_standby update-schema -d ./schema/cassandra/cadence/versioned
 	./cadence-cassandra-tool --ep 127.0.0.1 create -k cadence_visibility_standby --rf 1
 	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_standby setup-schema -v 0.0
-	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_standby update-schema -d ./schema/visibility/versioned
+	./cadence-cassandra-tool -ep 127.0.0.1 -k cadence_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
 start-cdc-active: bins
 	./cadence-server --zone active start
