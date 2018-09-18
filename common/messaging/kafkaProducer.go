@@ -21,10 +21,10 @@
 package messaging
 
 import (
-	"encoding/json"
-
 	"github.com/Shopify/sarama"
+
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/logging"
 
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -32,17 +32,19 @@ import (
 
 type (
 	kafkaProducer struct {
-		topic    string
-		producer sarama.SyncProducer
-		logger   bark.Logger
+		topic      string
+		producer   sarama.SyncProducer
+		msgEncoder codec.BinaryEncoder
+		logger     bark.Logger
 	}
 )
 
 // NewKafkaProducer is used to create the Kafka based producer implementation
 func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger bark.Logger) Producer {
 	return &kafkaProducer{
-		topic:    topic,
-		producer: producer,
+		topic:      topic,
+		producer:   producer,
+		msgEncoder: codec.NewThriftRWEncoder(),
 		logger: logger.WithFields(bark.Fields{
 			logging.TagTopicName: topic,
 		}),
@@ -112,7 +114,7 @@ func (p *kafkaProducer) Close() error {
 }
 
 func (p *kafkaProducer) serializeTask(task *replicator.ReplicationTask) ([]byte, error) {
-	payload, err := json.Marshal(task)
+	payload, err := p.msgEncoder.Encode(task)
 	if err != nil {
 		p.logger.WithFields(bark.Fields{
 			logging.TagErr: err,

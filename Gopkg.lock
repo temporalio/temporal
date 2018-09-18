@@ -674,6 +674,7 @@
     "go.uber.org/cadence/encoded",
     "go.uber.org/cadence/worker",
     "go.uber.org/cadence/workflow",
+    "go.uber.org/thriftrw/protocol",
     "go.uber.org/thriftrw/thriftreflect",
     "go.uber.org/thriftrw/wire",
     "go.uber.org/yarpc",

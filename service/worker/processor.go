@@ -22,7 +22,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/codec"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -62,6 +62,7 @@ type (
 		metricsClient    metrics.Client
 		domainReplicator DomainReplicator
 		historyClient    history.Client
+		msgEncoder       codec.BinaryEncoder
 	}
 )
 
@@ -108,6 +109,7 @@ func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string,
 		metricsClient:    metricsClient,
 		domainReplicator: domainReplicator,
 		historyClient:    retryableHistoryClient,
+		msgEncoder:       codec.NewThriftRWEncoder(),
 	}
 }
 
@@ -268,7 +270,7 @@ ProcessRetryLoop:
 
 func (p *replicationTaskProcessor) process(msg messaging.Message, logger bark.Logger, inRetry bool) (bark.Logger, error) {
 	scope := metrics.ReplicatorScope
-	task, err := deserialize(msg.Value())
+	task, err := p.deserialize(msg.Value())
 	if err != nil {
 		p.updateFailureMetric(scope, err)
 		logger.WithFields(bark.Fields{
@@ -447,9 +449,9 @@ func (p *replicationTaskProcessor) isTransientRetryableError(err error) bool {
 	}
 }
 
-func deserialize(payload []byte) (*replicator.ReplicationTask, error) {
+func (p *replicationTaskProcessor) deserialize(payload []byte) (*replicator.ReplicationTask, error) {
 	var task replicator.ReplicationTask
-	if err := json.Unmarshal(payload, &task); err != nil {
+	if err := p.msgEncoder.Decode(payload, &task); err != nil {
 		return nil, err
 	}
 
