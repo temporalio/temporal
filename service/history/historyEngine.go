@@ -2891,6 +2891,36 @@ func getStartRequest(domainID string,
 	return startRequest
 }
 
+func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, logger bark.Logger, domainID, workflowID, runID string) (*workflow.HistoryEvent, error) {
+	response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
+		DomainID: domainID,
+		Execution: workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(workflowID),
+			RunId:      common.StringPtr(runID),
+		},
+		FirstEventID:  common.FirstEventID,
+		NextEventID:   common.FirstEventID + 1,
+		PageSize:      defaultHistoryPageSize,
+		NextPageToken: nil,
+	})
+	if err != nil {
+		logger.WithFields(bark.Fields{
+			logging.TagErr: err,
+		}).Error("Conflict resolution current workflow finished.", err)
+		return nil, err
+	}
+	if len(response.History.Events) == 0 {
+		logger.WithFields(bark.Fields{
+			logging.TagWorkflowExecutionID: workflowID,
+			logging.TagWorkflowRunID:       runID,
+		})
+		logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
+		return nil, errNoHistoryFound
+	}
+
+	return response.History.Events[0], nil
+}
+
 func setTaskInfo(version int64, timestamp time.Time, transferTasks []persistence.Task, timerTasks []persistence.Task) {
 	// set both the task version, as well as the timestamp on the transfer tasks
 	for _, task := range transferTasks {

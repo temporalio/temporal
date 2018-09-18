@@ -22,7 +22,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -32,13 +31,14 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 )
 
 var (
-	errNoHistoryFound = errors.New("no history events found")
+	errNoHistoryFound = errors.NewInternalFailureError("no history events found")
 
 	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
 	workflowTerminationIdentity = "worker-service"
@@ -87,6 +87,8 @@ var (
 	ErrImpossibleLocalRemoteMissingReplicationInfo = &shared.BadRequestError{Message: "local and remote both are missing replication info"}
 	// ErrImpossibleRemoteClaimSeenHigherVersion is returned when replication info contains higher version then this cluster ever emitted.
 	ErrImpossibleRemoteClaimSeenHigherVersion = &shared.BadRequestError{Message: "replication info contains higher version then this cluster ever emitted"}
+	// ErrInternalFailure is returned when encounter code bug
+	ErrInternalFailure = &shared.BadRequestError{Message: "fail to apply history events due bug"}
 )
 
 func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, historyCache *historyCache, domainCache cache.DomainCache,
@@ -149,6 +151,9 @@ func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.Replicat
 			case *persistence.WorkflowExecutionAlreadyStartedError:
 				logger.Debugf("Encounter WorkflowExecutionAlreadyStartedError: %v", retError)
 				retError = ErrRetryExecutionAlreadyStarted
+			case *errors.InternalFailureError:
+				logError(logger, "Encounter InternalFailure.", retError)
+				retError = ErrInternalFailure
 			}
 		}
 	}()
@@ -398,7 +403,7 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 		err = msBuilder.BufferReplicationTask(request)
 		if err != nil {
 			logError(logger, "Failed to buffer out of order replication task.", err)
-			return errors.New("failed to add buffered replication task")
+			return err
 		}
 		return r.updateBufferedReplicationTask(context, msBuilder)
 	}
@@ -786,36 +791,6 @@ func (r *historyReplicator) conflictResolutionTerminateCurrentRunningIfNotSelf(c
 		logError(logger, "Conflict resolution err terminating current workflow.", err)
 	}
 	return currentRunID, err
-}
-
-func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, logger bark.Logger, domainID, workflowID, runID string) (*shared.HistoryEvent, error) {
-	response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID: domainID,
-		Execution: shared.WorkflowExecution{
-			WorkflowId: common.StringPtr(workflowID),
-			RunId:      common.StringPtr(runID),
-		},
-		FirstEventID:  common.FirstEventID,
-		NextEventID:   common.FirstEventID + 1,
-		PageSize:      defaultHistoryPageSize,
-		NextPageToken: nil,
-	})
-	if err != nil {
-		logger.WithFields(bark.Fields{
-			logging.TagErr: err,
-		}).Error("Conflict resolution current workflow finished.", err)
-		return nil, err
-	}
-	if len(response.History.Events) == 0 {
-		logger.WithFields(bark.Fields{
-			logging.TagWorkflowExecutionID: workflowID,
-			logging.TagWorkflowRunID:       runID,
-		})
-		logError(logger, errNoHistoryFound.Error(), errNoHistoryFound)
-		return nil, errNoHistoryFound
-	}
-
-	return response.History.Events[0], nil
 }
 
 func (r *historyReplicator) Serialize(history *shared.History) (*persistence.SerializedHistoryEventBatch, error) {

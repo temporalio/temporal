@@ -166,16 +166,22 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 
 		case shared.EventTypeActivityTaskFailed:
-			b.msBuilder.ReplicateActivityTaskFailedEvent(event)
+			if err := b.msBuilder.ReplicateActivityTaskFailedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeActivityTaskTimedOut:
-			b.msBuilder.ReplicateActivityTaskTimedOutEvent(event)
+			if err := b.msBuilder.ReplicateActivityTaskTimedOutEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeActivityTaskCancelRequested:
 			b.msBuilder.ReplicateActivityTaskCancelRequestedEvent(event)
 
 		case shared.EventTypeActivityTaskCanceled:
-			b.msBuilder.ReplicateActivityTaskCanceledEvent(event)
+			if err := b.msBuilder.ReplicateActivityTaskCanceledEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeRequestCancelActivityTaskFailed:
 			// No mutable state action is needed
@@ -215,7 +221,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			b.msBuilder.ReplicateStartChildWorkflowExecutionFailedEvent(event)
 
 		case shared.EventTypeChildWorkflowExecutionStarted:
-			b.msBuilder.ReplicateChildWorkflowExecutionStartedEvent(event)
+			if err := b.msBuilder.ReplicateChildWorkflowExecutionStartedEvent(event); err != nil {
+				return nil, nil, nil, err
+			}
 
 		case shared.EventTypeChildWorkflowExecutionCompleted:
 			b.msBuilder.ReplicateChildWorkflowExecutionCompletedEvent(event)
