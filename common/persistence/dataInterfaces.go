@@ -1800,3 +1800,13 @@ func SetVisibilityTSFrom(task Task, t time.Time) {
 		task.(*WorkflowRetryTimerTask).VisibilityTimestamp = t
 	}
 }
+
+// DBTimestampToUnixNano converts CQL timestamp to UnixNano
+func DBTimestampToUnixNano(milliseconds int64) int64 {
+	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
+}
+
+// UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
+func UnixNanoToDBTimestamp(timestamp int64) int64 {
+	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+}

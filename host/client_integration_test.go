@@ -157,7 +157,7 @@ func (s *clientIntegrationSuite) setupSuite(enableGlobalDomain bool, isMasterClu
 	s.Assertions = require.New(s.T())
 	options := persistencetests.TestBaseOptions{}
 	options.DBHost = "127.0.0.1"
-	options.DropKeySpace = true
+	options.DropDatabase = true
 	options.EnableGlobalDomain = enableGlobalDomain
 	options.IsMasterCluster = isMasterCluster
 	cassandra_persistence.InitTestSuite(&s.TestBase)

@@ -233,10 +233,10 @@ func RegisterDomain(c *cli.Context) {
 	}
 
 	request := &s.RegisterDomainRequest{
-		Name:        common.StringPtr(domain),
-		Description: common.StringPtr(description),
-		OwnerEmail:  common.StringPtr(ownerEmail),
-		Data:        domainData,
+		Name:                                   common.StringPtr(domain),
+		Description:                            common.StringPtr(description),
+		OwnerEmail:                             common.StringPtr(ownerEmail),
+		Data:                                   domainData,
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(int32(retentionDays)),
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
@@ -273,7 +273,7 @@ func UpdateDomain(c *cli.Context) {
 			ActiveClusterName: common.StringPtr(activeCluster),
 		}
 		updateRequest = &s.UpdateDomainRequest{
-			Name: common.StringPtr(domain),
+			Name:                     common.StringPtr(domain),
 			ReplicationConfiguration: replicationConfig,
 		}
 	} else {
@@ -508,7 +508,7 @@ func StartWorkflow(c *cli.Context) {
 		TaskList: &s.TaskList{
 			Name: common.StringPtr(tasklist),
 		},
-		Input: []byte(input),
+		Input:                               []byte(input),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32(et)),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),
@@ -558,7 +558,7 @@ func RunWorkflow(c *cli.Context) {
 		TaskList: &s.TaskList{
 			Name: common.StringPtr(tasklist),
 		},
-		Input: []byte(input),
+		Input:                               []byte(input),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32(et)),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),

@@ -129,3 +129,8 @@ ignored = ["github.com/uber/cadence/.gen"]
 [[constraint]]
   name = "go.uber.org/thriftrw"
   version = "1.6.0"
+
+[[constraint]]
+  branch = "batch"
+  name = "github.com/jmoiron/sqlx"
+  source = "github.com/mfateev/sqlx"

@@ -18,14 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package sql
 
 import (
+	"github.com/jmoiron/sqlx"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/cluster"
@@ -36,19 +36,17 @@ import (
 
 const (
 	testWorkflowClusterHosts = "127.0.0.1"
-	testPort                 = 0
-	testUser                 = ""
-	testPassword             = ""
-	testDatacenter           = ""
-	testSchemaDir            = "schema/cassandra/"
+	testPort                 = 3306
+	testUser                 = "uber"
+	testPassword             = "uber"
+	testSchemaDir            = "schema/mysql/"
 )
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	Port     int
-	keyspace string
-	cluster  *gocql.ClusterConfig
-	session  *gocql.Session
+	Options *persistencetests.TestBaseOptions
+	dbName  string
+	db      *sqlx.DB
 }
 
 // InitTestSuite initializes test suite to use cassandra
@@ -61,6 +59,7 @@ func InitTestSuite(tb *persistencetests.TestBase) {
 		DBPassword:         testPassword,
 		DropDatabase:       true,
 		EnableGlobalDomain: false,
+		Datacenter:         "foo",
 	}
 	InitTestSuiteWithOptions(tb, options)
 }
@@ -82,21 +81,23 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 		options.SchemaDir = testSchemaDir
 	}
 	log := bark.NewLoggerFromLogrus(log.New())
-	tb.PersistenceTestCluster = &TestCluster{}
+	tb.PersistenceTestCluster = &TestCluster{
+		Options: options,
+	}
 	tb.ClusterMetadata = metadata
 	currentClusterName := tb.ClusterMetadata.GetCurrentClusterName()
 	// Setup Workflow keyspace and deploy schema for tests
 	tb.PersistenceTestCluster.SetupTestDatabase(options)
 	shardID := 0
-	keyspace := tb.PersistenceTestCluster.DatabaseName()
+	databaseName := tb.PersistenceTestCluster.DatabaseName()
 	var err error
 	tb.ShardMgr, err = NewShardPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
+		options.DBPassword, databaseName, currentClusterName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
 	tb.ExecutionMgrFactory, err = NewPersistenceClientFactory(options.DBHost, options.DBPort,
-		options.DBUser, options.DBPassword, options.Datacenter, keyspace, 2, log, nil, nil)
+		options.DBUser, options.DBPassword, databaseName, options.Datacenter, log)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,37 +106,37 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.TaskMgr, err = NewTaskPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace,
-		log)
+	tb.TaskMgr, err = NewTaskPersistence(options.DBHost, options.DBPort, options.DBUser, options.DBPassword,
+		databaseName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
 	tb.HistoryMgr, err = NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, 2, log)
+		options.DBPassword, databaseName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
 	tb.MetadataManager, err = NewMetadataPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
+		options.DBPassword, databaseName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.MetadataManagerV2, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.MetadataProxy, err = NewMetadataManagerProxy(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.VisibilityMgr, err = NewVisibilityPersistence(options.DBHost, options.DBPort,
-		options.DBUser, options.DBPassword, options.Datacenter, keyspace, log)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// TODO: V2 for sql
+	//tb.MetadataManagerV2, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
+	//	options.DBPassword, databaseName, log)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//tb.MetadataProxy, err = NewMetadataManagerProxy(options.DBHost, options.DBPort, options.DBUser,
+	//	options.DBPassword, options.Datacenter, databaseName, currentClusterName, log)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//tb.VisibilityMgr, err = NewVisibilityPersistence(options.DBHost, options.DBPort,
+	//	options.DBUser, options.DBPassword, options.Datacenter, databaseName, log)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 	// Create a shard for test
 	tb.ReadLevel = 0
 	tb.ReplicationReadLevel = 0
@@ -172,60 +173,55 @@ func getCadencePackageDir() (string, error) {
 
 // DatabaseName from PersistenceTestCluster interface
 func (s *TestCluster) DatabaseName() string {
-	return s.keyspace
+	return s.dbName
 }
 
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase(options *persistencetests.TestBaseOptions) {
-	s.keyspace = options.DBName
-	if s.keyspace == "" {
-		s.keyspace = persistencetests.GenerateRandomDBName(10)
+	s.dbName = options.DBName
+	if s.dbName == "" {
+		s.dbName = persistencetests.GenerateRandomDBName(10)
 	}
 
+	s.CreateDatabase(options.DropDatabase)
 	s.CreateSession(options)
-	s.CreateDatabase(1, options.DropDatabase)
 	cadencePackageDir, err := getCadencePackageDir()
 	if err != nil {
 		log.Fatal(err)
 	}
 	schemaDir := cadencePackageDir + options.SchemaDir + "/"
-	s.LoadSchema([]string{"schema.cql"}, schemaDir)
-	s.LoadVisibilitySchema([]string{"schema.cql"}, schemaDir)
+	s.LoadSchema([]string{"schema.sql"}, schemaDir)
+	// TODO: Visibility
+	//s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
 	s.DropDatabase()
-	s.session.Close()
+	s.db.Close()
 }
 
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession(options *persistencetests.TestBaseOptions) {
-	s.cluster = NewCassandraCluster(options.DBHost, options.DBPort, options.DBUser, options.DBPassword, options.Datacenter)
-	s.cluster.Consistency = gocql.Consistency(1)
-	s.cluster.Keyspace = "system"
-	s.cluster.Timeout = 40 * time.Second
 	var err error
-	s.session, err = s.cluster.CreateSession()
+	s.db, err = newConnection(options.DBHost, options.DBPort, options.DBUser, options.DBPassword, s.dbName)
 	if err != nil {
 		log.WithField(logging.TagErr, err).Fatal(`CreateSession`)
 	}
 }
 
 // CreateDatabase from PersistenceTestCluster interface
-func (s *TestCluster) CreateDatabase(replicas int, dropKeySpace bool) {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), replicas, dropKeySpace)
+func (s *TestCluster) CreateDatabase(overwrite bool) {
+	err := createDatabase(s.Options.DBHost, s.Options.DBPort, s.Options.DBUser, s.Options.DBPassword, s.dbName, overwrite)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	s.cluster.Keyspace = s.DatabaseName()
 }
 
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
-	err := DropCassandraKeyspace(s.session, s.DatabaseName())
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
+	err := dropDatabase(s.db, s.dbName)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
@@ -233,17 +229,13 @@ func (s *TestCluster) DropDatabase() {
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 	workflowSchemaDir := schemaDir + "/cadence"
-	err := LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Port, s.DatabaseName(), true)
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
+	err := loadDatabaseSchema(workflowSchemaDir, fileNames, s.db, true)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := schemaDir + "visibility"
-	err := LoadCassandraSchema(workflowSchemaDir, fileNames, s.cluster.Port, s.DatabaseName(), false)
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		log.Fatal(err)
-	}
+	log.Fatal("LoadVisibilitySchema is not supportedy by SQL yet")
 }

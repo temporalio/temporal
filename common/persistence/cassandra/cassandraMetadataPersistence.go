@@ -23,12 +23,10 @@ package cassandra
 import (
 	"fmt"
 
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	p "github.com/uber/cadence/common/persistence"
-
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	p "github.com/uber/cadence/common/persistence"
 )
 
 const (
@@ -102,7 +100,7 @@ type (
 func NewMetadataPersistence(hosts string, port int, user, password, dc string, keyspace string,
 	currentClusterName string, logger bark.Logger) (p.MetadataManager,
 	error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

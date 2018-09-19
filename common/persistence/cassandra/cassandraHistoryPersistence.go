@@ -73,7 +73,7 @@ type (
 func NewHistoryPersistence(hosts string, port int, user, password, dc string, keyspace string,
 	numConns int, logger bark.Logger) (p.HistoryManager,
 	error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

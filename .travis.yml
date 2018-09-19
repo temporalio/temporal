@@ -5,7 +5,7 @@ language: go
 directories:
     - $HOME/.glide/cache
 go:
-  - 1.10.x
+  - 1.11.x
 
 env:
   global:
@@ -22,6 +22,9 @@ addons:
       - python-dev
       - python-pip
 
+services:
+  - mysql
+
 before_install:
   - pip install --user ccm
   - wget http://www.us.apache.org/dist/kafka/1.1.0/kafka_2.12-1.1.0.tgz -O kafka.tgz
@@ -36,6 +39,9 @@ install:
   - go get github.com/mattn/goveralls
   - go get golang.org/x/tools/cmd/cover
   - ccm create test -v 3.9 -n 1 -s
+
+before_script:
+  - mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'uber'@'localhost' IDENTIFIED BY 'uber';"
 
 script:
   - make cover_ci

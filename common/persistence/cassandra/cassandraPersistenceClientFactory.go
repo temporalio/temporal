@@ -40,7 +40,7 @@ type (
 // NewPersistenceClientFactory is used to create an instance of ExecutionManagerFactory implementation
 func NewPersistenceClientFactory(hosts string, port int, user, password, dc string, keyspace string,
 	numConns int, logger bark.Logger, rateLimiter common.TokenBucket, metricsClient metrics.Client) (p.ExecutionManagerFactory, error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

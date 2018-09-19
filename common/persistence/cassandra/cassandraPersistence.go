@@ -830,7 +830,7 @@ const (
 
 var (
 	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp = common.UnixNanoToCQLTimestamp(defaultDateTime.UnixNano())
+	defaultVisibilityTimestamp = p.UnixNanoToDBTimestamp(defaultDateTime.UnixNano())
 )
 
 type (
@@ -845,7 +845,7 @@ type (
 // NewShardPersistence is used to create an instance of ShardManager implementation
 func NewShardPersistence(hosts string, port int, user, password, dc string, keyspace string,
 	currentClusterName string, logger bark.Logger) (p.ShardManager, error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
@@ -869,7 +869,7 @@ func NewWorkflowExecutionPersistence(shardID int, session *gocql.Session,
 // NewTaskPersistence is used to create an instance of TaskManager implementation
 func NewTaskPersistence(hosts string, port int, user, password, dc string, keyspace string,
 	logger bark.Logger) (p.TaskManager, error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
@@ -891,7 +891,7 @@ func (d *cassandraPersistence) Close() {
 }
 
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 	query := d.session.Query(templateCreateShardQuery,
 		shardInfo.ShardID,
@@ -972,7 +972,7 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 }
 
 func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
 
 	query := d.session.Query(templateUpdateShardQuery,
@@ -1028,7 +1028,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 
 func (d *cassandraPersistence) CreateWorkflowExecution(request *p.CreateWorkflowExecutionRequest) (
 	*p.CreateWorkflowExecutionResponse, error) {
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	d.CreateWorkflowExecutionWithinBatch(request, batch, cqlNowTimestamp)
@@ -1436,7 +1436,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.UpdateWorkflowExecutionRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	executionInfo := request.ExecutionInfo
 	replicationState := request.ReplicationState
 
@@ -1697,7 +1697,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.UpdateWorkflow
 
 func (d *cassandraPersistence) ResetMutableState(request *p.ResetMutableStateRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	cqlNowTimestamp := common.UnixNanoToCQLTimestamp(time.Now().UnixNano())
+	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	executionInfo := request.ExecutionInfo
 	replicationState := request.ReplicationState
 
@@ -2169,7 +2169,7 @@ func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplic
 }
 
 func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
-	ts := common.UnixNanoToCQLTimestamp(request.VisibilityTimestamp.UnixNano())
+	ts := p.UnixNanoToDBTimestamp(request.VisibilityTimestamp.UnixNano())
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2195,8 +2195,8 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 }
 
 func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
-	start := common.UnixNanoToCQLTimestamp(request.InclusiveBeginTimestamp.UnixNano())
-	end := common.UnixNanoToCQLTimestamp(request.ExclusiveEndTimestamp.UnixNano())
+	start := p.UnixNanoToDBTimestamp(request.InclusiveBeginTimestamp.UnixNano())
+	end := p.UnixNanoToDBTimestamp(request.ExclusiveEndTimestamp.UnixNano())
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2534,8 +2534,8 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
 	error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could loose task
-	minTimestamp := common.UnixNanoToCQLTimestamp(request.MinTimestamp.UnixNano())
-	maxTimestamp := common.UnixNanoToCQLTimestamp(request.MaxTimestamp.UnixNano())
+	minTimestamp := p.UnixNanoToDBTimestamp(request.MinTimestamp.UnixNano())
+	maxTimestamp := p.UnixNanoToDBTimestamp(request.MaxTimestamp.UnixNano())
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2730,7 +2730,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 
 		// Ignoring possible type cast errors.
 		t, _ := p.GetVisibilityTSFrom(task)
-		ts := common.UnixNanoToCQLTimestamp(t.UnixNano())
+		ts := p.UnixNanoToDBTimestamp(t.UnixNano())
 
 		batch.Query(templateCreateTimerTaskQuery,
 			d.shardID,
@@ -2755,7 +2755,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 	if deleteTimerTask != nil {
 		// Ignoring possible type cast errors.
 		t, _ := p.GetVisibilityTSFrom(deleteTimerTask)
-		ts := common.UnixNanoToCQLTimestamp(t.UnixNano())
+		ts := p.UnixNanoToDBTimestamp(t.UnixNano())
 
 		batch.Query(templateCompleteTimerTaskQuery,
 			d.shardID,

@@ -188,7 +188,7 @@ func (s *HistoryPersistenceSuite) TestDeleteHistoryEvents() {
 		s.Nil(err0)
 	}
 
-	history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 10, 11, nil)
+	history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 8, 11, nil)
 	s.Nil(err1)
 	s.Nil(token)
 	s.Equal(7, len(history.Events))
@@ -222,10 +222,12 @@ func (s *HistoryPersistenceSuite) TestAppendAndGet() {
 
 	for i := 0; i < len(batches); i++ {
 
-		err0 := s.AppendHistoryEvents(domainID, workflowExecution, batches[i].events[0].GetEventId(), common.EmptyVersion, 1, int64(i), batches[i].batch, false)
+		events := batches[i].events
+		err0 := s.AppendHistoryEvents(domainID, workflowExecution, events[0].GetEventId(), common.EmptyVersion, 1, int64(i), batches[i].batch, false)
 		s.Nil(err0)
 
-		history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 10, 11, nil)
+		nextEventID := events[len(events)-1].GetEventId()
+		history, token, err1 := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, nextEventID, 11, nil)
 		s.Nil(err1)
 		s.Nil(token)
 		s.Equal((i+1)*2, len(history.Events))
@@ -265,7 +267,7 @@ func (s *HistoryPersistenceSuite) TestOverwriteAndShadowingHistoryEvents() {
 		s.Nil(err)
 	}
 
-	history, token, err := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 25, 25, nil)
+	history, token, err := s.GetWorkflowExecutionHistory(domainID, workflowExecution, 1, 15, 25, nil)
 	s.Nil(err)
 	s.Nil(token)
 	s.Equal(14, len(history.Events))

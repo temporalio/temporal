@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package cassandra
 
 import (
 	"fmt"
@@ -127,14 +127,4 @@ func LoadCassandraSchema(
 		err = fmt.Errorf("error loading schema:%v", err.Error())
 	}
 	return
-}
-
-// CQLTimestampToUnixNano converts CQL timestamp to UnixNano
-func CQLTimestampToUnixNano(milliseconds int64) int64 {
-	return milliseconds * 1000 * 1000 // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-3) - (-9) = 6, so multiply by 10⁶
-}
-
-// UnixNanoToCQLTimestamp converts UnixNano to CQL timestamp
-func UnixNanoToCQLTimestamp(timestamp int64) int64 {
-	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
 }

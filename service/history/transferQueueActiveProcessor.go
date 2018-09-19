@@ -778,11 +778,11 @@ func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *pers
 		startRequest := &h.StartWorkflowExecutionRequest{
 			DomainUUID: common.StringPtr(targetDomainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
-				Domain:       common.StringPtr(targetDomain),
-				WorkflowId:   attributes.WorkflowId,
-				WorkflowType: attributes.WorkflowType,
-				TaskList:     attributes.TaskList,
-				Input:        attributes.Input,
+				Domain:                              common.StringPtr(targetDomain),
+				WorkflowId:                          attributes.WorkflowId,
+				WorkflowType:                        attributes.WorkflowType,
+				TaskList:                            attributes.TaskList,
+				Input:                               attributes.Input,
 				ExecutionStartToCloseTimeoutSeconds: attributes.ExecutionStartToCloseTimeoutSeconds,
 				TaskStartToCloseTimeoutSeconds:      attributes.TaskStartToCloseTimeoutSeconds,
 				// Use the same request ID to dedupe StartWorkflowExecution calls

@@ -46,9 +46,9 @@ type (
 		DBPort       int    // database port
 		DBUser       string // database user
 		DBPassword   string // database password
-		DatabaseName string // database name
+		DBName       string // database name
 		Datacenter   string // database datacenter
-		DropKeySpace bool   // drop existing database
+		DropDatabase bool   // drop existing database
 		SchemaDir    string // directory with schema files
 		// TODO this is used for global domain test
 		// when crtoss DC is public, remove EnableGlobalDomain
@@ -73,7 +73,6 @@ type (
 		ReadLevel              int64
 		ReplicationReadLevel   int64
 		PersistenceTestCluster PersistenceTestCluster
-		UseMysql               bool
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -82,7 +81,6 @@ type (
 		SetupTestDatabase(options *TestBaseOptions)
 		TearDownTestDatabase()
 		CreateSession(options *TestBaseOptions)
-		CreateDatabase(replicas int, dropExisting bool)
 		DropDatabase()
 		LoadSchema(fileNames []string, schemaDir string)
 		LoadVisibilitySchema(fileNames []string, schemaDir string)

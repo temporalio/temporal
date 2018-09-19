@@ -864,17 +864,17 @@ func acquireShard(shardID int, svc service.Service, shardManager persistence.Sha
 	}
 
 	context := &shardContextImpl{
-		shardID:          shardID,
-		currentCluster:   svc.GetClusterMetadata().GetCurrentClusterName(),
-		service:          svc,
-		shardManager:     shardManager,
-		historyMgr:       historyMgr,
-		executionManager: executionMgr,
-		domainCache:      domainCache,
-		shardInfo:        updatedShardInfo,
-		closeCh:          closeCh,
-		metricsClient:    metricsClient,
-		config:           config,
+		shardID:                   shardID,
+		currentCluster:            svc.GetClusterMetadata().GetCurrentClusterName(),
+		service:                   svc,
+		shardManager:              shardManager,
+		historyMgr:                historyMgr,
+		executionManager:          executionMgr,
+		domainCache:               domainCache,
+		shardInfo:                 updatedShardInfo,
+		closeCh:                   closeCh,
+		metricsClient:             metricsClient,
+		config:                    config,
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
 		timerMaxReadLevel:         updatedShardInfo.TimerAckLevel, // use ack to init read level
 	}

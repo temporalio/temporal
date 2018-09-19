@@ -78,11 +78,11 @@ func (s *MatchingPersistenceSuite) TestPersistenceStartWorkflow() {
 		RunId:      common.StringPtr("7f9fe8a0-9237-11e6-ae22-56b6b6499611"),
 	}
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	task1, err1 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType1", 20, 14, nil, 3, 0, 2, nil)
-	s.NotNil(err1, "Expected workflow creation to fail.")
+	s.Error(err1, "Expected workflow creation to fail.")
 	log.Infof("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*p.WorkflowExecutionAlreadyStartedError)
 	s.True(ok)
@@ -119,7 +119,7 @@ func (s *MatchingPersistenceSuite) TestPersistenceStartWorkflow() {
 		DecisionStartToCloseTimeout: 1,
 	})
 
-	s.NotNil(err2, "Expected workflow creation to fail.")
+	s.Error(err2, "Expected workflow creation to fail.")
 	s.Nil(response)
 	log.Infof("Unable to start workflow execution: %v", err2)
 	s.IsType(&p.ShardOwnershipLostError{}, err2)
@@ -140,11 +140,11 @@ func (s *MatchingPersistenceSuite) TestPersistenceStartWorkflowWithReplicationSt
 		LastWriteVersion: lastWriteVersion,
 	}
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, "queue1", "wType", 20, 13, 3, 0, 2, replicationState, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	task1, err1 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType1", 20, 14, nil, 3, 0, 2, nil)
-	s.NotNil(err1, "Expected workflow creation to fail.")
+	s.Error(err1, "Expected workflow creation to fail.")
 	log.Infof("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*p.WorkflowExecutionAlreadyStartedError)
 	s.True(ok)
@@ -180,7 +180,7 @@ func (s *MatchingPersistenceSuite) TestPersistenceStartWorkflowWithReplicationSt
 		DecisionStartToCloseTimeout: 1,
 	})
 
-	s.NotNil(err2, "Expected workflow creation to fail.")
+	s.Error(err2, "Expected workflow creation to fail.")
 	s.Nil(response)
 	log.Infof("Unable to start workflow execution: %v", err2)
 	s.IsType(&p.ShardOwnershipLostError{}, err2)
@@ -194,11 +194,11 @@ func (s *MatchingPersistenceSuite) TestGetWorkflow() {
 		RunId:      common.StringPtr("918e7b1d-bfa4-4fe0-86cb-604858f90ce4"),
 	}
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info := state.ExecutionInfo
 	s.NotNil(info, "Valid Workflow response expected.")
 	s.NotNil(info, "Valid Workflow info expected.")
@@ -228,11 +228,11 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 		RunId:      common.StringPtr("5ba5e531-e46b-48d9-b4b3-859919839553"),
 	}
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(domainID, info0.DomainID)
@@ -275,10 +275,10 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	updatedInfo.ClientFeatureVersion = "random client feature version"
 	updatedInfo.ClientImpl = "random client impl"
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state1, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
 	s.Equal(domainID, info1.DomainID)
@@ -309,12 +309,12 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
 	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
-	s.NotNil(err4, "expected non nil error.")
+	s.Error(err4, "expected non nil error.")
 	s.IsType(&p.ConditionFailedError{}, err4)
 	log.Errorf("Conditional update failed with error: %v", err4)
 
 	state2, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 	info2 := state2.ExecutionInfo
 	s.NotNil(info2, "Valid Workflow info expected.")
 	s.Equal(domainID, info2.DomainID)
@@ -339,12 +339,12 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
 	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
-	s.NotNil(err5, "expected non nil error.")
+	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
 
 	state3, err6 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err6, "No error expected.")
+	s.NoError(err6)
 	info3 := state3.ExecutionInfo
 	s.NotNil(info3, "Valid Workflow info expected.")
 	s.Equal(domainID, info3.DomainID)
@@ -370,12 +370,12 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 
 	//update with incorrect rangeID and condition(next_event_id)
 	err7 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
-	s.NotNil(err7, "expected non nil error.")
+	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
 	log.Errorf("Conditional update failed with error: %v", err7)
 
 	state3, err8 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err8, "No error expected.")
+	s.NoError(err8)
 	info4 := state3.ExecutionInfo
 	s.NotNil(info4, "Valid Workflow info expected.")
 	s.Equal(domainID, info4.DomainID)
@@ -408,11 +408,11 @@ func (s *MatchingPersistenceSuite) TestDeleteWorkflow() {
 		RunId:      common.StringPtr("4e0917f2-9361-4a14-b16f-1fafe09b287a"),
 	}
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(domainID, info0.DomainID)
@@ -434,18 +434,19 @@ func (s *MatchingPersistenceSuite) TestDeleteWorkflow() {
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
 	err4 := s.DeleteWorkflowExecution(info0)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 
 	_, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.NotNil(err3, "expected non nil error.")
+	s.Error(err3, "expected non nil error.")
 	s.IsType(&gen.EntityNotExistsError{}, err3)
 
 	err5 := s.DeleteWorkflowExecution(info0)
-	s.Nil(err5)
+	s.NoError(err5)
 }
 
 // TestDeleteCurrentWorkflow test
 func (s *MatchingPersistenceSuite) TestDeleteCurrentWorkflow() {
+	s.T().Skip("SQL doesn't support retention yet")
 	finishedCurrentExecutionRetentionTTL := int32(3) // 3 seconds
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
 	workflowExecution := gen.WorkflowExecution{
@@ -454,37 +455,37 @@ func (s *MatchingPersistenceSuite) TestDeleteCurrentWorkflow() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	runID0, err1 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.Equal(*workflowExecution.RunId, runID0)
 
 	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2)
+	s.NoError(err2)
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
 	updatedInfo1.NextEventID = int64(6)
 	updatedInfo1.LastProcessedEvent = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3), finishedCurrentExecutionRetentionTTL)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 
 	runID4, err4 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 	s.Equal(*workflowExecution.RunId, runID4)
 
 	time.Sleep(time.Duration(finishedCurrentExecutionRetentionTTL*2) * time.Second)
 
 	runID0, err1 = s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.NotNil(err1)
+	s.Error(err1)
 	s.Empty(runID0)
 	_, ok := err1.(*gen.EntityNotExistsError)
 	s.True(ok)
 
 	// execution record should still be there
 	info0, err2 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2)
+	s.NoError(err2)
 }
 
 // TestGetCurrentWorkflow test
@@ -496,24 +497,24 @@ func (s *MatchingPersistenceSuite) TestGetCurrentWorkflow() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	runID0, err1 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.Equal(*workflowExecution.RunId, runID0)
 
 	info0, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2)
+	s.NoError(err2)
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
 	updatedInfo1.NextEventID = int64(6)
 	updatedInfo1.LastProcessedEvent = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3), 10)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 
 	runID4, err4 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 	s.Equal(*workflowExecution.RunId, runID4)
 
 	workflowExecution2 := gen.WorkflowExecution{
@@ -522,7 +523,7 @@ func (s *MatchingPersistenceSuite) TestGetCurrentWorkflow() {
 	}
 
 	task1, err5 := s.CreateWorkflowExecution(domainID, workflowExecution2, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.NotNil(err5, "Error expected.")
+	s.Error(err5, "Error expected.")
 	s.Empty(task1, "Expected empty task identifier.")
 }
 
@@ -535,11 +536,11 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	tasks1, err1 := s.GetTransferTasks(1, false)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
@@ -552,7 +553,7 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal("", task1.TargetRunID)
 
 	err3 := s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err3)
+	s.NoError(err3)
 
 	state0, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	info0 := state0.ExecutionInfo
@@ -560,10 +561,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
 	err2 := s.UpdateWorkflowExecution(updatedInfo, nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	tasks2, err1 := s.GetTransferTasks(1, false)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 decision task.")
 	task2 := tasks2[0]
@@ -576,7 +577,7 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal("", task2.TargetRunID)
 
 	err4 := s.CompleteTransferTask(task2.TaskID)
-	s.Nil(err4)
+	s.NoError(err4)
 
 	state1, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	info1 := state1.ExecutionInfo
@@ -584,18 +585,18 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	updatedInfo1.NextEventID = int64(6)
 	updatedInfo1.LastProcessedEvent = int64(2)
 	err5 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(5), 10)
-	s.Nil(err5, "No error expected.")
+	s.NoError(err5)
 
 	newExecution := gen.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      common.StringPtr("2a038c8f-b575-4151-8d2c-d443e999ab5a"),
 	}
 	runID6, err6 := s.GetCurrentWorkflowRunID(domainID, newExecution.GetWorkflowId())
-	s.Nil(err6)
+	s.NoError(err6)
 	s.Equal(*workflowExecution.RunId, runID6)
 
 	tasks3, err7 := s.GetTransferTasks(1, false)
-	s.Nil(err7, "No error expected.")
+	s.NoError(err7)
 	s.NotNil(tasks3, "expected valid list of tasks.")
 	s.Equal(1, len(tasks3), "Expected 1 decision task.")
 	task3 := tasks3[0]
@@ -606,13 +607,13 @@ func (s *MatchingPersistenceSuite) TestTransferTasksThroughUpdate() {
 	s.Equal("", task3.TargetRunID)
 
 	err8 := s.DeleteWorkflowExecution(info1)
-	s.Nil(err8)
+	s.NoError(err8)
 
 	err9 := s.CompleteTransferTask(task3.TaskID)
-	s.Nil(err9)
+	s.NoError(err9)
 
 	_, err10 := s.CreateWorkflowExecution(domainID, newExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.NotNil(err10, "Error expected.")
+	s.Error(err10, "Error expected.")
 }
 
 // TestCancelTransferTaskTasks test
@@ -624,16 +625,16 @@ func (s *MatchingPersistenceSuite) TestCancelTransferTaskTasks() {
 	}
 
 	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
@@ -651,10 +652,10 @@ func (s *MatchingPersistenceSuite) TestCancelTransferTaskTasks() {
 		InitiatedID:             1,
 	}}
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	tasks1, err := s.GetTransferTasks(1, false)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
@@ -668,7 +669,7 @@ func (s *MatchingPersistenceSuite) TestCancelTransferTaskTasks() {
 	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	targetDomainID = "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
 	targetWorkflowID = "target-workflow-cancellation-id-2"
@@ -684,16 +685,16 @@ func (s *MatchingPersistenceSuite) TestCancelTransferTaskTasks() {
 	}}
 
 	state2, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info2 := state2.ExecutionInfo
 	s.NotNil(info2, "Valid Workflow info expected.")
 	updatedInfo2 := copyWorkflowExecutionInfo(info2)
 
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	tasks2, err := s.GetTransferTasks(1, false)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
@@ -707,7 +708,7 @@ func (s *MatchingPersistenceSuite) TestCancelTransferTaskTasks() {
 	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task2.TaskID)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // TestSignalTransferTaskTasks test
@@ -719,16 +720,16 @@ func (s *MatchingPersistenceSuite) TestSignalTransferTaskTasks() {
 	}
 
 	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
@@ -746,10 +747,10 @@ func (s *MatchingPersistenceSuite) TestSignalTransferTaskTasks() {
 		InitiatedID:             1,
 	}}
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo1, int64(3), transferTasks, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	tasks1, err := s.GetTransferTasks(1, false)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
@@ -763,7 +764,7 @@ func (s *MatchingPersistenceSuite) TestSignalTransferTaskTasks() {
 	s.Equal(targetChildWorkflowOnly, task1.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	targetDomainID = "f2bfaab6-7e8b-4fac-9a62-17da8d37becb"
 	targetWorkflowID = "target-workflow-signal-id-2"
@@ -779,16 +780,16 @@ func (s *MatchingPersistenceSuite) TestSignalTransferTaskTasks() {
 	}}
 
 	state2, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info2 := state2.ExecutionInfo
 	s.NotNil(info2, "Valid Workflow info expected.")
 	updatedInfo2 := copyWorkflowExecutionInfo(info2)
 
 	err = s.UpdateWorkflowExecutionWithTransferTasks(updatedInfo2, int64(3), transferTasks, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	tasks2, err := s.GetTransferTasks(1, false)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
@@ -802,7 +803,7 @@ func (s *MatchingPersistenceSuite) TestSignalTransferTaskTasks() {
 	s.Equal(targetChildWorkflowOnly, task2.TargetChildWorkflowOnly)
 
 	err = s.CompleteTransferTask(task2.TaskID)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // TestCreateTask test
@@ -811,12 +812,12 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 	workflowExecution := gen.WorkflowExecution{WorkflowId: common.StringPtr("create-task-test"),
 		RunId: common.StringPtr("c949447a-691a-4132-8b2a-a5b38106793c")}
 	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, "a5b38106793c", 5)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	tasks1, err1 := s.CreateActivityTasks(domainID, workflowExecution, map[int64]string{
 		10: "a5b38106793c"})
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks1, "Expected valid task identifiers.")
 	s.Equal(1, len(tasks1), "expected single valid task identifier.")
 	for _, t := range tasks1 {
@@ -830,7 +831,7 @@ func (s *MatchingPersistenceSuite) TestCreateTask() {
 		50: "a5b38106793d",
 		60: "a5b38106793e",
 	})
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.Equal(5, len(tasks2), "expected single valid task identifier.")
 	for _, t := range tasks2 {
 		s.NotEmpty(t, "Expected non empty task identifier.")
@@ -844,11 +845,11 @@ func (s *MatchingPersistenceSuite) TestGetDecisionTasks() {
 		RunId: common.StringPtr("db20f7e2-1a1e-40d9-9278-d8b886738e05")}
 	taskList := "d8b886738e05"
 	task0, err0 := s.CreateDecisionTask(domainID, workflowExecution, taskList, 5)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	tasks1Response, err1 := s.GetTasks(domainID, taskList, p.TaskListTypeDecision, 1)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks1Response.Tasks, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1Response.Tasks), "Expected 1 decision task.")
 	s.Equal(int64(5), tasks1Response.Tasks[0].ScheduleID)
@@ -867,7 +868,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		40: taskList,
 		50: taskList,
 	})
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(tasks0, "Expected non empty task identifier.")
 	s.Equal(5, len(tasks0), "expected 5 valid task identifier.")
 	for _, t := range tasks0 {
@@ -876,7 +877,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 
 	tasksWithID1Response, err1 := s.GetTasks(domainID, taskList, p.TaskListTypeActivity, 5)
 
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	tasksWithID1 := tasksWithID1Response.Tasks
 	s.NotNil(tasksWithID1, "expected valid list of tasks.")
 
@@ -888,7 +889,7 @@ func (s *MatchingPersistenceSuite) TestCompleteDecisionTask() {
 		s.True(t.TaskID > 0)
 
 		err2 := s.CompleteTask(domainID, taskList, p.TaskListTypeActivity, t.TaskID, 100)
-		s.Nil(err2)
+		s.NoError(err2)
 	}
 }
 
@@ -975,15 +976,15 @@ func (s *MatchingPersistenceSuite) TestReplicationTasks() {
 	}
 
 	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(task0, "Expected non empty task identifier.")
 	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
@@ -1015,10 +1016,10 @@ func (s *MatchingPersistenceSuite) TestReplicationTasks() {
 		},
 	}
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	repTasks, err := s.GetReplicationTasks(1, true)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(len(replicationTasks), len(repTasks))
 
 	for index := range replicationTasks {
@@ -1027,7 +1028,7 @@ func (s *MatchingPersistenceSuite) TestReplicationTasks() {
 		s.Equal(replicationTasks[index].GetVersion(), repTasks[index].GetVersion())
 
 		err = s.CompleteReplicationTask(repTasks[index].GetTaskID())
-		s.Nil(err, "No error expected.")
+		s.NoError(err)
 	}
 }
 
@@ -1041,11 +1042,11 @@ func (s *MatchingPersistenceSuite) TestTransferTasksComplete() {
 	tasklist := "some random tasklist"
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist, "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	tasks1, err1 := s.GetTransferTasks(1, false)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
@@ -1058,10 +1059,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksComplete() {
 	s.Equal(p.TransferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
 	s.Equal("", task1.TargetRunID)
 	err3 := s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err3)
+	s.NoError(err3)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1083,10 +1084,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksComplete() {
 		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
@@ -1106,25 +1107,25 @@ func (s *MatchingPersistenceSuite) TestTransferTasksComplete() {
 	s.Equal(int64(666), txTasks[5].Version)
 
 	err2 = s.CompleteTransferTask(txTasks[0].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTransferTask(txTasks[1].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTransferTask(txTasks[2].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTransferTask(txTasks[3].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTransferTask(txTasks[4].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTransferTask(txTasks[5].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	txTasks, err2 = s.GetTransferTasks(100, false)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.Empty(txTasks, "expected empty task list.")
 }
 
@@ -1138,11 +1139,11 @@ func (s *MatchingPersistenceSuite) TestTransferTasksRangeComplete() {
 	tasklist := "some random tasklist"
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist, "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	tasks1, err1 := s.GetTransferTasks(1, false)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 decision task.")
 	task1 := tasks1[0]
@@ -1155,10 +1156,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksRangeComplete() {
 	s.Equal(p.TransferTaskTransferTargetWorkflowID, task1.TargetWorkflowID)
 	s.Equal("", task1.TargetRunID)
 	err3 := s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err3)
+	s.NoError(err3)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1180,10 +1181,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksRangeComplete() {
 		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetDomainID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, nil, int64(3), tasks)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	txTasks, err1 := s.GetTransferTasks(1, true) // use page size one to force pagination
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
@@ -1203,10 +1204,10 @@ func (s *MatchingPersistenceSuite) TestTransferTasksRangeComplete() {
 	s.Equal(int64(666), txTasks[5].Version)
 
 	err2 = s.RangeCompleteTransferTask(txTasks[0].TaskID-1, txTasks[5].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	txTasks, err2 = s.GetTransferTasks(100, false)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.Empty(txTasks, "expected empty task list.")
 }
 
@@ -1219,11 +1220,11 @@ func (s *MatchingPersistenceSuite) TestTimerTasksComplete() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1239,10 +1240,10 @@ func (s *MatchingPersistenceSuite) TestTimerTasksComplete() {
 		&p.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(timerTasks))
 	s.Equal(p.TaskTypeDecisionTimeout, timerTasks[0].TaskType)
@@ -1257,10 +1258,10 @@ func (s *MatchingPersistenceSuite) TestTimerTasksComplete() {
 	s.Equal(int64(15), timerTasks[4].Version)
 
 	err2 = s.RangeCompleteTimerTask(timerTasks[0].VisibilityTimestamp, timerTasks[4].VisibilityTimestamp.Add(1*time.Second))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.Empty(timerTasks2, "expected empty task list.")
 }
 
@@ -1273,11 +1274,11 @@ func (s *MatchingPersistenceSuite) TestTimerTasksRangeComplete() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1292,10 +1293,10 @@ func (s *MatchingPersistenceSuite) TestTimerTasksRangeComplete() {
 		&p.UserTimerTask{time.Now(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	timerTasks, err1 := s.GetTimerIndexTasks(1, true) // use page size one to force pagination
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(timerTasks))
 	s.Equal(p.TaskTypeDecisionTimeout, timerTasks[0].TaskType)
@@ -1311,22 +1312,22 @@ func (s *MatchingPersistenceSuite) TestTimerTasksRangeComplete() {
 
 	deleteTimerTask := &p.DecisionTimeoutTask{VisibilityTimestamp: timerTasks[0].VisibilityTimestamp, TaskID: timerTasks[0].TaskID}
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, deleteTimerTask, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTimerTask(timerTasks[1].VisibilityTimestamp, timerTasks[1].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTimerTask(timerTasks[2].VisibilityTimestamp, timerTasks[2].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTimerTask(timerTasks[3].VisibilityTimestamp, timerTasks[3].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	err2 = s.CompleteTimerTask(timerTasks[4].VisibilityTimestamp, timerTasks[4].TaskID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	timerTasks2, err2 := s.GetTimerIndexTasks(100, false)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.Empty(timerTasks2, "expected empty task list.")
 }
 
@@ -1339,11 +1340,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateActivities() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1367,10 +1368,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateActivities() {
 		TimerTaskStatus:          1,
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, activityInfos, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.ActivitInfos))
 	log.Printf("%+v", state.ActivitInfos)
@@ -1392,10 +1393,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, []int64{1}, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ActivitInfos))
 }
@@ -1409,11 +1410,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateTimers() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1430,10 +1431,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateTimers() {
 		StartedID:  5,
 	}}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, timerInfos, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
@@ -1443,10 +1444,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, nil, nil, []string{timerID})
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.TimerInfos))
 }
@@ -1466,11 +1467,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateChildExecutions() {
 	}
 
 	task0, err0 := s.CreateChildWorkflowExecution(domainID, workflowExecution, parentDomainID, parentExecution, 1, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(parentDomainID, info0.ParentDomainID)
@@ -1491,10 +1492,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateChildExecutions() {
 		CreateRequestID: createRequestID,
 	}}
 	err2 := s.UpsertChildExecutionsState(updatedInfo, int64(3), childExecutionInfos)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.ChildExecutionInfos))
 	ci, ok := state.ChildExecutionInfos[1]
@@ -1508,10 +1509,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateChildExecutions() {
 	s.Equal(createRequestID, ci.CreateRequestID)
 
 	err2 = s.DeleteChildExecutionsState(updatedInfo, int64(5), int64(1))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.ChildExecutionInfos))
 }
@@ -1525,11 +1526,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateRequestCancel() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1543,10 +1544,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateRequestCancel() {
 		CancelRequestID: cancelRequestID,
 	}}
 	err2 := s.UpsertRequestCancelState(updatedInfo, int64(3), requestCancelInfos)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.RequestCancelInfos))
 	ri, ok := state.RequestCancelInfos[1]
@@ -1557,10 +1558,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateRequestCancel() {
 	s.Equal(cancelRequestID, ri.CancelRequestID)
 
 	err2 = s.DeleteCancelState(updatedInfo, int64(5), int64(1))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.RequestCancelInfos))
 }
@@ -1575,11 +1576,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalInfo() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1600,10 +1601,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalInfo() {
 			Control:         control,
 		}}
 	err2 := s.UpsertSignalInfoState(updatedInfo, int64(3), signalInfos)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.SignalInfos))
 	ri, ok := state.SignalInfos[1]
@@ -1617,10 +1618,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalInfo() {
 	s.Equal(control, ri.Control)
 
 	err2 = s.DeleteSignalState(updatedInfo, int64(5), int64(1))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.SignalInfos))
 }
@@ -1635,11 +1636,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalRequested() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1649,10 +1650,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalRequested() {
 	signalRequestedID := uuid.New()
 	signalsRequested := []string{signalRequestedID}
 	err2 := s.UpsertSignalsRequestedState(updatedInfo, int64(3), signalsRequested)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.SignalRequestedIDs))
 	ri, ok := state.SignalRequestedIDs[signalRequestedID]
@@ -1660,10 +1661,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateSignalRequested() {
 	s.NotNil(ri)
 
 	err2 = s.DeleteSignalsRequestedState(updatedInfo, int64(5), signalRequestedID)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.SignalRequestedIDs))
 }
@@ -1677,11 +1678,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateBufferedReplicationTa
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(0, len(state0.BufferedReplicationTasks))
@@ -1715,10 +1716,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateBufferedReplicationTa
 		History:      s.serializeHistoryEvents(events),
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state1, "expected valid state.")
 	s.Equal(1, len(state1.BufferedReplicationTasks))
 
@@ -1797,10 +1798,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateBufferedReplicationTa
 		NewRunHistory: s.serializeHistoryEvents(newRunEvents),
 	}
 	err3 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 
 	state2, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 	s.NotNil(state2, "expected valid state.")
 	s.Equal(2, len(state2.BufferedReplicationTasks))
 
@@ -1841,19 +1842,19 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateBufferedReplicationTa
 
 	deleteBufferedReplicationTask := int64(5)
 	err5 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, &deleteBufferedReplicationTask, int64(3), nil)
-	s.Nil(err5, "No error expected.")
+	s.NoError(err5)
 
 	state3, err6 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err6, "No error expected.")
+	s.NoError(err6)
 	s.NotNil(state3, "expected valid state.")
 	s.Equal(1, len(state3.BufferedReplicationTasks))
 
 	deleteBufferedReplicationTask2 := int64(10)
 	err7 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, &deleteBufferedReplicationTask2, int64(3), nil)
-	s.Nil(err7, "No error expected.")
+	s.NoError(err7)
 
 	state4, err8 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err8, "No error expected.")
+	s.NoError(err8)
 	s.NotNil(state4, "expected valid state.")
 	s.Equal(0, len(state4.BufferedReplicationTasks))
 }
@@ -1867,11 +1868,11 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateInfo() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -1880,10 +1881,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowMutableStateInfo() {
 	updatedInfo.LastProcessedEvent = int64(2)
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.NotNil(state.ExecutionInfo, "expected valid MS Info state.")
 	s.Equal(updatedInfo.NextEventID, state.ExecutionInfo.NextEventID)
@@ -1899,10 +1900,10 @@ func (s *MatchingPersistenceSuite) TestContinueAsNew() {
 	}
 
 	_, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	continueAsNewInfo := copyWorkflowExecutionInfo(info0)
 	continueAsNewInfo.State = p.WorkflowStateCompleted
@@ -1915,17 +1916,17 @@ func (s *MatchingPersistenceSuite) TestContinueAsNew() {
 	}
 	err2 := s.ContinueAsNewExecution(continueAsNewInfo, info0.NextEventID, newWorkflowExecution, int64(3), int64(2))
 
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	prevExecutionState, err3 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err3)
+	s.NoError(err3)
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
 	s.Equal(p.WorkflowStateCompleted, prevExecutionInfo.State)
 	s.Equal(int64(5), prevExecutionInfo.NextEventID)
 	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
 
 	newExecutionState, err4 := s.GetWorkflowExecutionInfo(domainID, newWorkflowExecution)
-	s.Nil(err4)
+	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
 	s.Equal(p.WorkflowStateCreated, newExecutionInfo.State)
 	s.Equal(int64(3), newExecutionInfo.NextEventID)
@@ -1933,7 +1934,7 @@ func (s *MatchingPersistenceSuite) TestContinueAsNew() {
 	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
 
 	newRunID, err5 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
-	s.Nil(err5)
+	s.NoError(err5)
 	s.Equal(*newWorkflowExecution.RunId, newRunID)
 }
 
@@ -1946,16 +1947,16 @@ func (s *MatchingPersistenceSuite) TestReplicationTransferTaskTasks() {
 	}
 
 	task0, err := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	taskD, err := s.GetTransferTasks(1, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	err = s.CompleteTransferTask(taskD[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state1, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
@@ -1977,10 +1978,10 @@ func (s *MatchingPersistenceSuite) TestReplicationTransferTaskTasks() {
 		},
 	}}
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, nil, nil, nil, int64(3), replicationTasks)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	tasks1, err := s.GetReplicationTasks(1, false)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(tasks1, "expected valid list of tasks.")
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
@@ -2007,7 +2008,7 @@ func (s *MatchingPersistenceSuite) TestReplicationTransferTaskTasks() {
 	}
 
 	err = s.CompleteTransferTask(task1.TaskID)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // TestWorkflowReplicationState test
@@ -2053,14 +2054,14 @@ func (s *MatchingPersistenceSuite) TestWorkflowReplicationState() {
 				},
 			},
 		}, replicationTasks)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	taskD, err := s.GetTransferTasks(2, false)
 	s.Equal(1, len(taskD), "Expected 1 decision task.")
 	s.Equal(p.TransferTaskTypeDecisionTask, taskD[0].TaskType)
 	err = s.CompleteTransferTask(taskD[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	taskR, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR), "Expected 1 replication task.")
@@ -2087,10 +2088,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowReplicationState() {
 		}
 	}
 	err = s.CompleteReplicationTask(taskR[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	replicationState0 := state0.ReplicationState
 	s.NotNil(info0, "Valid Workflow info expected.")
@@ -2150,7 +2151,7 @@ func (s *MatchingPersistenceSuite) TestWorkflowReplicationState() {
 		},
 	}}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedReplicationState, nil, nil, int64(3), replicationTasks1)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	taskR1, err := s.GetReplicationTasks(1, false)
 	s.Equal(1, len(taskR1), "Expected 1 replication task.")
@@ -2177,10 +2178,10 @@ func (s *MatchingPersistenceSuite) TestWorkflowReplicationState() {
 		}
 	}
 	err = s.CompleteReplicationTask(taskR1[0].TaskID)
-	s.Nil(err)
+	s.NoError(err)
 
 	state1, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	info1 := state1.ExecutionInfo
 	replicationState1 := state1.ReplicationState
 	s.NotNil(info1, "Valid Workflow info expected.")
@@ -2221,11 +2222,11 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsSelf() {
 	}
 
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 
@@ -2376,28 +2377,28 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsSelf() {
 	}
 
 	err2 := s.UpdateAllMutableState(updatedState, int64(3))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	partialState, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	s.NotNil(partialState, "expected valid state.")
 	partialInfo := partialState.ExecutionInfo
 	s.NotNil(partialInfo, "Valid Workflow info expected.")
 
 	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
 	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
 		s.serializeHistoryEvents(eventsBatch1))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
 		s.serializeHistoryEvents(eventsBatch2))
-	s.Nil(err2, "No error expected.")
+	s.NoError(err2)
 
 	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err1, "No error expected.")
+	s.NoError(err1)
 	s.NotNil(state1, "expected valid state.")
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
@@ -2571,10 +2572,10 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsSelf() {
 
 	err3 := s.ResetMutableState(workflowExecution.GetRunId(), updatedInfo1, rState, int64(5), resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 
 	state4, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err4, "No error expected.")
+	s.NoError(err4)
 	s.NotNil(state4, "expected valid state.")
 	info4 := state4.ExecutionInfo
 	log.Printf("%+v", info4)
@@ -2670,11 +2671,11 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0"),
 	}
 	task, err := s.CreateWorkflowExecution(domainID, workflowExecutionReset, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 	s.NotNil(task, "Expected non empty task identifier.")
 
 	state, err := s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
-	s.Nil(err)
+	s.NoError(err)
 
 	info := state.ExecutionInfo
 	continueAsNewInfo := copyWorkflowExecutionInfo(info)
@@ -2687,19 +2688,19 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
 	}
 	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent1, int64(3), int64(2))
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	runID1, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent1.GetRunId(), runID1)
 	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionCurrent1)
-	s.Nil(err)
+	s.NoError(err)
 	updatedInfo1 := copyWorkflowExecutionInfo(state.ExecutionInfo)
 	updatedInfo1.State = p.WorkflowStateCompleted
 	updatedInfo1.CloseStatus = p.WorkflowCloseStatusCompleted
 	updatedInfo1.NextEventID = int64(6)
 	updatedInfo1.LastProcessedEvent = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, int64(3), 123)
-	s.Nil(err3, "No error expected.")
+	s.NoError(err3)
 	runID1, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent1.GetRunId(), runID1)
 
@@ -2736,14 +2737,14 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 
 	err = s.ResetMutableState(workflowExecutionCurrent1.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	// this test only assert whether the current workflow execution record is reseted
 	runID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
 
 	state, err = s.GetWorkflowExecutionInfo(domainID, workflowExecutionReset)
-	s.Nil(err)
+	s.NoError(err)
 	info = state.ExecutionInfo
 	continueAsNewInfo = copyWorkflowExecutionInfo(info)
 	continueAsNewInfo.State = p.WorkflowStateCompleted
@@ -2755,14 +2756,14 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"),
 	}
 	err = s.ContinueAsNewExecution(continueAsNewInfo, info.NextEventID, workflowExecutionCurrent2, int64(3), int64(2))
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	runID2, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionCurrent2.GetRunId(), runID2)
 
 	err = s.ResetMutableState(workflowExecutionCurrent2.GetRunId(), resetExecutionInfo, rState, continueAsNewInfo.NextEventID, resetActivityInfos, resetTimerInfos,
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
-	s.Nil(err, "No error expected.")
+	s.NoError(err)
 
 	// this test only assert whether the current workflow execution record is reseted
 	runID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
@@ -2828,7 +2829,7 @@ func (s *MatchingPersistenceSuite) TestCreateGetShardBackfill() {
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
 	}
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
-	s.Nil(err)
+	s.NoError(err)
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
@@ -2873,7 +2874,7 @@ func (s *MatchingPersistenceSuite) TestCreateGetUpdateGetShard() {
 	}
 	s.Nil(s.ShardMgr.CreateShard(createRequest))
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
-	s.Nil(err)
+	s.NoError(err)
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
@@ -2914,7 +2915,7 @@ func (s *MatchingPersistenceSuite) TestCreateGetUpdateGetShard() {
 	s.Nil(s.ShardMgr.UpdateShard(updateRequest))
 
 	resp, err = s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
-	s.Nil(err)
+	s.NoError(err)
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
@@ -2929,7 +2930,7 @@ func (s *MatchingPersistenceSuite) TestCreateGetUpdateGetShard() {
 func timestampConvertor(t time.Time) time.Time {
 	return time.Unix(
 		0,
-		common.CQLTimestampToUnixNano(common.UnixNanoToCQLTimestamp(t.UnixNano())),
+		p.DBTimestampToUnixNano(p.UnixNanoToDBTimestamp(t.UnixNano())),
 	).UTC()
 }
 

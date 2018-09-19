@@ -27,7 +27,6 @@ import (
 	"github.com/uber-common/bark"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
 )
 
@@ -100,7 +99,7 @@ type (
 // NewMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
 func NewMetadataPersistenceV2(hosts string, port int, user, password, dc string, keyspace string,
 	currentClusterName string, logger bark.Logger) (p.MetadataManager, error) {
-	cluster := common.NewCassandraCluster(hosts, port, user, password, dc)
+	cluster := NewCassandraCluster(hosts, port, user, password, dc)
 	cluster.Keyspace = keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum

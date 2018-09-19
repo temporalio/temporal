@@ -676,10 +676,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedConflictOnUpdate() {
 	decisions := []*workflow.Decision{{
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:   common.StringPtr(activity3ID),
-			ActivityType: &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
-			TaskList:     &workflow.TaskList{Name: &tl},
-			Input:        activity3Input,
+			ActivityId:                    common.StringPtr(activity3ID),
+			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activity3Type)},
+			TaskList:                      &workflow.TaskList{Name: &tl},
+			Input:                         activity3Input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -774,10 +774,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedMaxAttemptsExceeded() {
 	decisions := []*workflow.Decision{{
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:   common.StringPtr("activity1"),
-			ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
-			TaskList:     &workflow.TaskList{Name: &tl},
-			Input:        input,
+			ActivityId:                    common.StringPtr("activity1"),
+			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+			TaskList:                      &workflow.TaskList{Name: &tl},
+			Input:                         input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -1166,10 +1166,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledAtt
 		decisions := []*workflow.Decision{{
 			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
 			ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-				ActivityId:   common.StringPtr("activity1"),
-				ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
-				TaskList:     &workflow.TaskList{Name: &tl},
-				Input:        input,
+				ActivityId:                    common.StringPtr("activity1"),
+				ActivityType:                  &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+				TaskList:                      &workflow.TaskList{Name: &tl},
+				Input:                         input,
 				ScheduleToCloseTimeoutSeconds: iVar.scheduleToClose,
 				ScheduleToStartTimeoutSeconds: iVar.scheduleToStart,
 				StartToCloseTimeoutSeconds:    iVar.startToClose,
@@ -1250,10 +1250,10 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedSingleActivityScheduledDec
 	decisions := []*workflow.Decision{{
 		DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
 		ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
-			ActivityId:   common.StringPtr("activity1"),
-			ActivityType: &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
-			TaskList:     &workflow.TaskList{Name: &tl},
-			Input:        input,
+			ActivityId:                    common.StringPtr("activity1"),
+			ActivityType:                  &workflow.ActivityType{Name: common.StringPtr("activity_type1")},
+			TaskList:                      &workflow.TaskList{Name: &tl},
+			Input:                         input,
 			ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
 			ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
 			StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
@@ -4470,10 +4470,10 @@ func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowEx
 	parentInfo *history.ParentExecutionInfo, identity string) *workflow.HistoryEvent {
 	domainID := validDomainID
 	startRequest := &workflow.StartWorkflowExecutionRequest{
-		WorkflowId:   common.StringPtr(*workflowExecution.WorkflowId),
-		WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
-		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:        input,
+		WorkflowId:                          common.StringPtr(*workflowExecution.WorkflowId),
+		WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+		TaskList:                            &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:                               input,
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 		Identity:                            common.StringPtr(identity),
@@ -4530,10 +4530,10 @@ func addActivityTaskScheduledEvent(builder mutableState, decisionCompletedID int
 	taskList string, input []byte, timeout, queueTimeout, heartbeatTimeout int32) (*workflow.HistoryEvent,
 	*persistence.ActivityInfo) {
 	return builder.AddActivityTaskScheduledEvent(decisionCompletedID, &workflow.ScheduleActivityTaskDecisionAttributes{
-		ActivityId:   common.StringPtr(activityID),
-		ActivityType: &workflow.ActivityType{Name: common.StringPtr(activityType)},
-		TaskList:     &workflow.TaskList{Name: common.StringPtr(taskList)},
-		Input:        input,
+		ActivityId:                    common.StringPtr(activityID),
+		ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityType)},
+		TaskList:                      &workflow.TaskList{Name: common.StringPtr(taskList)},
+		Input:                         input,
 		ScheduleToCloseTimeoutSeconds: common.Int32Ptr(timeout),
 		ScheduleToStartTimeoutSeconds: common.Int32Ptr(queueTimeout),
 		HeartbeatTimeoutSeconds:       common.Int32Ptr(heartbeatTimeout),
@@ -4626,11 +4626,11 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder mutableState, decision
 	*persistence.ChildExecutionInfo) {
 	return builder.AddStartChildWorkflowExecutionInitiatedEvent(decisionCompletedID, createRequestID,
 		&workflow.StartChildWorkflowExecutionDecisionAttributes{
-			Domain:       common.StringPtr(domain),
-			WorkflowId:   common.StringPtr(workflowID),
-			WorkflowType: &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
-			TaskList:     &workflow.TaskList{Name: common.StringPtr(tasklist)},
-			Input:        input,
+			Domain:                              common.StringPtr(domain),
+			WorkflowId:                          common.StringPtr(workflowID),
+			WorkflowType:                        &workflow.WorkflowType{Name: common.StringPtr(workflowType)},
+			TaskList:                            &workflow.TaskList{Name: common.StringPtr(tasklist)},
+			Input:                               input,
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionStartToCloseTimeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(taskStartToCloseTimeout),
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),

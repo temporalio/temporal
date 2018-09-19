@@ -121,6 +121,14 @@
   revision = "2d684516a8861da43017284349b7e303e809ac21"
 
 [[projects]]
+  digest = "1:c07de423ca37dc2765396d6971599ab652a339538084b9b58c9f7fc533b28525"
+  name = "github.com/go-sql-driver/mysql"
+  packages = ["."]
+  pruneopts = ""
+  revision = "d523deb1b23d913de5bdada721a6071e71283618"
+  version = "v1.4.0"
+
+[[projects]]
   branch = "master"
   digest = "1:1899d7e4fedddc614b1af27d533dd2ab6656c376cea3cdba1ba073916faeebac"
   name = "github.com/gocql/gocql"
@@ -164,6 +172,26 @@
   packages = ["."]
   pruneopts = ""
   revision = "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
+
+[[projects]]
+  branch = "master"
+  digest = "1:67bcf41677f33b22aee1b82e9460aa093a96cfe4877445dd19ea950c200a47ab"
+  name = "github.com/iancoleman/strcase"
+  packages = ["."]
+  pruneopts = ""
+  revision = "3605ed457bf7f8caa1371b4fafadadc026673479"
+
+[[projects]]
+  branch = "batch"
+  digest = "1:f2dfbafa7faa143650abef3a721e6f654fec14422c0f3c03f7bec598622c102e"
+  name = "github.com/jmoiron/sqlx"
+  packages = [
+    ".",
+    "reflectx",
+  ]
+  pruneopts = ""
+  revision = "fa49b1cf03f78497da59de5455f40a753fa4a31d"
+  source = "github.com/mfateev/sqlx"
 
 [[projects]]
   digest = "1:9ea83adf8e96d6304f394d40436f2eb44c1dc3250d223b74088cc253a6cd0a1c"
@@ -604,6 +632,14 @@
   revision = "fbb02b2291d28baffd63558aa44b4b56f178d650"
 
 [[projects]]
+  digest = "1:c1771ca6060335f9768dff6558108bc5ef6c58506821ad43377ee23ff059e472"
+  name = "google.golang.org/appengine"
+  packages = ["cloudsql"]
+  pruneopts = ""
+  revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
+  version = "v1.1.0"
+
+[[projects]]
   digest = "1:75fb3fcfc73a8c723efde7777b40e8e8ff9babf30d8c56160d01beffea8a95a6"
   name = "gopkg.in/inf.v0"
   packages = ["."]
@@ -638,8 +674,11 @@
     "github.com/dgryski/go-farm",
     "github.com/emirpasic/gods/maps/treemap",
     "github.com/fatih/color",
+    "github.com/go-sql-driver/mysql",
     "github.com/gocql/gocql",
     "github.com/golang/mock/gomock",
+    "github.com/iancoleman/strcase",
+    "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",
     "github.com/pborman/uuid",
     "github.com/sirupsen/logrus",

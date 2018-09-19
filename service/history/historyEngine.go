@@ -696,7 +696,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 
 	result := &workflow.DescribeWorkflowExecutionResponse{
 		ExecutionConfiguration: &workflow.WorkflowExecutionConfiguration{
-			TaskList: &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
+			TaskList:                            &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(executionInfo.WorkflowTimeout),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(executionInfo.DecisionTimeoutValue),
 			ChildPolicy:                         common.ChildPolicyPtr(workflow.ChildPolicyTerminate),
@@ -1119,10 +1119,10 @@ Update_History_Loop:
 
 					startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
 					continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-						WorkflowType: startAttributes.WorkflowType,
-						TaskList:     startAttributes.TaskList,
-						RetryPolicy:  startAttributes.RetryPolicy,
-						Input:        startAttributes.Input,
+						WorkflowType:                        startAttributes.WorkflowType,
+						TaskList:                            startAttributes.TaskList,
+						RetryPolicy:                         startAttributes.RetryPolicy,
+						Input:                               startAttributes.Input,
 						ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 						TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
@@ -2874,11 +2874,11 @@ func getStartRequest(domainID string,
 	request *workflow.SignalWithStartWorkflowExecutionRequest) *h.StartWorkflowExecutionRequest {
 	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	req := &workflow.StartWorkflowExecutionRequest{
-		Domain:       request.Domain,
-		WorkflowId:   request.WorkflowId,
-		WorkflowType: request.WorkflowType,
-		TaskList:     request.TaskList,
-		Input:        request.Input,
+		Domain:                              request.Domain,
+		WorkflowId:                          request.WorkflowId,
+		WorkflowType:                        request.WorkflowType,
+		TaskList:                            request.TaskList,
+		Input:                               request.Input,
 		ExecutionStartToCloseTimeoutSeconds: request.ExecutionStartToCloseTimeoutSeconds,
 		TaskStartToCloseTimeoutSeconds:      request.TaskStartToCloseTimeoutSeconds,
 		Identity:                            request.Identity,

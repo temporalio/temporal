@@ -741,10 +741,10 @@ Update_History_Loop:
 
 		startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
 		continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
-			WorkflowType: startAttributes.WorkflowType,
-			TaskList:     startAttributes.TaskList,
-			RetryPolicy:  startAttributes.RetryPolicy,
-			Input:        startAttributes.Input,
+			WorkflowType:                        startAttributes.WorkflowType,
+			TaskList:                            startAttributes.TaskList,
+			RetryPolicy:                         startAttributes.RetryPolicy,
+			Input:                               startAttributes.Input,
 			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),

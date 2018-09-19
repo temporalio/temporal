@@ -201,8 +201,8 @@ var (
 				&shared.HistoryEvent{
 					EventType: &eventType,
 					WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-						WorkflowType: &shared.WorkflowType{Name: common.StringPtr("TestWorkflow")},
-						TaskList:     &shared.TaskList{Name: common.StringPtr("taskList")},
+						WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr("TestWorkflow")},
+						TaskList:                            &shared.TaskList{Name: common.StringPtr("taskList")},
 						ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(60),
 						TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 						Identity:                            common.StringPtr("tester"),
@@ -470,8 +470,8 @@ func (s *cliAppSuite) TestAnyToString() {
 		EventId:   common.Int64Ptr(1),
 		EventType: &eventType,
 		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
-			WorkflowType: &shared.WorkflowType{Name: common.StringPtr("code.uber.internal/devexp/cadence-samples.git/cmd/samples/recipes/helloworld.Workflow")},
-			TaskList:     &shared.TaskList{Name: common.StringPtr("taskList")},
+			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr("code.uber.internal/devexp/cadence-samples.git/cmd/samples/recipes/helloworld.Workflow")},
+			TaskList:                            &shared.TaskList{Name: common.StringPtr("taskList")},
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(60),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(10),
 			Identity:                            common.StringPtr("tester"),
