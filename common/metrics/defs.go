@@ -777,6 +777,14 @@ const (
 	ShardClosedCounter
 	ShardItemCreatedCounter
 	ShardItemRemovedCounter
+	ShardInfoReplicationPendingTasksTimer
+	ShardInfoTransferActivePendingTasksTimer
+	ShardInfoTransferStandbyPendingTasksTimer
+	ShardInfoTimerActivePendingTasksTimer
+	ShardInfoTimerStandbyPendingTasksTimer
+	ShardInfoReplicationLagTimer
+	ShardInfoTransferLagTimer
+	ShardInfoTimerLagTimer
 	ShardInfoTransferDiffTimer
 	ShardInfoTimerDiffTimer
 	MembershipChangedCounter
@@ -916,6 +924,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardClosedCounter:                           {metricName: "shard-closed-count", metricType: Counter},
 		ShardItemCreatedCounter:                      {metricName: "sharditem-created-count", metricType: Counter},
 		ShardItemRemovedCounter:                      {metricName: "sharditem-removed-count", metricType: Counter},
+		ShardInfoReplicationPendingTasksTimer:        {metricName: "shardinfo-replication-pending-task", metricType: Timer},
+		ShardInfoTransferActivePendingTasksTimer:     {metricName: "shardinfo-transfer-active-pending-task", metricType: Timer},
+		ShardInfoTransferStandbyPendingTasksTimer:    {metricName: "shardinfo-transfer-standby-pending-task", metricType: Timer},
+		ShardInfoTimerActivePendingTasksTimer:        {metricName: "shardinfo-timer-active-pending-task", metricType: Timer},
+		ShardInfoTimerStandbyPendingTasksTimer:       {metricName: "shardinfo-timer-standby-pending-task", metricType: Timer},
+		ShardInfoReplicationLagTimer:                 {metricName: "shardinfo-replication-lag", metricType: Timer},
+		ShardInfoTransferLagTimer:                    {metricName: "shardinfo-transfer-lag", metricType: Timer},
+		ShardInfoTimerLagTimer:                       {metricName: "shardinfo-timer-lag", metricType: Timer},
 		ShardInfoTransferDiffTimer:                   {metricName: "shardinfo-transfer-diff", metricType: Timer},
 		ShardInfoTimerDiffTimer:                      {metricName: "shardinfo-timer-diff", metricType: Timer},
 		MembershipChangedCounter:                     {metricName: "membership-changed-count", metricType: Counter},

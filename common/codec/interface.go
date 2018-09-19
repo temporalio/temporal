@@ -32,6 +32,7 @@ type (
 		Decode(payload []byte, val ThriftObject) error
 	}
 
+	// ThriftObject represents a thrift object
 	ThriftObject interface {
 		FromWire(w wire.Value) error
 		ToWire() (wire.Value, error)

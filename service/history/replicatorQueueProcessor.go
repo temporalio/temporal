@@ -122,7 +122,7 @@ func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) error {
 	if err != nil {
 		p.metricsClient.IncCounter(scope, metrics.TaskFailures)
 	} else {
-		p.queueAckMgr.completeQueueTask(task.TaskID)
+		err = p.queueAckMgr.completeQueueTask(task.TaskID)
 	}
 	return err
 }

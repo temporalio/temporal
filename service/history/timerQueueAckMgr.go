@@ -297,6 +297,17 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() {
 	}
 	sort.Sort(sequenceIDs)
 
+	pendingTasks := len(sequenceIDs)
+	if pendingTasks > warnPendingTasks {
+		t.logger.Warn("Too many pendind tasks.")
+	}
+	switch t.scope {
+	case metrics.TimerActiveQueueProcessorScope:
+		t.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, time.Duration(pendingTasks))
+	case metrics.TimerStandbyQueueProcessorScope:
+		t.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, time.Duration(pendingTasks))
+	}
+
 MoveAckLevelLoop:
 	for _, current := range sequenceIDs {
 		acked := outstandingTasks[current]

@@ -722,23 +722,31 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	}
 	diffTimerLevel := maxTimerLevel.Sub(minTimerLevel)
 
-	if logWarnTransferLevelDiff < diffTransferLevel || logWarnTimerLevelDiff < diffTimerLevel {
+	replicationLag := s.transferMaxReadLevel - s.shardInfo.ReplicationAckLevel
+	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
+	timerLag := time.Since(s.shardInfo.TimerAckLevel)
+
+	if logWarnTransferLevelDiff < diffTransferLevel ||
+		logWarnTimerLevelDiff < diffTimerLevel ||
+		logWarnTransferLevelDiff < transferLag ||
+		logWarnTimerLevelDiff < timerLag {
+
 		logger := s.logger.WithFields(bark.Fields{
-			logging.TagHistoryShardTime:         s.standbyClusterCurrentTime,
-			logging.TagHistoryShardTransferAcks: s.shardInfo.ClusterTransferAckLevel,
-			logging.TagHistoryShardTimerAcks:    s.shardInfo.ClusterTimerAckLevel,
+			logging.TagHistoryShardTime:           s.standbyClusterCurrentTime,
+			logging.TagHistoryShardReplicationAck: s.shardInfo.ReplicationAckLevel,
+			logging.TagHistoryShardTransferAcks:   s.shardInfo.ClusterTransferAckLevel,
+			logging.TagHistoryShardTimerAcks:      s.shardInfo.ClusterTimerAckLevel,
 		})
 
-		if logWarnTransferLevelDiff < diffTransferLevel {
-			logger.Warn("Transfer level diff exceeds warn threshold.")
-		}
-		if logWarnTimerLevelDiff < diffTimerLevel {
-			logger.Warn("Timer level diff exceeds warn threshold.")
-		}
+		logger.Warn("Shard ack levels diff exceeds warn threshold.")
 	}
 
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, time.Duration(diffTransferLevel))
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
+
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoReplicationLagTimer, time.Duration(replicationLag))
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferLagTimer, time.Duration(transferLag))
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerLagTimer, timerLag)
 }
 
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {

@@ -23,6 +23,7 @@ package history
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/uber-common/bark"
 
@@ -52,6 +53,10 @@ type (
 		ackLevel         int64
 		isReadFinished   bool
 	}
+)
+
+const (
+	warnPendingTasks = 1000
 )
 
 func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger bark.Logger) *queueAckMgrImpl {
@@ -176,6 +181,19 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() {
 		taskIDs = append(taskIDs, k)
 	}
 	sort.Slice(taskIDs, func(i, j int) bool { return taskIDs[i] < taskIDs[j] })
+
+	pendingTasks := len(taskIDs)
+	if pendingTasks > warnPendingTasks {
+		a.logger.Warn("Too many pendind tasks.")
+	}
+	switch a.options.MetricScope {
+	case metrics.ReplicatorQueueProcessorScope:
+		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoReplicationPendingTasksTimer, time.Duration(pendingTasks))
+	case metrics.TransferActiveQueueProcessorScope:
+		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferActivePendingTasksTimer, time.Duration(pendingTasks))
+	case metrics.TransferStandbyQueueProcessorScope:
+		a.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferStandbyPendingTasksTimer, time.Duration(pendingTasks))
+	}
 
 MoveAckLevelLoop:
 	for _, current := range taskIDs {
