@@ -67,10 +67,10 @@ type (
 )
 
 const (
-	retryErrorWaitMillis = 100
-)
+	dropSyncShardTaskTimeThreshold = 10 * time.Minute
 
-const (
+	retryErrorWaitMillis = 100
+
 	replicationTaskInitialRetryInterval = 100 * time.Millisecond
 	replicationTaskMaxRetryInterval     = 2 * time.Second
 	replicationTaskExpirationInterval   = 10 * time.Second
@@ -340,6 +340,10 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 
 	attr := task.SyncShardStatusTaskAttributes
 	logger.Debugf("Received sync shard task %v.", attr)
+
+	if time.Now().Sub(time.Unix(0, attr.GetTimestamp())) > dropSyncShardTaskTimeThreshold {
+		return nil
+	}
 
 	req := &h.SyncShardStatusRequest{
 		SourceCluster: attr.SourceCluster,
