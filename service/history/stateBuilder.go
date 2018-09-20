@@ -164,15 +164,24 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			if err := b.msBuilder.ReplicateActivityTaskCompletedEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
+			}
 
 		case shared.EventTypeActivityTaskFailed:
 			if err := b.msBuilder.ReplicateActivityTaskFailedEvent(event); err != nil {
 				return nil, nil, nil, err
 			}
+			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
+			}
 
 		case shared.EventTypeActivityTaskTimedOut:
 			if err := b.msBuilder.ReplicateActivityTaskTimedOutEvent(event); err != nil {
 				return nil, nil, nil, err
+			}
+			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
 		case shared.EventTypeActivityTaskCancelRequested:
@@ -181,6 +190,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeActivityTaskCanceled:
 			if err := b.msBuilder.ReplicateActivityTaskCanceledEvent(event); err != nil {
 				return nil, nil, nil, err
+			}
+			if timerTask := b.scheduleActivityTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
 			}
 
 		case shared.EventTypeRequestCancelActivityTaskFailed:
@@ -194,6 +206,9 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeTimerFired:
 			b.msBuilder.ReplicateTimerFiredEvent(event)
+			if timerTask := b.refreshUserTimerTask(event, b.msBuilder); timerTask != nil {
+				b.timerTasks = append(b.timerTasks, timerTask)
+			}
 
 		case shared.EventTypeTimerCanceled:
 			b.msBuilder.ReplicateTimerCanceledEvent(event)
