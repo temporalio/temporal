@@ -2274,7 +2274,7 @@ func (wh *WorkflowHandler) error(err error, scope int) error {
 
 	logging.LogUncategorizedError(wh.Service.GetLogger(), err)
 	wh.metricsClient.IncCounter(scope, metrics.CadenceFailures)
-	return &gen.InternalServiceError{Message: err.Error()}
+	return fmt.Errorf("Cadence internal uncategorized error, msg: %v", err.Error())
 }
 
 func (wh *WorkflowHandler) validateTaskListType(t *gen.TaskListType, scope int) error {

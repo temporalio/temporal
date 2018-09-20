@@ -234,6 +234,8 @@ func init() {
 			return true
 		case *shared.ServiceBusyError:
 			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -265,6 +267,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DeprecateDomain_Result.ServiceBusyError")
 			}
 			return &WorkflowService_DeprecateDomain_Result{ServiceBusyError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_DeprecateDomain_Result.DomainNotActiveError")
+			}
+			return &WorkflowService_DeprecateDomain_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -286,6 +293,10 @@ func init() {
 			err = result.ServiceBusyError
 			return
 		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
+			return
+		}
 		return
 	}
 
@@ -299,6 +310,7 @@ type WorkflowService_DeprecateDomain_Result struct {
 	InternalServiceError *shared.InternalServiceError `json:"internalServiceError,omitempty"`
 	EntityNotExistError  *shared.EntityNotExistsError `json:"entityNotExistError,omitempty"`
 	ServiceBusyError     *shared.ServiceBusyError     `json:"serviceBusyError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_DeprecateDomain_Result struct into a Thrift-level intermediate
@@ -318,7 +330,7 @@ type WorkflowService_DeprecateDomain_Result struct {
 //   }
 func (v *WorkflowService_DeprecateDomain_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -356,6 +368,14 @@ func (v *WorkflowService_DeprecateDomain_Result) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 4, Value: w}
 		i++
 	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
 
 	if i > 1 {
 		return wire.Value{}, fmt.Errorf("WorkflowService_DeprecateDomain_Result should have at most one field: got %v fields", i)
@@ -384,6 +404,12 @@ func _EntityNotExistsError_Read(w wire.Value) (*shared.EntityNotExistsError, err
 
 func _ServiceBusyError_Read(w wire.Value) (*shared.ServiceBusyError, error) {
 	var v shared.ServiceBusyError
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _DomainNotActiveError_Read(w wire.Value) (*shared.DomainNotActiveError, error) {
+	var v shared.DomainNotActiveError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -442,6 +468,14 @@ func (v *WorkflowService_DeprecateDomain_Result) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -458,6 +492,9 @@ func (v *WorkflowService_DeprecateDomain_Result) FromWire(w wire.Value) error {
 	if v.ServiceBusyError != nil {
 		count++
 	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("WorkflowService_DeprecateDomain_Result should have at most one field: got %v fields", count)
 	}
@@ -472,7 +509,7 @@ func (v *WorkflowService_DeprecateDomain_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.BadRequestError != nil {
 		fields[i] = fmt.Sprintf("BadRequestError: %v", v.BadRequestError)
@@ -488,6 +525,10 @@ func (v *WorkflowService_DeprecateDomain_Result) String() string {
 	}
 	if v.ServiceBusyError != nil {
 		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -509,6 +550,9 @@ func (v *WorkflowService_DeprecateDomain_Result) Equals(rhs *WorkflowService_Dep
 		return false
 	}
 	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 
@@ -550,6 +594,16 @@ func (v *WorkflowService_DeprecateDomain_Result) GetEntityNotExistError() (o *sh
 func (v *WorkflowService_DeprecateDomain_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
 	if v.ServiceBusyError != nil {
 		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// GetDomainNotActiveError returns the value of DomainNotActiveError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_DeprecateDomain_Result) GetDomainNotActiveError() (o *shared.DomainNotActiveError) {
+	if v.DomainNotActiveError != nil {
+		return v.DomainNotActiveError
 	}
 
 	return

@@ -76,6 +76,7 @@ service WorkflowService {
         2: shared.InternalServiceError internalServiceError,
         3: shared.EntityNotExistsError entityNotExistError,
         4: shared.ServiceBusyError serviceBusyError,
+        5: shared.DomainNotActiveError domainNotActiveError,
       )
 
   /**
@@ -89,6 +90,7 @@ service WorkflowService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.ServiceBusyError serviceBusyError,
+      5: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -105,6 +107,7 @@ service WorkflowService {
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.EntityNotExistsError entityNotExistError,
     )
 
   /**
@@ -132,6 +135,8 @@ service WorkflowService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
+      5: shared.EntityNotExistsError entityNotExistError,
+      6: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -183,6 +188,8 @@ service WorkflowService {
       2: shared.InternalServiceError internalServiceError,
       3: shared.ServiceBusyError serviceBusyError,
       4: shared.LimitExceededError limitExceededError,
+      5: shared.EntityNotExistsError entityNotExistError,
+      6: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -418,6 +425,7 @@ service WorkflowService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
+      6: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -436,6 +444,7 @@ service WorkflowService {
       3: shared.EntityNotExistsError entityNotExistError,
       4: shared.LimitExceededError limitExceededError,
       5: shared.ServiceBusyError serviceBusyError,
+      6: shared.DomainNotActiveError domainNotActiveError,
     )
 
   /**
@@ -448,7 +457,7 @@ service WorkflowService {
 	  3: shared.EntityNotExistsError entityNotExistError,
 	  4: shared.QueryFailedError queryFailedError,
 	  5: shared.LimitExceededError limitExceededError,
-    6: shared.ServiceBusyError serviceBusyError,
+      6: shared.ServiceBusyError serviceBusyError,
 	)
 
   /**

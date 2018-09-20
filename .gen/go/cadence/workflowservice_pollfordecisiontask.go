@@ -233,6 +233,10 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.EntityNotExistsError:
+			return true
+		case *shared.DomainNotActiveError:
+			return true
 		default:
 			return false
 		}
@@ -264,6 +268,16 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_PollForDecisionTask_Result.LimitExceededError")
 			}
 			return &WorkflowService_PollForDecisionTask_Result{LimitExceededError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_PollForDecisionTask_Result.EntityNotExistError")
+			}
+			return &WorkflowService_PollForDecisionTask_Result{EntityNotExistError: e}, nil
+		case *shared.DomainNotActiveError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_PollForDecisionTask_Result.DomainNotActiveError")
+			}
+			return &WorkflowService_PollForDecisionTask_Result{DomainNotActiveError: e}, nil
 		}
 
 		return nil, err
@@ -283,6 +297,14 @@ func init() {
 		}
 		if result.LimitExceededError != nil {
 			err = result.LimitExceededError
+			return
+		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
+		if result.DomainNotActiveError != nil {
+			err = result.DomainNotActiveError
 			return
 		}
 
@@ -309,6 +331,8 @@ type WorkflowService_PollForDecisionTask_Result struct {
 	InternalServiceError *shared.InternalServiceError        `json:"internalServiceError,omitempty"`
 	ServiceBusyError     *shared.ServiceBusyError            `json:"serviceBusyError,omitempty"`
 	LimitExceededError   *shared.LimitExceededError          `json:"limitExceededError,omitempty"`
+	EntityNotExistError  *shared.EntityNotExistsError        `json:"entityNotExistError,omitempty"`
+	DomainNotActiveError *shared.DomainNotActiveError        `json:"domainNotActiveError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_PollForDecisionTask_Result struct into a Thrift-level intermediate
@@ -328,7 +352,7 @@ type WorkflowService_PollForDecisionTask_Result struct {
 //   }
 func (v *WorkflowService_PollForDecisionTask_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -372,6 +396,22 @@ func (v *WorkflowService_PollForDecisionTask_Result) ToWire() (wire.Value, error
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 4, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 5, Value: w}
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		w, err = v.DomainNotActiveError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
 
@@ -450,6 +490,22 @@ func (v *WorkflowService_PollForDecisionTask_Result) FromWire(w wire.Value) erro
 				}
 
 			}
+		case 5:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 6:
+			if field.Value.Type() == wire.TStruct {
+				v.DomainNotActiveError, err = _DomainNotActiveError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -469,6 +525,12 @@ func (v *WorkflowService_PollForDecisionTask_Result) FromWire(w wire.Value) erro
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
+	if v.DomainNotActiveError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_PollForDecisionTask_Result should have exactly one field: got %v fields", count)
 	}
@@ -483,7 +545,7 @@ func (v *WorkflowService_PollForDecisionTask_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [7]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -503,6 +565,14 @@ func (v *WorkflowService_PollForDecisionTask_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
+		i++
+	}
+	if v.DomainNotActiveError != nil {
+		fields[i] = fmt.Sprintf("DomainNotActiveError: %v", v.DomainNotActiveError)
 		i++
 	}
 
@@ -527,6 +597,12 @@ func (v *WorkflowService_PollForDecisionTask_Result) Equals(rhs *WorkflowService
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
+		return false
+	}
+	if !((v.DomainNotActiveError == nil && rhs.DomainNotActiveError == nil) || (v.DomainNotActiveError != nil && rhs.DomainNotActiveError != nil && v.DomainNotActiveError.Equals(rhs.DomainNotActiveError))) {
 		return false
 	}
 
@@ -578,6 +654,26 @@ func (v *WorkflowService_PollForDecisionTask_Result) GetServiceBusyError() (o *s
 func (v *WorkflowService_PollForDecisionTask_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
 	if v.LimitExceededError != nil {
 		return v.LimitExceededError
+	}
+
+	return
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_PollForDecisionTask_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v.EntityNotExistError != nil {
+		return v.EntityNotExistError
+	}
+
+	return
+}
+
+// GetDomainNotActiveError returns the value of DomainNotActiveError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_PollForDecisionTask_Result) GetDomainNotActiveError() (o *shared.DomainNotActiveError) {
+	if v.DomainNotActiveError != nil {
+		return v.DomainNotActiveError
 	}
 
 	return

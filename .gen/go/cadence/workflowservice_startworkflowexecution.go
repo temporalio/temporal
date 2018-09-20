@@ -237,6 +237,8 @@ func init() {
 			return true
 		case *shared.LimitExceededError:
 			return true
+		case *shared.EntityNotExistsError:
+			return true
 		default:
 			return false
 		}
@@ -278,6 +280,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_StartWorkflowExecution_Result.LimitExceededError")
 			}
 			return &WorkflowService_StartWorkflowExecution_Result{LimitExceededError: e}, nil
+		case *shared.EntityNotExistsError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for WorkflowService_StartWorkflowExecution_Result.EntityNotExistError")
+			}
+			return &WorkflowService_StartWorkflowExecution_Result{EntityNotExistError: e}, nil
 		}
 
 		return nil, err
@@ -307,6 +314,10 @@ func init() {
 			err = result.LimitExceededError
 			return
 		}
+		if result.EntityNotExistError != nil {
+			err = result.EntityNotExistError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -333,6 +344,7 @@ type WorkflowService_StartWorkflowExecution_Result struct {
 	ServiceBusyError         *shared.ServiceBusyError                     `json:"serviceBusyError,omitempty"`
 	DomainNotActiveError     *shared.DomainNotActiveError                 `json:"domainNotActiveError,omitempty"`
 	LimitExceededError       *shared.LimitExceededError                   `json:"limitExceededError,omitempty"`
+	EntityNotExistError      *shared.EntityNotExistsError                 `json:"entityNotExistError,omitempty"`
 }
 
 // ToWire translates a WorkflowService_StartWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -352,7 +364,7 @@ type WorkflowService_StartWorkflowExecution_Result struct {
 //   }
 func (v *WorkflowService_StartWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -412,6 +424,14 @@ func (v *WorkflowService_StartWorkflowExecution_Result) ToWire() (wire.Value, er
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 6, Value: w}
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		w, err = v.EntityNotExistError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
 		i++
 	}
 
@@ -506,6 +526,14 @@ func (v *WorkflowService_StartWorkflowExecution_Result) FromWire(w wire.Value) e
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.EntityNotExistError, err = _EntityNotExistsError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -531,6 +559,9 @@ func (v *WorkflowService_StartWorkflowExecution_Result) FromWire(w wire.Value) e
 	if v.LimitExceededError != nil {
 		count++
 	}
+	if v.EntityNotExistError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("WorkflowService_StartWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -545,7 +576,7 @@ func (v *WorkflowService_StartWorkflowExecution_Result) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -573,6 +604,10 @@ func (v *WorkflowService_StartWorkflowExecution_Result) String() string {
 	}
 	if v.LimitExceededError != nil {
 		fields[i] = fmt.Sprintf("LimitExceededError: %v", v.LimitExceededError)
+		i++
+	}
+	if v.EntityNotExistError != nil {
+		fields[i] = fmt.Sprintf("EntityNotExistError: %v", v.EntityNotExistError)
 		i++
 	}
 
@@ -603,6 +638,9 @@ func (v *WorkflowService_StartWorkflowExecution_Result) Equals(rhs *WorkflowServ
 		return false
 	}
 	if !((v.LimitExceededError == nil && rhs.LimitExceededError == nil) || (v.LimitExceededError != nil && rhs.LimitExceededError != nil && v.LimitExceededError.Equals(rhs.LimitExceededError))) {
+		return false
+	}
+	if !((v.EntityNotExistError == nil && rhs.EntityNotExistError == nil) || (v.EntityNotExistError != nil && rhs.EntityNotExistError != nil && v.EntityNotExistError.Equals(rhs.EntityNotExistError))) {
 		return false
 	}
 
@@ -674,6 +712,16 @@ func (v *WorkflowService_StartWorkflowExecution_Result) GetDomainNotActiveError(
 func (v *WorkflowService_StartWorkflowExecution_Result) GetLimitExceededError() (o *shared.LimitExceededError) {
 	if v.LimitExceededError != nil {
 		return v.LimitExceededError
+	}
+
+	return
+}
+
+// GetEntityNotExistError returns the value of EntityNotExistError if it is set or its
+// zero value if it is unset.
+func (v *WorkflowService_StartWorkflowExecution_Result) GetEntityNotExistError() (o *shared.EntityNotExistsError) {
+	if v.EntityNotExistError != nil {
+		return v.EntityNotExistError
 	}
 
 	return
