@@ -84,6 +84,8 @@ type (
 var _ Engine = (*historyEngineImpl)(nil)
 
 var (
+	// ErrTaskDiscarded is the error indicating that the timer / transfer task is pending for too long and discarded.
+	ErrTaskDiscarded = errors.New("passive task pending for too long")
 	// ErrTaskRetry is the error indicating that the timer / transfer task should be retried.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDuplicate is exported temporarily for integration test

@@ -1631,7 +1631,7 @@ func (t *TimerTaskInfo) GetTaskType() int {
 	return t.TaskType
 }
 
-// GetVisibilityTimestamp returns the task type for transfer task
+// GetVisibilityTimestamp returns the task type for timer task
 func (t *TimerTaskInfo) GetVisibilityTimestamp() time.Time {
 	return t.VisibilityTimestamp
 }

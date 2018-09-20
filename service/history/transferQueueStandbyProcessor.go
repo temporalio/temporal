@@ -155,6 +155,11 @@ func (t *transferQueueStandbyProcessorImpl) process(qTask queueTaskInfo) error {
 			t.queueAckMgr.completeQueueTask(task.TaskID)
 			err = nil
 		}
+		if err == ErrTaskDiscarded {
+			t.queueAckMgr.completeQueueTask(task.TaskID)
+			t.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
+			err = nil
+		}
 		if err != nil {
 			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
 		}
@@ -343,6 +348,10 @@ func (t *transferQueueStandbyProcessorImpl) processCancelExecution(transferTask 
 			return nil
 		}
 
+		if t.discardTask(transferTask) {
+			return ErrTaskDiscarded
+		}
+
 		return ErrTaskRetry
 	}, postActionNoOp)
 }
@@ -364,6 +373,10 @@ func (t *transferQueueStandbyProcessorImpl) processSignalExecution(transferTask 
 			return err
 		} else if !ok {
 			return nil
+		}
+
+		if t.discardTask(transferTask) {
+			return ErrTaskDiscarded
 		}
 
 		return ErrTaskRetry
@@ -390,6 +403,11 @@ func (t *transferQueueStandbyProcessorImpl) processStartChildExecution(transferT
 		}
 
 		if childWorkflowInfo.StartedID == common.EmptyEventID {
+
+			if t.discardTask(transferTask) {
+				return ErrTaskDiscarded
+			}
+
 			return ErrTaskRetry
 		}
 		return nil
@@ -437,4 +455,22 @@ func (t *transferQueueStandbyProcessorImpl) getDomainIDAndWorkflowExecution(tran
 		WorkflowId: common.StringPtr(transferTask.WorkflowID),
 		RunId:      common.StringPtr(transferTask.RunID),
 	}
+}
+
+func (t *transferQueueStandbyProcessorImpl) discardTask(transferTask *persistence.TransferTaskInfo) bool {
+	// the current time got from shard is already delayed by t.shard.GetConfig().StandbyClusterDelay()
+	// so discard will be true if task is delayed by 2*t.shard.GetConfig().StandbyClusterDelay()
+	now := t.shard.GetCurrentTime(t.clusterName)
+	discard := now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
+	if discard {
+		t.logger.WithFields(bark.Fields{
+			logging.TagTaskID:              transferTask.GetTaskID(),
+			logging.TagTaskType:            transferTask.GetTaskType(),
+			logging.TagVersion:             transferTask.GetVersion(),
+			logging.TagDomainID:            transferTask.DomainID,
+			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
+			logging.TagWorkflowRunID:       transferTask.RunID,
+		}).Error("Discarding standby transfer task due to task being pending for too long.")
+	}
+	return discard
 }
