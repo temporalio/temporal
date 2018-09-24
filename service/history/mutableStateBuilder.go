@@ -1423,8 +1423,13 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 
 	// Flush any buffered events before creating the decision, otherwise it will result in invalid IDs for transient
 	// decision and will cause in timeout processing to not work for transient decisions
-	if err := e.FlushBufferedEvents(); err != nil {
-		return nil
+	if e.HasBufferedEvents() {
+		// if creating a decision and in the mean time events are flushed from buffered events
+		// than this decision cannot be a transient decision
+		e.executionInfo.DecisionAttempt = 0
+		if err := e.FlushBufferedEvents(); err != nil {
+			return nil
+		}
 	}
 
 	var newDecisionEvent *workflow.HistoryEvent

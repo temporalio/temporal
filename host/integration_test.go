@@ -4496,14 +4496,14 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 
 	// fail decision 1 more times
 	for i := 0; i < 2; i++ {
-		_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, 3+int64(i))
+		_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, false, int64(i))
 		s.Nil(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow decision
-	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(5))
-	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, int64(2))
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
@@ -6032,6 +6032,100 @@ func (s *integrationSuite) TestTransientDecisionTimeout() {
 	s.True(workflowComplete)
 }
 
+func (s *integrationSuite) TestNoTransientDecisionAfterFlushBufferedEvents() {
+	id := "interation-no-transient-decision-after-flush-buffered-events-test"
+	wt := "interation-no-transient-decision-after-flush-buffered-events-test-type"
+	tl := "interation-no-transient-decision-after-flush-buffered-events-test-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{Name: &wt}
+	taskList := &workflow.TaskList{Name: &tl}
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(20),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	// decider logic
+	workflowComplete := false
+	continueAsNewAndSignal := false
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !continueAsNewAndSignal {
+			continueAsNewAndSignal = true
+			// this will create new event when there is in-flight decision task, and the new event will be buffered
+			err := s.engine.SignalWorkflowExecution(createContext(),
+				&workflow.SignalWorkflowExecutionRequest{
+					Domain: common.StringPtr(s.domainName),
+					WorkflowExecution: &workflow.WorkflowExecution{
+						WorkflowId: common.StringPtr(id),
+					},
+					SignalName: common.StringPtr("buffered-signal-1"),
+					Input:      []byte("buffered-signal-input"),
+					Identity:   common.StringPtr(identity),
+				})
+			s.NoError(err)
+
+			return nil, []*workflow.Decision{{
+				DecisionType: workflow.DecisionTypeContinueAsNewWorkflowExecution.Ptr(),
+				ContinueAsNewWorkflowExecutionDecisionAttributes: &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+					WorkflowType:                        workflowType,
+					TaskList:                            taskList,
+					Input:                               nil,
+					ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1000),
+					TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(100),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// fist decision, this try to do a continue as new but there is a buffered event,
+	// so it will fail and create a new decision
+	_, err := poller.PollAndProcessDecisionTask(true, false)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	// second decision, which will complete the workflow
+	// this expect the decision to have attempt == 0
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 0)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	s.True(workflowComplete)
+}
+
 func (s *integrationSuite) TestRelayDecisionTimeout() {
 	id := "integration-relay-decision-timeout-test"
 	wt := "integration-relay-decision-timeout-test-type"
@@ -6241,8 +6335,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	}
 
 	// Process signal in decider
-	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 1)
-	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 0)
+	s.logger.Infof("pollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
 	s.printWorkflowHistory(s.domainName, workflowExecution)

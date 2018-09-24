@@ -907,15 +907,15 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedCompleteWorkflowFailed() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(14), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(*decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecisionTask())
-	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID)
+	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
-	s.Equal(int64(1), di3.Attempt)
+	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
+	s.Equal(int64(0), di3.Attempt)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
@@ -1005,15 +1005,15 @@ func (s *engineSuite) TestRespondDecisionTaskCompletedFailWorkflowFailed() {
 	})
 	s.Nil(err, s.printHistory(msBuilder))
 	executionBuilder := s.getBuilder(domainID, we)
-	s.Equal(int64(14), executionBuilder.GetExecutionInfo().NextEventID)
+	s.Equal(int64(15), executionBuilder.GetExecutionInfo().NextEventID)
 	s.Equal(*decisionStartedEvent1.EventId, executionBuilder.GetExecutionInfo().LastProcessedEvent)
 	s.Equal(executionContext, executionBuilder.GetExecutionInfo().ExecutionContext)
 	s.Equal(persistence.WorkflowStateRunning, executionBuilder.GetExecutionInfo().State)
 	s.True(executionBuilder.HasPendingDecisionTask())
-	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID)
+	di3, ok := executionBuilder.GetPendingDecision(executionBuilder.GetExecutionInfo().NextEventID - 1)
 	s.True(ok)
-	s.Equal(executionBuilder.GetExecutionInfo().NextEventID, di3.ScheduleID)
-	s.Equal(int64(1), di3.Attempt)
+	s.Equal(executionBuilder.GetExecutionInfo().NextEventID-1, di3.ScheduleID)
+	s.Equal(int64(0), di3.Attempt)
 }
 
 func (s *engineSuite) TestRespondDecisionTaskCompletedBadDecisionAttributes() {
