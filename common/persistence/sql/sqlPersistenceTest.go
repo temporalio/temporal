@@ -116,22 +116,13 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.MetadataManager, err = NewMetadataPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, databaseName, log)
+	tb.MetadataManager, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
+		options.DBPassword, databaseName, currentClusterName, log)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// TODO: V2 for sql
-	//tb.MetadataManagerV2, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
-	//	options.DBPassword, databaseName, log)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//tb.MetadataProxy, err = NewMetadataManagerProxy(options.DBHost, options.DBPort, options.DBUser,
-	//	options.DBPassword, options.Datacenter, databaseName, currentClusterName, log)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
+	tb.MetadataProxy = tb.MetadataManager
+	tb.MetadataManagerV2 = tb.MetadataManager
 	//tb.VisibilityMgr, err = NewVisibilityPersistence(options.DBHost, options.DBPort,
 	//	options.DBUser, options.DBPassword, options.Datacenter, databaseName, log)
 	//if err != nil {

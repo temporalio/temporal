@@ -68,7 +68,7 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 ListLoop:
 	for {
 		resp, err := m.ListDomains(pageSize, token)
-		m.Nil(err)
+		m.NoError(err)
 		token = resp.NextPageToken
 		for _, domain := range resp.Domains {
 			m.DeleteDomain(domain.Info.ID, "")
@@ -120,14 +120,14 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err0)
+	m.NoError(err0)
 	m.NotNil(resp0)
 	m.Equal(id, resp0.ID)
 
 	// for domain which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetDomain(id, "")
-	m.Nil(err1)
+	m.NoError(err1)
 	m.NotNil(resp1)
 	m.Equal(id, resp1.Info.ID)
 	m.Equal(name, resp1.Info.Name)
@@ -163,7 +163,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NotNil(err2)
+	m.Error(err2)
 	m.IsType(&gen.DomainAlreadyExistsError{}, err2)
 	m.Nil(resp2)
 }
@@ -195,7 +195,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 
 	resp0, err0 := m.GetDomain("", "does-not-exist")
 	m.Nil(resp0)
-	m.NotNil(err0)
+	m.Error(err0)
 	m.IsType(&gen.EntityNotExistsError{}, err0)
 
 	resp1, err1 := m.CreateDomain(
@@ -219,12 +219,12 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err1)
+	m.NoError(err1)
 	m.NotNil(resp1)
 	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetDomain(id, "")
-	m.Nil(err2)
+	m.NoError(err2)
 	m.NotNil(resp2)
 	m.Equal(id, resp2.Info.ID)
 	m.Equal(name, resp2.Info.Name)
@@ -245,7 +245,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(p.InitialFailoverNotificationVersion, resp2.FailoverNotificationVersion)
 
 	resp3, err3 := m.GetDomain("", name)
-	m.Nil(err3)
+	m.NoError(err3)
 	m.NotNil(resp3)
 	m.Equal(id, resp3.Info.ID)
 	m.Equal(name, resp3.Info.Name)
@@ -266,7 +266,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetDomain() {
 	m.Equal(p.InitialFailoverNotificationVersion, resp3.FailoverNotificationVersion)
 
 	resp4, err4 := m.GetDomain(id, name)
-	m.NotNil(err4)
+	m.Error(err4)
 	m.IsType(&gen.BadRequestError{}, err4)
 	m.Nil(resp4)
 
@@ -338,7 +338,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	m.Equal(int32(1), successCount)
 
 	resp, err3 := m.GetDomain("", name)
-	m.Nil(err3)
+	m.NoError(err3)
 	m.NotNil(resp)
 	m.Equal(name, resp.Info.Name)
 	m.Equal(status, resp.Info.Status)
@@ -359,7 +359,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateDomain() {
 	ss := strings.Split(resp.Info.Data["k0"], "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
-	m.Nil(err)
+	m.NoError(err)
 	m.Equal(true, vi > 0 && vi <= concurrency)
 }
 
@@ -409,13 +409,13 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err1)
+	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetDomain(id, "")
-	m.Nil(err2)
+	m.NoError(err2)
 	metadata, err := m.MetadataManagerV2.GetMetadata()
-	m.Nil(err)
+	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
 	concurrency := 16
@@ -457,7 +457,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	m.Equal(int32(1), successCount)
 
 	resp3, err3 := m.GetDomain("", name)
-	m.Nil(err3)
+	m.NoError(err3)
 	m.NotNil(resp3)
 	m.Equal(id, resp3.Info.ID)
 	m.Equal(name, resp3.Info.Name)
@@ -480,7 +480,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateDomain() {
 	ss := strings.Split(resp3.Info.Data["k0"], "-")
 	m.Equal(2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
-	m.Nil(err)
+	m.NoError(err)
 	m.Equal(true, vi > 0 && vi <= concurrency)
 }
 
@@ -530,13 +530,13 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err1)
+	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetDomain(id, "")
-	m.Nil(err2)
+	m.NoError(err2)
 	metadata, err := m.MetadataManagerV2.GetMetadata()
-	m.Nil(err)
+	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
 	updatedStatus := p.DomainStatusDeprecated
@@ -583,10 +583,10 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 		updateFailoverNotificationVersion,
 		notificationVersion,
 	)
-	m.Nil(err3)
+	m.NoError(err3)
 
 	resp4, err4 := m.GetDomain("", name)
-	m.Nil(err4)
+	m.NoError(err4)
 	m.NotNil(resp4)
 	m.Equal(id, resp4.Info.ID)
 	m.Equal(name, resp4.Info.Name)
@@ -607,7 +607,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateDomain() {
 	m.Equal(notificationVersion, resp4.NotificationVersion)
 
 	resp5, err5 := m.GetDomain("", name)
-	m.Nil(err5)
+	m.NoError(err5)
 	m.NotNil(resp5)
 	m.Equal(id, resp5.Info.ID)
 	m.Equal(name, resp5.Info.Name)
@@ -674,23 +674,23 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err1)
+	m.NoError(err1)
 	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetDomain("", name)
-	m.Nil(err2)
+	m.NoError(err2)
 	m.NotNil(resp2)
 
 	err3 := m.DeleteDomain("", name)
-	m.Nil(err3)
+	m.NoError(err3)
 
 	resp4, err4 := m.GetDomain("", name)
-	m.NotNil(err4)
+	m.Error(err4)
 	m.IsType(&gen.EntityNotExistsError{}, err4)
 	m.Nil(resp4)
 
 	resp5, err5 := m.GetDomain(id, "")
-	m.NotNil(err5)
+	m.Error(err5)
 	m.IsType(&gen.EntityNotExistsError{}, err5)
 	m.Nil(resp5)
 
@@ -716,19 +716,19 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteDomain() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Nil(err6)
+	m.NoError(err6)
 	m.Equal(id, resp6.ID)
 
 	err7 := m.DeleteDomain(id, "")
-	m.Nil(err7)
+	m.NoError(err7)
 
 	resp8, err8 := m.GetDomain("", name)
-	m.NotNil(err8)
+	m.Error(err8)
 	m.IsType(&gen.EntityNotExistsError{}, err8)
 	m.Nil(resp8)
 
 	resp9, err9 := m.GetDomain(id, "")
-	m.NotNil(err9)
+	m.Error(err9)
 	m.IsType(&gen.EntityNotExistsError{}, err9)
 	m.Nil(resp9)
 }
@@ -810,7 +810,7 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 			domain.ConfigVersion,
 			domain.FailoverVersion,
 		)
-		m.Nil(err)
+		m.NoError(err)
 	}
 
 	var token []byte
@@ -819,7 +819,7 @@ func (m *MetadataPersistenceSuiteV2) TestListDomains() {
 ListLoop:
 	for {
 		resp, err := m.ListDomains(pageSize, token)
-		m.Nil(err)
+		m.NoError(err)
 		token = resp.NextPageToken
 		for _, domain := range resp.Domains {
 			outputDomains[domain.Info.ID] = domain
