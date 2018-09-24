@@ -834,6 +834,7 @@ var (
 )
 
 type (
+	// Implements ExecutionManager, ShardManager and TaskManager
 	cassandraPersistence struct {
 		session            *gocql.Session
 		shardID            int

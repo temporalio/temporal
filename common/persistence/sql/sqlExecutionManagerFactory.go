@@ -27,7 +27,7 @@ import (
 )
 
 type (
-	persistenceClientFactory struct {
+	sqlExecutionManagerFactory struct {
 		host               string
 		port               int
 		username           string
@@ -38,9 +38,9 @@ type (
 	}
 )
 
-// NewPersistenceClientFactory creates ExecutionManagerFactory for SQL persistence.
-func NewPersistenceClientFactory(host string, port int, username, password, dbName string, currentClusterName string, logger bark.Logger) (persistence.ExecutionManagerFactory, error) {
-	return &persistenceClientFactory{
+// NewExecutionManagerFactory creates ExecutionManagerFactory for SQL persistence.
+func NewExecutionManagerFactory(host string, port int, username, password, dbName string, currentClusterName string, logger bark.Logger) (persistence.ExecutionManagerFactory, error) {
+	return &sqlExecutionManagerFactory{
 		host:               host,
 		port:               port,
 		username:           username,
@@ -51,9 +51,9 @@ func NewPersistenceClientFactory(host string, port int, username, password, dbNa
 	}, nil
 }
 
-func (f *persistenceClientFactory) CreateExecutionManager(shardID int) (persistence.ExecutionManager, error) {
+func (f *sqlExecutionManagerFactory) CreateExecutionManager(shardID int) (persistence.ExecutionManager, error) {
 	return NewSQLMatchingPersistence(f.host, f.port, f.username, f.password, f.dbName, f.logger)
 }
 
-func (f *persistenceClientFactory) Close() {
+func (f *sqlExecutionManagerFactory) Close() {
 }

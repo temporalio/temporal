@@ -96,7 +96,7 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.ExecutionMgrFactory, err = NewPersistenceClientFactory(options.DBHost, options.DBPort,
+	tb.ExecutionMgrFactory, err = NewExecutionManagerFactory(options.DBHost, options.DBPort,
 		options.DBUser, options.DBPassword, databaseName, options.Datacenter, log)
 	if err != nil {
 		log.Fatal(err)

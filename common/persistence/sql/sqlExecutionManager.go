@@ -34,7 +34,8 @@ import (
 )
 
 type (
-	sqlMatchingManager struct {
+	// Implements ExecutionManager
+	sqlExecutionManager struct {
 		db      *sqlx.DB
 		shardID int
 		logger  bark.Logger
@@ -450,13 +451,13 @@ run_id = ?
 FOR UPDATE`
 )
 
-func (m *sqlMatchingManager) Close() {
+func (m *sqlExecutionManager) Close() {
 	if m.db != nil {
 		m.db.Close()
 	}
 }
 
-func (m *sqlMatchingManager) CreateWorkflowExecution(request *p.CreateWorkflowExecutionRequest) (*p.CreateWorkflowExecutionResponse, error) {
+func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.CreateWorkflowExecutionRequest) (*p.CreateWorkflowExecutionResponse, error) {
 	/*
 		(x) make a transaction
 		( ) check for a parent
@@ -546,7 +547,7 @@ func (m *sqlMatchingManager) CreateWorkflowExecution(request *p.CreateWorkflowEx
 	return &p.CreateWorkflowExecutionResponse{}, nil
 }
 
-func (m *sqlMatchingManager) GetWorkflowExecution(request *p.GetWorkflowExecutionRequest) (*p.GetWorkflowExecutionResponse, error) {
+func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecutionRequest) (*p.GetWorkflowExecutionResponse, error) {
 	tx, err := m.db.Beginx()
 	if err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -763,7 +764,7 @@ func (m *sqlMatchingManager) GetWorkflowExecution(request *p.GetWorkflowExecutio
 	return &p.GetWorkflowExecutionResponse{State: &state}, nil
 }
 
-func (m *sqlMatchingManager) UpdateWorkflowExecution(request *p.UpdateWorkflowExecutionRequest) error {
+func (m *sqlExecutionManager) UpdateWorkflowExecution(request *p.UpdateWorkflowExecutionRequest) error {
 	tx, err := m.db.Beginx()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -965,7 +966,7 @@ func (m *sqlMatchingManager) UpdateWorkflowExecution(request *p.UpdateWorkflowEx
 	return nil
 }
 
-func (m *sqlMatchingManager) ResetMutableState(request *p.ResetMutableStateRequest) error {
+func (m *sqlExecutionManager) ResetMutableState(request *p.ResetMutableStateRequest) error {
 	tx, err := m.db.Beginx()
 	if err != nil {
 		return &workflow.InternalServiceError{
@@ -1149,7 +1150,7 @@ func (m *sqlMatchingManager) ResetMutableState(request *p.ResetMutableStateReque
 	return nil
 }
 
-func (m *sqlMatchingManager) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
+func (m *sqlExecutionManager) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
 	if _, err := m.db.Exec(deleteExecutionSQLQuery, m.shardID, request.DomainID, request.WorkflowID, request.RunID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err),
@@ -1158,7 +1159,7 @@ func (m *sqlMatchingManager) DeleteWorkflowExecution(request *p.DeleteWorkflowEx
 	return nil
 }
 
-func (m *sqlMatchingManager) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.GetCurrentExecutionResponse, error) {
+func (m *sqlExecutionManager) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.GetCurrentExecutionResponse, error) {
 	var row currentExecutionRow
 	if err := m.db.Get(&row, getCurrentExecutionSQLQuery, m.shardID, request.DomainID, request.WorkflowID); err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -1173,7 +1174,7 @@ func (m *sqlMatchingManager) GetCurrentExecution(request *p.GetCurrentExecutionR
 	}, nil
 }
 
-func (m *sqlMatchingManager) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
+func (m *sqlExecutionManager) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
 	var resp p.GetTransferTasksResponse
 	if err := m.db.Select(&resp.Tasks,
 		getTransferTasksSQLQuery,
@@ -1188,7 +1189,7 @@ func (m *sqlMatchingManager) GetTransferTasks(request *p.GetTransferTasksRequest
 	return &resp, nil
 }
 
-func (m *sqlMatchingManager) CompleteTransferTask(request *p.CompleteTransferTaskRequest) error {
+func (m *sqlExecutionManager) CompleteTransferTask(request *p.CompleteTransferTaskRequest) error {
 	if _, err := m.db.NamedExec(completeTransferTaskSQLQuery, &struct {
 		ShardID int64
 		TaskID  int64
@@ -1200,7 +1201,7 @@ func (m *sqlMatchingManager) CompleteTransferTask(request *p.CompleteTransferTas
 	return nil
 }
 
-func (m *sqlMatchingManager) RangeCompleteTransferTask(request *p.RangeCompleteTransferTaskRequest) error {
+func (m *sqlExecutionManager) RangeCompleteTransferTask(request *p.RangeCompleteTransferTaskRequest) error {
 	if _, err := m.db.Exec(rangeCompleteTransferTaskSQLQuery, m.shardID, request.ExclusiveBeginTaskID, request.InclusiveEndTaskID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err),
@@ -1209,7 +1210,7 @@ func (m *sqlMatchingManager) RangeCompleteTransferTask(request *p.RangeCompleteT
 	return nil
 }
 
-func (m *sqlMatchingManager) GetReplicationTasks(request *p.GetReplicationTasksRequest) (*p.GetReplicationTasksResponse, error) {
+func (m *sqlExecutionManager) GetReplicationTasks(request *p.GetReplicationTasksRequest) (*p.GetReplicationTasksResponse, error) {
 	var rows []replicationTasksRow
 
 	if err := m.db.Select(&rows,
@@ -1251,11 +1252,11 @@ func (m *sqlMatchingManager) GetReplicationTasks(request *p.GetReplicationTasksR
 	}, nil
 }
 
-func (m *sqlMatchingManager) CompleteReplicationTask(request *p.CompleteReplicationTaskRequest) error {
+func (m *sqlExecutionManager) CompleteReplicationTask(request *p.CompleteReplicationTaskRequest) error {
 	return nil
 }
 
-func (m *sqlMatchingManager) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse, error) {
+func (m *sqlExecutionManager) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse, error) {
 	var resp p.GetTimerIndexTasksResponse
 
 	if err := m.db.Select(&resp.Timers, getTimerTasksSQLQuery,
@@ -1270,7 +1271,7 @@ func (m *sqlMatchingManager) GetTimerIndexTasks(request *p.GetTimerIndexTasksReq
 	return &resp, nil
 }
 
-func (m *sqlMatchingManager) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
+func (m *sqlExecutionManager) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
 	if _, err := m.db.Exec(completeTimerTaskSQLQuery, m.shardID, request.VisibilityTimestamp, request.TaskID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err),
@@ -1279,7 +1280,7 @@ func (m *sqlMatchingManager) CompleteTimerTask(request *p.CompleteTimerTaskReque
 	return nil
 }
 
-func (m *sqlMatchingManager) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
+func (m *sqlExecutionManager) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
 	start := p.UnixNanoToDBTimestamp(request.InclusiveBeginTimestamp.UnixNano())
 	end := p.UnixNanoToDBTimestamp(request.ExclusiveEndTimestamp.UnixNano())
 	if _, err := m.db.Exec(rangeCompleteTimerTaskSQLQuery, m.shardID, start, end); err != nil {
@@ -1296,7 +1297,7 @@ func NewSQLMatchingPersistence(host string, port int, username, password, dbName
 	if err != nil {
 		return nil, err
 	}
-	return &sqlMatchingManager{
+	return &sqlExecutionManager{
 		db:     db,
 		logger: logger,
 	}, nil
