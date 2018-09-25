@@ -760,7 +760,7 @@ Update_History_Loop:
 
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
 		var transferTasks, timerTasks []persistence.Task
-		tranT, timerT, err := getDeleteWorkflowTasksFromShard(t.shard, domainID, tBuilder)
+		tranT, timerT, err := getDeleteWorkflowTasksFromShard(t.shard, domainID, workflowExecution.GetWorkflowId(), tBuilder)
 		if err != nil {
 			return err
 		}
@@ -808,7 +808,7 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 
 	if createDeletionTask {
 		tBuilder := t.historyService.getTimerBuilder(&context.workflowExecution)
-		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(executionInfo.DomainID, tBuilder)
+		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(executionInfo.DomainID, executionInfo.WorkflowID, tBuilder)
 		if err != nil {
 			return nil
 		}

@@ -1450,7 +1450,7 @@ Update_History_Loop:
 		}
 
 		if isComplete {
-			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, tBuilder)
+			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, workflowExecution.GetWorkflowId(), tBuilder)
 			if err != nil {
 				return nil, err
 			}
@@ -2352,7 +2352,7 @@ Update_History_Loop:
 
 		transferTasks, timerTasks := postActions.transferTasks, postActions.timerTasks
 		if postActions.deleteWorkflow {
-			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, tBuilder)
+			tranT, timerT, err := e.getDeleteWorkflowTasks(domainID, execution.GetWorkflowId(), tBuilder)
 			if err != nil {
 				return err
 			}
@@ -2417,14 +2417,14 @@ func (e *historyEngineImpl) updateWorkflowExecution(ctx context.Context, domainI
 }
 
 func (e *historyEngineImpl) getDeleteWorkflowTasks(
-	domainID string,
+	domainID, workflowID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
-	return getDeleteWorkflowTasksFromShard(e.shard, domainID, tBuilder)
+	return getDeleteWorkflowTasksFromShard(e.shard, domainID, workflowID, tBuilder)
 }
 
 func getDeleteWorkflowTasksFromShard(shard ShardContext,
-	domainID string,
+	domainID, workflowID string,
 	tBuilder *timerBuilder,
 ) (persistence.Task, persistence.Task, error) {
 	// Create a transfer task to close workflow execution
@@ -2438,7 +2438,7 @@ func getDeleteWorkflowTasksFromShard(shard ShardContext,
 			return nil, nil, err
 		}
 	} else {
-		retentionInDays = domainEntry.GetConfig().Retention
+		retentionInDays = domainEntry.GetRetentionDays(workflowID)
 	}
 	cleanupTask := tBuilder.createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24)
 

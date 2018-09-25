@@ -21,7 +21,9 @@
 package cache
 
 import (
+	"hash/fnv"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -605,4 +607,39 @@ func (t DomainCacheEntries) Less(i, j int) bool {
 // CreateDomainCacheEntry create a cache entry with domainName
 func CreateDomainCacheEntry(domainName string) *DomainCacheEntry {
 	return &DomainCacheEntry{info: &persistence.DomainInfo{Name: domainName}}
+}
+
+// SampleRetentionKey is key to specify sample retention
+var SampleRetentionKey = "sample_retention_days"
+
+// SampleRateKey is key to specify sample rate
+var SampleRateKey = "sample_retention_rate"
+
+// GetRetentionDays returns retention in days for given workflow
+func (entry *DomainCacheEntry) GetRetentionDays(workflowID string) int32 {
+	if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
+		sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
+		if err != nil || sampledRetentionDays < int(entry.config.Retention) {
+			return entry.config.Retention
+		}
+
+		if sampledRateValue, ok := entry.info.Data[SampleRateKey]; ok {
+			sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
+			if err != nil {
+				return entry.config.Retention
+			}
+
+			h := fnv.New32a()
+			h.Write([]byte(workflowID))
+			hash := h.Sum32()
+
+			r := float64(hash%1000) / float64(1000) // use 1000 so we support one decimal rate like 1.5%.
+			if r < sampledRate {
+				// sampled
+				return int32(sampledRetentionDays)
+			}
+		}
+	}
+
+	return entry.config.Retention
 }

@@ -315,7 +315,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeWorkflowExecutionCompleted:
 			b.msBuilder.ReplicateWorkflowExecutionCompletedEvent(event)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -324,7 +324,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeWorkflowExecutionFailed:
 			b.msBuilder.ReplicateWorkflowExecutionFailedEvent(event)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -333,7 +333,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeWorkflowExecutionTimedOut:
 			b.msBuilder.ReplicateWorkflowExecutionTimedoutEvent(event)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -342,7 +342,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeWorkflowExecutionCanceled:
 			b.msBuilder.ReplicateWorkflowExecutionCanceledEvent(event)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -351,7 +351,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 		case shared.EventTypeWorkflowExecutionTerminated:
 			b.msBuilder.ReplicateWorkflowExecutionTerminatedEvent(event)
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -423,7 +423,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			// BTW, the newRunTransferTasks and newRunTimerTasks are not used
 
 			b.transferTasks = append(b.transferTasks, b.scheduleDeleteHistoryTransferTask())
-			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID)
+			timerTask, err := b.scheduleDeleteHistoryTimerTask(event, domainID, execution.GetWorkflowId())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -517,7 +517,7 @@ func (b *stateBuilderImpl) scheduleWorkflowTimerTask(event *shared.HistoryEvent,
 	return &persistence.WorkflowTimeoutTask{VisibilityTimestamp: timeout}
 }
 
-func (b *stateBuilderImpl) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID string) (persistence.Task, error) {
+func (b *stateBuilderImpl) scheduleDeleteHistoryTimerTask(event *shared.HistoryEvent, domainID, workflowID string) (persistence.Task, error) {
 	var retentionInDays int32
 	domainEntry, err := b.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
@@ -525,7 +525,7 @@ func (b *stateBuilderImpl) scheduleDeleteHistoryTimerTask(event *shared.HistoryE
 			return nil, err
 		}
 	} else {
-		retentionInDays = domainEntry.GetConfig().Retention
+		retentionInDays = domainEntry.GetRetentionDays(workflowID)
 	}
 	return b.getTimerBuilder(event).createDeleteHistoryEventTimerTask(time.Duration(retentionInDays) * time.Hour * 24), nil
 }

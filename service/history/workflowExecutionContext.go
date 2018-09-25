@@ -325,7 +325,7 @@ func (c *workflowExecutionContext) updateHelper(transferTasks []persistence.Task
 			return err
 		}
 		// NOTE: domain retention is in days, so we need to do a conversion
-		finishExecutionTTL = domainEntry.GetConfig().Retention * secondsInDay
+		finishExecutionTTL = domainEntry.GetRetentionDays(executionInfo.WorkflowID) * secondsInDay
 	}
 
 	var replicationTasks []persistence.Task

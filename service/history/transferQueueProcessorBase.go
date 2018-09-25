@@ -177,7 +177,7 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		// it is possible that the domain got deleted. Use default retention.
 	} else {
 		// retention in domain config is in days, convert to seconds
-		retentionSeconds = int64(domainEntry.GetConfig().Retention) * 24 * 60 * 60
+		retentionSeconds = int64(domainEntry.GetRetentionDays(execution.GetWorkflowId())) * 24 * 60 * 60
 		domain = domainEntry.GetInfo().Name
 	}
 

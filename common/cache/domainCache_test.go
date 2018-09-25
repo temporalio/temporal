@@ -29,6 +29,7 @@ import (
 	"github.com/uber-go/tally"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/cluster"
@@ -570,4 +571,34 @@ func (s *domainCacheSuite) buildEntryFromRecord(record *persistence.GetDomainRes
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
 	newEntry.notificationVersion = record.NotificationVersion
 	return newEntry
+}
+
+func Test_GetRetentionDays(t *testing.T) {
+	d := &DomainCacheEntry{
+		info: &persistence.DomainInfo{
+			Data: make(map[string]string),
+		},
+		config: &persistence.DomainConfig{
+			Retention: 7,
+		},
+	}
+	d.info.Data[SampleRetentionKey] = "30"
+	d.info.Data[SampleRateKey] = "0"
+
+	wid := uuid.New()
+	rd := d.GetRetentionDays(wid)
+	require.Equal(t, int32(7), rd)
+
+	d.info.Data[SampleRateKey] = "1"
+	rd = d.GetRetentionDays(wid)
+	require.Equal(t, int32(30), rd)
+
+	d.info.Data[SampleRetentionKey] = "invalid-value"
+	rd = d.GetRetentionDays(wid)
+	require.Equal(t, int32(7), rd) // fallback to normal retention
+
+	d.info.Data[SampleRetentionKey] = "30"
+	d.info.Data[SampleRateKey] = "invalid-value"
+	rd = d.GetRetentionDays(wid)
+	require.Equal(t, int32(7), rd) // fallback to normal retention
 }
