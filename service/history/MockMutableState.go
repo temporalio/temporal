@@ -1597,6 +1597,20 @@ func (_m *mockMutableState) GetSignalInfo(_a0 int64) (*persistence.SignalInfo, b
 	return r0, r1
 }
 
+// GetStats provides a mock function with given fields:
+func (_m *mockMutableState) GetStats() *mutableStateStats {
+	ret := _m.Called()
+
+	var r0 *mutableStateStats
+	if rf, ok := ret.Get(0).(func() *mutableStateStats); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(*mutableStateStats)
+	}
+
+	return r0
+}
+
 // GetStartVersion provides a mock function with given fields:
 func (_m *mockMutableState) GetStartVersion() int64 {
 	ret := _m.Called()
@@ -1718,6 +1732,11 @@ func (_m *mockMutableState) HasPendingDecisionTask() bool {
 	}
 
 	return r0
+}
+
+// IncrementHistorySize provides a mock function with given fields: appendSize
+func (_m *mockMutableState) IncrementHistorySize(appendSize int) {
+	_m.Called(appendSize)
 }
 
 // IsCancelRequested provides a mock function with given fields:
@@ -2114,6 +2133,11 @@ func (_m *mockMutableState) ResetSnapshot(_a0 string) *persistence.ResetMutableS
 // SetHistoryBuilder provides a mock function with given fields: hBuilder
 func (_m *mockMutableState) SetHistoryBuilder(hBuilder *historyBuilder) {
 	_m.Called(hBuilder)
+}
+
+// SetNewRunSize provides a mock function with given fields: size
+func (_m *mockMutableState) SetNewRunSize(size int) {
+	_m.Called(size)
 }
 
 // UpdateActivity provides a mock function with given fields: _a0

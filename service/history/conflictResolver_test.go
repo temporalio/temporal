@@ -156,7 +156,8 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		NextPageToken:    pageToken,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
-	history, token, firstEventID, err := s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, nil)
+	response, err := s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, nil)
+	history, token, firstEventID := response.History, response.NextPageToken, response.LastFirstEventID
 	s.Nil(err)
 	s.Equal(history.Events, []*shared.HistoryEvent{event1, event2})
 	s.Equal(pageToken, token)
@@ -174,7 +175,8 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		NextPageToken:    nil,
 		LastFirstEventID: event4.GetEventId(),
 	}, nil)
-	history, token, firstEventID, err = s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, token)
+	response, err = s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, token)
+	history, token, firstEventID = response.History, response.NextPageToken, response.LastFirstEventID
 	s.Nil(err)
 	s.Equal(history.Events, []*shared.HistoryEvent{event3, event4, event5})
 	s.Empty(token)

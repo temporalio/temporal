@@ -383,8 +383,12 @@ func (s *TestShardContext) ResetMutableState(request *persistence.ResetMutableSt
 }
 
 // AppendHistoryEvents test implementation
-func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) error {
-	return s.historyMgr.AppendHistoryEvents(request)
+func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
+	size := 0
+	if request.Events != nil {
+		size = len(request.Events.Data)
+	}
+	return size, s.historyMgr.AppendHistoryEvents(request)
 }
 
 // NotifyNewHistoryEvent test implementation

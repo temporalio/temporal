@@ -259,6 +259,7 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	s.Empty(info0.ClientLibraryVersion)
 	s.Empty(info0.ClientFeatureVersion)
 	s.Empty(info0.ClientImpl)
+	s.Equal(int64(0), info0.HistorySize)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -274,6 +275,7 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	updatedInfo.ClientLibraryVersion = "random client library version"
 	updatedInfo.ClientFeatureVersion = "random client feature version"
 	updatedInfo.ClientImpl = "random client impl"
+	updatedInfo.HistorySize = int64(109)
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
@@ -305,6 +307,7 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
 	s.Equal(updatedInfo.ClientFeatureVersion, info1.ClientFeatureVersion)
 	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
+	s.Equal(int64(109), info1.HistorySize)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
@@ -335,6 +338,7 @@ func (s *MatchingPersistenceSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info2.DecisionTimeout)
 	s.Equal(int64(123), info2.DecisionAttempt)
 	s.Equal(int64(321), info2.DecisionTimestamp)
+	s.Equal(int64(109), info2.HistorySize)
 
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
@@ -2718,6 +2722,7 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 		DecisionTimeoutValue: 14,
 		State:                p.WorkflowStateRunning,
 		NextEventID:          123,
+		HistorySize:          int64(1024),
 		CreateRequestID:      uuid.New(),
 		DecisionVersion:      common.EmptyVersion,
 		DecisionScheduleID:   111,
@@ -2750,6 +2755,7 @@ func (s *MatchingPersistenceSuite) TestResetMutableStateCurrentIsNotSelf() {
 	continueAsNewInfo.State = p.WorkflowStateCompleted
 	continueAsNewInfo.NextEventID += 3
 	continueAsNewInfo.LastProcessedEvent += 2
+	s.Equal(int64(1024), info.HistorySize)
 
 	workflowExecutionCurrent2 := gen.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),

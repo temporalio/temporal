@@ -64,20 +64,20 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 	execution := r.context.workflowExecution
 	replayNextEventID := replayEventID + 1
 	var nextPageToken []byte
-	var history *shared.History
-	var err error
 	var resetMutableStateBuilder *mutableStateBuilder
 	var sBuilder stateBuilder
-	var lastFirstEventID int64
 	var lastEvent *shared.HistoryEvent
 	eventsToApply := replayNextEventID - common.FirstEventID
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
-		history, nextPageToken, lastFirstEventID, err = r.getHistory(domainID, execution, common.FirstEventID,
-			replayNextEventID, nextPageToken)
+		response, err := r.getHistory(domainID, execution, common.FirstEventID, replayNextEventID, nextPageToken)
 		if err != nil {
 			r.logError("Conflict resolution err getting history.", err)
 			return nil, err
 		}
+
+		history := response.History
+		lastFirstEventID := response.LastFirstEventID
+		nextPageToken = response.NextPageToken
 
 		batchSize := int64(len(history.Events))
 		// NextEventID could be in the middle of the batch.  Trim the history events to not have more events then what
@@ -111,6 +111,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 			return nil, err
 		}
 		resetMutableStateBuilder.executionInfo.LastFirstEventID = lastFirstEventID
+		resetMutableStateBuilder.IncrementHistorySize(response.Size)
 	}
 
 	// Applying events to mutableState does not move the nextEventID.  Explicitly set nextEventID to new value
@@ -131,7 +132,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 }
 
 func (r *conflictResolverImpl) getHistory(domainID string, execution shared.WorkflowExecution, firstEventID,
-	nextEventID int64, nextPageToken []byte) (*shared.History, []byte, int64, error) {
+	nextEventID int64, nextPageToken []byte) (*persistence.GetWorkflowExecutionHistoryResponse, error) {
 
 	response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,
@@ -143,10 +144,10 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 	})
 
 	if err != nil {
-		return nil, nil, common.EmptyEventID, err
+		return nil, err
 	}
 
-	return response.History, response.NextPageToken, response.LastFirstEventID, nil
+	return response, nil
 }
 
 func (r *conflictResolverImpl) logError(msg string, err error) {

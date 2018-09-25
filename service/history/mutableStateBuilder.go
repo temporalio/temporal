@@ -41,161 +41,6 @@ const (
 )
 
 type (
-	mutableState interface {
-		AddActivityTaskCancelRequestedEvent(int64, string, string) (*workflow.HistoryEvent, *persistence.ActivityInfo, bool)
-		AddActivityTaskCanceledEvent(int64, int64, int64, []uint8, string) *workflow.HistoryEvent
-		AddActivityTaskCompletedEvent(int64, int64, *workflow.RespondActivityTaskCompletedRequest) *workflow.HistoryEvent
-		AddActivityTaskFailedEvent(int64, int64, *workflow.RespondActivityTaskFailedRequest) *workflow.HistoryEvent
-		AddActivityTaskScheduledEvent(int64, *workflow.ScheduleActivityTaskDecisionAttributes) (*workflow.HistoryEvent, *persistence.ActivityInfo)
-		AddActivityTaskStartedEvent(*persistence.ActivityInfo, int64, string, string) *workflow.HistoryEvent
-		AddActivityTaskTimedOutEvent(int64, int64, workflow.TimeoutType, []uint8) *workflow.HistoryEvent
-		AddCancelTimerFailedEvent(int64, *workflow.CancelTimerDecisionAttributes, string) *workflow.HistoryEvent
-		AddChildWorkflowExecutionCanceledEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionCanceledEventAttributes) *workflow.HistoryEvent
-		AddChildWorkflowExecutionCompletedEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionCompletedEventAttributes) *workflow.HistoryEvent
-		AddChildWorkflowExecutionFailedEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionFailedEventAttributes) *workflow.HistoryEvent
-		AddChildWorkflowExecutionStartedEvent(*string, *workflow.WorkflowExecution, *workflow.WorkflowType, int64) *workflow.HistoryEvent
-		AddChildWorkflowExecutionTerminatedEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTerminatedEventAttributes) *workflow.HistoryEvent
-		AddChildWorkflowExecutionTimedOutEvent(int64, *workflow.WorkflowExecution, *workflow.WorkflowExecutionTimedOutEventAttributes) *workflow.HistoryEvent
-		AddCompletedWorkflowEvent(int64, *workflow.CompleteWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddContinueAsNewEvent(int64, *cache.DomainCacheEntry, string, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, mutableState, error)
-		AddDecisionTaskCompletedEvent(int64, int64, *workflow.RespondDecisionTaskCompletedRequest) *workflow.HistoryEvent
-		AddDecisionTaskFailedEvent(int64, int64, workflow.DecisionTaskFailedCause, []uint8, string) *workflow.HistoryEvent
-		AddDecisionTaskScheduleToStartTimeoutEvent(int64) *workflow.HistoryEvent
-		AddDecisionTaskScheduledEvent() *decisionInfo
-		AddDecisionTaskStartedEvent(int64, string, *workflow.PollForDecisionTaskRequest) (*workflow.HistoryEvent, *decisionInfo)
-		AddDecisionTaskTimedOutEvent(int64, int64) *workflow.HistoryEvent
-		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) *workflow.HistoryEvent
-		AddExternalWorkflowExecutionSignaled(int64, string, string, string, []uint8) *workflow.HistoryEvent
-		AddFailWorkflowEvent(int64, *workflow.FailWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddRecordMarkerEvent(int64, *workflow.RecordMarkerDecisionAttributes) *workflow.HistoryEvent
-		AddRequestCancelActivityTaskFailedEvent(int64, string, string) *workflow.HistoryEvent
-		AddRequestCancelExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, workflow.CancelExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent
-		AddRequestCancelExternalWorkflowExecutionInitiatedEvent(int64, string, *workflow.RequestCancelExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.RequestCancelInfo)
-		AddSignalExternalWorkflowExecutionFailedEvent(int64, int64, string, string, string, []uint8, workflow.SignalExternalWorkflowExecutionFailedCause) *workflow.HistoryEvent
-		AddSignalExternalWorkflowExecutionInitiatedEvent(int64, string, *workflow.SignalExternalWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.SignalInfo)
-		AddSignalRequested(requestID string)
-		AddStartChildWorkflowExecutionFailedEvent(int64, workflow.ChildWorkflowExecutionFailedCause, *workflow.StartChildWorkflowExecutionInitiatedEventAttributes) *workflow.HistoryEvent
-		AddStartChildWorkflowExecutionInitiatedEvent(int64, string, *workflow.StartChildWorkflowExecutionDecisionAttributes) (*workflow.HistoryEvent, *persistence.ChildExecutionInfo)
-		AddTimeoutWorkflowEvent() *workflow.HistoryEvent
-		AddTimerCanceledEvent(int64, *workflow.CancelTimerDecisionAttributes, string) *workflow.HistoryEvent
-		AddTimerFiredEvent(int64, string) *workflow.HistoryEvent
-		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo)
-		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent
-		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddWorkflowExecutionSignaled(*workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent
-		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) *workflow.HistoryEvent
-		AddWorkflowExecutionStartedEventForContinueAsNew(string, *h.ParentExecutionInfo, workflow.WorkflowExecution, mutableState, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddWorkflowExecutionTerminatedEvent(*workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent
-		AfterAddDecisionTaskCompletedEvent(int64)
-		BeforeAddDecisionTaskCompletedEvent()
-		BufferReplicationTask(*h.ReplicateEventsRequest) error
-		ClearStickyness()
-		CloseUpdateSession() (*mutableStateSessionUpdates, error)
-		CopyToPersistence() *persistence.WorkflowMutableState
-		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
-		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
-		CreateRetryTimer(*persistence.ActivityInfo, string) persistence.Task
-		CreateReplicationTask() *persistence.HistoryReplicationTask
-		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
-		DeleteActivity(int64) error
-		DeleteBufferedReplicationTask(int64)
-		DeleteDecision()
-		DeletePendingChildExecution(int64)
-		DeletePendingRequestCancel(int64)
-		DeleteSignalRequested(requestID string)
-		DeletePendingSignal(int64)
-		DeleteUserTimer(string)
-		FailDecision()
-		FlushBufferedEvents() error
-		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
-		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
-		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
-		GetActivityStartedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetBufferedHistory(*persistence.SerializedHistoryEventBatch) *workflow.History
-		GetBufferedReplicationTask(int64) (*persistence.BufferedReplicationTask, bool)
-		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
-		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetChildExecutionStartedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetCompletionEvent() (*workflow.HistoryEvent, bool)
-		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
-		GetCurrentVersion() int64
-		GetExecutionInfo() *persistence.WorkflowExecutionInfo
-		GetHistoryBuilder() *historyBuilder
-		GetHistoryEvent(serializedEvent []byte) (*workflow.HistoryEvent, bool)
-		GetInFlightDecisionTask() (*decisionInfo, bool)
-		GetLastFirstEventID() int64
-		GetLastUpdatedTimestamp() int64
-		GetLastWriteVersion() int64
-		GetNextEventID() int64
-		GetPendingDecision(int64) (*decisionInfo, bool)
-		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
-		GetPendingTimerInfos() map[string]*persistence.TimerInfo
-		GetPendingChildExecutionInfos() map[int64]*persistence.ChildExecutionInfo
-		GetReplicationState() *persistence.ReplicationState
-		GetRequestCancelInfo(int64) (*persistence.RequestCancelInfo, bool)
-		GetRetryBackoffDuration(errReason string) time.Duration
-		GetScheduleIDByActivityID(string) (int64, bool)
-		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
-		GetStartVersion() int64
-		GetUserTimer(string) (bool, *persistence.TimerInfo)
-		GetWorkflowType() *workflow.WorkflowType
-		HasBufferedEvents() bool
-		HasBufferedReplicationTasks() bool
-		HasInFlightDecisionTask() bool
-		HasParentExecution() bool
-		HasPendingDecisionTask() bool
-		IsCancelRequested() (bool, string)
-		IsSignalRequested(requestID string) bool
-		IsStickyTaskListEnabled() bool
-		IsWorkflowExecutionRunning() bool
-		Load(*persistence.WorkflowMutableState)
-		ReplicateActivityTaskCancelRequestedEvent(*workflow.HistoryEvent)
-		ReplicateActivityTaskCanceledEvent(*workflow.HistoryEvent) error
-		ReplicateActivityTaskCompletedEvent(*workflow.HistoryEvent) error
-		ReplicateActivityTaskFailedEvent(*workflow.HistoryEvent) error
-		ReplicateActivityTaskScheduledEvent(*workflow.HistoryEvent) *persistence.ActivityInfo
-		ReplicateActivityTaskStartedEvent(*workflow.HistoryEvent)
-		ReplicateActivityTaskTimedOutEvent(*workflow.HistoryEvent) error
-		ReplicateChildWorkflowExecutionCanceledEvent(*workflow.HistoryEvent)
-		ReplicateChildWorkflowExecutionCompletedEvent(*workflow.HistoryEvent)
-		ReplicateChildWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
-		ReplicateChildWorkflowExecutionStartedEvent(*workflow.HistoryEvent) error
-		ReplicateChildWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
-		ReplicateChildWorkflowExecutionTimedOutEvent(*workflow.HistoryEvent)
-		ReplicateDecisionTaskCompletedEvent(int64, int64)
-		ReplicateDecisionTaskFailedEvent(int64, int64)
-		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64) *decisionInfo
-		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) *decisionInfo
-		ReplicateDecisionTaskTimedOutEvent(int64, int64)
-		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent)
-		ReplicateExternalWorkflowExecutionSignaled(*workflow.HistoryEvent)
-		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
-		ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) *persistence.RequestCancelInfo
-		ReplicateSignalExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
-		ReplicateSignalExternalWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) *persistence.SignalInfo
-		ReplicateStartChildWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
-		ReplicateStartChildWorkflowExecutionInitiatedEvent(*workflow.HistoryEvent, string) *persistence.ChildExecutionInfo
-		ReplicateTimerCanceledEvent(*workflow.HistoryEvent)
-		ReplicateTimerFiredEvent(*workflow.HistoryEvent)
-		ReplicateTimerStartedEvent(*workflow.HistoryEvent) *persistence.TimerInfo
-		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionCanceledEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionCompletedEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState)
-		ReplicateWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.WorkflowExecutionStartedEventAttributes)
-		ReplicateWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
-		ReplicateWorkflowExecutionTimedoutEvent(*workflow.HistoryEvent)
-		ResetSnapshot(string) *persistence.ResetMutableStateRequest
-		SetHistoryBuilder(hBuilder *historyBuilder)
-		UpdateActivity(*persistence.ActivityInfo) error
-		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)
-		UpdateDecision(*decisionInfo)
-		UpdateReplicationStateVersion(int64, bool)
-		UpdateReplicationStateLastEventID(string, int64, int64)
-		UpdateUserTimer(string, *persistence.TimerInfo)
-	}
-
 	mutableStateBuilder struct {
 		pendingActivityInfoIDs          map[int64]*persistence.ActivityInfo    // Schedule Event ID -> Activity Info.
 		pendingActivityInfoByActivityID map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
@@ -236,41 +81,10 @@ type (
 		hBuilder         *historyBuilder
 		eventSerializer  historyEventSerializer
 		currentCluster   string
+		stateStats       *mutableStateStats
+		historySize      int
 		config           *Config
 		logger           bark.Logger
-	}
-
-	mutableStateSessionUpdates struct {
-		newEventsBuilder                 *historyBuilder
-		updateActivityInfos              []*persistence.ActivityInfo
-		deleteActivityInfos              []int64
-		updateTimerInfos                 []*persistence.TimerInfo
-		deleteTimerInfos                 []string
-		updateChildExecutionInfos        []*persistence.ChildExecutionInfo
-		deleteChildExecutionInfo         *int64
-		updateCancelExecutionInfos       []*persistence.RequestCancelInfo
-		deleteCancelExecutionInfo        *int64
-		updateSignalInfos                []*persistence.SignalInfo
-		deleteSignalInfo                 *int64
-		updateSignalRequestedIDs         []string
-		deleteSignalRequestedID          string
-		continueAsNew                    *persistence.CreateWorkflowExecutionRequest
-		newBufferedEvents                *persistence.SerializedHistoryEventBatch
-		clearBufferedEvents              bool
-		newBufferedReplicationEventsInfo *persistence.BufferedReplicationTask
-		deleteBufferedReplicationEvent   *int64
-	}
-
-	// TODO: This should be part of persistence layer
-	decisionInfo struct {
-		Version         int64
-		ScheduleID      int64
-		StartedID       int64
-		RequestID       string
-		DecisionTimeout int32
-		TaskList        string // This is only needed to communicate tasklist used after AddDecisionTaskScheduledEvent
-		Attempt         int64
-		Timestamp       int64
 	}
 )
 
@@ -346,6 +160,9 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 }
 
 func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
+	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
+	e.clearStats()
+
 	e.pendingActivityInfoIDs = state.ActivitInfos
 	e.pendingTimerInfoIDs = state.TimerInfos
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
@@ -359,6 +176,102 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.bufferedReplicationTasks = state.BufferedReplicationTasks
 	for _, ai := range state.ActivitInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
+	}
+}
+
+func (e *mutableStateBuilder) GetStats() *mutableStateStats {
+	if e.stateStats == nil {
+		e.stateStats = e.computeStats()
+	}
+
+	return e.stateStats
+}
+
+func (e *mutableStateBuilder) IncrementHistorySize(appendSize int) {
+	e.executionInfo.HistorySize += int64(appendSize)
+}
+
+func (e *mutableStateBuilder) SetNewRunSize(size int) {
+	if e.continueAsNew != nil {
+		e.continueAsNew.HistorySize = int64(size)
+	}
+}
+
+func (e *mutableStateBuilder) clearStats() {
+	e.stateStats = nil
+}
+
+func (e *mutableStateBuilder) computeStats() *mutableStateStats {
+	executionInfoSize := computeExecutionInfoSize(e.executionInfo)
+
+	activityInfoCount := 0
+	activityInfoSize := 0
+	for _, ai := range e.pendingActivityInfoIDs {
+		activityInfoCount++
+		activityInfoSize += computeActivityInfoSize(ai)
+	}
+
+	timerInfoCount := 0
+	timerInfoSize := 0
+	for _, ti := range e.pendingTimerInfoIDs {
+		timerInfoCount++
+		timerInfoSize += computeTimerInfoSize(ti)
+	}
+
+	childExecutionInfoCount := 0
+	childExecutionInfoSize := 0
+	for _, ci := range e.pendingChildExecutionInfoIDs {
+		childExecutionInfoCount++
+		childExecutionInfoSize += computeChildInfoSize(ci)
+	}
+
+	signalInfoCount := 0
+	signalInfoSize := 0
+	for _, si := range e.pendingSignalInfoIDs {
+		signalInfoCount++
+		signalInfoSize += computeSignalInfoSize(si)
+	}
+
+	bufferedEventsCount := 0
+	bufferedEventsSize := 0
+	for _, e := range e.bufferedEvents {
+		bufferedEventsCount++
+		bufferedEventsSize += computeBufferedEventsSize(e)
+	}
+
+	bufferedReplicationTasksCount := 0
+	bufferedReplicationTasksSize := 0
+	for _, rt := range e.bufferedReplicationTasks {
+		bufferedReplicationTasksCount++
+		bufferedReplicationTasksSize += computeBufferedReplicationTasksSize(rt)
+	}
+
+	requestCancelInfoCount := len(e.pendingRequestCancelInfoIDs)
+
+	totalSize := executionInfoSize
+	totalSize += activityInfoSize
+	totalSize += timerInfoSize
+	totalSize += childExecutionInfoSize
+	totalSize += signalInfoSize
+	totalSize += bufferedEventsSize
+	totalSize += bufferedReplicationTasksSize
+
+	return &mutableStateStats{
+		mutableStateSize:              totalSize,
+		executionInfoSize:             executionInfoSize,
+		activityInfoSize:              activityInfoSize,
+		timerInfoSize:                 timerInfoSize,
+		childInfoSize:                 childExecutionInfoSize,
+		signalInfoSize:                signalInfoSize,
+		bufferedEventsSize:            bufferedEventsSize,
+		bufferedReplicationTasksSize:  bufferedReplicationTasksSize,
+		activityInfoCount:             activityInfoCount,
+		timerInfoCount:                timerInfoCount,
+		childInfoCount:                childExecutionInfoCount,
+		signalInfoCount:               signalInfoCount,
+		bufferedEventsCount:           bufferedEventsCount,
+		bufferedReplicationTasksCount: bufferedReplicationTasksCount,
+		requestCancelInfoCount:        requestCancelInfoCount,
 	}
 }
 
@@ -379,6 +292,9 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 }
 
 func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.ResetMutableStateRequest {
+	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
+	e.clearStats()
+
 	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
 	for _, info := range e.pendingActivityInfoIDs {
 		insertActivities = append(insertActivities, info)
@@ -541,11 +457,15 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(clusterName stri
 }
 
 func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates, error) {
+	// Clear any cached stats on each update to force recompute on next call to GetStats
+	e.clearStats()
+
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, err
 	}
 
 	updates := &mutableStateSessionUpdates{
+		executionInfo:                    e.executionInfo,
 		newEventsBuilder:                 e.hBuilder,
 		updateActivityInfos:              convertUpdateActivityInfos(e.updateActivityInfos),
 		deleteActivityInfos:              convertDeleteActivityInfos(e.deleteActivityInfos),

@@ -182,6 +182,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Get
 	lastFirstEventID := common.EmptyEventID // first_event_id of last batch
 	eventBatch := p.SerializedHistoryEventBatch{}
 	history := &workflow.History{}
+	size := 0
 	for iter.Scan(nil, &eventBatchVersionPointer, &eventBatch.Data, &eventBatch.EncodingType, &eventBatch.Version) {
 		found = true
 
@@ -212,6 +213,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Get
 			history.Events = append(history.Events, historyBatch.Events...)
 			token.LastEventID = historyBatch.Events[len(historyBatch.Events)-1].GetEventId()
 			token.LastEventBatchVersion = eventBatchVersion
+			size += len(eventBatch.Data)
 		}
 
 		eventBatchVersionPointer = new(int64)
@@ -242,6 +244,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Get
 		NextPageToken:    data,
 		History:          history,
 		LastFirstEventID: lastFirstEventID,
+		Size:             size,
 	}
 
 	return response, nil

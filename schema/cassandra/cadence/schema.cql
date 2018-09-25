@@ -62,6 +62,7 @@ CREATE TYPE workflow_execution (
   expiration_time                  timestamp, -- retry expiration time
   max_attempts                     int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors             list<text>,
+  history_size                     bigint,
 );
 
 -- Replication information for each cluster

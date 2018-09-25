@@ -341,7 +341,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return nil, serializedError
 	}
 
-	err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+	var historySize int
+	historySize, err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 		DomainID:  domainID,
 		Execution: execution,
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
@@ -393,6 +394,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			ExecutionContext:            nil,
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          common.EmptyEventID,
+			HistorySize:                 int64(historySize),
 			TransferTasks:               transferTasks,
 			ReplicationTasks:            replicationTasks,
 			DecisionVersion:             decisionVersion,
@@ -2064,7 +2066,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return nil, serializedError
 	}
 
-	err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+	var historySize int
+	historySize, err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 		DomainID:  domainID,
 		Execution: execution,
 		// It is ok to use 0 for TransactionID because RunID is unique so there are
@@ -2114,6 +2117,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			ExecutionContext:            nil,
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          common.EmptyEventID,
+			HistorySize:                 int64(historySize),
 			TransferTasks:               transferTasks,
 			ReplicationTasks:            replicationTasks,
 			DecisionVersion:             decisionVersion,

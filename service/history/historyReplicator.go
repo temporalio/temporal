@@ -583,7 +583,8 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 		return err
 	}
 
-	err = r.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
+	var historySize int
+	historySize, err = r.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
 		DomainID:          domainID,
 		Execution:         execution,
 		TransactionID:     transactionID,
@@ -638,6 +639,7 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 			ExecutionContext:            nil,
 			NextEventID:                 msBuilder.GetNextEventID(),
 			LastProcessedEvent:          common.EmptyEventID,
+			HistorySize:                 int64(historySize),
 			TransferTasks:               transferTasks,
 			DecisionVersion:             decisionVersionID,
 			DecisionScheduleID:          decisionScheduleID,

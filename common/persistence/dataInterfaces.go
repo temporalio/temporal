@@ -205,6 +205,7 @@ type (
 		StartTimestamp               time.Time
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
+		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64
 		DecisionStartedID            int64
@@ -582,6 +583,7 @@ type (
 		ExecutionContext            []byte
 		NextEventID                 int64
 		LastProcessedEvent          int64
+		HistorySize                 int64
 		TransferTasks               []Task
 		ReplicationTasks            []Task
 		TimerTasks                  []Task
@@ -868,6 +870,8 @@ type (
 		NextPageToken []byte
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
+		// Size of history read from store
+		Size int
 	}
 
 	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history
