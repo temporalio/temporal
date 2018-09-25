@@ -759,9 +759,7 @@ func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(eventType workf
 	historyEvent.EventId = common.Int64Ptr(eventID)
 	historyEvent.Timestamp = ts
 	historyEvent.EventType = common.EventTypePtr(eventType)
-	if e.replicationState != nil {
-		historyEvent.Version = common.Int64Ptr(e.replicationState.CurrentVersion)
-	}
+	historyEvent.Version = common.Int64Ptr(e.GetCurrentVersion())
 
 	return historyEvent
 }
