@@ -67,9 +67,12 @@ type (
 		isStopping    bool
 	}
 
+	historyShardsItemStatus int
+
 	historyShardsItem struct {
 		sync.RWMutex
 		shardID       int
+		status        historyShardsItemStatus
 		service       service.Service
 		shardMgr      persistence.ShardManager
 		historyMgr    persistence.HistoryManager
@@ -82,6 +85,12 @@ type (
 		logger        bark.Logger
 		metricsClient metrics.Client
 	}
+)
+
+const (
+	historyShardsItemStatusInitialized = iota
+	historyShardsItemStatusStarted
+	historyShardsItemStatusStopped
 )
 
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
@@ -123,6 +132,7 @@ func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence
 	return &historyShardsItem{
 		service:       svc,
 		shardID:       shardID,
+		status:        historyShardsItemStatusInitialized,
 		shardMgr:      shardMgr,
 		historyMgr:    historyMgr,
 		executionMgr:  executionMgr,
@@ -201,8 +211,11 @@ func (c *shardController) removeEngineForShard(shardID int) {
 func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShardsItem, error) {
 	c.RLock()
 	if item, ok := c.historyShards[shardID]; ok {
-		c.RUnlock()
-		return item, nil
+		if item.isValid() {
+			c.RUnlock()
+			return item, nil
+		}
+		// if item not valid then process to create a new one
 	}
 	c.RUnlock()
 
@@ -210,7 +223,10 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	defer c.Unlock()
 
 	if item, ok := c.historyShards[shardID]; ok {
-		return item, nil
+		if item.isValid() {
+			return item, nil
+		}
+		// if item not valid then process to create a new one
 	}
 
 	if c.isStopping {
@@ -368,16 +384,9 @@ func (c *shardController) shardIDs() []int32 {
 	return ids
 }
 
-func (i *historyShardsItem) getEngine() Engine {
-	i.RLock()
-	defer i.RUnlock()
-
-	return i.engine
-}
-
 func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine, error) {
 	i.RLock()
-	if i.engine != nil {
+	if i.status == historyShardsItemStatusStarted {
 		defer i.RUnlock()
 		return i.engine, nil
 	}
@@ -385,36 +394,66 @@ func (i *historyShardsItem) getOrCreateEngine(shardClosedCh chan<- int) (Engine,
 
 	i.Lock()
 	defer i.Unlock()
-
-	if i.engine != nil {
+	switch i.status {
+	case historyShardsItemStatusInitialized:
+		logging.LogShardEngineCreatingEvent(i.logger, i.host.Identity(), i.shardID)
+		context, err := acquireShard(i, shardClosedCh)
+		if err != nil {
+			return nil, err
+		}
+		i.engine = i.engineFactory.CreateEngine(context)
+		i.engine.Start()
+		logging.LogShardEngineCreatedEvent(i.logger, i.host.Identity(), i.shardID)
+		i.status = historyShardsItemStatusStarted
 		return i.engine, nil
+	case historyShardsItemStatusStarted:
+		return i.engine, nil
+	case historyShardsItemStatusStopped:
+		return nil, fmt.Errorf("shard %v for host '%v' is shut down", i.shardID, i.host.Identity())
+	default:
+		panic(i.logInvalidStatus())
 	}
-
-	logging.LogShardEngineCreatingEvent(i.logger, i.host.Identity(), i.shardID)
-
-	context, err := acquireShard(i.shardID, i.service, i.shardMgr, i.historyMgr, i.executionMgr, i.domainCache,
-		i.host.Identity(), shardClosedCh, i.config, i.logger, i.metricsClient)
-	if err != nil {
-		return nil, err
-	}
-
-	i.engine = i.engineFactory.CreateEngine(context)
-	i.engine.Start()
-
-	logging.LogShardEngineCreatedEvent(i.logger, i.host.Identity(), i.shardID)
-	return i.engine, nil
 }
 
 func (i *historyShardsItem) stopEngine() {
 	i.Lock()
 	defer i.Unlock()
 
-	if i.engine != nil {
+	switch i.status {
+	case historyShardsItemStatusInitialized:
+		i.status = historyShardsItemStatusStopped
+	case historyShardsItemStatusStarted:
 		logging.LogShardEngineStoppingEvent(i.logger, i.host.Identity(), i.shardID)
 		i.engine.Stop()
 		i.engine = nil
 		logging.LogShardEngineStoppedEvent(i.logger, i.host.Identity(), i.shardID)
+		i.status = historyShardsItemStatusStopped
+	case historyShardsItemStatusStopped:
+		// no op
+	default:
+		panic(i.logInvalidStatus())
 	}
+}
+
+func (i *historyShardsItem) isValid() bool {
+	i.RLock()
+	defer i.RUnlock()
+
+	switch i.status {
+	case historyShardsItemStatusInitialized, historyShardsItemStatusStarted:
+		return true
+	case historyShardsItemStatusStopped:
+		return false
+	default:
+		panic(i.logInvalidStatus())
+	}
+}
+
+func (i *historyShardsItem) logInvalidStatus() string {
+	msg := fmt.Sprintf("Host '%v' encounter invalid status %v for shard item for shardID '%v'.",
+		i.host.Identity(), i.status, i.shardID)
+	i.logger.Error(msg)
+	return msg
 }
 
 func isShardOwnershiptLostError(err error) bool {
