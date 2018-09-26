@@ -46,7 +46,7 @@ type (
 		WorkflowID   string
 		RunID        string
 		FirstEventID int64
-		Data         *[]byte
+		Data         []byte
 		DataEncoding string
 		DataVersion  int64
 
@@ -132,7 +132,7 @@ func (m *sqlHistoryManager) AppendHistoryEvents(request *p.AppendHistoryEventsRe
 		WorkflowID:   *request.Execution.WorkflowId,
 		RunID:        *request.Execution.RunId,
 		FirstEventID: request.FirstEventID,
-		Data:         takeAddressIfNotNil(request.Events.Data),
+		Data:         request.Events.Data,
 		DataEncoding: string(request.Events.EncodingType),
 		DataVersion:  int64(request.Events.Version),
 		RangeID:      request.RangeID,
@@ -241,7 +241,7 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.GetWorkflowEx
 	history := &workflow.History{}
 	eventBatch := p.SerializedHistoryEventBatch{}
 	for _, v := range rows {
-		eventBatch.Data = *v.Data
+		eventBatch.Data = v.Data
 		eventBatch.EncodingType = common.EncodingType(v.DataEncoding)
 
 		if eventBatchVersionPointer != nil {

@@ -102,7 +102,7 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 		log.Fatal(err)
 	}
 	// Create an ExecutionManager for the shard for use in unit tests
-	tb.WorkflowMgr, err = tb.ExecutionMgrFactory.CreateExecutionManager(shardID)
+	tb.ExecutionManager, err = tb.ExecutionMgrFactory.CreateExecutionManager(shardID)
 	if err != nil {
 		log.Fatal(err)
 	}

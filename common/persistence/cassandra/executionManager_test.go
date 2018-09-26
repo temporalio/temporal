@@ -18,18 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package cassandra
 
 import (
-	"github.com/uber/cadence/common/persistence/sql"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/uber/cadence/common/persistence/persistence-tests"
 )
 
-func TestMatchingPersistenceSuite(t *testing.T) {
-	s := new(persistencetests.MatchingPersistenceSuite)
-	sql.InitTestSuite(&s.TestBase)
+func TestExecutionManagerSuite(t *testing.T) {
+	s := new(persistencetests.ExecutionManagerSuite)
+	InitTestSuite(&s.TestBase)
 	suite.Run(t, s)
 }

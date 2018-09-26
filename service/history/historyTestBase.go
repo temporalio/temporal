@@ -457,7 +457,7 @@ func (s *TestBase) SetupWorkflowStoreWithOptions(options persistencetests.TestBa
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, s.MetadataManagerV2,
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
 		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
@@ -468,7 +468,7 @@ func (s *TestBase) SetupWorkflowStore() {
 	log := bark.NewLoggerFromLogrus(log.New())
 	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.WorkflowMgr, s.MetadataManager, s.MetadataManagerV2,
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
 		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
