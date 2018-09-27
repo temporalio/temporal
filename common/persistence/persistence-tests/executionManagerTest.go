@@ -66,6 +66,223 @@ func (s *ExecutionManagerSuite) SetupTest() {
 	s.ClearTasks()
 }
 
+// TestCreateWorkflowExecutionBrandNew test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            workflowExecution,
+		TaskList:             tasklist,
+		WorkflowTypeName:     workflowType,
+		WorkflowTimeout:      workflowTimeout,
+		DecisionTimeoutValue: decisionTimeout,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardInfo.RangeID,
+		CreateWorkflowMode:   p.CreateWorkflowModeBrandNew,
+	})
+	s.Nil(err)
+}
+
+// TestCreateWorkflowExecutionRunIDReuseWithReplication test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplication() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test-run-id-reuse-with-replication"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+	decisionScheduleID := int64(2)
+	version := int64(0)
+	replicationState := &p.ReplicationState{
+		StartVersion:     version,
+		CurrentVersion:   version,
+		LastWriteVersion: version,
+		LastWriteEventID: nextEventID - 1,
+	}
+
+	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, tasklist,
+		workflowType, workflowTimeout, decisionTimeout, nextEventID,
+		lastProcessedEventID, decisionScheduleID, replicationState, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	newExecution := gen.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:                uuid.New(),
+		DomainID:                 domainID,
+		Execution:                newExecution,
+		TaskList:                 tasklist,
+		WorkflowTypeName:         workflowType,
+		WorkflowTimeout:          workflowTimeout,
+		DecisionTimeoutValue:     decisionTimeout,
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       lastProcessedEventID,
+		RangeID:                  s.ShardInfo.RangeID,
+		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:            workflowExecution.GetRunId(),
+		PreviousLastWriteVersion: common.EmptyVersion,
+		ReplicationState:         replicationState,
+	})
+	s.NotNil(err)
+	s.IsType(&p.ConditionFailedError{}, err)
+
+	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.Nil(err)
+
+	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
+	updatedInfo.State = p.WorkflowStateCompleted
+	updatedInfo.CloseStatus = p.WorkflowCloseStatusCompleted
+	updatedInfo.NextEventID = int64(6)
+	updatedInfo.LastProcessedEvent = int64(2)
+	updateReplicationState := &p.ReplicationState{
+		StartVersion:     version,
+		CurrentVersion:   version,
+		LastWriteVersion: version,
+		LastWriteEventID: updatedInfo.NextEventID - 1,
+	}
+	err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ExecutionInfo:        updatedInfo,
+		TransferTasks:        nil,
+		TimerTasks:           nil,
+		Condition:            nextEventID,
+		DeleteTimerTask:      nil,
+		RangeID:              s.ShardInfo.RangeID,
+		UpsertActivityInfos:  nil,
+		DeleteActivityInfos:  nil,
+		UpserTimerInfos:      nil,
+		DeleteTimerInfos:     nil,
+		FinishedExecutionTTL: 10,
+		FinishExecution:      true,
+		ReplicationState:     updateReplicationState,
+	})
+	s.Nil(err)
+
+	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:                uuid.New(),
+		DomainID:                 domainID,
+		Execution:                newExecution,
+		TaskList:                 tasklist,
+		WorkflowTypeName:         workflowType,
+		WorkflowTimeout:          workflowTimeout,
+		DecisionTimeoutValue:     decisionTimeout,
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       lastProcessedEventID,
+		RangeID:                  s.ShardInfo.RangeID,
+		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:            workflowExecution.GetRunId(),
+		PreviousLastWriteVersion: version,
+		ReplicationState:         replicationState,
+	})
+	s.Nil(err)
+}
+
+// TestCreateWorkflowExecutionRunIDReuseWithoutReplication test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutReplication() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test-run-id-reuse-without-replication"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+	decisionScheduleID := int64(2)
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist,
+		workflowType, workflowTimeout, decisionTimeout, nil, nextEventID,
+		lastProcessedEventID, decisionScheduleID, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	newExecution := gen.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	// this create should work since we are relying the business logic in history engine
+	// to check whether the existing running workflow has finished
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            newExecution,
+		TaskList:             tasklist,
+		WorkflowTypeName:     workflowType,
+		WorkflowTimeout:      workflowTimeout,
+		DecisionTimeoutValue: decisionTimeout,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardInfo.RangeID,
+		CreateWorkflowMode:   p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:        workflowExecution.GetRunId(),
+	})
+	s.Nil(err)
+}
+
+// TestCreateWorkflowExecutionContinueAsNew test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionContinueAsNew() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test-continue-as-new"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+	decisionScheduleID := int64(2)
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist,
+		workflowType, workflowTimeout, decisionTimeout, nil, nextEventID,
+		lastProcessedEventID, decisionScheduleID, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	newExecution := gen.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            newExecution,
+		TaskList:             tasklist,
+		WorkflowTypeName:     workflowType,
+		WorkflowTimeout:      workflowTimeout,
+		DecisionTimeoutValue: decisionTimeout,
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   lastProcessedEventID,
+		RangeID:              s.ShardInfo.RangeID,
+		CreateWorkflowMode:   p.CreateWorkflowModeContinueAsNew,
+		PreviousRunID:        workflowExecution.GetRunId(),
+	})
+	s.Nil(err)
+}
+
 // TestPersistenceStartWorkflow test
 func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	domainID := "2d7994bf-9de8-459d-9c81-e723daedb246"
@@ -147,7 +364,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflowWithReplicationState
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
 	s.Equal(p.WorkflowStateRunning, startedErr.State, startedErr.Msg)
 	s.Equal(p.WorkflowCloseStatusNone, startedErr.CloseStatus, startedErr.Msg)
-	s.Equal(lastWriteVersion, startedErr.LastWriteVersion, startedErr.Msg)
+	s.Equal(common.EmptyVersion, startedErr.LastWriteVersion, startedErr.Msg)
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{

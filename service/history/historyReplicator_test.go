@@ -1309,7 +1309,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               false,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:               "",
 			ReplicationState:            replicationState,
 		}, input)
@@ -1694,7 +1694,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               false,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:               "",
 			ReplicationState:            replicationState,
 		}, input)
@@ -1727,8 +1727,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               true,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:               currentRunID,
+			PreviousLastWriteVersion:    currentVersion,
 			ReplicationState:            replicationState,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
@@ -1850,7 +1851,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               false,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:               "",
 			ReplicationState:            replicationState,
 		}, input)
@@ -1883,8 +1884,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               true,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:               currentRunID,
+			PreviousLastWriteVersion:    currentVersion,
 			ReplicationState:            replicationState,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()
@@ -2206,7 +2208,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               false,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeBrandNew,
 			PreviousRunID:               "",
 			ReplicationState:            replicationState,
 		}, input)
@@ -2239,8 +2241,9 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 			DecisionStartedID:           di.StartedID,
 			DecisionStartToCloseTimeout: di.DecisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               true,
+			CreateWorkflowMode:          persistence.CreateWorkflowModeWorkflowIDReuse,
 			PreviousRunID:               currentRunID,
+			PreviousLastWriteVersion:    version,
 			ReplicationState:            replicationState,
 		}, input)
 	})).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Once()

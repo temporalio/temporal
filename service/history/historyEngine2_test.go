@@ -1039,14 +1039,16 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	taskList := "testTaskList"
 	identity := "testIdentity"
 	requestID := "requestID"
+	lastWriteVersion := common.EmptyVersion
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
-		Msg:            "random message",
-		StartRequestID: requestID,
-		RunID:          runID,
-		State:          p.WorkflowStateRunning,
-		CloseStatus:    p.WorkflowCloseStatusNone,
+		Msg:              "random message",
+		StartRequestID:   requestID,
+		RunID:            runID,
+		State:            p.WorkflowStateRunning,
+		CloseStatus:      p.WorkflowCloseStatusNone,
+		LastWriteVersion: lastWriteVersion,
 	}).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -1088,14 +1090,16 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	workflowType := "workflowType"
 	taskList := "testTaskList"
 	identity := "testIdentity"
+	lastWriteVersion := common.EmptyVersion
 
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Once()
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
-		Msg:            "random message",
-		StartRequestID: "oldRequestID",
-		RunID:          runID,
-		State:          p.WorkflowStateRunning,
-		CloseStatus:    p.WorkflowCloseStatusNone,
+		Msg:              "random message",
+		StartRequestID:   "oldRequestID",
+		RunID:            runID,
+		State:            p.WorkflowStateRunning,
+		CloseStatus:      p.WorkflowCloseStatusNone,
+		LastWriteVersion: lastWriteVersion,
 	}).Once()
 	s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
@@ -1139,6 +1143,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	workflowType := "workflowType"
 	taskList := "testTaskList"
 	identity := "testIdentity"
+	lastWriteVersion := common.EmptyVersion
 
 	options := []workflow.WorkflowIdReusePolicy{
 		workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
@@ -1151,13 +1156,16 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
 	s.mockExecutionMgr.On(
 		"CreateWorkflowExecution",
-		mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),
+		mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
+			return request.CreateWorkflowMode == p.CreateWorkflowModeBrandNew
+		}),
 	).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
-		Msg:            "random message",
-		StartRequestID: "oldRequestID",
-		RunID:          runID,
-		State:          p.WorkflowStateCompleted,
-		CloseStatus:    p.WorkflowCloseStatusCompleted,
+		Msg:              "random message",
+		StartRequestID:   "oldRequestID",
+		RunID:            runID,
+		State:            p.WorkflowStateCompleted,
+		CloseStatus:      p.WorkflowCloseStatusCompleted,
+		LastWriteVersion: lastWriteVersion,
 	}).Times(len(expecedErrs))
 	s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 		&p.GetDomainResponse{
@@ -1178,7 +1186,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		if !expecedErrs[index] {
 			s.mockExecutionMgr.On(
 				"CreateWorkflowExecution",
-				mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
+				mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
+					return request.CreateWorkflowMode == p.CreateWorkflowModeWorkflowIDReuse &&
+						request.PreviousRunID == runID &&
+						request.PreviousLastWriteVersion == lastWriteVersion
+				}),
 			).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 		} else {
 			s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
@@ -1217,6 +1229,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 	workflowType := "workflowType"
 	taskList := "testTaskList"
 	identity := "testIdentity"
+	lastWriteVersion := common.EmptyVersion
 
 	options := []workflow.WorkflowIdReusePolicy{
 		workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly,
@@ -1239,13 +1252,16 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 		s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(nil).Times(len(expecedErrs))
 		s.mockExecutionMgr.On(
 			"CreateWorkflowExecution",
-			mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == false }),
+			mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
+				return request.CreateWorkflowMode == p.CreateWorkflowModeBrandNew
+			}),
 		).Return(nil, &p.WorkflowExecutionAlreadyStartedError{
-			Msg:            "random message",
-			StartRequestID: "oldRequestID",
-			RunID:          runIDs[i],
-			State:          p.WorkflowStateCompleted,
-			CloseStatus:    closeState,
+			Msg:              "random message",
+			StartRequestID:   "oldRequestID",
+			RunID:            runIDs[i],
+			State:            p.WorkflowStateCompleted,
+			CloseStatus:      closeState,
+			LastWriteVersion: lastWriteVersion,
 		}).Times(len(expecedErrs))
 		s.mockMetadataMgr.On("GetDomain", mock.Anything).Return(
 			&p.GetDomainResponse{
@@ -1267,7 +1283,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			if !expecedErrs[j] {
 				s.mockExecutionMgr.On(
 					"CreateWorkflowExecution",
-					mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool { return request.ContinueAsNew == true }),
+					mock.MatchedBy(func(request *p.CreateWorkflowExecutionRequest) bool {
+						return request.CreateWorkflowMode == p.CreateWorkflowModeWorkflowIDReuse &&
+							request.PreviousRunID == runIDs[i] &&
+							request.PreviousLastWriteVersion == lastWriteVersion
+					}),
 				).Return(&p.CreateWorkflowExecutionResponse{}, nil).Once()
 			} else {
 				s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()

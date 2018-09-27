@@ -43,6 +43,13 @@ const (
 	DomainStatusDeleted
 )
 
+// Create Workflow Execution Mode
+const (
+	CreateWorkflowModeBrandNew = iota
+	CreateWorkflowModeWorkflowIDReuse
+	CreateWorkflowModeContinueAsNew
+)
+
 // Workflow execution states
 const (
 	WorkflowStateCreated = iota
@@ -592,8 +599,9 @@ type (
 		DecisionScheduleID          int64
 		DecisionStartedID           int64
 		DecisionStartToCloseTimeout int32
-		ContinueAsNew               bool
+		CreateWorkflowMode          int
 		PreviousRunID               string
+		PreviousLastWriteVersion    int64
 		ReplicationState            *ReplicationState
 		Attempt                     int32
 		HasRetryPolicy              bool

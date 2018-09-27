@@ -38,6 +38,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cache"
+	ce "github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
@@ -379,7 +380,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	}
 	setTaskInfo(msBuilder.GetCurrentVersion(), time.Now(), transferTasks, timerTasks)
 
-	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
+	createWorkflow := func(isBrandNew bool, prevRunID string, prevLastWriteVersion int64) (string, error) {
 		createRequest := &persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
 			DomainID:                    domainID,
@@ -402,11 +403,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			DecisionStartedID:           decisionStartID,
 			DecisionStartToCloseTimeout: decisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               !isBrandNew,
 			PreviousRunID:               prevRunID,
+			PreviousLastWriteVersion:    prevLastWriteVersion,
 			ReplicationState:            replicationState,
 			HasRetryPolicy:              request.RetryPolicy != nil,
 		}
+		createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeBrandNew
+		if !isBrandNew {
+			createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeWorkflowIDReuse
+		}
+
 		if createRequest.HasRetryPolicy {
 			createRequest.InitialInterval = request.RetryPolicy.GetInitialIntervalInSeconds()
 			createRequest.BackoffCoefficient = request.RetryPolicy.GetBackoffCoefficient()
@@ -482,12 +488,20 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	// try to create the workflow execution
 	isBrandNew := true
 	resultRunID := ""
-	resultRunID, err = createWorkflow(isBrandNew, "")
+	resultRunID, err = createWorkflow(isBrandNew, "", 0)
 	// if err still non nil, see if retry
 	if errExist, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
+		if msBuilder.GetCurrentVersion() < errExist.LastWriteVersion {
+			return nil, ce.NewDomainNotActiveError(
+				domainEntry.GetInfo().Name,
+				clusterMetadata.GetCurrentClusterName(),
+				clusterMetadata.ClusterNameForFailoverVersion(errExist.LastWriteVersion),
+			)
+		}
+
 		if err = workflowExistsErrHandler(errExist); err == nil {
 			isBrandNew = false
-			resultRunID, err = createWorkflow(isBrandNew, errExist.RunID)
+			resultRunID, err = createWorkflow(isBrandNew, errExist.RunID, errExist.LastWriteVersion)
 		}
 	}
 
@@ -1924,6 +1938,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 
 	isBrandNew := false
 	prevRunID := ""
+	prevLastWriteVersion := common.EmptyVersion
 	attempt := 0
 
 	context, release, err0 := e.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
@@ -1941,7 +1956,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 				return nil, err1
 			}
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				prevRunID = context.workflowExecution.GetRunId()
+				prevRunID = msBuilder.GetExecutionInfo().RunID
+				prevLastWriteVersion = msBuilder.GetLastWriteVersion()
 				break
 			}
 			executionInfo := msBuilder.GetExecutionInfo()
@@ -2104,8 +2120,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	}
 	setTaskInfo(msBuilder.GetCurrentVersion(), time.Now(), transferTasks, timerTasks)
 
-	createWorkflow := func(isBrandNew bool, prevRunID string) (string, error) {
-		_, err = e.shard.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
+	createWorkflow := func(isBrandNew bool, prevRunID string, prevLastWriteVersion int64) (string, error) {
+		createRequest := &persistence.CreateWorkflowExecutionRequest{
 			RequestID:                   common.StringDefault(request.RequestId),
 			DomainID:                    domainID,
 			Execution:                   execution,
@@ -2125,10 +2141,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			DecisionStartedID:           decisionStartID,
 			DecisionStartToCloseTimeout: decisionTimeout,
 			TimerTasks:                  timerTasks,
-			ContinueAsNew:               !isBrandNew,
 			PreviousRunID:               prevRunID,
+			PreviousLastWriteVersion:    prevLastWriteVersion,
 			ReplicationState:            replicationState,
-		})
+		}
+		createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeBrandNew
+		if !isBrandNew {
+			createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeWorkflowIDReuse
+		}
+		_, err = e.shard.CreateWorkflowExecution(createRequest)
 
 		if err != nil {
 			switch t := err.(type) {
@@ -2146,7 +2167,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	}
 
 	// try to create the workflow execution
-	resultRunID, err := createWorkflow(isBrandNew, prevRunID) // (true, "") or (false, "prevRunID")
+	if !isBrandNew && msBuilder.GetCurrentVersion() < prevLastWriteVersion {
+		return nil, ce.NewDomainNotActiveError(
+			domainEntry.GetInfo().Name,
+			clusterMetadata.GetCurrentClusterName(),
+			clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
+		)
+	}
+	resultRunID, err := createWorkflow(isBrandNew, prevRunID, prevLastWriteVersion) // (true, "", 0) or (false, "prevRunID", "prevLastWriteVersion")
 	if err == nil {
 		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 

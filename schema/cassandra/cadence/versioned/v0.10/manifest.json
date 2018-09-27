@@ -1,8 +1,9 @@
 {
   "CurrVersion": "0.10",
   "MinCompatibleVersion": "0.10",
-  "Description": "Adding batch event verion to events table",
+  "Description": "Adding batch event verion to events table, alter execution table to have workflow state and last write version",
   "SchemaUpdateCqlFiles": [
-    "event_batch_version.cql"
+    "event_batch_version.cql",
+    "execution_last_write_version_and_workflow_state.cql"
   ]
 }

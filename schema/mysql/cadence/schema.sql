@@ -118,6 +118,7 @@ CREATE TABLE current_executions(
 	state INT NOT NULL,
 	close_status INT NOT NULL,
   start_version BIGINT,
+	last_write_version BIGINT,
   PRIMARY KEY (shard_id, domain_id, workflow_id)
 );
 
