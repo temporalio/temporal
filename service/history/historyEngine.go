@@ -1417,6 +1417,7 @@ Update_History_Loop:
 			if err1 != nil {
 				return nil, err1
 			}
+			tBuilder = e.getTimerBuilder(&context.workflowExecution)
 			isComplete = false
 			hasUnhandledEvents = true
 			continueAsNewBuilder = nil
