@@ -46,7 +46,8 @@ import (
 )
 
 const (
-	signalInputSizeLimit                     = 256 * 1024
+	signalInputWarnSizeLimit                 = 256 * 1024
+	signalInputErrSizeLimit                  = 2 * 1024 * 1024
 	conditionalRetryCount                    = 5
 	activityCancelationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancelationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
@@ -1295,8 +1296,8 @@ Update_History_Loop:
 					failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
 					break Process_Decision_Loop
 				}
-				if err = validateSignalInput(attributes.Input, e.metricsClient,
-					metrics.HistoryRespondDecisionTaskCompletedScope); err != nil {
+				if err = validateSignalInput(domainID, &workflowExecution, attributes.Input, e.metricsClient,
+					metrics.HistoryRespondDecisionTaskCompletedScope, e.logger); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadSignalInputSize
 					break Process_Decision_Loop
@@ -1881,8 +1882,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	if err := validateSignalInput(request.GetInput(), e.metricsClient,
-		metrics.HistorySignalWorkflowExecutionScope); err != nil {
+	if err := validateSignalInput(domainID, &execution, request.GetInput(), e.metricsClient,
+		metrics.HistorySignalWorkflowExecutionScope, e.logger); err != nil {
 		return err
 	}
 
@@ -1932,8 +1933,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		WorkflowId: sRequest.WorkflowId,
 	}
 
-	if err := validateSignalInput(sRequest.GetSignalInput(), e.metricsClient,
-		metrics.HistorySignalWithStartWorkflowExecutionScope); err != nil {
+	if err := validateSignalInput(domainID, &execution, sRequest.GetSignalInput(), e.metricsClient,
+		metrics.HistorySignalWithStartWorkflowExecutionScope, e.logger); err != nil {
 		return nil, err
 	}
 
@@ -2837,15 +2838,25 @@ func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecut
 	return common.ValidateRetryPolicy(request.RetryPolicy)
 }
 
-func validateSignalInput(signalInput []byte, metricsClient metrics.Client, scope int) error {
+func validateSignalInput(domainID string, execution *workflow.WorkflowExecution, signalInput []byte, metricsClient metrics.Client, scope int, logger bark.Logger) error {
 	size := len(signalInput)
 	metricsClient.RecordTimer(
 		scope,
 		metrics.SignalSizeTimer,
 		time.Duration(size),
 	)
-	if size > signalInputSizeLimit {
-		return ErrSignalOverSize
+
+	if size > signalInputWarnSizeLimit {
+		logger.WithFields(bark.Fields{
+			logging.TagDomainID:            domainID,
+			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+			logging.TagWorkflowRunID:       execution.GetRunId(),
+			logging.TagSize:                size,
+		}).Warn("Large signal size encountered.")
+
+		if size > signalInputErrSizeLimit {
+			return ErrSignalOverSize
+		}
 	}
 	return nil
 }
