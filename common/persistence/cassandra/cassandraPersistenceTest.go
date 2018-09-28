@@ -184,11 +184,16 @@ func (s *TestCluster) SetupTestDatabase(options *persistencetests.TestBaseOption
 
 	s.CreateSession(options)
 	s.CreateDatabase(1, options.DropDatabase)
-	cadencePackageDir, err := getCadencePackageDir()
-	if err != nil {
-		log.Fatal(err)
+	schemaDir := options.SchemaDir + "/"
+
+	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
+		cadencePackageDir, err := getCadencePackageDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		schemaDir = cadencePackageDir + schemaDir
 	}
-	schemaDir := cadencePackageDir + options.SchemaDir + "/"
+
 	s.LoadSchema([]string{"schema.cql"}, schemaDir)
 	s.LoadVisibilitySchema([]string{"schema.cql"}, schemaDir)
 }
