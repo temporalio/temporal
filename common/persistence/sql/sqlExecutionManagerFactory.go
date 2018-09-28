@@ -52,7 +52,12 @@ func NewExecutionManagerFactory(host string, port int, username, password, dbNam
 }
 
 func (f *sqlExecutionManagerFactory) CreateExecutionManager(shardID int) (persistence.ExecutionManager, error) {
-	return NewSQLMatchingPersistence(f.host, f.port, f.username, f.password, f.dbName, f.logger)
+	pMgr, err := NewSQLMatchingPersistence(f.host, f.port, f.username, f.password, f.dbName, f.logger)
+	if err != nil {
+		return nil, err
+	}
+	mgr := persistence.NewExecutionManagerImpl(pMgr)
+	return mgr, nil
 }
 
 func (f *sqlExecutionManagerFactory) Close() {

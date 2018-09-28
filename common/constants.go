@@ -50,8 +50,10 @@ const (
 
 // Data encoding types
 const (
-	EncodingTypeJSON EncodingType = "json"
-	EncodingTypeGob               = "gob"
+	EncodingTypeJSON     EncodingType = "json"
+	EncodingTypeThriftRW              = "thriftrw"
+	EncodingTypeGob                   = "gob"
+	EncodingTypeUnknown               = "unknow"
 )
 
 // NoRetryBackoff is used to represent backoff when no retry is needed

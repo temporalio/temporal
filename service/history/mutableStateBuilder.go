@@ -67,9 +67,9 @@ type (
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedID   string              // Deleted signaled requestId
 
-		bufferedEvents       []*persistence.SerializedHistoryEventBatch // buffered history events that are already persisted
-		updateBufferedEvents *persistence.SerializedHistoryEventBatch   // buffered history events that needs to be persisted
-		clearBufferedEvents  bool                                       // delete buffered events from persistence
+		bufferedEvents       []*workflow.HistoryEvent // buffered history events that are already persisted
+		updateBufferedEvents []*workflow.HistoryEvent // buffered history events that needs to be persisted
+		clearBufferedEvents  bool                     // delete buffered events from persistence
 
 		bufferedReplicationTasks       map[int64]*persistence.BufferedReplicationTask // Storage for out of order events
 		updateBufferedReplicationTasks *persistence.BufferedReplicationTask
@@ -79,9 +79,7 @@ type (
 		replicationState *persistence.ReplicationState
 		continueAsNew    *persistence.CreateWorkflowExecutionRequest
 		hBuilder         *historyBuilder
-		eventSerializer  historyEventSerializer
 		currentCluster   string
-		stateStats       *mutableStateStats
 		historySize      int
 		config           *Config
 		logger           bark.Logger
@@ -115,10 +113,9 @@ func newMutableStateBuilder(currentCluster string, config *Config, logger bark.L
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedID:   "",
 
-		eventSerializer: newJSONHistoryEventSerializer(),
-		currentCluster:  currentCluster,
-		config:          config,
-		logger:          logger,
+		currentCluster: currentCluster,
+		config:         config,
+		logger:         logger,
 	}
 	s.executionInfo = &persistence.WorkflowExecutionInfo{
 		NextEventID:        common.FirstEventID,
@@ -160,8 +157,6 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 }
 
 func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
-	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
-	e.clearStats()
 
 	e.pendingActivityInfoIDs = state.ActivitInfos
 	e.pendingTimerInfoIDs = state.TimerInfos
@@ -179,99 +174,17 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	}
 }
 
-func (e *mutableStateBuilder) GetStats() *mutableStateStats {
-	if e.stateStats == nil {
-		e.stateStats = e.computeStats()
-	}
-
-	return e.stateStats
-}
-
 func (e *mutableStateBuilder) IncrementHistorySize(appendSize int) {
 	e.executionInfo.HistorySize += int64(appendSize)
+}
+
+func (e *mutableStateBuilder) GetHistorySize() int64 {
+	return e.executionInfo.HistorySize
 }
 
 func (e *mutableStateBuilder) SetNewRunSize(size int) {
 	if e.continueAsNew != nil {
 		e.continueAsNew.HistorySize = int64(size)
-	}
-}
-
-func (e *mutableStateBuilder) clearStats() {
-	e.stateStats = nil
-}
-
-func (e *mutableStateBuilder) computeStats() *mutableStateStats {
-	executionInfoSize := computeExecutionInfoSize(e.executionInfo)
-
-	activityInfoCount := 0
-	activityInfoSize := 0
-	for _, ai := range e.pendingActivityInfoIDs {
-		activityInfoCount++
-		activityInfoSize += computeActivityInfoSize(ai)
-	}
-
-	timerInfoCount := 0
-	timerInfoSize := 0
-	for _, ti := range e.pendingTimerInfoIDs {
-		timerInfoCount++
-		timerInfoSize += computeTimerInfoSize(ti)
-	}
-
-	childExecutionInfoCount := 0
-	childExecutionInfoSize := 0
-	for _, ci := range e.pendingChildExecutionInfoIDs {
-		childExecutionInfoCount++
-		childExecutionInfoSize += computeChildInfoSize(ci)
-	}
-
-	signalInfoCount := 0
-	signalInfoSize := 0
-	for _, si := range e.pendingSignalInfoIDs {
-		signalInfoCount++
-		signalInfoSize += computeSignalInfoSize(si)
-	}
-
-	bufferedEventsCount := 0
-	bufferedEventsSize := 0
-	for _, e := range e.bufferedEvents {
-		bufferedEventsCount++
-		bufferedEventsSize += computeBufferedEventsSize(e)
-	}
-
-	bufferedReplicationTasksCount := 0
-	bufferedReplicationTasksSize := 0
-	for _, rt := range e.bufferedReplicationTasks {
-		bufferedReplicationTasksCount++
-		bufferedReplicationTasksSize += computeBufferedReplicationTasksSize(rt)
-	}
-
-	requestCancelInfoCount := len(e.pendingRequestCancelInfoIDs)
-
-	totalSize := executionInfoSize
-	totalSize += activityInfoSize
-	totalSize += timerInfoSize
-	totalSize += childExecutionInfoSize
-	totalSize += signalInfoSize
-	totalSize += bufferedEventsSize
-	totalSize += bufferedReplicationTasksSize
-
-	return &mutableStateStats{
-		mutableStateSize:              totalSize,
-		executionInfoSize:             executionInfoSize,
-		activityInfoSize:              activityInfoSize,
-		timerInfoSize:                 timerInfoSize,
-		childInfoSize:                 childExecutionInfoSize,
-		signalInfoSize:                signalInfoSize,
-		bufferedEventsSize:            bufferedEventsSize,
-		bufferedReplicationTasksSize:  bufferedReplicationTasksSize,
-		activityInfoCount:             activityInfoCount,
-		timerInfoCount:                timerInfoCount,
-		childInfoCount:                childExecutionInfoCount,
-		signalInfoCount:               signalInfoCount,
-		bufferedEventsCount:           bufferedEventsCount,
-		bufferedReplicationTasksCount: bufferedReplicationTasksCount,
-		requestCancelInfoCount:        requestCancelInfoCount,
 	}
 }
 
@@ -293,7 +206,6 @@ func (e *mutableStateBuilder) GetReplicationState() *persistence.ReplicationStat
 
 func (e *mutableStateBuilder) ResetSnapshot(prevRunID string) *persistence.ResetMutableStateRequest {
 	// Clear any cached stats before loading mutable state to force recompute on next call to GetStats
-	e.clearStats()
 
 	insertActivities := make([]*persistence.ActivityInfo, 0, len(e.pendingActivityInfoIDs))
 	for _, info := range e.pendingActivityInfoIDs {
@@ -354,30 +266,12 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 
 	// no decision in-flight, flush all buffered events to committed bucket
 	if !e.HasInFlightDecisionTask() {
-		flush := func(bufferedEventBatch *persistence.SerializedHistoryEventBatch) error {
-			// TODO: get serializer based on eventBatch's EncodingType when we support multiple encoding
-			eventBatch, err := e.hBuilder.serializer.Deserialize(bufferedEventBatch)
-			if err != nil {
-				logging.LogHistoryDeserializationErrorEvent(e.logger, err, "Unable to serialize execution history for update.")
-				return err
-			}
-			for _, event := range eventBatch.Events {
-				newCommittedEvents = append(newCommittedEvents, event)
-			}
-			return nil
-		}
 
 		// flush persisted buffered events
-		for _, bufferedEventBatch := range e.bufferedEvents {
-			if err := flush(bufferedEventBatch); err != nil {
-				return err
-			}
-		}
+		newCommittedEvents = append(newCommittedEvents, e.bufferedEvents...)
 		// flush pending buffered events
 		if e.updateBufferedEvents != nil {
-			if err := flush(e.updateBufferedEvents); err != nil {
-				return err
-			}
+			newCommittedEvents = append(newCommittedEvents, e.updateBufferedEvents...)
 		}
 
 		// flush new buffered events that were not saved to persistence yet
@@ -397,14 +291,7 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 
 	// if decision is not closed yet, and there are new buffered events, then put those to the pending buffer
 	if e.HasInFlightDecisionTask() && len(newBufferedEvents) > 0 {
-		// decision in-flight, and some new events needs to be buffered
-		bufferedBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), newBufferedEvents)
-		serializedEvents, err := e.hBuilder.serializer.Serialize(bufferedBatch)
-		if err != nil {
-			logging.LogHistorySerializationErrorEvent(e.logger, err, "Unable to serialize execution history for update.")
-			return err
-		}
-		e.updateBufferedEvents = serializedEvents
+		e.updateBufferedEvents = newBufferedEvents
 	}
 
 	return nil
@@ -457,8 +344,6 @@ func (e *mutableStateBuilder) UpdateReplicationStateLastEventID(clusterName stri
 }
 
 func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates, error) {
-	// Clear any cached stats on each update to force recompute on next call to GetStats
-	e.clearStats()
 
 	if err := e.FlushBufferedEvents(); err != nil {
 		return nil, err
@@ -503,7 +388,7 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 	e.continueAsNew = nil
 	e.clearBufferedEvents = false
 	if e.updateBufferedEvents != nil {
-		e.bufferedEvents = append(e.bufferedEvents, e.updateBufferedEvents)
+		e.bufferedEvents = append(e.bufferedEvents, e.updateBufferedEvents...)
 		e.updateBufferedEvents = nil
 	}
 	if len(e.bufferedEvents) > e.config.MaximumBufferedEventsBatch() {
@@ -517,31 +402,12 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 
 func (e *mutableStateBuilder) BufferReplicationTask(
 	request *h.ReplicateEventsRequest) error {
-	var err error
-	var serializedHistoryBatch, serializedNewRunHistoryBatch *persistence.SerializedHistoryEventBatch
-	if request.History != nil {
-		historyBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), request.History.Events)
-		serializedHistoryBatch, err = e.hBuilder.serializer.Serialize(historyBatch)
-		if err != nil {
-			return err
-		}
-	}
-
-	if request.NewRunHistory != nil {
-		newRunHistoryBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(),
-			request.NewRunHistory.Events)
-		serializedNewRunHistoryBatch, err = e.hBuilder.serializer.Serialize(newRunHistoryBatch)
-		if err != nil {
-			return err
-		}
-	}
-
 	bt := &persistence.BufferedReplicationTask{
 		FirstEventID:  request.GetFirstEventId(),
 		NextEventID:   request.GetNextEventId(),
 		Version:       request.GetVersion(),
-		History:       serializedHistoryBatch,
-		NewRunHistory: serializedNewRunHistoryBatch,
+		History:       request.History.Events,
+		NewRunHistory: request.NewRunHistory.Events,
 	}
 
 	e.bufferedReplicationTasks[request.GetFirstEventId()] = bt
@@ -559,29 +425,6 @@ func (e *mutableStateBuilder) GetBufferedReplicationTask(firstEventID int64) (*p
 func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) {
 	delete(e.bufferedReplicationTasks, firstEventID)
 	e.deleteBufferedReplicationEvent = common.Int64Ptr(firstEventID)
-}
-
-func (e *mutableStateBuilder) GetBufferedHistory(
-	serializedHistory *persistence.SerializedHistoryEventBatch) *workflow.History {
-
-	if serializedHistory != nil {
-		var history []*workflow.HistoryEvent
-		batch, err := e.hBuilder.serializer.Deserialize(serializedHistory)
-		if err != nil {
-			// TODO: return proper error here
-			return nil
-		}
-
-		for _, event := range batch.Events {
-			history = append(history, event)
-		}
-
-		return &workflow.History{
-			Events: history,
-		}
-	}
-
-	return nil
 }
 
 func (e *mutableStateBuilder) CreateReplicationTask() *persistence.HistoryReplicationTask {
@@ -839,7 +682,7 @@ func (e *mutableStateBuilder) GetActivityScheduledEvent(scheduleEventID int64) (
 		return nil, false
 	}
 
-	return e.GetHistoryEvent(ai.ScheduledEvent)
+	return ai.ScheduledEvent, true
 }
 
 func (e *mutableStateBuilder) GetActivityStartedEvent(scheduleEventID int64) (*workflow.HistoryEvent, bool) {
@@ -848,7 +691,7 @@ func (e *mutableStateBuilder) GetActivityStartedEvent(scheduleEventID int64) (*w
 		return nil, false
 	}
 
-	return e.GetHistoryEvent(ai.StartedEvent)
+	return ai.StartedEvent, true
 }
 
 // GetActivityInfo gives details about an activity that is currently in progress.
@@ -888,7 +731,7 @@ func (e *mutableStateBuilder) GetChildExecutionInitiatedEvent(initiatedEventID i
 		return nil, false
 	}
 
-	return e.GetHistoryEvent(ci.InitiatedEvent)
+	return ci.InitiatedEvent, true
 }
 
 // GetChildExecutionStartedEvent reads out the ChildExecutionStartedEvent from mutable state for in-progress child
@@ -899,7 +742,7 @@ func (e *mutableStateBuilder) GetChildExecutionStartedEvent(initiatedEventID int
 		return nil, false
 	}
 
-	return e.GetHistoryEvent(ci.StartedEvent)
+	return ci.StartedEvent, true
 }
 
 // GetRequestCancelInfo gives details about a request cancellation that is currently in progress.
@@ -925,12 +768,7 @@ func (e *mutableStateBuilder) GetSignalInfo(initiatedEventID int64) (*persistenc
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
 func (e *mutableStateBuilder) GetCompletionEvent() (*workflow.HistoryEvent, bool) {
-	serializedEvent := e.executionInfo.CompletionEvent
-	if serializedEvent == nil {
-		return nil, false
-	}
-
-	return e.GetHistoryEvent(serializedEvent)
+	return e.executionInfo.CompletionEvent, true
 }
 
 // DeletePendingChildExecution deletes details about a ChildExecutionInfo.
@@ -954,14 +792,9 @@ func (e *mutableStateBuilder) DeletePendingSignal(initiatedEventID int64) {
 func (e *mutableStateBuilder) writeCompletionEventToMutableState(completionEvent *workflow.HistoryEvent) error {
 	// First check to see if this is a Child Workflow
 	if e.HasParentExecution() {
-		serializedEvent, err := e.eventSerializer.Serialize(completionEvent)
-		if err != nil {
-			return err
-		}
-
 		// Store the completion result within mutable state so we can communicate the result to parent execution
 		// during the processing of DeleteTransferTask
-		e.executionInfo.CompletionEvent = serializedEvent
+		e.executionInfo.CompletionEvent = completionEvent
 	}
 
 	return nil
@@ -1200,15 +1033,6 @@ func (e *mutableStateBuilder) AddSignalRequested(requestID string) {
 func (e *mutableStateBuilder) DeleteSignalRequested(requestID string) {
 	delete(e.pendingSignalRequestedIDs, requestID)
 	e.deleteSignalRequestedID = requestID
-}
-
-func (e *mutableStateBuilder) GetHistoryEvent(serializedEvent []byte) (*workflow.HistoryEvent, bool) {
-	event, err := e.eventSerializer.Deserialize(serializedEvent)
-	if err != nil {
-		return nil, false
-	}
-
-	return event, true
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(domainID string,
@@ -1584,10 +1408,6 @@ func (e *mutableStateBuilder) AddActivityTaskScheduledEvent(decisionCompletedEve
 func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	event *workflow.HistoryEvent) *persistence.ActivityInfo {
 	attributes := event.ActivityTaskScheduledEventAttributes
-	scheduleEvent, err := e.eventSerializer.Serialize(event)
-	if err != nil {
-		return nil
-	}
 
 	scheduleEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeoutSeconds()
@@ -1595,7 +1415,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 	ai := &persistence.ActivityInfo{
 		Version:                  event.GetVersion(),
 		ScheduleID:               scheduleEventID,
-		ScheduledEvent:           scheduleEvent,
+		ScheduledEvent:           event,
 		ScheduledTime:            time.Unix(0, *event.Timestamp),
 		StartedID:                common.EmptyEventID,
 		StartedTime:              time.Time{},
@@ -2376,16 +2196,12 @@ func (e *mutableStateBuilder) AddStartChildWorkflowExecutionInitiatedEvent(decis
 
 func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent(event *workflow.HistoryEvent,
 	createRequestID string) *persistence.ChildExecutionInfo {
-	initiatedEvent, err := e.eventSerializer.Serialize(event)
-	if err != nil {
-		return nil
-	}
 
 	initiatedEventID := event.GetEventId()
 	ci := &persistence.ChildExecutionInfo{
 		Version:         event.GetVersion(),
 		InitiatedID:     initiatedEventID,
-		InitiatedEvent:  initiatedEvent,
+		InitiatedEvent:  event,
 		StartedID:       common.EmptyEventID,
 		CreateRequestID: createRequestID,
 	}
@@ -2418,13 +2234,8 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(event 
 	initiatedID := attributes.GetInitiatedEventId()
 
 	ci, _ := e.GetChildExecutionInfo(initiatedID)
-	startedEvent, err := e.eventSerializer.Serialize(event)
-	if err != nil {
-		return err
-	}
-
 	ci.StartedID = event.GetEventId()
-	ci.StartedEvent = startedEvent
+	ci.StartedEvent = event
 	e.updateChildExecutionInfos[ci] = struct{}{}
 
 	return nil
@@ -2463,9 +2274,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCompletedEvent(initiatedI
 		return nil
 	}
 
-	startedEvent, _ := e.GetHistoryEvent(ci.StartedEvent)
-	domain := startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
-	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+	domain := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
 
 	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(domain, childExecution, workflowType, ci.InitiatedID,
 		ci.StartedID, attributes)
@@ -2491,9 +2301,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionFailedEvent(initiatedID i
 		return nil
 	}
 
-	startedEvent, _ := e.GetHistoryEvent(ci.StartedEvent)
-	domain := startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
-	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+	domain := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
 
 	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(domain, childExecution, workflowType, ci.InitiatedID,
 		ci.StartedID, attributes)
@@ -2519,9 +2328,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionCanceledEvent(initiatedID
 		return nil
 	}
 
-	startedEvent, _ := e.GetHistoryEvent(ci.StartedEvent)
-	domain := startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
-	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+	domain := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
 
 	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(domain, childExecution, workflowType, ci.InitiatedID,
 		ci.StartedID, attributes)
@@ -2547,9 +2355,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTerminatedEvent(initiated
 		return nil
 	}
 
-	startedEvent, _ := e.GetHistoryEvent(ci.StartedEvent)
-	domain := startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
-	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+	domain := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
 
 	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(domain, childExecution, workflowType, ci.InitiatedID,
 		ci.StartedID, attributes)
@@ -2575,9 +2382,8 @@ func (e *mutableStateBuilder) AddChildWorkflowExecutionTimedOutEvent(initiatedID
 		return nil
 	}
 
-	startedEvent, _ := e.GetHistoryEvent(ci.StartedEvent)
-	domain := startedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
-	workflowType := startedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
+	domain := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.Domain
+	workflowType := ci.StartedEvent.ChildWorkflowExecutionStartedEventAttributes.WorkflowType
 
 	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(domain, childExecution, workflowType, ci.InitiatedID,
 		ci.StartedID, attributes)

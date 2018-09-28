@@ -29,16 +29,14 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/logging"
 	p "github.com/uber/cadence/common/persistence"
 )
 
 type (
 	sqlHistoryManager struct {
-		db                *sqlx.DB
-		shardID           int
-		logger            bark.Logger
-		serializerFactory p.HistorySerializerFactory
+		db      *sqlx.DB
+		shardID int
+		logger  bark.Logger
 	}
 
 	eventsRow struct {
@@ -114,27 +112,25 @@ func (m *sqlHistoryManager) Close() {
 }
 
 // NewHistoryPersistence creates an instance of HistoryManager
-func NewHistoryPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (p.HistoryManager, error) {
+func NewHistoryPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (p.HistoryStore, error) {
 	var db, err = newConnection(host, port, username, password, dbName)
 	if err != nil {
 		return nil, err
 	}
 	return &sqlHistoryManager{
-		db:                db,
-		logger:            logger,
-		serializerFactory: p.NewHistorySerializerFactory(),
+		db:     db,
+		logger: logger,
 	}, nil
 }
 
-func (m *sqlHistoryManager) AppendHistoryEvents(request *p.AppendHistoryEventsRequest) error {
+func (m *sqlHistoryManager) AppendHistoryEvents(request *p.InternalAppendHistoryEventsRequest) error {
 	arg := &eventsRow{
 		DomainID:     request.DomainID,
 		WorkflowID:   *request.Execution.WorkflowId,
 		RunID:        *request.Execution.RunId,
 		FirstEventID: request.FirstEventID,
 		Data:         request.Events.Data,
-		DataEncoding: string(request.Events.EncodingType),
-		DataVersion:  int64(request.Events.Version),
+		DataEncoding: string(request.Events.Encoding),
 		RangeID:      request.RangeID,
 		TxID:         request.TransactionID,
 	}
@@ -207,12 +203,8 @@ func (m *sqlHistoryManager) AppendHistoryEvents(request *p.AppendHistoryEventsRe
 }
 
 // TODO: Pagination
-func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.GetWorkflowExecutionHistoryRequest) (
-	*p.GetWorkflowExecutionHistoryResponse, error) {
-	token, err := m.deserializeToken(request)
-	if err != nil {
-		return nil, err
-	}
+func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWorkflowExecutionHistoryRequest) (
+	*p.InternalGetWorkflowExecutionHistoryResponse, error) {
 
 	var rows []eventsRow
 	if err := m.db.Select(&rows,
@@ -220,7 +212,7 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.GetWorkflowEx
 		request.DomainID,
 		request.Execution.WorkflowId,
 		request.Execution.RunId,
-		token.LastEventID+1,
+		request.FirstEventID,
 		request.NextEventID,
 		request.PageSize); err != nil {
 		return nil, &workflow.InternalServiceError{
@@ -237,65 +229,33 @@ func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.GetWorkflowEx
 
 	eventBatchVersionPointer := new(int64)
 	eventBatchVersion := common.EmptyVersion
-	lastFirstEventID := common.EmptyEventID // first_event_id of last batch
-	history := &workflow.History{}
-	eventBatch := p.SerializedHistoryEventBatch{}
+	lastEventBatchVersion := request.LastEventBatchVersion
+
+	history := make([]*p.DataBlob, 0)
 	for _, v := range rows {
+		eventBatch := &p.DataBlob{}
 		eventBatch.Data = v.Data
-		eventBatch.EncodingType = common.EncodingType(v.DataEncoding)
+		eventBatch.Encoding = common.EncodingType(v.DataEncoding)
 
 		if eventBatchVersionPointer != nil {
 			eventBatchVersion = *eventBatchVersionPointer
 		}
-		if eventBatchVersion >= token.LastEventBatchVersion {
-			historyBatch, err := m.deserializeEvents(&eventBatch)
-			if err != nil {
-				return nil, err
-			}
-			if len(historyBatch.Events) == 0 || historyBatch.Events[0].GetEventId() > token.LastEventID+1 {
-				logger := m.logger.WithFields(bark.Fields{
-					logging.TagWorkflowExecutionID: request.Execution.GetWorkflowId(),
-					logging.TagWorkflowRunID:       request.Execution.GetRunId(),
-					logging.TagDomainID:            request.DomainID,
-				})
-				logger.Error("Unexpected event batch")
-				return nil, fmt.Errorf("corrupted history event batch")
-			}
-
-			if historyBatch.Events[0].GetEventId() != token.LastEventID+1 {
-				// staled event batch, skip it
-				continue
-			}
-
-			lastFirstEventID = historyBatch.Events[0].GetEventId()
-			history.Events = append(history.Events, historyBatch.Events...)
-			token.LastEventID = historyBatch.Events[len(historyBatch.Events)-1].GetEventId()
-			token.LastEventBatchVersion = eventBatchVersion
+		if eventBatchVersion >= lastEventBatchVersion {
+			history = append(history, eventBatch)
+			lastEventBatchVersion = eventBatchVersion
 		}
 
 		eventBatchVersionPointer = new(int64)
 		eventBatchVersion = common.EmptyVersion
-		eventBatch = p.SerializedHistoryEventBatch{}
 	}
-	var nextToken []byte
-	if token.LastEventID < request.NextEventID-1 {
-		nextToken, err = m.serializeToken(token)
-		if err != nil {
-			return nil, err
-		}
-	}
-	response := &p.GetWorkflowExecutionHistoryResponse{
-		History:          history,
-		LastFirstEventID: lastFirstEventID,
-		NextPageToken:    nextToken,
-	}
-	return response, nil
-}
 
-func (m *sqlHistoryManager) deserializeEvents(e *p.SerializedHistoryEventBatch) (*p.HistoryEventBatch, error) {
-	p.SetSerializedHistoryDefaults(e)
-	s, _ := m.serializerFactory.Get(e.EncodingType)
-	return s.Deserialize(e)
+	response := &p.InternalGetWorkflowExecutionHistoryResponse{
+		History:               history,
+		LastEventBatchVersion: lastEventBatchVersion,
+		NextPageToken:         []byte{},
+	}
+
+	return response, nil
 }
 
 func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWorkflowExecutionHistoryRequest) error {

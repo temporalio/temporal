@@ -37,12 +37,11 @@ type (
 	}
 
 	conflictResolverImpl struct {
-		shard              ShardContext
-		clusterMetadata    cluster.Metadata
-		context            *workflowExecutionContext
-		historyMgr         persistence.HistoryManager
-		hSerializerFactory persistence.HistorySerializerFactory
-		logger             bark.Logger
+		shard           ShardContext
+		clusterMetadata cluster.Metadata
+		context         *workflowExecutionContext
+		historyMgr      persistence.HistoryManager
+		logger          bark.Logger
 	}
 )
 
@@ -50,12 +49,11 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 	logger bark.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{
-		shard:              shard,
-		clusterMetadata:    shard.GetService().GetClusterMetadata(),
-		context:            context,
-		historyMgr:         historyMgr,
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
-		logger:             logger,
+		shard:           shard,
+		clusterMetadata: shard.GetService().GetClusterMetadata(),
+		context:         context,
+		historyMgr:      historyMgr,
+		logger:          logger,
 	}
 }
 

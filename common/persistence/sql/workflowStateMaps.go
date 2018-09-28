@@ -27,8 +27,9 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 
-	"github.com/jmoiron/sqlx"
 	"strings"
+
+	"github.com/jmoiron/sqlx"
 )
 
 /*
@@ -220,10 +221,10 @@ func updateActivityInfos(tx *sqlx.Tx,
 					ScheduleID: v.ScheduleID,
 				},
 				Version:                  v.Version,
-				ScheduledEvent:           takeAddressIfNotNil(v.ScheduledEvent),
+				ScheduledEvent:           nil,
 				ScheduledTime:            v.ScheduledTime,
 				StartedID:                v.StartedID,
-				StartedEvent:             takeAddressIfNotNil(v.StartedEvent),
+				StartedEvent:             nil,
 				StartedTime:              v.StartedTime,
 				ActivityID:               v.ActivityID,
 				RequestID:                v.RequestID,
@@ -357,10 +358,10 @@ func getActivityInfoMap(tx *sqlx.Tx,
 		ret[v.ScheduleID] = &persistence.ActivityInfo{
 			Version:                  v.Version,
 			ScheduleID:               v.ScheduleID,
-			ScheduledEvent:           dereferenceIfNotNil(v.ScheduledEvent),
+			ScheduledEvent:           nil,
 			ScheduledTime:            v.ScheduledTime,
 			StartedID:                v.StartedID,
-			StartedEvent:             dereferenceIfNotNil(v.StartedEvent),
+			StartedEvent:             nil,
 			StartedTime:              v.StartedTime,
 			ActivityID:               v.ActivityID,
 			RequestID:                v.RequestID,
@@ -628,9 +629,9 @@ func updateChildExecutionInfos(tx *sqlx.Tx,
 					InitiatedID: v.InitiatedID,
 				},
 				Version:         v.Version,
-				InitiatedEvent:  takeAddressIfNotNil(v.InitiatedEvent),
+				InitiatedEvent:  nil,
 				StartedID:       v.StartedID,
-				StartedEvent:    takeAddressIfNotNil(v.StartedEvent),
+				StartedEvent:    nil,
 				CreateRequestID: v.CreateRequestID,
 			}
 		}
@@ -689,9 +690,9 @@ func getChildExecutionInfoMap(tx *sqlx.Tx,
 		ret[v.InitiatedID] = &persistence.ChildExecutionInfo{
 			InitiatedID:     v.InitiatedID,
 			Version:         v.Version,
-			InitiatedEvent:  dereferenceIfNotNil(v.InitiatedEvent),
+			InitiatedEvent:  nil,
 			StartedID:       v.StartedID,
-			StartedEvent:    dereferenceIfNotNil(v.StartedEvent),
+			StartedEvent:    nil,
 			CreateRequestID: v.CreateRequestID,
 		}
 
@@ -1142,7 +1143,7 @@ func getBufferedReplicationTasks(tx *sqlx.Tx,
 		}
 
 		if v.History != nil {
-			ret[v.FirstEventID].History = &persistence.SerializedHistoryEventBatch{}
+			ret[v.FirstEventID].History = make([]*workflow.HistoryEvent, 0)
 			if err := gobDeserialize(*v.History, &ret[v.FirstEventID].History); err != nil {
 				return nil, &workflow.InternalServiceError{
 					Message: fmt.Sprintf("Failed to get buffered replication tasks. Failed to deserialize a BufferedReplicationTask.History. Error: %v", err),
@@ -1151,7 +1152,7 @@ func getBufferedReplicationTasks(tx *sqlx.Tx,
 		}
 
 		if v.NewRunHistory != nil {
-			ret[v.FirstEventID].NewRunHistory = &persistence.SerializedHistoryEventBatch{}
+			ret[v.FirstEventID].NewRunHistory = make([]*workflow.HistoryEvent, 0)
 			if err := gobDeserialize(*v.NewRunHistory, &ret[v.FirstEventID].NewRunHistory); err != nil {
 				return nil, &workflow.InternalServiceError{
 					Message: fmt.Sprintf("Failed to get buffered replication tasks. Failed to deserialize a BufferedReplicationTask.NewRunHistory. Error: %v", err),

@@ -81,11 +81,6 @@ type (
 		CreateEngine(context ShardContext) Engine
 	}
 
-	historyEventSerializer interface {
-		Serialize(event *workflow.HistoryEvent) ([]byte, error)
-		Deserialize(data []byte) (*workflow.HistoryEvent, error)
-	}
-
 	queueProcessor interface {
 		common.Daemon
 		notifyNewTask()

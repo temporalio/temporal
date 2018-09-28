@@ -66,7 +66,6 @@ type (
 		replicatorProcessor  queueProcessor
 		historyEventNotifier historyEventNotifier
 		tokenSerializer      common.TaskTokenSerializer
-		hSerializerFactory   persistence.HistorySerializerFactory
 		historyCache         *historyCache
 		metricsClient        metrics.Client
 		logger               bark.Logger
@@ -136,14 +135,12 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 	executionManager := shard.GetExecutionManager()
 	historyManager := shard.GetHistoryManager()
 	historyCache := newHistoryCache(shard)
-	historySerializerFactory := persistence.NewHistorySerializerFactory()
 	historyEngImpl := &historyEngineImpl{
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		historyMgr:         historyManager,
 		executionManager:   executionManager,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: historySerializerFactory,
 		historyCache:       historyCache,
 		logger: logger.WithFields(bark.Fields{
 			logging.TagWorkflowComponent: logging.TagValueHistoryEngineComponent,
@@ -158,8 +155,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
-		replicatorProcessor := newReplicatorQueueProcessor(shard, publisher, executionManager, historyManager,
-			historySerializerFactory, logger)
+		replicatorProcessor := newReplicatorQueueProcessor(shard, publisher, executionManager, historyManager, logger)
 		historyEngImpl.replicatorProcessor = replicatorProcessor
 		shardWrapper.replcatorProcessor = replicatorProcessor
 		historyEngImpl.replicator = newHistoryReplicator(shard, historyEngImpl, historyCache, shard.GetDomainCache(), historyManager,
@@ -334,14 +330,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
 	}}
-	// Serialize the history
-	serializedHistory, serializedError := msBuilder.GetHistoryBuilder().Serialize()
-	if serializedError != nil {
-		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
-			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
-			execution.GetWorkflowId(), execution.GetRunId()))
-		return nil, serializedError
-	}
 
 	var historySize int
 	historySize, err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
@@ -352,7 +340,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		TransactionID:     0,
 		FirstEventID:      startedEvent.GetEventId(),
 		EventBatchVersion: startedEvent.GetVersion(),
-		Events:            serializedHistory,
+		Events:            msBuilder.GetHistoryBuilder().GetHistory().Events,
 	})
 	if err != nil {
 		return nil, err
@@ -751,9 +739,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 				ai.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
 				ai.HeartbeatDetails = pi.Details
 			}
-			if scheduledEvent, ok := msBuilder.GetHistoryEvent(pi.ScheduledEvent); ok {
-				ai.ActivityType = scheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
-			}
+			ai.ActivityType = pi.ScheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
 			result.PendingActivities = append(result.PendingActivities, ai)
 		}
 	}
@@ -2075,14 +2061,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	timerTasks := []persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: e.shard.GetTimeSource().Now().Add(duration),
 	}}
-	// Serialize the history
-	serializedHistory, serializedError := msBuilder.GetHistoryBuilder().Serialize()
-	if serializedError != nil {
-		logging.LogHistorySerializationErrorEvent(e.logger, serializedError, fmt.Sprintf(
-			"HistoryEventBatch serialization error on start workflow.  WorkflowID: %v, RunID: %v",
-			execution.GetWorkflowId(), execution.GetRunId()))
-		return nil, serializedError
-	}
 
 	var historySize int
 	historySize, err = e.shard.AppendHistoryEvents(&persistence.AppendHistoryEventsRequest{
@@ -2093,7 +2071,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		TransactionID:     0,
 		FirstEventID:      startedEvent.GetEventId(),
 		EventBatchVersion: startedEvent.GetVersion(),
-		Events:            serializedHistory,
+		Events:            msBuilder.GetHistoryBuilder().GetHistory().Events,
 	})
 	if err != nil {
 		return nil, err
@@ -2545,15 +2523,15 @@ func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *tim
 	return newTimerBuilder(e.shard.GetConfig(), lg, common.NewRealTimeSource())
 }
 
-func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
-	err := s.ShardContext.UpdateWorkflowExecution(request)
+func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	resp, err := s.ShardContext.UpdateWorkflowExecution(request)
 	if err == nil {
 		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}
 	}
-	return err
+	return resp, err
 }
 
 func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (

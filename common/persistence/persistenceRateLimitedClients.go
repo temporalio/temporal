@@ -179,13 +179,13 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetWorkflowExecution(req
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
+func (p *workflowExecutionRateLimitedPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateWorkflowExecution(request)
-	return err
+	resp, err := p.persistence.UpdateWorkflowExecution(request)
+	return resp, err
 }
 
 func (p *workflowExecutionRateLimitedPersistenceClient) ResetMutableState(request *ResetMutableStateRequest) error {
@@ -340,13 +340,13 @@ func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *historyRateLimitedPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
+func (p *historyRateLimitedPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AppendHistoryEvents(request)
-	return err
+	resp, err := p.persistence.AppendHistoryEvents(request)
+	return resp, err
 }
 
 func (p *historyRateLimitedPersistenceClient) GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {

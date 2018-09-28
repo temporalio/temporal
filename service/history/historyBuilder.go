@@ -26,12 +26,10 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
-	"github.com/uber/cadence/common/persistence"
 )
 
 type (
 	historyBuilder struct {
-		serializer       persistence.HistorySerializer
 		transientHistory []*workflow.HistoryEvent
 		history          []*workflow.HistoryEvent
 		msBuilder        mutableState
@@ -41,7 +39,6 @@ type (
 
 func newHistoryBuilder(msBuilder mutableState, logger bark.Logger) *historyBuilder {
 	return &historyBuilder{
-		serializer:       persistence.NewJSONHistorySerializer(),
 		transientHistory: []*workflow.HistoryEvent{},
 		history:          []*workflow.HistoryEvent{},
 		msBuilder:        msBuilder,
@@ -51,9 +48,8 @@ func newHistoryBuilder(msBuilder mutableState, logger bark.Logger) *historyBuild
 
 func newHistoryBuilderFromEvents(history []*workflow.HistoryEvent, logger bark.Logger) *historyBuilder {
 	return &historyBuilder{
-		serializer: persistence.NewJSONHistorySerializer(),
-		history:    history,
-		logger:     logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
+		history: history,
+		logger:  logger.WithField(logging.TagWorkflowComponent, logging.TagValueHistoryBuilderComponent),
 	}
 }
 
@@ -72,20 +68,6 @@ func (b *historyBuilder) GetFirstEvent() *workflow.HistoryEvent {
 
 func (b *historyBuilder) HasTransientEvents() bool {
 	return b.transientHistory != nil && len(b.transientHistory) > 0
-}
-
-func (b *historyBuilder) SerializeEvents(events []*workflow.HistoryEvent) (*persistence.SerializedHistoryEventBatch,
-	error) {
-	eventBatch := persistence.NewHistoryEventBatch(persistence.GetDefaultHistoryVersion(), events)
-	history, err := b.serializer.Serialize(eventBatch)
-	if err != nil {
-		return nil, err
-	}
-	return history, nil
-}
-
-func (b *historyBuilder) Serialize() (*persistence.SerializedHistoryEventBatch, error) {
-	return b.SerializeEvents(b.history)
 }
 
 func (b *historyBuilder) AddWorkflowExecutionStartedEvent(request *h.StartWorkflowExecutionRequest,
@@ -1021,4 +1003,9 @@ func setDecisionTaskStartedEventInfo(historyEvent *workflow.HistoryEvent, schedu
 	historyEvent.DecisionTaskStartedEventAttributes = attributes
 
 	return historyEvent
+}
+
+func (b *historyBuilder) GetHistory() *workflow.History {
+	history := workflow.History{Events: b.history}
+	return &history
 }

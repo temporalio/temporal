@@ -111,11 +111,13 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.HistoryMgr, err = NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
+	pHisMgr, err := NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
 		options.DBPassword, options.Datacenter, keyspace, 2, log)
 	if err != nil {
 		log.Fatal(err)
 	}
+	tb.HistoryMgr = p.NewHistoryManagerImpl(pHisMgr, log)
+
 	tb.MetadataManager, err = NewMetadataPersistence(options.DBHost, options.DBPort, options.DBUser,
 		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
 	if err != nil {

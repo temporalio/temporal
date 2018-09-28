@@ -962,12 +962,5 @@ func (s *historyBuilderSuite) validateRequestCancelExternalWorkflowExecutionFail
 }
 
 func (s *historyBuilderSuite) printHistory() string {
-	history, err := s.builder.Serialize()
-	if err != nil {
-		s.logger.Errorf("Error serializing history: %v", err)
-		return ""
-	}
-
-	//s.logger.Info(string(history))
-	return history.String()
+	return s.builder.GetHistory().String()
 }

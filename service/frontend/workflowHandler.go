@@ -58,20 +58,19 @@ var _ workflowserviceserver.Interface = (*WorkflowHandler)(nil)
 type (
 	// WorkflowHandler - Thrift handler inteface for workflow service
 	WorkflowHandler struct {
-		domainCache        cache.DomainCache
-		metadataMgr        persistence.MetadataManager
-		historyMgr         persistence.HistoryManager
-		visibitiltyMgr     persistence.VisibilityManager
-		history            history.Client
-		matching           matching.Client
-		matchingRawClient  matching.Client
-		tokenSerializer    common.TaskTokenSerializer
-		hSerializerFactory persistence.HistorySerializerFactory
-		metricsClient      metrics.Client
-		startWG            sync.WaitGroup
-		rateLimiter        common.TokenBucket
-		config             *Config
-		domainReplicator   DomainReplicator
+		domainCache       cache.DomainCache
+		metadataMgr       persistence.MetadataManager
+		historyMgr        persistence.HistoryManager
+		visibitiltyMgr    persistence.VisibilityManager
+		history           history.Client
+		matching          matching.Client
+		matchingRawClient matching.Client
+		tokenSerializer   common.TaskTokenSerializer
+		metricsClient     metrics.Client
+		startWG           sync.WaitGroup
+		rateLimiter       common.TokenBucket
+		config            *Config
+		domainReplicator  DomainReplicator
 		service.Service
 	}
 
@@ -118,16 +117,15 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 	historyMgr persistence.HistoryManager, visibilityMgr persistence.VisibilityManager,
 	kafkaProducer messaging.Producer) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		Service:            sVice,
-		config:             config,
-		metadataMgr:        metadataMgr,
-		historyMgr:         historyMgr,
-		visibitiltyMgr:     visibilityMgr,
-		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
-		domainCache:        cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
-		rateLimiter:        common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
-		domainReplicator:   NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
+		Service:          sVice,
+		config:           config,
+		metadataMgr:      metadataMgr,
+		historyMgr:       historyMgr,
+		visibitiltyMgr:   visibilityMgr,
+		tokenSerializer:  common.NewJSONTaskTokenSerializer(),
+		domainCache:      cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
+		rateLimiter:      common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
+		domainReplicator: NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)

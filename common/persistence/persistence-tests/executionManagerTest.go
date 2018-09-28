@@ -161,7 +161,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		LastWriteVersion: version,
 		LastWriteEventID: updatedInfo.NextEventID - 1,
 	}
-	err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		ExecutionInfo:        updatedInfo,
 		TransferTasks:        nil,
 		TimerTasks:           nil,
@@ -1407,10 +1407,10 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,
 		ScheduleID:               1,
-		ScheduledEvent:           []byte("scheduled_event_1"),
+		ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(1)},
 		ScheduledTime:            currentTime,
 		StartedID:                2,
-		StartedEvent:             []byte("started_event_1"),
+		StartedEvent:             &gen.HistoryEvent{EventId: int64Ptr(2)},
 		StartedTime:              currentTime,
 		ScheduleToCloseTimeout:   1,
 		ScheduleToStartTimeout:   2,
@@ -1432,10 +1432,10 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(1), ai.ScheduleID)
-	s.Equal([]byte("scheduled_event_1"), ai.ScheduledEvent)
+	s.Equal(int64(1), *ai.ScheduledEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix()) // This line is flakey
 	s.Equal(int64(2), ai.StartedID)
-	s.Equal([]byte("started_event_1"), ai.StartedEvent)
+	s.Equal(int64(2), *ai.StartedEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
@@ -1538,9 +1538,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	childExecutionInfos := []*p.ChildExecutionInfo{{
 		Version:         1234,
 		InitiatedID:     1,
-		InitiatedEvent:  []byte("initiated_event_1"),
+		InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(1)},
 		StartedID:       2,
-		StartedEvent:    []byte("started_event_1"),
+		StartedEvent:    &gen.HistoryEvent{EventId: int64Ptr(2)},
 		CreateRequestID: createRequestID,
 	}}
 	err2 := s.UpsertChildExecutionsState(updatedInfo, int64(3), childExecutionInfos)
@@ -1555,9 +1555,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	s.NotNil(ci)
 	s.Equal(int64(1234), ci.Version)
 	s.Equal(int64(1), ci.InitiatedID)
-	s.Equal([]byte("initiated_event_1"), ci.InitiatedEvent)
+	s.Equal(int64(1), *ci.InitiatedEvent.EventId)
 	s.Equal(int64(2), ci.StartedID)
-	s.Equal([]byte("started_event_1"), ci.StartedEvent)
+	s.Equal(int64(2), *ci.StartedEvent.EventId)
 	s.Equal(createRequestID, ci.CreateRequestID)
 
 	err2 = s.DeleteChildExecutionsState(updatedInfo, int64(5), int64(1))
@@ -1765,7 +1765,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 		FirstEventID: int64(5),
 		NextEventID:  int64(7),
 		Version:      int64(11),
-		History:      s.serializeHistoryEvents(events),
+		History:      events,
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
 	s.NoError(err2)
@@ -1782,18 +1782,18 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(int64(7), bufferedTask.NextEventID)
 	s.Equal(int64(11), bufferedTask.Version)
 
-	bufferedEvents := s.deserializedHistoryEvents(bufferedTask.History)
-	s.Equal(2, len(bufferedEvents.Events))
-	s.Equal(int64(5), bufferedEvents.Events[0].GetEventId())
-	s.Equal(gen.EventTypeDecisionTaskCompleted, bufferedEvents.Events[0].GetEventType())
-	s.Equal(int64(2), bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetScheduledEventId())
-	s.Equal(int64(3), bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetStartedEventId())
-	s.Equal("test_worker", bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetIdentity())
-	s.Equal(int64(6), bufferedEvents.Events[1].GetEventId())
-	s.Equal(gen.EventTypeTimerStarted, bufferedEvents.Events[1].GetEventType())
-	s.Equal("ID1", bufferedEvents.Events[1].TimerStartedEventAttributes.GetTimerId())
-	s.Equal(int64(101), bufferedEvents.Events[1].TimerStartedEventAttributes.GetStartToFireTimeoutSeconds())
-	s.Equal(int64(5), bufferedEvents.Events[1].TimerStartedEventAttributes.GetDecisionTaskCompletedEventId())
+	bufferedEvents := bufferedTask.History
+	s.Equal(2, len(bufferedEvents))
+	s.Equal(int64(5), bufferedEvents[0].GetEventId())
+	s.Equal(gen.EventTypeDecisionTaskCompleted, bufferedEvents[0].GetEventType())
+	s.Equal(int64(2), bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetScheduledEventId())
+	s.Equal(int64(3), bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetStartedEventId())
+	s.Equal("test_worker", bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetIdentity())
+	s.Equal(int64(6), bufferedEvents[1].GetEventId())
+	s.Equal(gen.EventTypeTimerStarted, bufferedEvents[1].GetEventType())
+	s.Equal("ID1", bufferedEvents[1].TimerStartedEventAttributes.GetTimerId())
+	s.Equal(int64(101), bufferedEvents[1].TimerStartedEventAttributes.GetStartToFireTimeoutSeconds())
+	s.Equal(int64(5), bufferedEvents[1].TimerStartedEventAttributes.GetDecisionTaskCompletedEventId())
 
 	newExecutionRunID := "d83db48f-a63c-413d-a05a-bbf5a1ac1098"
 	info1 := state1.ExecutionInfo
@@ -1846,8 +1846,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 		FirstEventID:  int64(10),
 		NextEventID:   int64(12),
 		Version:       int64(12),
-		History:       s.serializeHistoryEvents(completionEvents),
-		NewRunHistory: s.serializeHistoryEvents(newRunEvents),
+		History:       completionEvents,
+		NewRunHistory: newRunEvents,
 	}
 	err3 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, bufferedTask, nil, int64(3), nil)
 	s.NoError(err3)
@@ -1864,33 +1864,33 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(int64(12), bufferedTask.NextEventID)
 	s.Equal(int64(12), bufferedTask.Version)
 
-	bufferedEvents = s.deserializedHistoryEvents(bufferedTask.History)
-	s.Equal(2, len(bufferedEvents.Events))
-	s.Equal(int64(10), bufferedEvents.Events[0].GetEventId())
-	s.Equal(gen.EventTypeDecisionTaskCompleted, bufferedEvents.Events[0].GetEventType())
-	s.Equal(int64(8), bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetScheduledEventId())
-	s.Equal(int64(9), bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetStartedEventId())
-	s.Equal("test_worker", bufferedEvents.Events[0].DecisionTaskCompletedEventAttributes.GetIdentity())
-	s.Equal(int64(11), bufferedEvents.Events[1].GetEventId())
-	s.Equal(gen.EventTypeWorkflowExecutionContinuedAsNew, bufferedEvents.Events[1].GetEventType())
-	s.Equal(newExecutionRunID, bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId())
-	s.Equal("wType", bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.WorkflowType.GetName())
-	s.Equal("taskList", bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.TaskList.GetName())
-	s.Equal(int32(212), bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.GetTaskStartToCloseTimeoutSeconds())
-	s.Equal(int32(312), bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.GetExecutionStartToCloseTimeoutSeconds())
-	s.Equal(int64(10), bufferedEvents.Events[1].WorkflowExecutionContinuedAsNewEventAttributes.GetDecisionTaskCompletedEventId())
+	bufferedEvents = bufferedTask.History
+	s.Equal(2, len(bufferedEvents))
+	s.Equal(int64(10), bufferedEvents[0].GetEventId())
+	s.Equal(gen.EventTypeDecisionTaskCompleted, bufferedEvents[0].GetEventType())
+	s.Equal(int64(8), bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetScheduledEventId())
+	s.Equal(int64(9), bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetStartedEventId())
+	s.Equal("test_worker", bufferedEvents[0].DecisionTaskCompletedEventAttributes.GetIdentity())
+	s.Equal(int64(11), bufferedEvents[1].GetEventId())
+	s.Equal(gen.EventTypeWorkflowExecutionContinuedAsNew, bufferedEvents[1].GetEventType())
+	s.Equal(newExecutionRunID, bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId())
+	s.Equal("wType", bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.WorkflowType.GetName())
+	s.Equal("taskList", bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.TaskList.GetName())
+	s.Equal(int32(212), bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.GetTaskStartToCloseTimeoutSeconds())
+	s.Equal(int32(312), bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.GetExecutionStartToCloseTimeoutSeconds())
+	s.Equal(int64(10), bufferedEvents[1].WorkflowExecutionContinuedAsNewEventAttributes.GetDecisionTaskCompletedEventId())
 
-	bufferedNewRunEvents := s.deserializedHistoryEvents(bufferedTask.NewRunHistory)
-	s.Equal(2, len(bufferedNewRunEvents.Events))
-	s.Equal(int64(1), bufferedNewRunEvents.Events[0].GetEventId())
-	s.Equal(gen.EventTypeWorkflowExecutionStarted, bufferedNewRunEvents.Events[0].GetEventType())
-	s.Equal("wType", bufferedNewRunEvents.Events[0].WorkflowExecutionStartedEventAttributes.WorkflowType.GetName())
-	s.Equal("taskList", bufferedNewRunEvents.Events[0].WorkflowExecutionStartedEventAttributes.TaskList.GetName())
-	s.Equal(int64(2), bufferedNewRunEvents.Events[1].GetEventId())
-	s.Equal(gen.EventTypeDecisionTaskScheduled, bufferedNewRunEvents.Events[1].GetEventType())
-	s.Equal("taskList", bufferedNewRunEvents.Events[1].DecisionTaskScheduledEventAttributes.TaskList.GetName())
-	s.Equal(int32(201), bufferedNewRunEvents.Events[1].DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds())
-	s.Equal(int64(1), bufferedNewRunEvents.Events[1].DecisionTaskScheduledEventAttributes.GetAttempt())
+	bufferedNewRunEvents := bufferedTask.NewRunHistory
+	s.Equal(2, len(bufferedNewRunEvents))
+	s.Equal(int64(1), bufferedNewRunEvents[0].GetEventId())
+	s.Equal(gen.EventTypeWorkflowExecutionStarted, bufferedNewRunEvents[0].GetEventType())
+	s.Equal("wType", bufferedNewRunEvents[0].WorkflowExecutionStartedEventAttributes.WorkflowType.GetName())
+	s.Equal("taskList", bufferedNewRunEvents[0].WorkflowExecutionStartedEventAttributes.TaskList.GetName())
+	s.Equal(int64(2), bufferedNewRunEvents[1].GetEventId())
+	s.Equal(gen.EventTypeDecisionTaskScheduled, bufferedNewRunEvents[1].GetEventType())
+	s.Equal("taskList", bufferedNewRunEvents[1].DecisionTaskScheduledEventAttributes.TaskList.GetName())
+	s.Equal(int32(201), bufferedNewRunEvents[1].DecisionTaskScheduledEventAttributes.GetStartToCloseTimeoutSeconds())
+	s.Equal(int64(1), bufferedNewRunEvents[1].DecisionTaskScheduledEventAttributes.GetAttempt())
 
 	deleteBufferedReplicationTask := int64(5)
 	err5 := s.UpdateWorklowStateAndReplication(updatedInfo, nil, nil, &deleteBufferedReplicationTask, int64(3), nil)
@@ -2313,7 +2313,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		FirstEventID: int64(5),
 		NextEventID:  int64(7),
 		Version:      int64(11),
-		History:      s.serializeHistoryEvents(eventsBatch1),
+		History:      eventsBatch1,
 	}
 
 	eventsBatch2 := []*gen.HistoryEvent{
@@ -2331,7 +2331,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		FirstEventID: int64(21),
 		NextEventID:  int64(22),
 		Version:      int64(12),
-		History:      s.serializeHistoryEvents(eventsBatch2),
+		History:      eventsBatch2,
 	}
 	updatedState := &p.WorkflowMutableState{
 		ExecutionInfo: updatedInfo,
@@ -2339,10 +2339,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 			4: {
 				Version:                  7789,
 				ScheduleID:               4,
-				ScheduledEvent:           []byte("scheduled_event_4"),
+				ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(40)},
 				ScheduledTime:            currentTime,
 				StartedID:                6,
-				StartedEvent:             []byte("started_event_1"),
+				StartedEvent:             &gen.HistoryEvent{EventId: int64Ptr(60)},
 				StartedTime:              currentTime,
 				ScheduleToCloseTimeout:   1,
 				ScheduleToStartTimeout:   2,
@@ -2354,10 +2354,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 			5: {
 				Version:                  7789,
 				ScheduleID:               5,
-				ScheduledEvent:           []byte("scheduled_event_5"),
+				ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(50)},
 				ScheduledTime:            currentTime,
 				StartedID:                7,
-				StartedEvent:             []byte("started_event_2"),
+				StartedEvent:             &gen.HistoryEvent{EventId: int64Ptr(70)},
 				StartedTime:              currentTime,
 				ScheduleToCloseTimeout:   1,
 				ScheduleToStartTimeout:   2,
@@ -2442,11 +2442,9 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NoError(err2)
 	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
-		s.serializeHistoryEvents(eventsBatch1))
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1)
 	s.NoError(err2)
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID,
-		s.serializeHistoryEvents(eventsBatch2))
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch2)
 	s.NoError(err2)
 
 	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
@@ -2461,10 +2459,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(4), ai.ScheduleID)
-	s.Equal([]byte("scheduled_event_4"), ai.ScheduledEvent)
+	s.Equal(int64(40), *ai.ScheduledEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix()) // flakey test
 	s.Equal(int64(6), ai.StartedID)
-	s.Equal([]byte("started_event_1"), ai.StartedEvent)
+	s.Equal(int64(60), *ai.StartedEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
@@ -2478,10 +2476,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(5), ai.ScheduleID)
-	s.Equal([]byte("scheduled_event_5"), ai.ScheduledEvent)
+	s.Equal(int64(50), *ai.ScheduledEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
 	s.Equal(int64(7), ai.StartedID)
-	s.Equal([]byte("started_event_2"), ai.StartedEvent)
+	s.Equal(int64(70), *ai.StartedEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
@@ -2545,7 +2543,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.True(contains)
 
 	s.Equal(2, len(state1.BufferedReplicationTasks))
-	s.Equal(2, len(state1.BufferedEvents))
+	s.Equal(3, len(state1.BufferedEvents))
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedInfo1.NextEventID = int64(3)
@@ -2553,10 +2551,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		{
 			Version:                  8789,
 			ScheduleID:               40,
-			ScheduledEvent:           []byte("scheduled_event_40"),
+			ScheduledEvent:           &gen.HistoryEvent{EventId: int64Ptr(400)},
 			ScheduledTime:            currentTime,
 			StartedID:                60,
-			StartedEvent:             []byte("started_event_10"),
+			StartedEvent:             &gen.HistoryEvent{EventId: int64Ptr(600)},
 			StartedTime:              currentTime,
 			ScheduleToCloseTimeout:   10,
 			ScheduleToStartTimeout:   20,
@@ -2640,10 +2638,10 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(ai)
 	s.Equal(int64(8789), ai.Version)
 	s.Equal(int64(40), ai.ScheduleID)
-	s.Equal([]byte("scheduled_event_40"), ai.ScheduledEvent)
+	s.Equal(int64(400), *ai.ScheduledEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
 	s.Equal(int64(60), ai.StartedID)
-	s.Equal([]byte("started_event_10"), ai.StartedEvent)
+	s.Equal(int64(600), *ai.StartedEvent.EventId)
 	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
 	s.Equal(int32(10), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(20), ai.ScheduleToStartTimeout)
@@ -3016,22 +3014,4 @@ func copyReplicationInfo(sourceInfo *p.ReplicationInfo) *p.ReplicationInfo {
 		Version:     sourceInfo.Version,
 		LastEventID: sourceInfo.LastEventID,
 	}
-}
-
-func (s *ExecutionManagerSuite) serializeHistoryEvents(events []*gen.HistoryEvent) *p.SerializedHistoryEventBatch {
-	historySerializer := p.NewJSONHistorySerializer()
-	bufferedBatch := p.NewHistoryEventBatch(p.GetDefaultHistoryVersion(), events)
-	serializedEvents, _ := historySerializer.Serialize(bufferedBatch)
-
-	return serializedEvents
-}
-
-func (s *ExecutionManagerSuite) deserializedHistoryEvents(batch *p.SerializedHistoryEventBatch) *p.HistoryEventBatch {
-	historySerializer := p.NewJSONHistorySerializer()
-	events, err := historySerializer.Deserialize(batch)
-	if err != nil {
-		panic(err)
-	}
-
-	return events
 }

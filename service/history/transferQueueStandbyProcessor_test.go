@@ -141,7 +141,6 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 	}
 	s.mockHistoryEngine = h

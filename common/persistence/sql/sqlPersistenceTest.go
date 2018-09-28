@@ -21,10 +21,11 @@
 package sql
 
 import (
-	"github.com/jmoiron/sqlx"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
@@ -111,8 +112,14 @@ func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persisten
 	if err != nil {
 		log.Fatal(err)
 	}
-	tb.HistoryMgr, err = NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
+
+	historyPs, err := NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
 		options.DBPassword, databaseName, log)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tb.HistoryMgr = p.NewHistoryManagerImpl(historyPs, log)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -267,7 +267,7 @@ func (s *Service) Start() {
 	}
 	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)
 
-	history, err := cassandra.NewHistoryPersistence(p.CassandraConfig.Hosts,
+	phistory, err := cassandra.NewHistoryPersistence(p.CassandraConfig.Hosts,
 		p.CassandraConfig.Port,
 		p.CassandraConfig.User,
 		p.CassandraConfig.Password,
@@ -279,6 +279,7 @@ func (s *Service) Start() {
 	if err != nil {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
 	}
+	history := persistence.NewHistoryManagerImpl(phistory, log)
 	history = persistence.NewHistoryPersistenceRateLimitedClient(history, persistenceRateLimiter, log)
 	history = persistence.NewHistoryPersistenceMetricsClient(history, base.GetMetricsClient(), log)
 

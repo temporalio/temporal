@@ -95,7 +95,6 @@ func (s *timerQueueProcessorSuite) SetupTest() {
 		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
-		hSerializerFactory: persistence.NewHistorySerializerFactory(),
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.engineImpl.txProcessor = newTransferQueueProcessor(
@@ -954,12 +953,5 @@ func (s *timerQueueProcessorSuite) TestTimersOnClosedWorkflow() {
 }
 
 func (s *timerQueueProcessorSuite) printHistory(builder mutableState) string {
-	history, err := builder.GetHistoryBuilder().Serialize()
-	if err != nil {
-		s.logger.Errorf("Error serializing history: %v", err)
-		return ""
-	}
-
-	//s.logger.Info(string(history))
-	return history.String()
+	return builder.GetHistoryBuilder().GetHistory().String()
 }

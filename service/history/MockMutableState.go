@@ -1041,6 +1041,20 @@ func (_m *mockMutableState) FlushBufferedEvents() error {
 	return r0
 }
 
+// FlushBufferedEvents provides a mock function with given fields:
+func (_m *mockMutableState) GetHistorySize() int64 {
+	ret := _m.Called()
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = 0
+	}
+
+	return r0
+}
+
 // GetActivityByActivityID provides a mock function with given fields: _a0
 func (_m *mockMutableState) GetActivityByActivityID(_a0 string) (*persistence.ActivityInfo, bool) {
 	ret := _m.Called(_a0)
@@ -1131,22 +1145,6 @@ func (_m *mockMutableState) GetActivityStartedEvent(_a0 int64) (*shared.HistoryE
 	}
 
 	return r0, r1
-}
-
-// GetBufferedHistory provides a mock function with given fields: _a0
-func (_m *mockMutableState) GetBufferedHistory(_a0 *persistence.SerializedHistoryEventBatch) *shared.History {
-	ret := _m.Called(_a0)
-
-	var r0 *shared.History
-	if rf, ok := ret.Get(0).(func(*persistence.SerializedHistoryEventBatch) *shared.History); ok {
-		r0 = rf(_a0)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*shared.History)
-		}
-	}
-
-	return r0
 }
 
 // GetBufferedReplicationTask provides a mock function with given fields: _a0
@@ -1324,29 +1322,6 @@ func (_m *mockMutableState) GetHistoryBuilder() *historyBuilder {
 	}
 
 	return r0
-}
-
-// GetHistoryEvent provides a mock function with given fields: serializedEvent
-func (_m *mockMutableState) GetHistoryEvent(serializedEvent []byte) (*shared.HistoryEvent, bool) {
-	ret := _m.Called(serializedEvent)
-
-	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func([]byte) *shared.HistoryEvent); ok {
-		r0 = rf(serializedEvent)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*shared.HistoryEvent)
-		}
-	}
-
-	var r1 bool
-	if rf, ok := ret.Get(1).(func([]byte) bool); ok {
-		r1 = rf(serializedEvent)
-	} else {
-		r1 = ret.Get(1).(bool)
-	}
-
-	return r0, r1
 }
 
 func (_m *mockMutableState) GetInFlightDecisionTask() (*decisionInfo, bool) {
@@ -1595,20 +1570,6 @@ func (_m *mockMutableState) GetSignalInfo(_a0 int64) (*persistence.SignalInfo, b
 	}
 
 	return r0, r1
-}
-
-// GetStats provides a mock function with given fields:
-func (_m *mockMutableState) GetStats() *mutableStateStats {
-	ret := _m.Called()
-
-	var r0 *mutableStateStats
-	if rf, ok := ret.Get(0).(func() *mutableStateStats); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(*mutableStateStats)
-	}
-
-	return r0
 }
 
 // GetStartVersion provides a mock function with given fields:

@@ -58,11 +58,13 @@ func NewPersistenceClientFactory(hosts string, port int, user, password, dc stri
 
 // CreateExecutionManager implements ExecutionManagerFactory interface
 func (f *cassandraPersistenceClientFactory) CreateExecutionManager(shardID int) (p.ExecutionManager, error) {
-	mgr, err := NewWorkflowExecutionPersistence(shardID, f.session, f.logger)
+	pmgr, err := NewWorkflowExecutionPersistence(shardID, f.session, f.logger)
 
 	if err != nil {
 		return nil, err
 	}
+
+	mgr := p.NewExecutionManagerImpl(pmgr)
 
 	if f.rateLimiter != nil {
 		mgr = p.NewWorkflowExecutionPersistenceRateLimitedClient(mgr, f.rateLimiter, f.logger)

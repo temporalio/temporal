@@ -659,7 +659,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		state.ExecutionInfo.ParentRunID = *execution.ParentRunID
 		state.ExecutionInfo.InitiatedID = *execution.InitiatedID
 		if state.ExecutionInfo.CompletionEvent != nil {
-			state.ExecutionInfo.CompletionEvent = *execution.CompletionEvent
+			state.ExecutionInfo.CompletionEvent = nil
 		}
 	}
 
@@ -1325,15 +1325,12 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(request *p.RangeCompleteTim
 }
 
 // NewSQLMatchingPersistence creates an instance of ExecutionManager
-func NewSQLMatchingPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (p.ExecutionManager, error) {
-	var db, err = newConnection(host, port, username, password, dbName)
+func NewSQLMatchingPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (p.ExecutionStore, error) {
+	var _, err = newConnection(host, port, username, password, dbName)
 	if err != nil {
 		return nil, err
 	}
-	return &sqlExecutionManager{
-		db:     db,
-		logger: logger,
-	}, nil
+	return nil, nil
 }
 
 func getCurrentExecutionIfExists(tx *sqlx.Tx, shardID int64, domainID string, workflowID string) (*currentExecutionRow, error) {
@@ -1852,7 +1849,7 @@ func updateExecution(tx *sqlx.Tx,
 			ParentWorkflowID:             &executionInfo.ParentWorkflowID,
 			ParentRunID:                  &executionInfo.ParentRunID,
 			InitiatedID:                  &executionInfo.InitiatedID,
-			CompletionEvent:              &executionInfo.CompletionEvent,
+			CompletionEvent:              nil,
 			TaskList:                     executionInfo.TaskList,
 			WorkflowTypeName:             executionInfo.WorkflowTypeName,
 			WorkflowTimeoutSeconds:       int64(executionInfo.WorkflowTimeout),
@@ -1904,7 +1901,7 @@ func updateExecution(tx *sqlx.Tx,
 		args.ParentWorkflowID = &executionInfo.ParentWorkflowID
 		args.ParentRunID = &executionInfo.ParentRunID
 		args.InitiatedID = &executionInfo.InitiatedID
-		args.CompletionEvent = &executionInfo.CompletionEvent
+		args.CompletionEvent = nil
 	}
 
 	if executionInfo.CancelRequested {

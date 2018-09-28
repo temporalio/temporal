@@ -334,7 +334,7 @@ func (s *TestShardContext) CreateWorkflowExecution(request *persistence.CreateWo
 }
 
 // UpdateWorkflowExecution test implementation
-func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
+func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	for _, task := range request.TimerTasks {
 		ts, err := persistence.GetVisibilityTSFrom(task)
@@ -360,7 +360,8 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 		s.logger.Infof("%v: TestShardContext: Assigning timer (timestamp: %v, seq: %v)",
 			time.Now().UTC(), visibilityTs, task.GetTaskID())
 	}
-	return s.executionMgr.UpdateWorkflowExecution(request)
+	resp, err := s.executionMgr.UpdateWorkflowExecution(request)
+	return resp, err
 }
 
 // UpdateTimerMaxReadLevel test implementation
@@ -384,11 +385,8 @@ func (s *TestShardContext) ResetMutableState(request *persistence.ResetMutableSt
 
 // AppendHistoryEvents test implementation
 func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
-	size := 0
-	if request.Events != nil {
-		size = len(request.Events.Data)
-	}
-	return size, s.historyMgr.AppendHistoryEvents(request)
+	resp, err := s.historyMgr.AppendHistoryEvents(request)
+	return resp.Size, err
 }
 
 // NotifyNewHistoryEvent test implementation

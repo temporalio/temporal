@@ -27,6 +27,7 @@ CREATE TYPE workflow_execution (
   parent_run_id                    uuid,   -- RunID of parent workflow which started the workflow execution
   initiated_id                     bigint, -- Initiated event ID of parent workflow which started this execution
   completion_event                 blob,   -- Completion event used to communicate result to parent workflow execution
+  completion_event_data_encoding   text, -- Protocol used for history serialization
   task_list                        text,
   workflow_type_name               text,
   workflow_timeout                 int,  -- Workflow ExecutionStartToCloseTimeoutSeconds
@@ -152,6 +153,7 @@ CREATE TYPE activity_info (
   expiration_time           timestamp, -- retry expiration time
   max_attempts              int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors      list<text>,
+  event_data_encoding   text, -- Protocol used for history serialization
 );
 
 -- User timer details
@@ -171,6 +173,7 @@ CREATE TYPE child_execution_info (
   started_id        bigint,
   started_event     blob,
   create_request_id uuid,
+  event_data_encoding   text, -- Protocol used for history serialization
 );
 
 -- External workflow cancellation in progress mutable state

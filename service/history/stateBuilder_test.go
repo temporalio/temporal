@@ -820,12 +820,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		},
 	}
 
-	initiatedEvent, err := newJSONHistoryEventSerializer().Serialize(event)
-	s.Nil(err)
 	ci := &persistence.ChildExecutionInfo{
 		Version:         event.GetVersion(),
 		InitiatedID:     event.GetEventId(),
-		InitiatedEvent:  initiatedEvent,
+		InitiatedEvent:  event,
 		StartedID:       common.EmptyEventID,
 		CreateRequestID: createRequestID,
 	}
@@ -1712,17 +1710,13 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 		ActivityTaskStartedEventAttributes: &shared.ActivityTaskStartedEventAttributes{},
 	}
 
-	serializedScheduledEvent, err := newJSONHistoryEventSerializer().Serialize(scheduledEvent)
-	s.Nil(err)
-	serializedStartedEvent, err := newJSONHistoryEventSerializer().Serialize(startedEvent)
-	s.Nil(err)
 	ai := &persistence.ActivityInfo{
 		Version:                  version,
 		ScheduleID:               scheduledEvent.GetEventId(),
-		ScheduledEvent:           serializedScheduledEvent,
+		ScheduledEvent:           scheduledEvent,
 		ScheduledTime:            time.Unix(0, scheduledEvent.GetTimestamp()),
 		StartedID:                startedEvent.GetEventId(),
-		StartedEvent:             serializedStartedEvent,
+		StartedEvent:             startedEvent,
 		StartedTime:              time.Unix(0, startedEvent.GetTimestamp()),
 		ActivityID:               activityID,
 		ScheduleToStartTimeout:   timeoutSecond,
@@ -1778,12 +1772,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		ActivityTaskScheduledEventAttributes: &shared.ActivityTaskScheduledEventAttributes{},
 	}
 
-	scheduledEvent, err := newJSONHistoryEventSerializer().Serialize(event)
-	s.Nil(err)
 	ai := &persistence.ActivityInfo{
 		Version:                  event.GetVersion(),
 		ScheduleID:               event.GetEventId(),
-		ScheduledEvent:           scheduledEvent,
+		ScheduledEvent:           event,
 		ScheduledTime:            time.Unix(0, event.GetTimestamp()),
 		StartedID:                common.EmptyEventID,
 		StartedTime:              time.Time{},

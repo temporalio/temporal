@@ -43,29 +43,6 @@ type (
 		Timestamp       int64
 	}
 
-	mutableStateStats struct {
-		// Total size of mutable state
-		mutableStateSize int
-
-		// Breakdown of size into more granular stats
-		executionInfoSize            int
-		activityInfoSize             int
-		timerInfoSize                int
-		childInfoSize                int
-		signalInfoSize               int
-		bufferedEventsSize           int
-		bufferedReplicationTasksSize int
-
-		// Item count for various information captured within mutable state
-		activityInfoCount             int
-		timerInfoCount                int
-		childInfoCount                int
-		signalInfoCount               int
-		requestCancelInfoCount        int
-		bufferedEventsCount           int
-		bufferedReplicationTasksCount int
-	}
-
 	mutableState interface {
 		AddActivityTaskCancelRequestedEvent(int64, string, string) (*workflow.HistoryEvent, *persistence.ActivityInfo, bool)
 		AddActivityTaskCanceledEvent(int64, int64, int64, []uint8, string) *workflow.HistoryEvent
@@ -136,7 +113,6 @@ type (
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
 		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
 		GetActivityStartedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetBufferedHistory(*persistence.SerializedHistoryEventBatch) *workflow.History
 		GetBufferedReplicationTask(int64) (*persistence.BufferedReplicationTask, bool)
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
@@ -146,7 +122,6 @@ type (
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
 		GetHistoryBuilder() *historyBuilder
-		GetHistoryEvent(serializedEvent []byte) (*workflow.HistoryEvent, bool)
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastUpdatedTimestamp() int64
@@ -161,7 +136,6 @@ type (
 		GetRetryBackoffDuration(errReason string) time.Duration
 		GetScheduleIDByActivityID(string) (int64, bool)
 		GetSignalInfo(int64) (*persistence.SignalInfo, bool)
-		GetStats() *mutableStateStats
 		GetStartVersion() int64
 		GetUserTimer(string) (bool, *persistence.TimerInfo)
 		GetWorkflowType() *workflow.WorkflowType
@@ -171,6 +145,7 @@ type (
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
 		IncrementHistorySize(int)
+		GetHistorySize() int64
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool

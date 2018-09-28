@@ -42,7 +42,6 @@ type (
 		shard               ShardContext
 		executionMgr        persistence.ExecutionManager
 		historyMgr          persistence.HistoryManager
-		hSerializerFactory  persistence.HistorySerializerFactory
 		replicator          messaging.Producer
 		metricsClient       metrics.Client
 		options             *QueueProcessorOptions
@@ -61,8 +60,7 @@ var (
 )
 
 func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Producer,
-	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager,
-	hSerializerFactory persistence.HistorySerializerFactory, logger bark.Logger) queueProcessor {
+	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager, logger bark.Logger) queueProcessor {
 
 	currentClusterNamer := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -89,7 +87,6 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 		shard:               shard,
 		executionMgr:        executionMgr,
 		historyMgr:          historyMgr,
-		hSerializerFactory:  hSerializerFactory,
 		replicator:          replicator,
 		metricsClient:       shard.GetMetricsClient(),
 		options:             options,

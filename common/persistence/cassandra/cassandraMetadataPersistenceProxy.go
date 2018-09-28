@@ -32,8 +32,8 @@ type (
 	// TODO, we should migrate the non global domain to new table, see #773
 	// WARN this struct should only be used by the domain cache ONLY
 	metadataManagerProxy struct {
-		metadataMgr   p.MetadataManager
-		metadataMgrV2 p.MetadataManager
+		metadataMgr   p.MetadataStore
+		metadataMgrV2 p.MetadataStore
 		logger        bark.Logger
 	}
 )

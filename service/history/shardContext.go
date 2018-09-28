@@ -69,7 +69,7 @@ type (
 		UpdateDomainNotificationVersion(domainNotificationVersion int64) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
 			*persistence.CreateWorkflowExecutionResponse, error)
-		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error
+		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ResetMutableState(request *persistence.ResetMutableStateRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
 		NotifyNewHistoryEvent(event *historyEventNotification) error
@@ -407,7 +407,7 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
-func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
+func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -418,7 +418,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 	for _, task := range request.TransferTasks {
 		id, err := s.getNextTransferTaskIDLocked()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		s.logger.Debugf("Assigning transfer task ID: %v", id)
 		task.SetTaskID(id)
@@ -428,7 +428,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 	for _, task := range request.ReplicationTasks {
 		id, err := s.getNextTransferTaskIDLocked()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		s.logger.Debugf("Assigning replication task ID: %v", id)
 		task.SetTaskID(id)
@@ -439,7 +439,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		for _, task := range request.ContinueAsNew.TransferTasks {
 			id, err := s.getNextTransferTaskIDLocked()
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s.logger.Debugf("Assigning transfer task ID: %v", id)
 			task.SetTaskID(id)
@@ -449,7 +449,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 		for _, task := range request.ContinueAsNew.ReplicationTasks {
 			id, err := s.getNextTransferTaskIDLocked()
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s.logger.Debugf("Assigning replication task ID: %v", id)
 			task.SetTaskID(id)
@@ -464,7 +464,7 @@ Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
 		request.RangeID = currentRangeID
-		err := s.executionManager.UpdateWorkflowExecution(request)
+		resp, err := s.executionManager.UpdateWorkflowExecution(request)
 		if err != nil {
 			switch err.(type) {
 			case *persistence.ConditionFailedError,
@@ -499,10 +499,10 @@ Update_Loop:
 			}
 		}
 
-		return err
+		return resp, err
 	}
 
-	return ErrMaxAttemptsExceeded
+	return nil, ErrMaxAttemptsExceeded
 }
 
 func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
@@ -556,20 +556,23 @@ Reset_Loop:
 
 func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
 	size := 0
-	if request.Events != nil {
-		size = len(request.Events.Data)
+	defer func() {
 		s.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
-	}
+	}()
 
 	// No need to lock context here, as we can write concurrently to append history events
 	currentRangeID := atomic.LoadInt64(&s.rangeID)
 	request.RangeID = currentRangeID
-	err0 := s.historyMgr.AppendHistoryEvents(request)
+	resp, err0 := s.historyMgr.AppendHistoryEvents(request)
+	size = resp.Size
+
 	if err0 != nil {
 		if _, ok := err0.(*persistence.ConditionFailedError); ok {
 			// Inserting a new event failed, lets try to overwrite the tail
 			request.Overwrite = true
-			return size, s.historyMgr.AppendHistoryEvents(request)
+			resp, err1 := s.historyMgr.AppendHistoryEvents(request)
+			size = resp.Size
+			return size, err1
 		}
 	}
 

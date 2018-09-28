@@ -221,18 +221,18 @@ func (p *workflowExecutionPersistenceClient) GetWorkflowExecution(request *GetWo
 	return response, err
 }
 
-func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) error {
+func (p *workflowExecutionPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateWorkflowExecution(request)
+	resp, err := p.persistence.UpdateWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceUpdateWorkflowExecutionScope, err)
 	}
 
-	return err
+	return resp, err
 }
 
 func (p *workflowExecutionPersistenceClient) ResetMutableState(request *ResetMutableStateRequest) error {
@@ -513,18 +513,18 @@ func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) error {
+func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceLatency)
-	err := p.persistence.AppendHistoryEvents(request)
+	resp, err := p.persistence.AppendHistoryEvents(request)
 	sw.Stop()
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceAppendHistoryEventsScope, err)
 	}
 
-	return err
+	return resp, err
 }
 
 func (p *historyPersistenceClient) GetWorkflowExecutionHistory(

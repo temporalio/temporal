@@ -21,15 +21,16 @@
 package persistence
 
 import (
+	"sync"
+	"testing"
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"sync"
-	"testing"
-	"time"
 )
 
 type (
@@ -53,7 +54,7 @@ func (s *historySerializerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *historySerializerSuite) TestSerializerFactory() {
+func (s *historySerializerSuite) TestSerializer() {
 
 	concurrency := 5
 	startWG := sync.WaitGroup{}
@@ -62,9 +63,9 @@ func (s *historySerializerSuite) TestSerializerFactory() {
 	startWG.Add(1)
 	doneWG.Add(concurrency)
 
-	factory := NewHistorySerializerFactory()
+	serializer := NewHistorySerializer()
 
-	event1 := &workflow.HistoryEvent{
+	event0 := &workflow.HistoryEvent{
 		EventId:   common.Int64Ptr(999),
 		Timestamp: common.Int64Ptr(time.Now().UnixNano()),
 		EventType: common.EventTypePtr(workflow.EventTypeActivityTaskCompleted),
@@ -76,6 +77,8 @@ func (s *historySerializerSuite) TestSerializerFactory() {
 		},
 	}
 
+	history0 := &workflow.History{Events: []*workflow.HistoryEvent{event0, event0}}
+
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -83,50 +86,66 @@ func (s *historySerializerSuite) TestSerializerFactory() {
 			startWG.Wait()
 			defer doneWG.Done()
 
-			serializer, err := factory.Get(common.EncodingTypeGob)
+			_, err := serializer.SerializeEvent(event0, common.EncodingTypeGob)
 			s.NotNil(err)
 			_, ok := err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			serializer, err = factory.Get(common.EncodingTypeJSON)
+			dJSON, err := serializer.SerializeEvent(event0, common.EncodingTypeJSON)
 			s.Nil(err)
-			s.NotNil(serializer)
-			_, ok = serializer.(*jsonHistorySerializer)
-			s.True(ok)
+			s.NotNil(dJSON)
 
-			events := []*workflow.HistoryEvent{event1}
-			eventBatch := NewHistoryEventBatch(GetMaxSupportedHistoryVersion()+1, events)
-			sh, err := serializer.Serialize(eventBatch)
+			dThrift, err := serializer.SerializeEvent(event0, common.EncodingTypeThriftRW)
+			s.Nil(err)
+			s.NotNil(dThrift)
+
+			dEmpty, err := serializer.SerializeEvent(event0, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(dEmpty)
+
+			_, err = serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeGob)
 			s.NotNil(err)
-			_, ok = err.(*HistorySerializationError)
+			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			eventBatch.Version = 1
-			sh, err = serializer.Serialize(eventBatch)
+			dsJSON, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeJSON)
 			s.Nil(err)
-			s.NotNil(sh)
-			s.Equal(1, sh.Version)
-			s.Equal(common.EncodingTypeJSON, sh.EncodingType)
+			s.NotNil(dsJSON)
 
-			sh.Version = 2
-			dh, err := serializer.Deserialize(sh)
-			s.NotNil(err)
-			_, ok = err.(*HistoryDeserializationError)
-			s.True(ok)
-			s.Nil(dh)
-
-			sh.Version = 1
-			dh, err = serializer.Deserialize(sh)
+			dsThrift, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingTypeThriftRW)
 			s.Nil(err)
-			s.NotNil(dh)
+			s.NotNil(dsThrift)
 
-			s.Equal(dh.Version, 1)
-			s.Equal(len(dh.Events), 1)
-			s.Equal(event1.EventId, dh.Events[0].EventId)
-			s.Equal(event1.Timestamp, dh.Events[0].Timestamp)
-			s.Equal(event1.EventType, dh.Events[0].EventType)
-			s.Equal(event1.ActivityTaskCompletedEventAttributes.Result, dh.Events[0].ActivityTaskCompletedEventAttributes.Result)
+			dsEmpty, err := serializer.SerializeBatchEvents(history0.Events, common.EncodingType(""))
+			s.Nil(err)
+			s.NotNil(dsEmpty)
 
+			event1, err := serializer.DeserializeEvent(dJSON)
+			s.Nil(err)
+			event0.Equals(event1)
+
+			event2, err := serializer.DeserializeEvent(dThrift)
+			s.Nil(err)
+			event0.Equals(event2)
+
+			event3, err := serializer.DeserializeEvent(dEmpty)
+			s.Nil(err)
+			event0.Equals(event3)
+
+			events, err := serializer.DeserializeBatchEvents(dsJSON)
+			history1 := &workflow.History{Events: events}
+			s.Nil(err)
+			history0.Equals(history1)
+
+			events, err = serializer.DeserializeBatchEvents(dsThrift)
+			history2 := &workflow.History{Events: events}
+			s.Nil(err)
+			history0.Equals(history2)
+
+			events, err = serializer.DeserializeBatchEvents(dsEmpty)
+			history3 := &workflow.History{Events: events}
+			s.Nil(err)
+			history0.Equals(history3)
 		}()
 	}
 
