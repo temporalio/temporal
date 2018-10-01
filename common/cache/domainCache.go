@@ -141,6 +141,13 @@ func newDomainCacheEntry(clusterMetadata cluster.Metadata) *DomainCacheEntry {
 	return &DomainCacheEntry{clusterMetadata: clusterMetadata}
 }
 
+// NewDomainCacheEntryWithInfo returns an entry with domainInfo
+func NewDomainCacheEntryWithInfo(info *persistence.DomainInfo) *DomainCacheEntry {
+	return &DomainCacheEntry{
+		info: info,
+	}
+}
+
 func (c *domainCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
 	return int64(c.cacheByID.Size()), int64(c.cacheNameToID.Size())
 }

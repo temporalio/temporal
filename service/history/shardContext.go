@@ -407,9 +407,23 @@ Create_Loop:
 	return nil, ErrMaxAttemptsExceeded
 }
 
+func (s *shardContextImpl) getDefaultEncoding(domainID string) (common.EncodingType, error) {
+	dm, err := s.domainCache.GetDomainByID(domainID)
+	if err != nil {
+		return "", err
+	}
+	return common.EncodingType(s.config.EventEncodingType(dm.GetInfo().Name)), nil
+}
+
 func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	s.Lock()
 	defer s.Unlock()
+
+	encoding, err := s.getDefaultEncoding(request.ExecutionInfo.DomainID)
+	if err != nil {
+		return nil, err
+	}
+	request.Encoding = encoding
 
 	transferMaxReadLevel := int64(0)
 	// assign IDs for the transfer tasks
@@ -509,6 +523,12 @@ func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableSt
 	s.Lock()
 	defer s.Unlock()
 
+	encoding, err := s.getDefaultEncoding(request.ExecutionInfo.DomainID)
+	if err != nil {
+		return err
+	}
+	request.Encoding = encoding
+
 Reset_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
 		currentRangeID := s.getRangeID()
@@ -555,6 +575,12 @@ Reset_Loop:
 }
 
 func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
+	encoding, err := s.getDefaultEncoding(request.DomainID)
+	if err != nil {
+		return 0, err
+	}
+	request.Encoding = encoding
+
 	size := 0
 	defer func() {
 		s.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))

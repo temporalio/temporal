@@ -75,6 +75,9 @@ type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList stri
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
 
+// StringPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
+type StringPropertyFnWithDomainFilter func(domain string) string
+
 // BoolPropertyFnWithTaskListInfoFilters is a wrapper to get bool property from dynamic config with three filters: domain, taskList, taskType
 type BoolPropertyFnWithTaskListInfoFilters func(domain string, taskList string, taskType int) bool
 
@@ -187,6 +190,17 @@ func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultV
 func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
 	return func(opts ...FilterOption) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		return val
+	}
+}
+
+// GetStringPropertyFnWithDomainFilter gets property with domain filter and asserts that its domain
+func (c *Collection) GetStringPropertyFnWithDomainFilter(key Key, defaultValue string) StringPropertyFnWithDomainFilter {
+	return func(domain string) string {
+		val, err := c.client.GetStringValue(key, getFilterMap(DomainFilter(domain)), defaultValue)
 		if err != nil {
 			c.logNoValue(key, err)
 		}

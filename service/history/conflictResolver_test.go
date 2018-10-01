@@ -57,6 +57,7 @@ type (
 		mockService         service.Service
 		mockShard           *shardContextImpl
 		mockContext         *workflowExecutionContext
+		mockDomainCache     *cache.DomainCacheMock
 
 		conflictResolver *conflictResolverImpl
 	}
@@ -91,6 +92,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.mockService = service.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, metricsClient, s.logger)
+	s.mockDomainCache = &cache.DomainCacheMock{}
 
 	s.mockShard = &shardContextImpl{
 		service:                   s.mockService,
@@ -103,7 +105,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		closeCh:                   make(chan int, 100),
 		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
 		logger:                    s.logger,
-		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
+		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.mockContext = newWorkflowExecutionContext(validDomainID, shared.WorkflowExecution{
@@ -273,6 +275,7 @@ func (s *conflictResolverSuite) TestReset() {
 		InsertRequestCancelInfos:  []*persistence.RequestCancelInfo{},
 		InsertSignalInfos:         []*persistence.SignalInfo{},
 		InsertSignalRequestedIDs:  []string{},
+		Encoding:                  common.EncodingType("json"),
 	}).Return(nil).Once()
 	s.mockExecutionMgr.On("GetWorkflowExecution", &persistence.GetWorkflowExecutionRequest{
 		DomainID:  domainID,
@@ -294,6 +297,8 @@ func (s *conflictResolverSuite) TestReset() {
 		},
 		nil,
 	)
+	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryWithInfo(&persistence.DomainInfo{}), nil)
+
 	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, startTime)
 	s.Nil(err)
 }

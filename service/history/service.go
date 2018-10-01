@@ -112,6 +112,9 @@ type Config struct {
 	// Time to hold a poll request before returning an empty response
 	// right now only used by GetMutableState
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithDomainFilter
+
+	// encoding the history events
+	EventEncodingType dynamicconfig.StringPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
@@ -176,6 +179,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		LongPollExpirationInterval: dc.GetDurationPropertyFilteredByDomain(
 			dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20,
 		),
+		EventEncodingType: dc.GetStringPropertyFnWithDomainFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeJSON)),
 	}
 }
 
