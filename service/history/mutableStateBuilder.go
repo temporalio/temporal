@@ -403,11 +403,16 @@ func (e *mutableStateBuilder) CloseUpdateSession() (*mutableStateSessionUpdates,
 func (e *mutableStateBuilder) BufferReplicationTask(
 	request *h.ReplicateEventsRequest) error {
 	bt := &persistence.BufferedReplicationTask{
-		FirstEventID:  request.GetFirstEventId(),
-		NextEventID:   request.GetNextEventId(),
-		Version:       request.GetVersion(),
-		History:       request.History.Events,
-		NewRunHistory: request.NewRunHistory.Events,
+		FirstEventID: request.GetFirstEventId(),
+		NextEventID:  request.GetNextEventId(),
+		Version:      request.GetVersion(),
+	}
+
+	if request.History != nil {
+		bt.History = request.History.Events
+	}
+	if request.NewRunHistory != nil {
+		bt.NewRunHistory = request.NewRunHistory.Events
 	}
 
 	e.bufferedReplicationTasks[request.GetFirstEventId()] = bt
