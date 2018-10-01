@@ -1135,13 +1135,8 @@ func (d *cassandraPersistence) CreateWorkflowExecution(request *p.CreateWorkflow
 					}
 				}
 
-				// condition update on current run id or current run id + last write version + state failed
-				currentRunID := previous["current_run_id"].(gocql.UUID).String()
-				currentLastWriteVersion := previous["workflow_last_write_version"].(int64)
-				currentState := previous["workflow_state"].(int)
-
-				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunID: %v, LastWriteVersion: %v, State: %v, columns: (%v)",
-					request.Execution.GetWorkflowId(), currentRunID, currentLastWriteVersion, currentState, strings.Join(columns, ","))
+				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, columns: (%v)",
+					request.Execution.GetWorkflowId(), strings.Join(columns, ","))
 				return nil, &p.ConditionFailedError{Msg: msg}
 			}
 
