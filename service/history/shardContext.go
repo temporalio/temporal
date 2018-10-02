@@ -590,14 +590,18 @@ func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistor
 	currentRangeID := atomic.LoadInt64(&s.rangeID)
 	request.RangeID = currentRangeID
 	resp, err0 := s.historyMgr.AppendHistoryEvents(request)
-	size = resp.Size
+	if resp != nil {
+		size = resp.Size
+	}
 
 	if err0 != nil {
 		if _, ok := err0.(*persistence.ConditionFailedError); ok {
 			// Inserting a new event failed, lets try to overwrite the tail
 			request.Overwrite = true
 			resp, err1 := s.historyMgr.AppendHistoryEvents(request)
-			size = resp.Size
+			if resp != nil {
+				size = resp.Size
+			}
 			return size, err1
 		}
 	}
