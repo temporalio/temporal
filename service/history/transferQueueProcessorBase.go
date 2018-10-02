@@ -143,6 +143,9 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domainID string, execution workflow.WorkflowExecution, workflowTypeName string,
 	startTimeUnixNano int64, workflowTimeout int32) error {
 	domain := defaultDomainName
+	isSampledEnabled := false
+	wid := execution.GetWorkflowId()
+
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
@@ -150,6 +153,12 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 		}
 	} else {
 		domain = domainEntry.GetInfo().Name
+		isSampledEnabled = domainEntry.IsSampledForLongerRetentionEnabled(wid)
+	}
+
+	// if sampled for longer retention is enabled, only record those sampled events
+	if isSampledEnabled && !domainEntry.IsSampledForLongerRetention(wid) {
+		return nil
 	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
@@ -169,6 +178,9 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 	// Record closing in visibility store
 	retentionSeconds := int64(0)
 	domain := defaultDomainName
+	isSampledEnabled := false
+	wid := execution.GetWorkflowId()
+
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
@@ -177,8 +189,14 @@ func (t *transferQueueProcessorBase) recordWorkflowClosed(
 		// it is possible that the domain got deleted. Use default retention.
 	} else {
 		// retention in domain config is in days, convert to seconds
-		retentionSeconds = int64(domainEntry.GetRetentionDays(execution.GetWorkflowId())) * 24 * 60 * 60
+		retentionSeconds = int64(domainEntry.GetRetentionDays(execution.GetWorkflowId())) * int64(secondsInDay)
 		domain = domainEntry.GetInfo().Name
+		isSampledEnabled = domainEntry.IsSampledForLongerRetentionEnabled(wid)
+	}
+
+	// if sampled for longer retention is enabled, only record those sampled events
+	if isSampledEnabled && !domainEntry.IsSampledForLongerRetention(wid) {
+		return nil
 	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{

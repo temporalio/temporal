@@ -601,4 +601,52 @@ func Test_GetRetentionDays(t *testing.T) {
 	d.info.Data[SampleRateKey] = "invalid-value"
 	rd = d.GetRetentionDays(wid)
 	require.Equal(t, int32(7), rd) // fallback to normal retention
+
+	wid = "3aef42a8-db0a-4a3b-b8b7-9829d74b4ebf"
+	d.info.Data[SampleRetentionKey] = "30"
+	d.info.Data[SampleRateKey] = "0.8"
+	rd = d.GetRetentionDays(wid)
+	require.Equal(t, int32(7), rd) // fallback to normal retention
+	d.info.Data[SampleRateKey] = "0.9"
+	rd = d.GetRetentionDays(wid)
+	require.Equal(t, int32(30), rd)
+}
+
+func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
+	d := &DomainCacheEntry{
+		info: &persistence.DomainInfo{
+			Data: make(map[string]string),
+		},
+		config: &persistence.DomainConfig{
+			Retention: 7,
+		},
+	}
+	wid := uuid.New()
+	require.False(t, d.IsSampledForLongerRetentionEnabled(wid))
+	d.info.Data[SampleRetentionKey] = "30"
+	d.info.Data[SampleRateKey] = "0"
+	require.True(t, d.IsSampledForLongerRetentionEnabled(wid))
+}
+
+func Test_IsSampledForLongerRetention(t *testing.T) {
+	d := &DomainCacheEntry{
+		info: &persistence.DomainInfo{
+			Data: make(map[string]string),
+		},
+		config: &persistence.DomainConfig{
+			Retention: 7,
+		},
+	}
+	wid := uuid.New()
+	require.False(t, d.IsSampledForLongerRetention(wid))
+
+	d.info.Data[SampleRetentionKey] = "30"
+	d.info.Data[SampleRateKey] = "0"
+	require.False(t, d.IsSampledForLongerRetention(wid))
+
+	d.info.Data[SampleRateKey] = "1"
+	require.True(t, d.IsSampledForLongerRetention(wid))
+
+	d.info.Data[SampleRateKey] = "invalid-value"
+	require.False(t, d.IsSampledForLongerRetention(wid))
 }

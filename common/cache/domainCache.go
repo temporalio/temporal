@@ -624,29 +624,40 @@ var SampleRateKey = "sample_retention_rate"
 
 // GetRetentionDays returns retention in days for given workflow
 func (entry *DomainCacheEntry) GetRetentionDays(workflowID string) int32 {
-	if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
-		sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-		if err != nil || sampledRetentionDays < int(entry.config.Retention) {
-			return entry.config.Retention
-		}
-
-		if sampledRateValue, ok := entry.info.Data[SampleRateKey]; ok {
-			sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
-			if err != nil {
+	if entry.IsSampledForLongerRetention(workflowID) {
+		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
+			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
+			if err != nil || sampledRetentionDays < int(entry.config.Retention) {
 				return entry.config.Retention
 			}
-
-			h := fnv.New32a()
-			h.Write([]byte(workflowID))
-			hash := h.Sum32()
-
-			r := float64(hash%1000) / float64(1000) // use 1000 so we support one decimal rate like 1.5%.
-			if r < sampledRate {
-				// sampled
-				return int32(sampledRetentionDays)
-			}
+			return int32(sampledRetentionDays)
 		}
 	}
-
 	return entry.config.Retention
+}
+
+// IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not
+func (entry *DomainCacheEntry) IsSampledForLongerRetentionEnabled(workflowID string) bool {
+	_, ok := entry.info.Data[SampleRateKey]
+	return ok
+}
+
+// IsSampledForLongerRetention return should given workflow been sampled or not
+func (entry *DomainCacheEntry) IsSampledForLongerRetention(workflowID string) bool {
+	if sampledRateValue, ok := entry.info.Data[SampleRateKey]; ok {
+		sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
+		if err != nil {
+			return false
+		}
+
+		h := fnv.New32a()
+		h.Write([]byte(workflowID))
+		hash := h.Sum32()
+
+		r := float64(hash%1000) / float64(1000) // use 1000 so we support one decimal rate like 1.5%.
+		if r < sampledRate {                    // sampled
+			return true
+		}
+	}
+	return false
 }
