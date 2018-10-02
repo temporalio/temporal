@@ -57,14 +57,6 @@ type (
 
 var _ historyEventNotifier = (*historyEventNotifierImpl)(nil)
 
-func newWorkflowIdentifier(domainID string, workflowExecution *gen.WorkflowExecution) *workflowIdentifier {
-	return &workflowIdentifier{
-		domainID:   domainID,
-		workflowID: *workflowExecution.WorkflowId,
-		runID:      *workflowExecution.RunId,
-	}
-}
-
 func newHistoryEventNotification(domainID string, workflowExecution *gen.WorkflowExecution,
 	lastFirstEventID int64, nextEventID int64, isWorkflowRunning bool) *historyEventNotification {
 	return &historyEventNotification{
@@ -100,7 +92,7 @@ func newHistoryEventNotifier(metrics metrics.Client, workflowIDToShardID func(st
 }
 
 func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
-	identifier *workflowIdentifier) (string, chan *historyEventNotification, error) {
+	identifier workflowIdentifier) (string, chan *historyEventNotification, error) {
 
 	channel := make(chan *historyEventNotification, 1)
 	subscriberID := uuid.New()
@@ -108,7 +100,7 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 		subscriberID: channel,
 	}
 
-	_, _, err := notifier.eventsPubsubs.PutOrDo(*identifier, subscribers, func(key interface{}, value interface{}) error {
+	_, _, err := notifier.eventsPubsubs.PutOrDo(identifier, subscribers, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *historyEventNotification)
 
 		if _, ok := subscribers[subscriberID]; ok {
@@ -129,10 +121,10 @@ func (notifier *historyEventNotifierImpl) WatchHistoryEvent(
 }
 
 func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
-	identifier *workflowIdentifier, subscriberID string) error {
+	identifier workflowIdentifier, subscriberID string) error {
 
 	success := true
-	notifier.eventsPubsubs.RemoveIf(*identifier, func(key interface{}, value interface{}) bool {
+	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {
 		subscribers := value.(map[string]chan *historyEventNotification)
 
 		if _, ok := subscribers[subscriberID]; !ok {
@@ -156,11 +148,11 @@ func (notifier *historyEventNotifierImpl) UnwatchHistoryEvent(
 }
 
 func (notifier *historyEventNotifierImpl) dispatchHistoryEventNotification(event *historyEventNotification) {
-	identifier := &event.workflowIdentifier
+	identifier := event.workflowIdentifier
 
 	timer := notifier.metrics.StartTimer(metrics.HistoryEventNotificationScope, metrics.HistoryEventNotificationFanoutLatency)
 	defer timer.Stop()
-	notifier.eventsPubsubs.GetAndDo(*identifier, func(key interface{}, value interface{}) error {
+	notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *historyEventNotification)
 
 		for _, channel := range subscribers {

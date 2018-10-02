@@ -143,7 +143,15 @@ type (
 	historyEventNotifier interface {
 		common.Daemon
 		NotifyNewHistoryEvent(event *historyEventNotification)
-		WatchHistoryEvent(identifier *workflowIdentifier) (string, chan *historyEventNotification, error)
-		UnwatchHistoryEvent(identifier *workflowIdentifier, subscriberID string) error
+		WatchHistoryEvent(identifier workflowIdentifier) (string, chan *historyEventNotification, error)
+		UnwatchHistoryEvent(identifier workflowIdentifier, subscriberID string) error
 	}
 )
+
+func newWorkflowIdentifier(domainID string, execution *workflow.WorkflowExecution) workflowIdentifier {
+	return workflowIdentifier{
+		domainID:   domainID,
+		workflowID: execution.GetWorkflowId(),
+		runID:      execution.GetRunId(),
+	}
+}

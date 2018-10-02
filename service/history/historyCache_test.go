@@ -107,6 +107,34 @@ func (s *historyCacheSuite) TearDownTest() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 }
 
+func (s *historyCacheSuite) TestHistoryCacheBasic() {
+	s.cache = newHistoryCache(s.mockShard)
+
+	domainID := "test_domain_id"
+	execution1 := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	mockMS1 := &mockMutableState{}
+	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, execution1)
+	s.Nil(err)
+	context.msBuilder = mockMS1
+	release(nil)
+	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution1)
+	s.Nil(err)
+	s.Equal(mockMS1, context.msBuilder)
+	release(nil)
+
+	execution2 := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution2)
+	s.Nil(err)
+	s.NotEqual(mockMS1, context.msBuilder)
+	release(nil)
+}
+
 func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
 	domainID := "test_domain_id"

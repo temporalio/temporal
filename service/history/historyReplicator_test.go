@@ -2115,10 +2115,11 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// the test above already assert the create workflow request, so here jsut use anyting
 	s.mockExecutionMgr.On("CreateWorkflowExecution", mock.Anything).Return(nil, errRet).Once()
 
-	currentContext := newWorkflowExecutionContext(domainID, shared.WorkflowExecution{
+	currentExecution := shared.WorkflowExecution{
 		WorkflowId: common.StringPtr(workflowID),
 		RunId:      common.StringPtr(currentRunID),
-	}, s.mockShard, s.mockExecutionMgr, s.logger)
+	}
+	currentContext := newWorkflowExecutionContext(domainID, currentExecution, s.mockShard, s.mockExecutionMgr, s.logger)
 	currentMsBuilder := &mockMutableState{}
 	currentMsBuilder.On("IsWorkflowExecutionRunning").Return(true)
 	currentMsBuilder.On("HasBufferedReplicationTasks").Return(false)
@@ -2127,7 +2128,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	// return nil to bypass updating the version, since this test does not test that
 	currentMsBuilder.On("GetReplicationState").Return(nil)
 	currentContext.msBuilder = currentMsBuilder
-	s.historyReplicator.historyCache.PutIfNotExist(currentRunID, currentContext)
+	s.historyReplicator.historyCache.PutIfNotExist(newWorkflowIdentifier(domainID, &currentExecution), currentContext)
 	s.mockExecutionMgr.On("GetCurrentExecution", &persistence.GetCurrentExecutionRequest{
 		DomainID:   domainID,
 		WorkflowID: workflowID,

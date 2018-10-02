@@ -115,7 +115,7 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 		return nil, nil, nil, false, err
 	}
 
-	key := execution.GetRunId()
+	key := newWorkflowIdentifier(domainID, &execution)
 	contextFromCache, cacheHit := c.Get(key).(*workflowExecutionContext)
 	releaseFunc := func(error) {}
 	// If cache hit, we need to lock the cache to prevent race condition
@@ -153,7 +153,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 		return newWorkflowExecutionContext(domainID, execution, c.shard, c.executionManager, c.logger), func(error) {}, nil
 	}
 
-	key := execution.GetRunId()
+	key := newWorkflowIdentifier(domainID, &execution)
 	workflowCtx, cacheHit := c.Get(key).(*workflowExecutionContext)
 	if !cacheHit {
 		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.CacheMissCounter)
@@ -181,7 +181,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *historyCache) makeReleaseFunc(key string, status int32, context *workflowExecutionContext) func(error) {
+func (c *historyCache) makeReleaseFunc(key workflowIdentifier, status int32, context *workflowExecutionContext) func(error) {
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if err != nil {
