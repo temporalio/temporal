@@ -265,9 +265,12 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 	if err != nil {
 		return nil, err
 	}
-	newBufferedEvents, err := m.serializer.SerializeBatchEvents(request.NewBufferedEvents, request.Encoding)
-	if err != nil {
-		return nil, err
+	var newBufferedEvents *DataBlob
+	if request.NewBufferedEvents != nil {
+		newBufferedEvents, err = m.serializer.SerializeBatchEvents(request.NewBufferedEvents, request.Encoding)
+		if err != nil {
+			return nil, err
+		}
 	}
 	newBufferedReplicationTask, err := m.SerializeNewBufferedReplicationTask(request.NewBufferedReplicationTask, request.Encoding)
 	if err != nil {
