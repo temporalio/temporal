@@ -56,6 +56,7 @@ type (
 
 var (
 	errUnknownReplicationTask = errors.New("Unknown replication task")
+	errHistoryNotFoundTask    = errors.New("History not found")
 	defaultHistoryPageSize    = 1000
 )
 
@@ -101,27 +102,25 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 	return processor
 }
 
-func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) error {
+func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) (int, error) {
 	task, ok := qTask.(*persistence.ReplicationTaskInfo)
 	if !ok {
-		return errUnexpectedQueueTask
-	}
-	scope := metrics.ReplicatorQueueProcessorScope
-	var err error
-	switch task.TaskType {
-	case persistence.ReplicationTaskTypeHistory:
-		scope = metrics.ReplicatorTaskHistoryScope
-		err = p.processHistoryReplicationTask(task)
-	default:
-		err = errUnknownReplicationTask
+		return metrics.ReplicatorQueueProcessorScope, errUnexpectedQueueTask
 	}
 
-	if err != nil {
-		p.metricsClient.IncCounter(scope, metrics.TaskFailures)
-	} else {
-		err = p.queueAckMgr.completeQueueTask(task.TaskID)
+	switch task.TaskType {
+	case persistence.ReplicationTaskTypeHistory:
+		err := p.processHistoryReplicationTask(task)
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			err = errHistoryNotFoundTask
+		}
+		if err == nil {
+			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
+		}
+		return metrics.ReplicatorTaskHistoryScope, err
+	default:
+		return metrics.ReplicatorQueueProcessorScope, errUnknownReplicationTask
 	}
-	return err
 }
 
 func (p *replicatorQueueProcessorImpl) queueShutdown() error {
@@ -130,9 +129,6 @@ func (p *replicatorQueueProcessorImpl) queueShutdown() error {
 }
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {
-	p.metricsClient.IncCounter(metrics.ReplicatorTaskHistoryScope, metrics.TaskRequests)
-	sw := p.metricsClient.StartTimer(metrics.ReplicatorTaskHistoryScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	domainEntry, err := p.shard.GetDomainCache().GetDomainByID(task.DomainID)
 	if err != nil {
@@ -204,12 +200,6 @@ func (p *replicatorQueueProcessorImpl) readTasks(readLevel int64) ([]queueTaskIn
 	}
 
 	return tasks, len(response.NextPageToken) != 0, nil
-}
-
-func (p *replicatorQueueProcessorImpl) completeTask(taskID int64) error {
-	return p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-		TaskID: taskID,
-	})
 }
 
 func (p *replicatorQueueProcessorImpl) updateAckLevel(ackLevel int64) error {

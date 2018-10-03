@@ -192,7 +192,7 @@ func (t *timerQueueProcessorBase) taskWorker(workerWG *sync.WaitGroup, notificat
 			if !ok {
 				return
 			}
-			t.processWithRetry(notificationChan, task)
+			t.processTaskAndAck(notificationChan, task)
 		}
 	}
 }
@@ -246,9 +246,9 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 			}
 		case persistence.TaskTypeDeleteHistoryEvent:
 			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskDeleteHistoryEvent, metrics.NewTimerCounter)
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
 			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDeleteHistoryEvent, metrics.NewTimerCounter)
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskDeleteHistoryEventScope, metrics.NewTimerCounter)
 			}
 		case persistence.TaskTypeActivityRetryTimer:
 			if isActive {
@@ -394,77 +394,120 @@ func (t *timerQueueProcessorBase) retryTasks() {
 	}
 }
 
-func (t *timerQueueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
+func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo) {
 
-	var logger bark.Logger
+	var scope int
 	var err error
 	startTime := time.Now()
-
+	logger := t.initializeLoggerForTask(task)
 	attempt := 0
 	op := func() error {
-		err = t.timerProcessor.process(task)
-		if err != nil && err != ErrTaskRetry {
-			if _, ok := err.(*workflow.DomainNotActiveError); !ok {
-				attempt++
-				logger = t.initializeLoggerForTask(task, logger)
-				logging.LogTaskProcessingFailedEvent(logger, err)
+		scope, err = t.processTaskOnce(notificationChan, task, logger)
+		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
+	}
+	retryCondition := func(err error) bool { return true }
+
+	for {
+		select {
+		case <-t.shutdownCh:
+			// this must return without ack
+			return
+		default:
+			err = backoff.Retry(op, t.retryPolicy, retryCondition)
+			if err == nil {
+				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+				t.ackTaskOnce(task, scope)
+				return
+			}
+
+			attempt++
+
+			if attempt >= t.config.TimerTaskMaxRetryCount() {
+				t.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+				logging.LogCriticalErrorEvent(logger, "Critical error processing timer task, retrying.", err)
 			}
 		}
+	}
+}
+
+func (t *timerQueueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task *persistence.TimerTaskInfo, logger bark.Logger) (int, error) {
+
+	select {
+	case <-notificationChan:
+	default:
+	}
+
+	startTime := time.Now()
+	scope, err := t.timerProcessor.process(task)
+	t.metricsClient.IncCounter(scope, metrics.TaskRequests)
+	t.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
+
+	return scope, err
+}
+
+func (t *timerQueueProcessorBase) handleTaskError(scope int, startTime time.Time,
+	notificationChan <-chan struct{}, err error, logger bark.Logger) error {
+
+	if err == nil {
+		return nil
+	}
+
+	if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		return nil
+	}
+
+	// this is a transient error
+	if err == ErrTaskRetry {
+		t.metricsClient.IncCounter(scope, metrics.TaskStandbyRetryCounter)
+		<-notificationChan
 		return err
 	}
 
-ProcessRetryLoop:
-	for attempt < t.config.TimerTaskMaxRetryCount() {
-		select {
-		case <-t.shutdownCh:
-			return
-		default:
-			// clear the existing notification
-			select {
-			case <-notificationChan:
-			default:
-			}
+	if err == ErrTaskDiscarded {
+		t.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
+		err = nil
+	}
 
-			err = backoff.Retry(op, t.retryPolicy, func(err error) bool {
-				return err != ErrTaskRetry
-			})
-
-			if err != nil {
-				if err == ErrTaskRetry {
-					t.metricsClient.IncCounter(t.scope, metrics.HistoryTaskStandbyRetryCounter)
-					<-notificationChan
-				} else if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-					t.metricsClient.IncCounter(t.scope, metrics.HistoryTaskNotActiveCounter)
-					t.timerQueueAckMgr.completeTimerTask(task)
-					return
-				}
-				continue ProcessRetryLoop
-			}
-			atomic.AddUint64(&t.timerFiredCount, 1)
-			return
+	// this is a transient error
+	if _, ok := err.(*workflow.DomainNotActiveError); ok {
+		if time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+			t.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
+			return nil
 		}
+
+		return err
 	}
 
-	// Cannot processes timer task due to LimitExceededError after all retries
-	// raise and alert and move on
-	logger = t.initializeLoggerForTask(task, logger)
+	t.metricsClient.IncCounter(scope, metrics.TaskFailures)
+
+	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+		logging.LogTaskProcessingFailedEvent(logger, "More than 2 workflow are running.", err)
+		return nil
+	}
+
 	if _, ok := err.(*workflow.LimitExceededError); ok {
-		logging.LogCriticalErrorEvent(logger, "Critical error processing timer task.  Skipping.", err)
-		t.metricsClient.IncCounter(t.scope, metrics.CadenceCriticalFailures)
-		t.timerQueueAckMgr.completeTimerTask(task)
-		return
+		t.metricsClient.IncCounter(scope, metrics.TaskLimitExceededCounter)
+		logging.LogTaskProcessingFailedEvent(logger, "Task encounter limit exceeded error.", err)
+		return err
 	}
 
-	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	logging.LogOperationPanicEvent(logger, "Retry count exceeded for timer task", err)
+	logging.LogTaskProcessingFailedEvent(logger, "Fail to process task", err)
+	return err
 }
 
-func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo, logger bark.Logger) bark.Logger {
-	if logger != nil {
-		return logger
-	}
+func (t *timerQueueProcessorBase) ackTaskOnce(task *persistence.TimerTaskInfo, scope int) {
+	t.timerQueueAckMgr.completeTimerTask(task)
+	t.metricsClient.RecordTimer(
+		scope,
+		metrics.TaskQueueLatency,
+		time.Since(task.GetVisibilityTimestamp()),
+	)
+	atomic.AddUint64(&t.timerFiredCount, 1)
+}
 
-	logger = t.logger.WithFields(bark.Fields{
+func (t *timerQueueProcessorBase) initializeLoggerForTask(task *persistence.TimerTaskInfo) bark.Logger {
+	logger := t.logger.WithFields(bark.Fields{
+		logging.TagHistoryShardID:      t.shard.GetShardID(),
 		logging.TagTaskID:              task.GetTaskID(),
 		logging.TagTaskType:            task.GetTaskType(),
 		logging.TagVersion:             task.GetVersion(),
@@ -489,9 +532,6 @@ func (t *timerQueueProcessorBase) getDomainIDAndWorkflowExecution(task *persiste
 }
 
 func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(t.scope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(t.scope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	context, release, err := t.cache.getOrCreateWorkflowExecution(t.getDomainIDAndWorkflowExecution(task))
 	if err != nil {

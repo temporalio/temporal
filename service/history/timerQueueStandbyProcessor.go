@@ -126,13 +126,13 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(timerTasks []persistenc
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
-func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTaskInfo) error {
+func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTaskInfo) (int, error) {
 	ok, err := t.timerTaskFilter(timerTask)
 	if err != nil {
-		return err
+		return metrics.TimerStandbyQueueProcessorScope, err
 	} else if !ok {
 		t.timerQueueAckMgr.completeTimerTask(timerTask)
-		return nil
+		return metrics.TimerStandbyQueueProcessorScope, nil
 	}
 
 	taskID := TimerSequenceID{VisibilityTimestamp: timerTask.VisibilityTimestamp, TaskID: timerTask.TaskID}
@@ -140,68 +140,34 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 		taskID, timerTask.WorkflowID, timerTask.RunID, t.timerQueueProcessorBase.getTimerTaskType(timerTask.TaskType),
 		workflow.TimeoutType(timerTask.TimeoutType).String(), timerTask.EventID)
 
-	scope := metrics.TimerQueueProcessorScope
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		scope = metrics.TimerStandbyTaskUserTimerScope
-		err = t.processExpiredUserTimer(timerTask)
+		return metrics.TimerStandbyTaskUserTimerScope, t.processExpiredUserTimer(timerTask)
 
 	case persistence.TaskTypeActivityTimeout:
-		scope = metrics.TimerStandbyTaskActivityTimeoutScope
-		err = t.processActivityTimeout(timerTask)
+		return metrics.TimerStandbyTaskActivityTimeoutScope, t.processActivityTimeout(timerTask)
 
 	case persistence.TaskTypeDecisionTimeout:
-		scope = metrics.TimerStandbyTaskDecisionTimeoutScope
-		err = t.processDecisionTimeout(timerTask)
+		return metrics.TimerStandbyTaskDecisionTimeoutScope, t.processDecisionTimeout(timerTask)
 
 	case persistence.TaskTypeWorkflowTimeout:
-		scope = metrics.TimerStandbyTaskWorkflowTimeoutScope
-		err = t.processWorkflowTimeout(timerTask)
+		return metrics.TimerStandbyTaskWorkflowTimeoutScope, t.processWorkflowTimeout(timerTask)
 
 	case persistence.TaskTypeActivityRetryTimer:
-		scope = metrics.TimerStandbyTaskActivityRetryTimerScope
-		err = nil // retry backoff timer should not get created on passive cluster
+		return metrics.TimerStandbyTaskActivityRetryTimerScope, nil // retry backoff timer should not get created on passive cluster
 
 	case persistence.TaskTypeWorkflowRetryTimer:
-		scope = metrics.TimerStandbyTaskWorkflowRetryTimerScope
-		err = t.processWorkflowRetryTimerTask(timerTask)
+		return metrics.TimerStandbyTaskWorkflowRetryTimerScope, t.processWorkflowRetryTimerTask(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
-		scope = metrics.TimerStandbyTaskDeleteHistoryEvent
-		err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+		return metrics.TimerStandbyTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+
+	default:
+		return metrics.TimerStandbyQueueProcessorScope, errUnknownTimerTask
 	}
-
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
-			// Timer could fire after the execution is deleted.
-			// In which case just ignore the error so we can complete the timer task.
-			t.timerQueueAckMgr.completeTimerTask(timerTask)
-			err = nil
-		}
-		if err == ErrTaskDiscarded {
-			t.timerQueueAckMgr.completeTimerTask(timerTask)
-			t.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
-			err = nil
-		}
-
-		if err != nil {
-			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
-		}
-	} else {
-		t.timerQueueAckMgr.completeTimerTask(timerTask)
-	}
-
-	if err == nil {
-		t.metricsClient.RecordTimer(scope, metrics.StandbyTimerTaskQueueLatency, time.Since(timerTask.GetVisibilityTimestamp()))
-	}
-
-	return err
 }
 
 func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(timerTask *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerStandbyTaskUserTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskUserTimerScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		executionInfo := msBuilder.GetExecutionInfo()
@@ -245,9 +211,6 @@ func (t *timerQueueStandbyProcessorImpl) processExpiredUserTimer(timerTask *pers
 }
 
 func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerStandbyTaskActivityTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskActivityTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		executionInfo := msBuilder.GetExecutionInfo()
@@ -291,9 +254,6 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 }
 
 func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerStandbyTaskDecisionTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskDecisionTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		di, isPending := msBuilder.GetPendingDecision(timerTask.EventID)
@@ -325,9 +285,6 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 }
 
 func (t *timerQueueStandbyProcessorImpl) processWorkflowRetryTimerTask(timerTask *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowRetryTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskWorkflowRetryTimerScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 
@@ -361,9 +318,6 @@ func (t *timerQueueStandbyProcessorImpl) processWorkflowRetryTimerTask(timerTask
 }
 
 func (t *timerQueueStandbyProcessorImpl) processWorkflowTimeout(timerTask *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerStandbyTaskWorkflowTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	return t.processTimer(timerTask, func(msBuilder mutableState) error {
 		// we do not need to notity new timer to base, since if there is no new event being replicated

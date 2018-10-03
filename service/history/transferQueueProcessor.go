@@ -21,6 +21,7 @@
 package history
 
 import (
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,10 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+)
+
+var (
+	errUnknownTransferTask = errors.New("Unknown transfer task")
 )
 
 type (
@@ -226,7 +231,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
+	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteTransferTask(&persistence.RangeCompleteTransferTaskRequest{

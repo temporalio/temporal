@@ -21,6 +21,7 @@
 package history
 
 import (
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,10 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+)
+
+var (
+	errUnknownTimerTask = errors.New("Unknown timer task")
 )
 
 type (
@@ -223,7 +228,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.HistoryTaskBatchCompleteCounter)
+	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.VisibilityTimestamp.Before(upperAckLevel.VisibilityTimestamp) {
 		err := t.shard.GetExecutionManager().RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{

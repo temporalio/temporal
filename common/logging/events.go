@@ -90,6 +90,6 @@ const (
 
 	// General purpose events
 	OperationFailed   = 9000
-	OperationPanic    = 9001
+	OperationStuck    = 9001
 	OperationCritical = 9002
 )

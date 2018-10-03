@@ -87,11 +87,6 @@ func (t *transferQueueProcessorBase) readTasks(readLevel int64) ([]queueTaskInfo
 	return tasks, len(response.NextPageToken) != 0, nil
 }
 
-func (t *transferQueueProcessorBase) completeTask(taskID int64) error {
-	// this is a no op on the for transfer queue active / standby processor
-	return nil
-}
-
 func (t *transferQueueProcessorBase) updateAckLevel(ackLevel int64) error {
 	return t.updateTransferAckLevel(ackLevel)
 }

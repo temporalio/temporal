@@ -428,8 +428,8 @@ const (
 	TimerActiveTaskActivityRetryTimerScope
 	// TimerActiveTaskWorkflowRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
 	TimerActiveTaskWorkflowRetryTimerScope
-	// TimerActiveTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
-	TimerActiveTaskDeleteHistoryEvent
+	// TimerActiveTaskDeleteHistoryEventScope is the scope used by metric emitted by timer queue processor for processing history event cleanup
+	TimerActiveTaskDeleteHistoryEventScope
 	// TimerStandbyTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerStandbyTaskActivityTimeoutScope
 	// TimerStandbyTaskDecisionTimeoutScope is the scope used by metric emitted by timer queue processor for processing decision timeouts
@@ -440,8 +440,8 @@ const (
 	TimerStandbyTaskWorkflowTimeoutScope
 	// TimerStandbyTaskActivityRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
 	TimerStandbyTaskActivityRetryTimerScope
-	// TimerStandbyTaskDeleteHistoryEvent is the scope used by metric emitted by timer queue processor for processing history event cleanup
-	TimerStandbyTaskDeleteHistoryEvent
+	// TimerStandbyTaskDeleteHistoryEventScope is the scope used by metric emitted by timer queue processor for processing history event cleanup
+	TimerStandbyTaskDeleteHistoryEventScope
 	// TimerStandbyTaskWorkflowRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
 	TimerStandbyTaskWorkflowRetryTimerScope
 	// HistoryEventNotificationScope is the scope used by shard history event nitification
@@ -671,14 +671,14 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TimerActiveTaskWorkflowTimeoutScope:          {operation: "TimerActiveTaskWorkflowTimeout"},
 		TimerActiveTaskActivityRetryTimerScope:       {operation: "TimerActiveTaskActivityRetryTimer"},
 		TimerActiveTaskWorkflowRetryTimerScope:       {operation: "TimerActiveTaskWorkflowRetryTimer"},
-		TimerActiveTaskDeleteHistoryEvent:            {operation: "TimerActiveTaskDeleteHistoryEvent"},
+		TimerActiveTaskDeleteHistoryEventScope:       {operation: "TimerActiveTaskDeleteHistoryEvent"},
 		TimerStandbyTaskActivityTimeoutScope:         {operation: "TimerStandbyTaskActivityTimeout"},
 		TimerStandbyTaskDecisionTimeoutScope:         {operation: "TimerStandbyTaskDecisionTimeout"},
 		TimerStandbyTaskUserTimerScope:               {operation: "TimerStandbyTaskUserTimer"},
 		TimerStandbyTaskWorkflowTimeoutScope:         {operation: "TimerStandbyTaskWorkflowTimeout"},
 		TimerStandbyTaskActivityRetryTimerScope:      {operation: "TimerStandbyTaskActivityRetryTimer"},
 		TimerStandbyTaskWorkflowRetryTimerScope:      {operation: "TimerStandbyTaskWorkflowRetryTimer"},
-		TimerStandbyTaskDeleteHistoryEvent:           {operation: "TimerStandbyTaskDeleteHistoryEvent"},
+		TimerStandbyTaskDeleteHistoryEventScope:      {operation: "TimerStandbyTaskDeleteHistoryEvent"},
 		HistoryEventNotificationScope:                {operation: "HistoryEventNotification"},
 		ReplicatorQueueProcessorScope:                {operation: "ReplicatorQueueProcessor"},
 		ReplicatorTaskHistoryScope:                   {operation: "ReplicatorTaskHistory"},
@@ -760,9 +760,17 @@ const (
 // History Metrics enum
 const (
 	TaskRequests = iota + NumCommonMetrics
+	TaskLatency
 	TaskFailures
 	TaskDiscarded
-	TaskLatency
+	TaskAttemptTimer
+	TaskStandbyRetryCounter
+	TaskNotActiveCounter
+	TaskLimitExceededCounter
+	TaskBatchCompleteCounter
+	TaskProcessingLatency
+	TaskQueueLatency
+
 	AckLevelUpdateCounter
 	AckLevelUpdateFailedCounter
 	DecisionTypeScheduleActivityCounter
@@ -823,13 +831,6 @@ const (
 	BufferReplicationTaskTimer
 	UnbufferReplicationTaskTimer
 	HistoryConflictsCounter
-	HistoryTaskStandbyRetryCounter
-	HistoryTaskNotActiveCounter
-	HistoryTaskBatchCompleteCounter
-	ActiveTransferTaskQueueLatency
-	ActiveTimerTaskQueueLatency
-	StandbyTransferTaskQueueLatency
-	StandbyTimerTaskQueueLatency
 	CompleteTaskFailedCounter
 	HistoryCacheRequests
 	HistoryCacheFailures
@@ -929,9 +930,16 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Frontend: {},
 	History: {
 		TaskRequests:                                 {metricName: "task.requests", metricType: Counter},
+		TaskLatency:                                  {metricName: "task.latency", metricType: Timer},
+		TaskAttemptTimer:                             {metricName: "task.attempt", metricType: Timer},
 		TaskFailures:                                 {metricName: "task.errors", metricType: Counter},
 		TaskDiscarded:                                {metricName: "task.errors.discarded", metricType: Counter},
-		TaskLatency:                                  {metricName: "task.latency", metricType: Timer},
+		TaskStandbyRetryCounter:                      {metricName: "task.errors.standby-retry-counter", metricType: Counter},
+		TaskNotActiveCounter:                         {metricName: "task.errors.not-active-counter", metricType: Counter},
+		TaskLimitExceededCounter:                     {metricName: "task.errors.limit-exceeded-counter", metricType: Counter},
+		TaskProcessingLatency:                        {metricName: "task.latency.processing", metricType: Timer},
+		TaskQueueLatency:                             {metricName: "task.latency.queue", metricType: Timer},
+		TaskBatchCompleteCounter:                     {metricName: "task.batch-complete-counter", metricType: Counter},
 		AckLevelUpdateCounter:                        {metricName: "ack-level-update", metricType: Counter},
 		AckLevelUpdateFailedCounter:                  {metricName: "ack-level-update-failed", metricType: Counter},
 		DecisionTypeScheduleActivityCounter:          {metricName: "schedule-activity-decision", metricType: Counter},
@@ -992,13 +1000,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		BufferReplicationTaskTimer:                   {metricName: "buffer-replication-tasks", metricType: Timer},
 		UnbufferReplicationTaskTimer:                 {metricName: "unbuffer-replication-tasks", metricType: Timer},
 		HistoryConflictsCounter:                      {metricName: "history-conflicts", metricType: Counter},
-		HistoryTaskStandbyRetryCounter:               {metricName: "history-task-standby-retry-counter", metricType: Counter},
-		HistoryTaskNotActiveCounter:                  {metricName: "history-task-not-active-counter", metricType: Counter},
-		HistoryTaskBatchCompleteCounter:              {metricName: "history-task-batch-complete-counter", metricType: Counter},
-		ActiveTransferTaskQueueLatency:               {metricName: "active.transfertask.queue.latency", metricType: Timer},
-		ActiveTimerTaskQueueLatency:                  {metricName: "active.timertask.queue.latency", metricType: Timer},
-		StandbyTransferTaskQueueLatency:              {metricName: "standby.transfertask.queue.latency", metricType: Timer},
-		StandbyTimerTaskQueueLatency:                 {metricName: "standby.timertask.queue.latency", metricType: Timer},
 		CompleteTaskFailedCounter:                    {metricName: "complete-task-fail-count", metricType: Counter},
 		HistoryCacheRequests:                         {metricName: "history-cache.requests", metricType: Counter},
 		HistoryCacheFailures:                         {metricName: "history-cache.errors", metricType: Counter},

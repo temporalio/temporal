@@ -136,18 +136,12 @@ TaskFilterLoop:
 	return tasks, morePage, nil
 }
 
-func (a *queueAckMgrImpl) completeQueueTask(taskID int64) error {
-	err := a.processor.completeTask(taskID)
-	if err != nil {
-		return err
-	}
-
+func (a *queueAckMgrImpl) completeQueueTask(taskID int64) {
 	a.Lock()
 	if _, ok := a.outstandingTasks[taskID]; ok {
 		a.outstandingTasks[taskID] = true
 	}
 	a.Unlock()
-	return nil
 }
 
 func (a *queueAckMgrImpl) getQueueAckLevel() int64 {

@@ -253,7 +253,7 @@ func (p *queueProcessorBase) taskWorker(tasksCh <-chan queueTaskInfo, notificati
 			if !ok {
 				return
 			}
-			p.processWithRetry(notificationChan, task)
+			p.processTaskAndAck(notificationChan, task)
 		}
 	}
 }
@@ -267,93 +267,128 @@ func (p *queueProcessorBase) retryTasks() {
 	}
 }
 
-func (p *queueProcessorBase) processWithRetry(notificationChan <-chan struct{}, task queueTaskInfo) {
+func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{}, task queueTaskInfo) {
 
-	var logger bark.Logger
+	var scope int
 	var err error
 	startTime := time.Now()
-
-	retryCount := 0
+	logger := p.initializeLoggerForTask(task)
+	attempt := 0
 	op := func() error {
-		err = p.processor.process(task)
-		if err != nil && err != ErrTaskRetry {
-			if _, ok := err.(*workflow.DomainNotActiveError); !ok {
-				retryCount++
-				logger = p.initializeLoggerForTask(task, logger)
-				logging.LogTaskProcessingFailedEvent(logger, err)
-			}
-		}
-		return err
+		scope, err = p.processTaskOnce(notificationChan, task, logger)
+		return p.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
+	retryCondition := func(err error) bool { return true }
+	defer func() { p.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime)) }()
 
-ProcessRetryLoop:
-	for retryCount < p.options.MaxRetryCount() {
+	for {
 		select {
 		case <-p.shutdownCh:
+			// this must return without ack
 			return
 		default:
-			// clear the existing notification
-			select {
-			case <-notificationChan:
-			default:
+			err = backoff.Retry(op, p.retryPolicy, retryCondition)
+			if err == nil {
+				p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+				p.ackTaskOnce(task, scope)
+				return
 			}
 
-			err = backoff.Retry(op, p.retryPolicy, func(err error) bool {
-				return err != ErrTaskRetry
-			})
+			attempt++
 
-			if err != nil {
-				if err == ErrTaskRetry {
-					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskStandbyRetryCounter)
-					<-notificationChan
-				} else if _, ok := err.(*workflow.DomainNotActiveError); ok && time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
-					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskNotActiveCounter)
-					p.ackMgr.completeQueueTask(task.GetTaskID())
-					return
+			if attempt >= p.options.MaxRetryCount() {
+				p.metricsClient.RecordTimer(scope, metrics.TaskAttemptTimer, time.Duration(attempt))
+				switch task.(type) {
+				case *persistence.TransferTaskInfo:
+					logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task, retrying.", err)
+				case *persistence.ReplicationTaskInfo:
+					logging.LogCriticalErrorEvent(logger, "Critical error processing replication task, retrying.", err)
 				}
-				continue ProcessRetryLoop
 			}
-			return
 		}
-	}
-
-	// All attempts to process transfer task failed.  We won't be able to move the ackLevel so panic
-	logger = p.initializeLoggerForTask(task, logger)
-	switch task.(type) {
-	case *persistence.TransferTaskInfo:
-		// Cannot processes transfer task due to LimitExceededError after all retries
-		// raise and alert and move on
-		if _, ok := err.(*workflow.LimitExceededError); ok {
-			logging.LogCriticalErrorEvent(logger, "Critical error processing transfer task.  Skipping.", err)
-			p.metricsClient.IncCounter(p.options.MetricScope, metrics.CadenceCriticalFailures)
-			p.ackMgr.completeQueueTask(task.GetTaskID())
-			return
-		}
-
-		logging.LogOperationPanicEvent(logger, "Retry count exceeded for transfer task", err)
-	case *persistence.ReplicationTaskInfo:
-		// Cannot processes replication task due to LimitExceededError after all retries
-		// raise and alert and move on
-		if _, ok := err.(*workflow.LimitExceededError); ok {
-			logging.LogCriticalErrorEvent(logger, "Critical error processing replication task.  Skipping.", err)
-			p.metricsClient.IncCounter(p.options.MetricScope, metrics.CadenceCriticalFailures)
-			p.ackMgr.completeQueueTask(task.GetTaskID())
-			return
-		}
-
-		logging.LogOperationPanicEvent(logger, "Retry count exceeded for replication task", err)
 	}
 }
 
-func (p *queueProcessorBase) initializeLoggerForTask(task queueTaskInfo, logger bark.Logger) bark.Logger {
-	if logger != nil {
-		return logger
+func (p *queueProcessorBase) processTaskOnce(notificationChan <-chan struct{}, task queueTaskInfo, logger bark.Logger) (int, error) {
+
+	select {
+	case <-notificationChan:
+	default:
 	}
 
-	logger = p.logger.WithFields(bark.Fields{
-		logging.TagTaskID:   task.GetTaskID(),
-		logging.TagTaskType: task.GetTaskType(),
-		logging.TagVersion:  task.GetVersion(),
+	startTime := time.Now()
+	scope, err := p.processor.process(task)
+	p.metricsClient.IncCounter(scope, metrics.TaskRequests)
+	p.metricsClient.RecordTimer(scope, metrics.TaskProcessingLatency, time.Since(startTime))
+
+	return scope, err
+}
+
+func (p *queueProcessorBase) handleTaskError(scope int, startTime time.Time,
+	notificationChan <-chan struct{}, err error, logger bark.Logger) error {
+
+	if err == nil {
+		return nil
+	}
+
+	if _, ok := err.(*workflow.EntityNotExistsError); ok {
+		return nil
+	}
+
+	// this is a transient error
+	if err == ErrTaskRetry {
+		p.metricsClient.IncCounter(scope, metrics.TaskStandbyRetryCounter)
+		<-notificationChan
+		return err
+	}
+
+	if err == ErrTaskDiscarded {
+		p.metricsClient.IncCounter(scope, metrics.TaskDiscarded)
+		err = nil
+	}
+
+	// this is a transient error
+	if _, ok := err.(*workflow.DomainNotActiveError); ok {
+		if time.Now().Sub(startTime) > cache.DomainCacheRefreshInterval {
+			p.metricsClient.IncCounter(scope, metrics.TaskNotActiveCounter)
+			return nil
+		}
+
+		return err
+	}
+
+	p.metricsClient.IncCounter(scope, metrics.TaskFailures)
+
+	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+		logging.LogTaskProcessingFailedEvent(logger, "More than 2 workflow are running.", err)
+		return nil
+	}
+
+	if _, ok := err.(*workflow.LimitExceededError); ok {
+		p.metricsClient.IncCounter(scope, metrics.TaskLimitExceededCounter)
+		logging.LogTaskProcessingFailedEvent(logger, "Task encounter limit exceeded error.", err)
+		return err
+	}
+
+	logging.LogTaskProcessingFailedEvent(logger, "Fail to process task", err)
+	return err
+}
+
+func (p *queueProcessorBase) ackTaskOnce(task queueTaskInfo, scope int) {
+	p.ackMgr.completeQueueTask(task.GetTaskID())
+	p.metricsClient.RecordTimer(
+		scope,
+		metrics.TaskQueueLatency,
+		time.Since(task.GetVisibilityTimestamp()),
+	)
+}
+
+func (p *queueProcessorBase) initializeLoggerForTask(task queueTaskInfo) bark.Logger {
+	logger := p.logger.WithFields(bark.Fields{
+		logging.TagHistoryShardID: p.shard.GetShardID(),
+		logging.TagTaskID:         task.GetTaskID(),
+		logging.TagTaskType:       task.GetTaskType(),
+		logging.TagVersion:        task.GetVersion(),
 	})
 
 	switch task := task.(type) {

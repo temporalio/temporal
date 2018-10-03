@@ -174,7 +174,13 @@ func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.Replicat
 		// err will not be of type EntityNotExistsError
 		return err
 	}
-	defer func() { release(retError) }()
+	defer func() {
+		if retError == ErrRetryBufferEvents {
+			release(nil)
+		} else {
+			release(retError)
+		}
+	}()
 
 	firstEvent := request.History.Events[0]
 	switch firstEvent.GetEventType() {

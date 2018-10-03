@@ -75,17 +75,8 @@ func (_m *MockQueueAckMgr) readQueueTasks() ([]queueTaskInfo, bool, error) {
 }
 
 // completeQueueTask is mock implementation for completeQueueTask of QueueAckMgr
-func (_m *MockQueueAckMgr) completeQueueTask(taskID int64) error {
-	ret := _m.Called(taskID)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(int64) error); ok {
-		r0 = rf(taskID)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
+func (_m *MockQueueAckMgr) completeQueueTask(taskID int64) {
+	_m.Called(taskID)
 }
 
 // getQueueAckLevel is mock implementation for getQueueAckLevel of QueueAckMgr

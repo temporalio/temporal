@@ -194,80 +194,45 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(timerTasks []persistence
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }
 
-func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo) error {
+func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTaskInfo) (int, error) {
 	ok, err := t.timerTaskFilter(timerTask)
 	if err != nil {
-		return err
+		return metrics.TimerActiveQueueProcessorScope, err
 	} else if !ok {
 		t.timerQueueAckMgr.completeTimerTask(timerTask)
 		t.logger.Debugf("Discarding timer: (%v, %v), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
 			timerTask.TaskID, timerTask.VisibilityTimestamp, timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType, timerTask.EventID, err)
-		return nil
+		return metrics.TimerActiveQueueProcessorScope, nil
 	}
 
-	scope := metrics.TimerActiveQueueProcessorScope
 	switch timerTask.TaskType {
 	case persistence.TaskTypeUserTimer:
-		scope = metrics.TimerActiveTaskUserTimerScope
-		err = t.processExpiredUserTimer(timerTask)
+		return metrics.TimerActiveTaskUserTimerScope, t.processExpiredUserTimer(timerTask)
 
 	case persistence.TaskTypeActivityTimeout:
-		scope = metrics.TimerActiveTaskActivityTimeoutScope
-		err = t.processActivityTimeout(timerTask)
+		return metrics.TimerActiveTaskActivityTimeoutScope, t.processActivityTimeout(timerTask)
 
 	case persistence.TaskTypeDecisionTimeout:
-		scope = metrics.TimerActiveTaskDecisionTimeoutScope
-		err = t.processDecisionTimeout(timerTask)
+		return metrics.TimerActiveTaskDecisionTimeoutScope, t.processDecisionTimeout(timerTask)
 
 	case persistence.TaskTypeWorkflowTimeout:
-		scope = metrics.TimerActiveTaskWorkflowTimeoutScope
-		err = t.processWorkflowTimeout(timerTask)
+		return metrics.TimerActiveTaskWorkflowTimeoutScope, t.processWorkflowTimeout(timerTask)
 
 	case persistence.TaskTypeActivityRetryTimer:
-		scope = metrics.TimerActiveTaskActivityRetryTimerScope
-		err = t.processActivityRetryTimer(timerTask)
+		return metrics.TimerActiveTaskActivityRetryTimerScope, t.processActivityRetryTimer(timerTask)
 
 	case persistence.TaskTypeWorkflowRetryTimer:
-		scope = metrics.TimerActiveTaskWorkflowRetryTimerScope
-		err = t.processWorkflowRetryTimer(timerTask)
+		return metrics.TimerActiveTaskWorkflowRetryTimerScope, t.processWorkflowRetryTimer(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
-		scope = metrics.TimerActiveTaskDeleteHistoryEvent
-		err = t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+		return metrics.TimerActiveTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
+
+	default:
+		return metrics.TimerActiveQueueProcessorScope, errUnknownTimerTask
 	}
-
-	t.logger.Debugf("Processing timer: (%v, %v), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
-		timerTask.TaskID, timerTask.VisibilityTimestamp, timerTask.WorkflowID, timerTask.RunID, timerTask.TaskType, timerTask.EventID, err)
-
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
-			// Timer could fire after the execution is deleted.
-			// In which case just ignore the error so we can complete the timer task.
-			t.timerQueueAckMgr.completeTimerTask(timerTask)
-			err = nil
-		} else if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-			t.timerQueueAckMgr.completeTimerTask(timerTask)
-			t.logger.WithField(logging.TagErr, err).Error("More than 2 workflow is running.")
-			err = nil
-		}
-		if err != nil {
-			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
-		}
-	} else {
-		t.timerQueueAckMgr.completeTimerTask(timerTask)
-	}
-
-	if err == nil {
-		t.metricsClient.RecordTimer(scope, metrics.ActiveTimerTaskQueueLatency, time.Since(timerTask.GetVisibilityTimestamp()))
-	}
-
-	return err
 }
 
 func (t *timerQueueActiveProcessorImpl) processExpiredUserTimer(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskUserTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskUserTimerScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
@@ -334,9 +299,6 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityTimeout(timerTask *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskActivityTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(timerTask))
 	if err0 != nil {
@@ -495,9 +457,6 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processDecisionTimeout(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskDecisionTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
@@ -571,9 +530,6 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowRetryTimer(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowRetryTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskWorkflowRetryTimerScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
@@ -609,9 +565,6 @@ Update_History_Loop:
 }
 
 func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persistence.TimerTaskInfo) error {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskActivityRetryTimerScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskActivityRetryTimerScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	processFn := func() error {
 		context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
@@ -684,9 +637,6 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persiste
 }
 
 func (t *timerQueueActiveProcessorImpl) processWorkflowTimeout(task *persistence.TimerTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TimerActiveTaskWorkflowTimeoutScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	domainID, workflowExecution := t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task)
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(domainID, workflowExecution)

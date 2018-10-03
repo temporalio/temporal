@@ -252,7 +252,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingLes
 	context.msBuilder = msBuilderIn
 	request := &h.ReplicateEventsRequest{
 		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -279,7 +279,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingEqu
 	context.msBuilder = msBuilderIn
 	request := &h.ReplicateEventsRequest{
 		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -308,7 +308,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &h.ReplicateEventsRequest{
 		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -342,7 +342,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 
 	request := &h.ReplicateEventsRequest{
 		Version: common.Int64Ptr(incomingVersion),
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -381,7 +381,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 	request := &h.ReplicateEventsRequest{
 		Version:         common.Int64Ptr(incomingVersion),
 		ReplicationInfo: map[string]*h.ReplicationInfo{},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -445,7 +445,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -506,7 +506,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -551,7 +551,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -606,7 +606,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -655,7 +655,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}
@@ -701,7 +701,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEventsVersionChecking_IncomingGre
 				LastEventId: common.Int64Ptr(incomingReplicationInfoLastEventID),
 			},
 		},
-		History: &shared.History{[]*shared.HistoryEvent{
+		History: &shared.History{Events: []*shared.HistoryEvent{
 			&shared.HistoryEvent{Timestamp: common.Int64Ptr(time.Now().UnixNano())},
 		}},
 	}

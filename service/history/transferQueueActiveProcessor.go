@@ -23,10 +23,6 @@ package history
 import (
 	"github.com/uber-common/bark"
 
-	"errors"
-
-	"time"
-
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -56,10 +52,6 @@ type (
 		*queueProcessorBase
 		queueAckMgr
 	}
-)
-
-var (
-	errUnknownTransferTask = errors.New("Unknown transfer task")
 )
 
 func newTransferQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, visibilityMgr persistence.VisibilityManager,
@@ -175,6 +167,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 			shard, options, visibilityMgr, matchingClient, maxReadAckLevel, updateTransferAckLevel, transferQueueShutdown, logger,
 		),
 	}
+
 	queueAckMgr := newQueueFailoverAckMgr(shard, options, processor, minLevel, logger)
 	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
@@ -186,76 +179,45 @@ func (t *transferQueueActiveProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
 }
 
-func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) error {
+func (t *transferQueueActiveProcessorImpl) process(qTask queueTaskInfo) (int, error) {
 	task, ok := qTask.(*persistence.TransferTaskInfo)
 	if !ok {
-		return errUnexpectedQueueTask
+		return metrics.TransferActiveQueueProcessorScope, errUnexpectedQueueTask
 	}
 	ok, err := t.transferTaskFilter(task)
 	if err != nil {
-		return err
+		return metrics.TransferActiveQueueProcessorScope, err
 	} else if !ok {
 		t.logger.Debugf("Discarding task: (%s), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
 			task.TaskID, task.WorkflowID, task.RunID, task.TaskType, task.ScheduleID, err)
-		t.queueAckMgr.completeQueueTask(task.TaskID)
-		return nil
+		return metrics.TransferActiveQueueProcessorScope, nil
 	}
 
-	scope := metrics.TransferQueueProcessorScope
 	switch task.TaskType {
 	case persistence.TransferTaskTypeActivityTask:
-		scope = metrics.TransferActiveTaskActivityScope
-		err = t.processActivityTask(task)
+		return metrics.TransferActiveTaskActivityScope, t.processActivityTask(task)
+
 	case persistence.TransferTaskTypeDecisionTask:
-		scope = metrics.TransferActiveTaskDecisionScope
-		err = t.processDecisionTask(task)
+		return metrics.TransferActiveTaskDecisionScope, t.processDecisionTask(task)
+
 	case persistence.TransferTaskTypeCloseExecution:
-		scope = metrics.TransferActiveTaskCloseExecutionScope
-		err = t.processCloseExecution(task)
+		return metrics.TransferActiveTaskCloseExecutionScope, t.processCloseExecution(task)
+
 	case persistence.TransferTaskTypeCancelExecution:
-		scope = metrics.TransferActiveTaskCancelExecutionScope
-		err = t.processCancelExecution(task)
+		return metrics.TransferActiveTaskCancelExecutionScope, t.processCancelExecution(task)
+
 	case persistence.TransferTaskTypeSignalExecution:
-		scope = metrics.TransferActiveTaskSignalExecutionScope
-		err = t.processSignalExecution(task)
+		return metrics.TransferActiveTaskSignalExecutionScope, t.processSignalExecution(task)
+
 	case persistence.TransferTaskTypeStartChildExecution:
-		scope = metrics.TransferActiveTaskStartChildExecutionScope
-		err = t.processStartChildExecution(task)
+		return metrics.TransferActiveTaskStartChildExecutionScope, t.processStartChildExecution(task)
+
 	default:
-		err = errUnknownTransferTask
+		return metrics.TransferActiveQueueProcessorScope, errUnknownTransferTask
 	}
-
-	t.logger.Debugf("Processing task: (%s), for WorkflowID: %v, RunID: %v, Type: %v, EventID: %v, Error: %v",
-		task.TaskID, task.WorkflowID, task.RunID, task.TaskType, task.ScheduleID, err)
-
-	if err != nil {
-		if _, ok := err.(*workflow.EntityNotExistsError); ok {
-			// Timer could fire after the execution is deleted.
-			// In which case just ignore the error so we can complete the timer task.
-			t.queueAckMgr.completeQueueTask(task.TaskID)
-			err = nil
-		} else if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-			t.queueAckMgr.completeQueueTask(task.TaskID)
-			t.logger.WithField(logging.TagErr, err).Error("More than 2 workflow is running.")
-			err = nil
-		}
-		if err != nil {
-			t.metricsClient.IncCounter(scope, metrics.TaskFailures)
-		}
-	} else {
-		t.queueAckMgr.completeQueueTask(task.TaskID)
-	}
-
-	if err == nil {
-		t.metricsClient.RecordTimer(scope, metrics.ActiveTransferTaskQueueLatency, time.Since(task.GetVisibilityTimestamp()))
-	}
-	return err
 }
 
 func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskActivityScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskActivityScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	execution := workflow.WorkflowExecution{
@@ -297,9 +259,6 @@ func (t *transferQueueActiveProcessorImpl) processActivityTask(task *persistence
 }
 
 func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskDecisionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskDecisionScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	execution := workflow.WorkflowExecution{
@@ -365,9 +324,6 @@ func (t *transferQueueActiveProcessorImpl) processDecisionTask(task *persistence
 }
 
 func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskCloseExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskCloseExecutionScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	domainID := task.DomainID
@@ -451,9 +407,6 @@ func (t *transferQueueActiveProcessorImpl) processCloseExecution(task *persisten
 }
 
 func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskCancelExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskCancelExecutionScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	domainID := task.DomainID
@@ -574,9 +527,6 @@ func (t *transferQueueActiveProcessorImpl) processCancelExecution(task *persiste
 }
 
 func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskSignalExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskSignalExecutionScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	domainID := task.DomainID
@@ -706,9 +656,6 @@ func (t *transferQueueActiveProcessorImpl) processSignalExecution(task *persiste
 }
 
 func (t *transferQueueActiveProcessorImpl) processStartChildExecution(task *persistence.TransferTaskInfo) (retError error) {
-	t.metricsClient.IncCounter(metrics.TransferActiveTaskStartChildExecutionScope, metrics.TaskRequests)
-	sw := t.metricsClient.StartTimer(metrics.TransferActiveTaskStartChildExecutionScope, metrics.TaskLatency)
-	defer sw.Stop()
 
 	var err error
 	domainID := task.DomainID
