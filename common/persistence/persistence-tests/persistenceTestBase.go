@@ -290,6 +290,20 @@ func (s *TestBase) CreateChildWorkflowExecution(domainID string, workflowExecuti
 	return response, err
 }
 
+// GetWorkflowExecutionInfoWithStats is a utility method to retrieve execution info with size stats
+func (s *TestBase) GetWorkflowExecutionInfoWithStats(domainID string, workflowExecution workflow.WorkflowExecution) (
+	*p.MutableStateStats, *p.WorkflowMutableState, error) {
+	response, err := s.ExecutionManager.GetWorkflowExecution(&p.GetWorkflowExecutionRequest{
+		DomainID:  domainID,
+		Execution: workflowExecution,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return response.MutableStateStats, response.State, nil
+}
+
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
 func (s *TestBase) GetWorkflowExecutionInfo(domainID string, workflowExecution workflow.WorkflowExecution) (
 	*p.WorkflowMutableState, error) {
@@ -618,14 +632,16 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 // UpdateWorkflowExecutionForBufferEvents is a utility method to update workflow execution
 func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 	updatedInfo *p.WorkflowExecutionInfo, rState *p.ReplicationState, condition int64,
-	bufferEvents []*workflow.HistoryEvent) error {
+	bufferEvents []*workflow.HistoryEvent, clearBufferedEvents bool) error {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
-		ExecutionInfo:     updatedInfo,
-		ReplicationState:  rState,
-		NewBufferedEvents: bufferEvents,
-		Condition:         condition,
-		RangeID:           s.ShardInfo.RangeID,
-		Encoding:          pickRandomEncoding(),
+		ExecutionInfo:       updatedInfo,
+		ReplicationState:    rState,
+		NewBufferedEvents:   bufferEvents,
+		Condition:           condition,
+		ClearBufferedEvents: clearBufferedEvents,
+
+		RangeID:  s.ShardInfo.RangeID,
+		Encoding: pickRandomEncoding(),
 	})
 	return err
 }

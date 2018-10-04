@@ -2266,6 +2266,127 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 }
 
 // TestResetMutableStateCurrentIsSelf test
+func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
+	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("test-update-and-clear-buffered-events"),
+		RunId:      common.StringPtr("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+	}
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "taskList", "wType", 20, 13, nil, 3, 0, 2, nil)
+	s.NoError(err0)
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	stats0, state0, err1 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
+	s.NoError(err1)
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+	s.Equal(0, stats0.BufferedEventsCount)
+	s.Equal(0, stats0.BufferedEventsSize)
+
+	eventsBatch1 := []*gen.HistoryEvent{
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(5),
+			EventType: gen.EventTypeDecisionTaskCompleted.Ptr(),
+			Version:   common.Int64Ptr(11),
+			DecisionTaskCompletedEventAttributes: &gen.DecisionTaskCompletedEventAttributes{
+				ScheduledEventId: common.Int64Ptr(2),
+				StartedEventId:   common.Int64Ptr(3),
+				Identity:         common.StringPtr("test_worker"),
+			},
+		},
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(6),
+			EventType: gen.EventTypeTimerStarted.Ptr(),
+			Version:   common.Int64Ptr(11),
+			TimerStartedEventAttributes: &gen.TimerStartedEventAttributes{
+				TimerId:                      common.StringPtr("ID1"),
+				StartToFireTimeoutSeconds:    common.Int64Ptr(101),
+				DecisionTaskCompletedEventId: common.Int64Ptr(5),
+			},
+		},
+	}
+	bufferedTask1 := &p.BufferedReplicationTask{
+		FirstEventID: int64(5),
+		NextEventID:  int64(7),
+		Version:      int64(11),
+		History:      eventsBatch1,
+	}
+
+	eventsBatch2 := []*gen.HistoryEvent{
+		&gen.HistoryEvent{
+			EventId:   common.Int64Ptr(21),
+			EventType: gen.EventTypeTimerFired.Ptr(),
+			Version:   common.Int64Ptr(12),
+			TimerFiredEventAttributes: &gen.TimerFiredEventAttributes{
+				TimerId:        common.StringPtr("2"),
+				StartedEventId: common.Int64Ptr(3),
+			},
+		},
+	}
+	bufferedTask2 := &p.BufferedReplicationTask{
+		FirstEventID: int64(21),
+		NextEventID:  int64(22),
+		Version:      int64(12),
+		History:      eventsBatch2,
+	}
+	updatedInfo := copyWorkflowExecutionInfo(info0)
+	updatedState := &p.WorkflowMutableState{
+		ExecutionInfo: updatedInfo,
+	}
+
+	err2 := s.UpdateAllMutableState(updatedState, int64(3))
+	s.NoError(err2)
+
+	partialState, err2 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err2)
+	s.NotNil(partialState, "expected valid state.")
+	partialInfo := partialState.ExecutionInfo
+	s.NotNil(partialInfo, "Valid Workflow info expected.")
+
+	bufferUpdateInfo := copyWorkflowExecutionInfo(partialInfo)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask1, nil, bufferUpdateInfo.NextEventID, nil)
+	s.NoError(err2)
+	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
+	s.NoError(err2)
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1, false)
+	s.NoError(err2)
+	stats0, state0, err2 = s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
+	s.NoError(err2)
+	s.Equal(1, stats0.BufferedEventsCount)
+	s.True(stats0.BufferedEventsSize > 0)
+	history := &gen.History{Events: make([]*gen.HistoryEvent, 0)}
+	history.Events = append(history.Events, eventsBatch1...)
+	history0 := &gen.History{Events: state0.BufferedEvents}
+	s.True(history.Equals(history0))
+	history.Events = append(history.Events, eventsBatch2...)
+
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch2, false)
+	s.NoError(err2)
+
+	stats1, state1, err1 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
+	s.NoError(err1)
+	s.NotNil(state1, "expected valid state.")
+	info1 := state1.ExecutionInfo
+	s.NotNil(info1, "Valid Workflow info expected.")
+	s.Equal(2, stats1.BufferedEventsCount)
+	s.True(stats1.BufferedEventsSize > 0)
+	history1 := &gen.History{Events: state1.BufferedEvents}
+	s.True(history.Equals(history1))
+
+	err3 := s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, nil, true)
+	s.NoError(err3)
+
+	stats3, state3, err3 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
+	s.NoError(err3)
+	s.NotNil(state3, "expected valid state.")
+	info3 := state3.ExecutionInfo
+	s.NotNil(info3, "Valid Workflow info expected.")
+	s.Equal(0, stats3.BufferedEventsCount)
+	s.Equal(0, stats3.BufferedEventsSize)
+}
+
+// TestResetMutableStateCurrentIsSelf test
 func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowExecution := gen.WorkflowExecution{
@@ -2277,10 +2398,12 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
-	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	stats0, state0, err1 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
+	s.Equal(0, stats0.BufferedEventsCount)
+	s.Equal(0, stats0.BufferedEventsSize)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
@@ -2442,16 +2565,30 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NoError(err2)
 	err2 = s.UpdateWorklowStateAndReplication(bufferUpdateInfo, nil, bufferedTask2, nil, bufferUpdateInfo.NextEventID, nil)
 	s.NoError(err2)
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1)
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch1, false)
 	s.NoError(err2)
-	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch2)
+	stats0, state0, err2 = s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
+	s.NoError(err2)
+	s.Equal(1, stats0.BufferedEventsCount)
+	s.True(stats0.BufferedEventsSize > 0)
+	history := &gen.History{Events: make([]*gen.HistoryEvent, 0)}
+	history.Events = append(history.Events, eventsBatch1...)
+	history0 := &gen.History{Events: state0.BufferedEvents}
+	s.True(history.Equals(history0))
+	history.Events = append(history.Events, eventsBatch2...)
+
+	err2 = s.UpdateWorkflowExecutionForBufferEvents(bufferUpdateInfo, nil, bufferUpdateInfo.NextEventID, eventsBatch2, false)
 	s.NoError(err2)
 
-	state1, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	stats1, state1, err1 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
 	s.NoError(err1)
 	s.NotNil(state1, "expected valid state.")
 	info1 := state1.ExecutionInfo
 	s.NotNil(info1, "Valid Workflow info expected.")
+	s.Equal(2, stats1.BufferedEventsCount)
+	s.True(stats1.BufferedEventsSize > 0)
+	history1 := &gen.History{Events: state1.BufferedEvents}
+	s.True(history.Equals(history1))
 
 	s.Equal(2, len(state1.ActivitInfos))
 	ai, ok := state1.ActivitInfos[4]
@@ -2624,9 +2761,12 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err3)
 
-	state4, err4 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	stats4, state4, err4 := s.GetWorkflowExecutionInfoWithStats(domainID, workflowExecution)
 	s.NoError(err4)
 	s.NotNil(state4, "expected valid state.")
+	s.Equal(0, stats4.BufferedEventsCount)
+	s.Equal(0, stats4.BufferedEventsSize)
+
 	info4 := state4.ExecutionInfo
 	log.Printf("%+v", info4)
 	s.NotNil(info4, "Valid Workflow info expected.")
@@ -2708,6 +2848,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 
 	s.Equal(0, len(state4.BufferedReplicationTasks))
 	s.Equal(0, len(state4.BufferedEvents))
+
 }
 
 // TestResetMutableStateCurrentIsNotSelf test
