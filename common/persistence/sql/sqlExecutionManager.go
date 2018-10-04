@@ -313,10 +313,10 @@ domain_id = ? AND
 workflow_id = ? AND
 run_id = ?`
 
-	transferTaskInfoColumns = `domain_id,
+	transferTaskInfoColumns = `task_id, 
+domain_id,
 workflow_id,
 run_id,
-task_id,
 task_type,
 target_domain_id,
 target_workflow_id,
@@ -326,10 +326,10 @@ task_list,
 schedule_id,
 version`
 
-	transferTaskInfoColumnsTags = `:domain_id,
+	transferTaskInfoColumnsTags = `:task_id,
+:domain_id,
 :workflow_id,
 :run_id,
-:task_id,
 :task_type,
 :target_domain_id,
 :target_workflow_id,
@@ -405,20 +405,20 @@ VALUES
 	completeTransferTaskSQLQuery      = `DELETE FROM transfer_tasks WHERE shard_id = :shard_id AND task_id = :task_id`
 	rangeCompleteTransferTaskSQLQuery = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
 
-	replicationTaskInfoColumns = `domain_id,
+	replicationTaskInfoColumns = `task_id,
+domain_id,
 workflow_id,
 run_id,
-task_id,
 task_type,
 first_event_id,
 next_event_id,
 version,
 last_replication_info`
 
-	replicationTaskInfoColumnsTags = `:domain_id,
+	replicationTaskInfoColumnsTags = `:task_id,
+:domain_id,
 :workflow_id,
 :run_id,
-:task_id,
 :task_type,
 :first_event_id,
 :next_event_id,
@@ -439,8 +439,8 @@ shard_id = ? AND
 task_id > ? AND
 task_id <= ?`
 
-	timerTaskInfoColumns     = `domain_id, workflow_id, run_id, visibility_timestamp, task_id, task_type, timeout_type, event_id, schedule_attempt, version`
-	timerTaskInfoColumnsTags = `:domain_id, :workflow_id, :run_id, :visibility_timestamp, :task_id, :task_type, :timeout_type, :event_id, :schedule_attempt, :version`
+	timerTaskInfoColumns     = `visibility_timestamp, task_id, domain_id, workflow_id, run_id, task_type, timeout_type, event_id, schedule_attempt, version`
+	timerTaskInfoColumnsTags = `:visibility_timestamp, :task_id, :domain_id, :workflow_id, :run_id, :task_type, :timeout_type, :event_id, :schedule_attempt, :version`
 	timerTasksColumns        = `shard_id,` + timerTaskInfoColumns
 	timerTasksColumnsTags    = `:shard_id,` + timerTaskInfoColumnsTags
 	createTimerTasksSQLQuery = `INSERT INTO timer_tasks (` +

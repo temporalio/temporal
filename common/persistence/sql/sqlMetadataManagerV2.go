@@ -23,13 +23,13 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/uber-common/bark"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 
-	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/jmoiron/sqlx"
 )
 
@@ -77,10 +77,10 @@ type (
 const (
 	createDomainSQLQuery = `INSERT INTO domains (
 		id,
+		name,
 		retention, 
 		emit_metric,
 		config_version,
-		name, 
 		status, 
 		description, 
 		owner_email,
@@ -94,10 +94,10 @@ const (
 		)
 		VALUES(
 		:id,
+		:name,
 		:retention, 
 		:emit_metric,
 		:config_version,
-		:name, 
 		:status, 
 		:description, 
 		:owner_email,
@@ -209,7 +209,8 @@ func updateMetadata(tx *sqlx.Tx, oldNotificationVersion int64) error {
 }
 
 func lockMetadata(tx *sqlx.Tx) error {
-	_, err := tx.Exec(lockMetadataSQLQuery)
+	var notificationVersion int
+	err := tx.Get(&notificationVersion, lockMetadataSQLQuery)
 	if err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to lock domain metadata. Error: %v", err),
@@ -240,64 +241,47 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 		return nil, err
 	}
 
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return nil, err
-	}
-	commited := false
-	defer func() {
-		if !commited {
-			tx.Rollback()
-		}
-	}()
+	var resp *persistence.CreateDomainResponse
+	err = runTransaction("CreateDomain", m.db, func(tx *sqlx.Tx) error {
+		if _, err1 := tx.NamedExec(createDomainSQLQuery, &domainRow{
+			domainCommon: domainCommon{
+				Name:        request.Info.Name,
+				ID:          request.Info.ID,
+				Status:      request.Info.Status,
+				Description: request.Info.Description,
+				OwnerEmail:  request.Info.OwnerEmail,
+				Data:        &data,
 
-	if _, err := tx.NamedExec(createDomainSQLQuery, &domainRow{
-		domainCommon: domainCommon{
-			Name:        request.Info.Name,
-			ID:          request.Info.ID,
-			Status:      request.Info.Status,
-			Description: request.Info.Description,
-			OwnerEmail:  request.Info.OwnerEmail,
-			Data:        &data,
+				DomainConfig: *(request.Config),
 
-			DomainConfig: *(request.Config),
+				ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
+				Clusters:          &clusters,
 
-			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-			Clusters:          &clusters,
+				ConfigVersion:   request.ConfigVersion,
+				FailoverVersion: request.FailoverVersion,
+			},
 
-			ConfigVersion:   request.ConfigVersion,
-			FailoverVersion: request.FailoverVersion,
-		},
-
-		NotificationVersion:         metadata.NotificationVersion,
-		FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
-		IsGlobalDomain:              request.IsGlobalDomain,
-	}); err != nil {
-		if sqlErr, ok := err.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
-			return nil, &workflow.DomainAlreadyExistsError{
-				Message: fmt.Sprintf("name: %v", request.Info.Name),
+			NotificationVersion:         metadata.NotificationVersion,
+			FailoverNotificationVersion: persistence.InitialFailoverNotificationVersion,
+			IsGlobalDomain:              request.IsGlobalDomain,
+		}); err1 != nil {
+			if sqlErr, ok := err1.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
+				return &workflow.DomainAlreadyExistsError{
+					Message: fmt.Sprintf("name: %v", request.Info.Name),
+				}
 			}
+			return err1
 		}
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Inserting into domains table. Error: %v", err),
+		if err1 := lockMetadata(tx); err1 != nil {
+			return err1
 		}
-	}
-
-	if err := lockMetadata(tx); err != nil {
-		return nil, err
-	}
-
-	if err := updateMetadata(tx, metadata.NotificationVersion); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("CreateDomain operation failed. Committing transaction. Error: %v", err),
+		if err1 := updateMetadata(tx, metadata.NotificationVersion); err1 != nil {
+			return err1
 		}
-	}
-	commited = true
-	return &persistence.CreateDomainResponse{ID: request.Info.ID}, nil
+		resp = &persistence.CreateDomainResponse{ID: request.Info.ID}
+		return nil
+	})
+	return resp, err
 }
 
 func (m *sqlMetadataManagerV2) GetDomain(request *persistence.GetDomainRequest) (*persistence.GetDomainResponse, error) {
@@ -408,114 +392,55 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 		}
 	}
 
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Failed to start transaction. Error: %v", err),
+	return runTransaction("UpdateDomain", m.db, func(tx *sqlx.Tx) error {
+		result, err := tx.NamedExec(updateDomainSQLQuery, &flatUpdateDomainRequest{
+			domainCommon: domainCommon{
+				Name:        request.Info.Name,
+				ID:          request.Info.ID,
+				Status:      request.Info.Status,
+				Description: request.Info.Description,
+				OwnerEmail:  request.Info.OwnerEmail,
+				Data:        &data,
+
+				DomainConfig: *(request.Config),
+
+				ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
+				Clusters:          &clusters,
+				ConfigVersion:     request.ConfigVersion,
+				FailoverVersion:   request.FailoverVersion,
+			},
+			FailoverNotificationVersion: request.FailoverNotificationVersion,
+			NotificationVersion:         request.NotificationVersion,
+		})
+		if err != nil {
+			return err
 		}
-	}
-	defer tx.Rollback()
-
-	result, err := tx.NamedExec(updateDomainSQLQuery, &flatUpdateDomainRequest{
-		domainCommon: domainCommon{
-			Name:        request.Info.Name,
-			ID:          request.Info.ID,
-			Status:      request.Info.Status,
-			Description: request.Info.Description,
-			OwnerEmail:  request.Info.OwnerEmail,
-			Data:        &data,
-
-			DomainConfig: *(request.Config),
-
-			ActiveClusterName: request.ReplicationConfig.ActiveClusterName,
-			Clusters:          &clusters,
-			ConfigVersion:     request.ConfigVersion,
-			FailoverVersion:   request.FailoverVersion,
-		},
-		FailoverNotificationVersion: request.FailoverNotificationVersion,
-		NotificationVersion:         request.NotificationVersion,
+		noRowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected error: %v", err)
+		}
+		if noRowsAffected != 1 {
+			return fmt.Errorf("%v rows updated instead of one", noRowsAffected)
+		}
+		if err := lockMetadata(tx); err != nil {
+			return err
+		}
+		return updateMetadata(tx, request.NotificationVersion)
 	})
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Error %v", err),
-		}
-	}
-	noRowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Couldn't verify the number of rows updated. Error: %v", err),
-		}
-	} else if noRowsAffected != 1 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. %v rows updated, where one should have been updated. Error: %v", noRowsAffected, err),
-		}
-	}
-
-	if err := lockMetadata(tx); err != nil {
-		return err
-	}
-
-	if err := updateMetadata(tx, request.NotificationVersion); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateDomain operation failed. Failed to commit transaction. Error: %v", err),
-		}
-	}
-
-	return nil
 }
 
-// TODO Find a way to get rid of code repetition without using a type switch
-
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomain operation failed. Failed to start transaction. Error: %v", err),
-		}
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.NamedExec(deleteDomainByIDSQLQuery, request); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomain operation failed. Error %v", err),
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomain operation failed. Failed to commit transaction. Error: %v", err),
-		}
-	}
-
-	return nil
+	return runTransaction("DeleteDomain", m.db, func(tx *sqlx.Tx) error {
+		_, err := tx.NamedExec(deleteDomainByIDSQLQuery, request)
+		return err
+	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomainByName operation failed. Failed to start transaction. Error: %v", err),
-		}
-	}
-	defer tx.Rollback()
-
-	if _, err := m.db.NamedExec(deleteDomainByNameSQLQuery, request); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomainByName operation failed. Error %v", err),
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteDomainByName operation failed. Failed to commit transaction. Error: %v", err),
-		}
-	}
-
-	return nil
+	return runTransaction("DeleteDomainByName", m.db, func(tx *sqlx.Tx) error {
+		_, err := m.db.NamedExec(deleteDomainByNameSQLQuery, request)
+		return err
+	})
 }
 
 func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, error) {
@@ -526,13 +451,15 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 			Message: fmt.Sprintf("GetMetadata operation failed. Error: %v", err),
 		}
 	}
-
 	return &persistence.GetMetadataResponse{NotificationVersion: notificationVersion}, nil
 }
 
 func (m *sqlMetadataManagerV2) ListDomains(request *persistence.ListDomainsRequest) (*persistence.ListDomainsResponse, error) {
 	rows, err := m.db.Queryx(listDomainsSQLQuery)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return &persistence.ListDomainsResponse{}, nil
+		}
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ListDomains operation failed. Failed to get domain rows. Error: %v", err),
 		}

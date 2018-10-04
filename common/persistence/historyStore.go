@@ -143,7 +143,7 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 	newResponse.Size = size
 	newResponse.LastFirstEventID = lastFirstEventID
 	newResponse.History = history
-	newResponse.NextPageToken, err = m.serializeToken(token)
+	newResponse.NextPageToken, err = m.serializeToken(token, request.NextEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,10 @@ func (m *historyManagerImpl) deserializeToken(request *GetWorkflowExecutionHisto
 	return token, nil
 }
 
-func (m *historyManagerImpl) serializeToken(token *historyToken) ([]byte, error) {
-	if len(token.Data) == 0 {
+func (m *historyManagerImpl) serializeToken(token *historyToken, nextEventID int64) ([]byte, error) {
+	if token.LastEventID+1 >= nextEventID || len(token.Data) == 0 {
 		return nil, nil
 	}
-
 	data, err := json.Marshal(token)
 	if err != nil {
 		return nil, &workflow.InternalServiceError{Message: "Error generating history event token."}

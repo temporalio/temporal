@@ -23,8 +23,9 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/uber-common/bark"
 	"time"
+
+	"github.com/uber-common/bark"
 
 	"github.com/jmoiron/sqlx"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -222,54 +223,23 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
 		}
 	}
-
-	tx, err := m.db.Beginx()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
+	return runTransaction("UpdateShard", m.db, func(tx *sqlx.Tx) error {
+		if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
+			return err
 		}
-	}
-	defer tx.Rollback()
-
-	if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
-		switch err.(type) {
-		case *persistence.ShardOwnershipLostError:
-			return &persistence.ShardOwnershipLostError{
-				Msg: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
-			}
-		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
-			}
+		result, err := tx.NamedExec(updateShardSQLQuery, &row)
+		if err != nil {
+			return err
 		}
-	}
-
-	result, err := tx.NamedExec(updateShardSQLQuery, &row)
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdatedShard operation failed. Failed to update shard with ID: %v. Error: %v", request.ShardInfo.ShardID, err),
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("rowsAffected returned error for shardID %v: %v", request.ShardInfo.ShardID, err)
 		}
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdatedShard operation failed. Failed to verify whether we successfully updated shard with ID: %v. Error: %v", request.ShardInfo.ShardID, err),
+		if rowsAffected != 1 {
+			return fmt.Errorf("rowsAffected returned %v shards instead of one", rowsAffected)
 		}
-	}
-	if rowsAffected != 1 {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdatedShard operation failed. Tried to update %v shards instead of one.", rowsAffected),
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("UpdatedShard operation failed. Failed to commit transaction. Error: %v", err),
-		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {

@@ -66,7 +66,6 @@ func (s *MatchingPersistenceSuite) TearDownSuite() {
 func (s *MatchingPersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ClearTasks()
 }
 
 // TestCreateTask test

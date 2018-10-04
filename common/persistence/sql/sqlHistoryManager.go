@@ -21,8 +21,11 @@
 package sql
 
 import (
-	"encoding/json"
 	"fmt"
+
+	"database/sql"
+
+	"strconv"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -44,17 +47,15 @@ type (
 		WorkflowID   string
 		RunID        string
 		FirstEventID int64
+		BatchVersion int64
+		RangeID      int64
+		TxID         int64
 		Data         []byte
 		DataEncoding string
-		DataVersion  int64
-
-		RangeID int64
-		TxID    int64
 	}
 
-	historyToken struct {
-		LastEventBatchVersion int64
-		LastEventID           int64
+	historyPageToken struct {
+		LastEventID int64
 	}
 )
 
@@ -63,53 +64,34 @@ const (
 	// so we don't do the insert and return a ConditionalUpdate error.
 	ErrDupEntry = 1062
 
-	appendHistorySQLQuery = `INSERT INTO events (
-domain_id,workflow_id,run_id,first_event_id,data,data_encoding,data_version
-) VALUES (
-:domain_id,:workflow_id,:run_id,:first_event_id,:data,:data_encoding,:data_version
-);`
+	appendHistorySQLQuery = `INSERT INTO events (` +
+		`domain_id,workflow_id,run_id,first_event_id,batch_version,range_id,tx_id,data,data_encoding)` +
+		`VALUES (:domain_id,:workflow_id,:run_id,:first_event_id,:batch_version,:range_id,:tx_id,:data,:data_encoding);`
 
 	overwriteHistorySQLQuery = `UPDATE events
 SET
-domain_id = :domain_id,
-workflow_id = :workflow_id,
-run_id = :run_id,
-first_event_id = :first_event_id,
+batch_version = :batch_version,
+range_id = :range_id,
+tx_id = :tx_id,
 data = :data,
-data_encoding = :data_encoding,
-data_version = :data_version
+data_encoding = :data_encoding
 WHERE
 domain_id = :domain_id AND 
 workflow_id = :workflow_id AND 
 run_id = :run_id AND 
 first_event_id = :first_event_id`
 
-	pollHistorySQLQuery = `SELECT 1 FROM events WHERE domain_id = :domain_id AND 
-workflow_id= :workflow_id AND run_id= :run_id AND first_event_id= :first_event_id`
+	getWorkflowExecutionHistorySQLQuery = `SELECT first_event_id, batch_version, data, data_encoding ` +
+		`FROM events ` +
+		`WHERE domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id >= ? AND first_event_id < ? ` +
+		`ORDER BY first_event_id LIMIT ?`
 
-	getWorkflowExecutionHistorySQLQuery = `SELECT first_event_id, data, data_encoding, data_version
-FROM events
-WHERE
-domain_id = ? AND
-workflow_id = ? AND
-run_id = ? AND
-first_event_id >= ? AND
-first_event_id < ?
-ORDER BY first_event_id
-LIMIT ?`
+	deleteWorkflowExecutionHistorySQLQuery = `DELETE FROM events WHERE domain_id = ? AND workflow_id = ? AND run_id = ?`
 
-	deleteWorkflowExecutionHistorySQLQuery = `DELETE FROM events WHERE
-domain_id = ? AND workflow_id = ? AND run_id = ?`
-
-	lockRangeIDAndTxIDSQLQuery = `SELECT range_id, tx_id FROM events WHERE
-domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id = ?`
+	lockEventSQLQuery = `SELECT range_id, tx_id FROM events ` +
+		`WHERE domain_id = ? AND workflow_id = ? AND run_id = ? AND first_event_id = ? ` +
+		`FOR UPDATE`
 )
-
-func (m *sqlHistoryManager) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
 
 // NewHistoryPersistence creates an instance of HistoryManager
 func NewHistoryPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (p.HistoryStore, error) {
@@ -129,195 +111,150 @@ func (m *sqlHistoryManager) AppendHistoryEvents(request *p.InternalAppendHistory
 		WorkflowID:   *request.Execution.WorkflowId,
 		RunID:        *request.Execution.RunId,
 		FirstEventID: request.FirstEventID,
-		Data:         request.Events.Data,
-		DataEncoding: string(request.Events.Encoding),
+		BatchVersion: request.EventBatchVersion,
 		RangeID:      request.RangeID,
 		TxID:         request.TransactionID,
+		Data:         request.Events.Data,
+		DataEncoding: string(request.Events.Encoding),
 	}
-
 	if request.Overwrite {
-		tx, err := m.db.Beginx()
-		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Failed to begin transaction for overwrite. Error: %v", err),
-			}
-		}
-		defer tx.Rollback()
-
-		if err := lockAndCheckRangeIDAndTxID(tx,
-			request.RangeID,
-			request.TransactionID,
-			request.DomainID,
-			*request.Execution.WorkflowId,
-			*request.Execution.RunId,
-			request.FirstEventID); err != nil {
-			switch err.(type) {
-			case *p.ConditionFailedError:
-				return &p.ConditionFailedError{
-					Msg: fmt.Sprintf("AppendHistoryEvents operation failed. Overwrite failed. Error: %v", err),
-				}
-			default:
-				return &workflow.InternalServiceError{
-					Message: fmt.Sprintf("AppendHistoryEvents operation failed. Failed to lock row for overwrite. Error: %v", err),
-				}
-			}
-		}
-		result, err := tx.NamedExec(overwriteHistorySQLQuery, arg)
-		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Update failed. Error: %v", err),
-			}
-		}
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Failed to check number of rows updated. Error: %v", err),
-			}
-		}
-		if rowsAffected != 1 {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Updated %v rows instead of one.", rowsAffected),
-			}
-		}
-
-		if err := tx.Commit(); err != nil {
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Failed to lock row. Error: %v", err),
-			}
-		}
-	} else {
-		if _, err := m.db.NamedExec(appendHistorySQLQuery, arg); err != nil {
-			// TODO Find another way to do this without inspecting the error message (?)
-			if sqlErr, ok := err.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
-				return &p.ConditionFailedError{
-					Msg: fmt.Sprintf("AppendHistoryEvents operaiton failed. Couldn't insert since row already existed. Erorr: %v", err),
-				}
-			}
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("AppendHistoryEvents operation failed. Insert failed. Error: %v", err),
-			}
-		}
+		return m.overWriteHistoryEvents(request, arg)
 	}
-
+	if _, err := m.db.NamedExec(appendHistorySQLQuery, arg); err != nil {
+		if sqlErr, ok := err.(*mysql.MySQLError); ok && sqlErr.Number == ErrDupEntry {
+			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryEvents: event already exist: %v", err)}
+		}
+		return &workflow.InternalServiceError{Message: fmt.Sprintf("AppendHistoryEvents: %v", err)}
+	}
 	return nil
 }
 
-// TODO: Pagination
 func (m *sqlHistoryManager) GetWorkflowExecutionHistory(request *p.InternalGetWorkflowExecutionHistoryRequest) (
 	*p.InternalGetWorkflowExecutionHistoryResponse, error) {
 
-	var rows []eventsRow
-	if err := m.db.Select(&rows,
-		getWorkflowExecutionHistorySQLQuery,
-		request.DomainID,
-		request.Execution.WorkflowId,
-		request.Execution.RunId,
-		request.FirstEventID,
-		request.NextEventID,
-		request.PageSize); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetWorkflowExecutionHistory operation failed. Select failed. Error: %v", err),
+	token := newHistoryPageToken(request.FirstEventID - 1)
+	if request.NextPageToken != nil && len(request.NextPageToken) > 0 {
+		if err := token.deserialize(request.NextPageToken); err != nil {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("invalid next page token %v", request.NextPageToken)}
 		}
 	}
 
-	if len(rows) == 0 {
+	var rows []eventsRow
+	err := m.db.Select(&rows, getWorkflowExecutionHistorySQLQuery,
+		request.DomainID,
+		request.Execution.WorkflowId,
+		request.Execution.RunId,
+		token.LastEventID+1,
+		request.NextEventID,
+		request.PageSize)
+
+	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return nil, &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("Workflow execution history not found.  WorkflowId: %v, RunId: %v",
 				*request.Execution.WorkflowId, *request.Execution.RunId),
 		}
 	}
 
-	eventBatchVersionPointer := new(int64)
-	eventBatchVersion := common.EmptyVersion
-	lastEventBatchVersion := request.LastEventBatchVersion
+	if err != nil {
+		return nil, &workflow.InternalServiceError{
+			Message: fmt.Sprintf("GetWorkflowExecutionHistory: %v", err),
+		}
+	}
 
 	history := make([]*p.DataBlob, 0)
+	lastEventBatchVersion := request.LastEventBatchVersion
+
 	for _, v := range rows {
 		eventBatch := &p.DataBlob{}
+		eventBatchVersion := common.EmptyVersion
 		eventBatch.Data = v.Data
 		eventBatch.Encoding = common.EncodingType(v.DataEncoding)
-
-		if eventBatchVersionPointer != nil {
-			eventBatchVersion = *eventBatchVersionPointer
+		if v.BatchVersion > 0 {
+			eventBatchVersion = v.BatchVersion
 		}
 		if eventBatchVersion >= lastEventBatchVersion {
 			history = append(history, eventBatch)
 			lastEventBatchVersion = eventBatchVersion
 		}
-
-		eventBatchVersionPointer = new(int64)
-		eventBatchVersion = common.EmptyVersion
+		token.LastEventID = v.FirstEventID
 	}
 
-	response := &p.InternalGetWorkflowExecutionHistoryResponse{
+	return &p.InternalGetWorkflowExecutionHistoryResponse{
 		History:               history,
 		LastEventBatchVersion: lastEventBatchVersion,
-		NextPageToken:         []byte{},
-	}
-
-	return response, nil
+		NextPageToken:         token.serialize(),
+	}, nil
 }
 
 func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWorkflowExecutionHistoryRequest) error {
 	if _, err := m.db.Exec(deleteWorkflowExecutionHistorySQLQuery, request.DomainID, request.Execution.WorkflowId, request.Execution.RunId); err != nil {
 		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("DeleteWorkflowExecutionHistory operation failed. Error: %v", err),
+			Message: fmt.Sprintf("DeleteWorkflowExecutionHistory: %v", err),
 		}
 	}
 	return nil
 }
 
-func lockAndCheckRangeIDAndTxID(tx *sqlx.Tx,
-	maxRangeID int64,
-	maxTxIDPlusOne int64,
-	domainID string,
-	workflowID string,
-	runID string,
-	firstEventID int64) error {
+func (m *sqlHistoryManager) Close() {
+	if m.db != nil {
+		m.db.Close()
+	}
+}
+
+func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *eventsRow) error {
+	return runTransaction("AppendHistoryEvents", m.db, func(tx *sqlx.Tx) error {
+		if err := lockEventForUpdate(tx, request); err != nil {
+			return err
+		}
+		result, err := tx.NamedExec(overwriteHistorySQLQuery, row)
+		if err != nil {
+			return err
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("expected 1 row to be affected, got %v", rowsAffected)
+		}
+		return nil
+	})
+}
+
+func lockEventForUpdate(tx *sqlx.Tx, req *p.InternalAppendHistoryEventsRequest) error {
 	var row eventsRow
-	if err := tx.Get(&row,
-		lockRangeIDAndTxIDSQLQuery,
-		domainID,
-		workflowID,
-		runID,
-		firstEventID); err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to lock range ID and tx ID. Get failed. Error: %v", err),
+	err := tx.Get(&row, lockEventSQLQuery, req.DomainID, *req.Execution.WorkflowId, *req.Execution.RunId, req.FirstEventID)
+	if err != nil {
+		return err
+	}
+	if row.RangeID > req.RangeID {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("expected rangedID <=%v, got %v", req.RangeID, row.RangeID),
 		}
 	}
-	if !(row.RangeID <= maxRangeID) {
+	if row.TxID >= req.TransactionID {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to lock range ID and tx ID. %v should've been at most %v.", row.RangeID, maxRangeID),
-		}
-	} else if !(row.TxID < maxTxIDPlusOne) {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to lock range ID and tx ID. %v should've been strictly less than %v.", row.TxID, maxTxIDPlusOne),
+			Msg: fmt.Sprintf("expected txID < %v, got %v", req.TransactionID, row.TxID),
 		}
 	}
 	return nil
 }
 
-func (m *sqlHistoryManager) serializeToken(token *historyToken) ([]byte, error) {
-	data, err := json.Marshal(token)
-	if err != nil {
-		return nil, &workflow.InternalServiceError{Message: "Error generating history event token."}
-	}
-	return data, nil
+func newHistoryPageToken(eventID int64) *historyPageToken {
+	return &historyPageToken{LastEventID: eventID}
 }
 
-func (m *sqlHistoryManager) deserializeToken(request *p.GetWorkflowExecutionHistoryRequest) (*historyToken, error) {
-	token := &historyToken{
-		LastEventBatchVersion: common.EmptyVersion,
-		LastEventID:           request.FirstEventID - 1,
-	}
+func (t *historyPageToken) serialize() []byte {
+	s := strconv.FormatInt(t.LastEventID, 10)
+	return []byte(s)
+}
 
-	if len(request.NextPageToken) == 0 {
-		return token, nil
+func (t *historyPageToken) deserialize(payload []byte) error {
+	eventID, err := strconv.ParseInt(string(payload), 10, 64)
+	if err != nil {
+		return err
 	}
-
-	err := json.Unmarshal(request.NextPageToken, token)
-	if err == nil {
-		return token, nil
-	}
-	return token, nil
+	t.LastEventID = eventID
+	return nil
 }

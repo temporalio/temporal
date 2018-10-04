@@ -22,15 +22,18 @@ package sql
 
 import (
 	"fmt"
+	"io/ioutil"
+
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
 )
+
+const driverName = "mysql"
 
 // TODO: driverName parameter
 func newConnection(host string, port int, username, password, dbName string) (*sqlx.DB, error) {
-	var db, err = sqlx.Connect("mysql",
+	var db, err = sqlx.Connect(driverName,
 		fmt.Sprintf(dataSourceName, username, password, host, port, dbName))
 	if err != nil {
 		return nil, err
@@ -41,7 +44,7 @@ func newConnection(host string, port int, username, password, dbName string) (*s
 }
 
 func createDatabase(host string, port int, username, password, dbName string, overwrite bool) error {
-	var db, err = sqlx.Connect("mysql",
+	var db, err = sqlx.Connect(driverName,
 		fmt.Sprintf(dataSourceName, username, password, host, port, ""))
 	if err != nil {
 		return fmt.Errorf("failure connecting to mysql database: %v", err)

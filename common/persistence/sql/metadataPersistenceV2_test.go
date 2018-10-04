@@ -30,7 +30,6 @@ import (
 )
 
 func TestMetadataPersistenceSuiteV2(t *testing.T) {
-	t.Skip("Temporary skipping until SQL persistence is fixed")
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	sql.InitTestSuite(&s.TestBase)
 	suite.Run(t, s)
