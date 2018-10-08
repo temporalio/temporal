@@ -21,10 +21,11 @@
 package worker
 
 import (
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 
 	"github.com/pborman/uuid"
 	"github.com/sirupsen/logrus"

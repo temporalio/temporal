@@ -23,6 +23,8 @@ package frontend
 import (
 	"errors"
 
+	"github.com/uber/cadence/common/logging"
+
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -43,7 +45,7 @@ type (
 	DomainReplicator interface {
 		HandleTransmissionTask(domainOperation replicator.DomainOperation, info *persistence.DomainInfo,
 			config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-			configVersion int64, failoverVersion int64) error
+			configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error
 	}
 
 	domainReplicatorImpl struct {
@@ -63,7 +65,13 @@ func NewDomainReplicator(kafka messaging.Producer, logger bark.Logger) DomainRep
 // HandleTransmissionTask handle transmission of the domain replication task
 func (domainReplicator *domainReplicatorImpl) HandleTransmissionTask(domainOperation replicator.DomainOperation,
 	info *persistence.DomainInfo, config *persistence.DomainConfig, replicationConfig *persistence.DomainReplicationConfig,
-	configVersion int64, failoverVersion int64) error {
+	configVersion int64, failoverVersion int64, isGlobalDomainEnabled bool) error {
+
+	if !isGlobalDomainEnabled {
+		domainReplicator.logger.WithField(logging.TagDomainID, info.ID).Warn("Should not replicate non global domain")
+		return nil
+	}
+
 	status, err := domainReplicator.convertDomainStatusToThrift(info.Status)
 	if err != nil {
 		return err

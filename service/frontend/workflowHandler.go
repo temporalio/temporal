@@ -257,7 +257,8 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
 	if clusterMetadata.IsGlobalDomainEnabled() {
 		err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationCreate,
-			domainRequest.Info, domainRequest.Config, domainRequest.ReplicationConfig, 0, domainRequest.FailoverVersion)
+			domainRequest.Info, domainRequest.Config, domainRequest.ReplicationConfig, 0,
+			domainRequest.FailoverVersion, domainRequest.IsGlobalDomain)
 		if err != nil {
 			return wh.error(err, scope)
 		}
@@ -518,9 +519,9 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		}
 
 		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-		if clusterMetadata.IsGlobalDomainEnabled() {
+		if clusterMetadata.IsGlobalDomainEnabled() && getResponse.IsGlobalDomain {
 			err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
-				info, config, replicationConfig, configVersion, failoverVersion)
+				info, config, replicationConfig, configVersion, failoverVersion, getResponse.IsGlobalDomain)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}

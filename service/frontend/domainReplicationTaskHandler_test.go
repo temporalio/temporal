@@ -69,9 +69,10 @@ func (s *domainReplicatorSuite) SetupTest() {
 }
 
 func (s *domainReplicatorSuite) TearDownTest() {
+	s.kafkaProducer.AssertExpectations(s.T())
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() {
+func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_IsGlobalDomain() {
 	taskType := replicator.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
@@ -111,6 +112,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
+	isGlobalDomain := true
 
 	s.kafkaProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: &taskType,
@@ -137,11 +139,55 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask() 
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion)
+	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
 	s.Nil(err)
 }
 
-func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
+func (s *domainReplicatorSuite) TestHandleTransmissionTask_RegisterDomainTask_NotGlobalDomain() {
+	id := uuid.New()
+	name := "some random domain test name"
+	description := "some random test description"
+	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
+	retention := int32(10)
+	emitMetric := true
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(0)
+	failoverVersion := int64(59)
+	clusters := []*p.ClusterReplicationConfig{
+		{
+			ClusterName: clusterActive,
+		},
+		{
+			ClusterName: clusterStandby,
+		},
+	}
+
+	domainOperation := replicator.DomainOperationCreate
+	info := &p.DomainInfo{
+		ID:          id,
+		Name:        name,
+		Status:      p.DomainStatusRegistered,
+		Description: description,
+		OwnerEmail:  ownerEmail,
+		Data:        data,
+	}
+	config := &p.DomainConfig{
+		Retention:  retention,
+		EmitMetric: emitMetric,
+	}
+	replicationConfig := &p.DomainReplicationConfig{
+		ActiveClusterName: clusterActive,
+		Clusters:          clusters,
+	}
+	isGlobalDomain := false
+
+	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	s.Nil(err)
+}
+
+func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_IsGlobalDomain() {
 	taskType := replicator.ReplicationTaskTypeDomain
 	id := uuid.New()
 	name := "some random domain test name"
@@ -181,6 +227,7 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
 	}
+	isGlobalDomain := true
 
 	s.kafkaProducer.On("Publish", &replicator.ReplicationTask{
 		TaskType: &taskType,
@@ -207,6 +254,50 @@ func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask() {
 		},
 	}).Return(nil).Once()
 
-	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion)
+	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
+	s.Nil(err)
+}
+
+func (s *domainReplicatorSuite) TestHandleTransmissionTask_UpdateDomainTask_NotGlobalDomain() {
+	id := uuid.New()
+	name := "some random domain test name"
+	description := "some random test description"
+	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
+	retention := int32(10)
+	emitMetric := true
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(0)
+	failoverVersion := int64(59)
+	clusters := []*p.ClusterReplicationConfig{
+		{
+			ClusterName: clusterActive,
+		},
+		{
+			ClusterName: clusterStandby,
+		},
+	}
+
+	domainOperation := replicator.DomainOperationUpdate
+	info := &p.DomainInfo{
+		ID:          id,
+		Name:        name,
+		Status:      p.DomainStatusDeprecated,
+		Description: description,
+		OwnerEmail:  ownerEmail,
+		Data:        data,
+	}
+	config := &p.DomainConfig{
+		Retention:  retention,
+		EmitMetric: emitMetric,
+	}
+	replicationConfig := &p.DomainReplicationConfig{
+		ActiveClusterName: clusterActive,
+		Clusters:          clusters,
+	}
+	isGlobalDomain := false
+
+	err := s.domainReplicator.HandleTransmissionTask(domainOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalDomain)
 	s.Nil(err)
 }
