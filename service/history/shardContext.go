@@ -416,14 +416,14 @@ func (s *shardContextImpl) getDefaultEncoding(domainID string) (common.EncodingT
 }
 
 func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-	s.Lock()
-	defer s.Unlock()
-
 	encoding, err := s.getDefaultEncoding(request.ExecutionInfo.DomainID)
 	if err != nil {
 		return nil, err
 	}
 	request.Encoding = encoding
+
+	s.Lock()
+	defer s.Unlock()
 
 	transferMaxReadLevel := int64(0)
 	// assign IDs for the transfer tasks
@@ -520,14 +520,14 @@ Update_Loop:
 }
 
 func (s *shardContextImpl) ResetMutableState(request *persistence.ResetMutableStateRequest) error {
-	s.Lock()
-	defer s.Unlock()
-
 	encoding, err := s.getDefaultEncoding(request.ExecutionInfo.DomainID)
 	if err != nil {
 		return err
 	}
 	request.Encoding = encoding
+
+	s.Lock()
+	defer s.Unlock()
 
 Reset_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
