@@ -34,6 +34,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	p "github.com/uber/cadence/common/persistence"
+	"sync"
 )
 
 type (
@@ -80,7 +81,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	lastProcessedEventID := int64(0)
 	nextEventID := int64(3)
 
-	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+	req := &p.CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
 		DomainID:             domainID,
 		Execution:            workflowExecution,
@@ -92,8 +93,14 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 		LastProcessedEvent:   lastProcessedEventID,
 		RangeID:              s.ShardInfo.RangeID,
 		CreateWorkflowMode:   p.CreateWorkflowModeBrandNew,
-	})
+	}
+
+	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Nil(err)
+
+	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
+	s.NotNil(err)
+	s.IsType(&p.WorkflowExecutionAlreadyStartedError{}, err)
 }
 
 // TestCreateWorkflowExecutionRunIDReuseWithReplication test
@@ -145,7 +152,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		ReplicationState:         replicationState,
 	})
 	s.NotNil(err)
-	s.IsType(&p.ConditionFailedError{}, err)
+	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
 	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.Nil(err)
@@ -281,6 +288,61 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionContinueAsNew() {
 		PreviousRunID:        workflowExecution.GetRunId(),
 	})
 	s.Nil(err)
+}
+
+// TestCreateWorkflowExecutionConcurrentCreate test
+func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("create-workflow-test-concurrent-create"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeout := int32(10)
+	decisionTimeout := int32(14)
+	lastProcessedEventID := int64(0)
+	nextEventID := int64(3)
+	decisionScheduleID := int64(2)
+
+	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist,
+		workflowType, workflowTimeout, decisionTimeout, nil, nextEventID,
+		lastProcessedEventID, decisionScheduleID, nil)
+	s.Nil(err0, "No error expected.")
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	times := 2
+	var wg sync.WaitGroup
+	wg.Add(times)
+	numOfErr := 0
+	for i := 0; i < times; i++ {
+		go func() {
+			newExecution := gen.WorkflowExecution{
+				WorkflowId: workflowExecution.WorkflowId,
+				RunId:      common.StringPtr(uuid.New()),
+			}
+			_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+				RequestID:            uuid.New(),
+				DomainID:             domainID,
+				Execution:            newExecution,
+				TaskList:             tasklist,
+				WorkflowTypeName:     workflowType,
+				WorkflowTimeout:      workflowTimeout,
+				DecisionTimeoutValue: decisionTimeout,
+				NextEventID:          nextEventID,
+				LastProcessedEvent:   lastProcessedEventID,
+				RangeID:              s.ShardInfo.RangeID,
+				CreateWorkflowMode:   p.CreateWorkflowModeContinueAsNew,
+				PreviousRunID:        workflowExecution.GetRunId(),
+			})
+			if err != nil {
+				numOfErr++
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	s.Equal(1, numOfErr)
 }
 
 // TestPersistenceStartWorkflow test

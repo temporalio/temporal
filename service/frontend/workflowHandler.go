@@ -1688,10 +1688,17 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, wh.error(err, scope)
 	}
 
-	resp, err := wh.history.SignalWithStartWorkflowExecution(ctx, &h.SignalWithStartWorkflowExecutionRequest{
-		DomainUUID:             common.StringPtr(domainID),
-		SignalWithStartRequest: signalWithStartRequest,
-	})
+	var resp *gen.StartWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = wh.history.SignalWithStartWorkflowExecution(ctx, &h.SignalWithStartWorkflowExecutionRequest{
+			DomainUUID:             common.StringPtr(domainID),
+			SignalWithStartRequest: signalWithStartRequest,
+		})
+		return err
+	}
+
+	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
