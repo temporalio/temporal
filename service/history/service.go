@@ -25,8 +25,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/cassandra"
+	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
@@ -204,7 +203,7 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 		stopC:  make(chan struct{}),
 		config: NewConfig(
 			dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
-			params.CassandraConfig.NumHistoryShards,
+			params.PersistenceConfig.NumHistoryShards,
 		),
 	}
 }
@@ -212,95 +211,38 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 // Start starts the service
 func (s *Service) Start() {
 
-	var p = s.params
-	var log = p.Logger
+	var params = s.params
+	var log = params.Logger
 
 	log.Infof("%v starting", common.HistoryServiceName)
 
-	base := service.New(p)
-
-	persistenceMaxQPS := s.config.PersistenceMaxQPS()
-	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
+	base := service.New(params)
 
 	s.metricsClient = base.GetMetricsClient()
 
-	shardMgr, err := cassandra.NewShardPersistence(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		p.ClusterMetadata.GetCurrentClusterName(),
-		p.Logger)
+	pConfig := params.PersistenceConfig
+	pConfig.HistoryMaxConns = s.config.HistoryMgrNumConns()
+	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
+	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
 
+	shardMgr, err := pFactory.NewShardManager()
 	if err != nil {
 		log.Fatalf("failed to create shard manager: %v", err)
 	}
-	shardMgr = persistence.NewShardPersistenceRateLimitedClient(shardMgr, persistenceRateLimiter, log)
-	shardMgr = persistence.NewShardPersistenceMetricsClient(shardMgr, base.GetMetricsClient(), log)
 
-	metadata, err := cassandra.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		p.ClusterMetadata.GetCurrentClusterName(),
-		p.Logger)
-
+	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
-	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
-	visibility, err := cassandra.NewVisibilityPersistence(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.VisibilityKeyspace,
-		p.Logger)
-
+	visibility, err := pFactory.NewVisibilityManager()
 	if err != nil {
 		log.Fatalf("failed to create visibility manager: %v", err)
 	}
-	visibility = persistence.NewVisibilityPersistenceRateLimitedClient(visibility, persistenceRateLimiter, log)
-	if s.config.EnableVisibilitySampling() {
-		visibility = NewVisibilitySamplingClient(visibility, s.config, base.GetMetricsClient(), log)
-	}
-	visibility = persistence.NewVisibilityPersistenceMetricsClient(visibility, base.GetMetricsClient(), log)
 
-	phistory, err := cassandra.NewHistoryPersistence(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		s.config.HistoryMgrNumConns(),
-		log)
-
+	history, err := pFactory.NewHistoryManager()
 	if err != nil {
 		log.Fatalf("Creating Cassandra history manager persistence failed: %v", err)
-	}
-	history := persistence.NewHistoryManagerImpl(phistory, log)
-	history = persistence.NewHistoryPersistenceRateLimitedClient(history, persistenceRateLimiter, log)
-	history = persistence.NewHistoryPersistenceMetricsClient(history, base.GetMetricsClient(), log)
-
-	execMgrFactory, err := cassandra.NewPersistenceClientFactory(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		s.config.ExecutionMgrNumConns(),
-		p.Logger,
-		persistenceRateLimiter,
-		s.metricsClient,
-	)
-
-	if err != nil {
-		log.Fatalf("Creating Cassandra execution manager persistence factory failed: %v", err)
 	}
 
 	handler := NewHandler(base,
@@ -309,7 +251,7 @@ func (s *Service) Start() {
 		metadata,
 		visibility,
 		history,
-		execMgrFactory)
+		pFactory)
 
 	handler.Start()
 

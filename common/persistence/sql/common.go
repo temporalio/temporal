@@ -56,7 +56,7 @@ func gobDeserialize(a []byte, x interface{}) error {
 }
 
 const (
-	dataSourceName = "%s:%s@tcp(%s:%d)/%s?multiStatements=true&tx_isolation=%%27READ-COMMITTED%%27&parseTime=true&clientFoundRows=true"
+	dataSourceName = "%s:%s@%v(%v)/%s?multiStatements=true&tx_isolation=%%27READ-COMMITTED%%27&parseTime=true&clientFoundRows=true"
 )
 
 func boolToInt64(b bool) int64 {

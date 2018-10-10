@@ -27,13 +27,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -43,7 +44,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	cassandra_persistence "github.com/uber/cadence/common/persistence/cassandra"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"
@@ -155,12 +155,12 @@ func (s *clientIntegrationSuite) TearDownTest() {
 func (s *clientIntegrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster bool) {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	options := persistencetests.TestBaseOptions{}
-	options.DBHost = "127.0.0.1"
-	options.DropDatabase = true
-	options.EnableGlobalDomain = enableGlobalDomain
-	options.IsMasterCluster = isMasterCluster
-	cassandra_persistence.InitTestSuite(&s.TestBase)
+	options := persistencetests.TestBaseOptions{
+		EnableGlobalDomain: enableGlobalDomain,
+		IsMasterCluster:    isMasterCluster,
+	}
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
+	s.TestBase.Setup()
 
 	s.setupShards()
 

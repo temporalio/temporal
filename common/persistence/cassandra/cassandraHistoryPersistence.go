@@ -28,6 +28,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const (
@@ -60,18 +61,18 @@ type (
 	}
 )
 
-// NewHistoryPersistence is used to create an instance of HistoryManager implementation
-func NewHistoryPersistence(hosts string, port int, user, password, dc string, keyspace string,
-	numConns int, logger bark.Logger) (p.HistoryStore,
+// newHistoryPersistence is used to create an instance of HistoryManager implementation
+func newHistoryPersistence(cfg config.Cassandra, logger bark.Logger) (p.HistoryStore,
 	error) {
-	cluster := NewCassandraCluster(hosts, port, user, password, dc)
-	cluster.Keyspace = keyspace
+	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
+	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial
 	cluster.Timeout = defaultSessionTimeout
-	cluster.NumConns = numConns
-
+	if cfg.MaxConns > 0 {
+		cluster.NumConns = cfg.MaxConns
+	}
 	session, err := cluster.CreateSession()
 	if err != nil {
 		return nil, err

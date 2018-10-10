@@ -1,9 +1,18 @@
-cassandra:
-  hosts: "127.0.0.1"
-  keyspace: "cadence_active"
-  visibilityKeyspace: "cadence_visibility_active"
-  consistency: "One"
+persistence:
+  defaultStore: cass-default
+  visibilityStore: cass-visibility
   numHistoryShards: 1
+  datastores:
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence_active"
+        consistency: "One"
+    cass-visibility:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "cadence_visibility_active"
+        consistency: "One"
 
 ringpop:
   name: cadence_active

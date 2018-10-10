@@ -27,11 +27,8 @@ import (
 
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const (
@@ -39,137 +36,42 @@ const (
 	testPort                 = 0
 	testUser                 = ""
 	testPassword             = ""
-	testDatacenter           = ""
 	testSchemaDir            = "schema/cassandra/"
 )
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	Port     int
 	keyspace string
 	cluster  *gocql.ClusterConfig
 	session  *gocql.Session
+	cfg      config.Cassandra
 }
 
-// InitTestSuite initializes test suite to use cassandra
-func InitTestSuite(tb *persistencetests.TestBase) {
-	options := &persistencetests.TestBaseOptions{
-		SchemaDir:          testSchemaDir,
-		DBHost:             testWorkflowClusterHosts,
-		DBPort:             testPort,
-		DBUser:             testUser,
-		DBPassword:         testPassword,
-		DropDatabase:       true,
-		EnableGlobalDomain: false,
+// NewTestCluster returns a new cassandra test cluster
+func NewTestCluster(keyspace string) *TestCluster {
+	var result TestCluster
+	result.keyspace = keyspace
+	result.cfg = config.Cassandra{
+		User:     testUser,
+		Password: testPassword,
+		Hosts:    testWorkflowClusterHosts,
+		Port:     testPort,
+		MaxConns: 2,
+		Keyspace: keyspace,
 	}
-	InitTestSuiteWithOptions(tb, options)
+	return &result
 }
 
-// InitTestSuiteWithOptions initializes test suite to use cassandra given options
-func InitTestSuiteWithOptions(tb *persistencetests.TestBase, options *persistencetests.TestBaseOptions) {
-	InitTestSuiteWithMetadata(tb, options, cluster.GetTestClusterMetadata(
-		options.EnableGlobalDomain,
-		options.IsMasterCluster,
-	))
-}
-
-// InitTestSuiteWithMetadata initializes test suite to use cassandra given options and metadata
-func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persistencetests.TestBaseOptions, metadata cluster.Metadata) {
-	if metadata == nil {
-		panic("nil metadata")
+// Config returns the persistence config for connecting to this test cluster
+func (s *TestCluster) Config() config.Persistence {
+	cfg := s.cfg
+	return config.Persistence{
+		DefaultStore:    "test",
+		VisibilityStore: "test",
+		DataStores: map[string]config.DataStore{
+			"test": {Cassandra: &cfg},
+		},
 	}
-	if options.SchemaDir == "" {
-		options.SchemaDir = testSchemaDir
-	}
-	log := bark.NewLoggerFromLogrus(log.New())
-	tb.PersistenceTestCluster = &TestCluster{}
-	tb.ClusterMetadata = metadata
-	currentClusterName := tb.ClusterMetadata.GetCurrentClusterName()
-	// Setup Workflow keyspace and deploy schema for tests
-	tb.PersistenceTestCluster.SetupTestDatabase(options)
-	shardID := 0
-	keyspace := tb.PersistenceTestCluster.DatabaseName()
-	var err error
-	tb.ShardMgr, err = NewShardPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.ExecutionMgrFactory, err = NewPersistenceClientFactory(options.DBHost, options.DBPort,
-		options.DBUser, options.DBPassword, options.Datacenter, keyspace, 2, log, nil, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Create an ExecutionManager for the shard for use in unit tests
-	tb.ExecutionManager, err = tb.ExecutionMgrFactory.CreateExecutionManager(shardID)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.TaskMgr, err = NewTaskPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace,
-		log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	pHisMgr, err := NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, 2, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.HistoryMgr = p.NewHistoryManagerImpl(pHisMgr, log)
-
-	tb.MetadataManager, err = NewMetadataPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.MetadataManagerV2, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.MetadataProxy, err = NewMetadataManagerProxy(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, options.Datacenter, keyspace, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.VisibilityMgr, err = NewVisibilityPersistence(options.DBHost, options.DBPort,
-		options.DBUser, options.DBPassword, options.Datacenter, keyspace, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Create a shard for test
-	tb.ReadLevel = 0
-	tb.ReplicationReadLevel = 0
-	tb.ShardInfo = &p.ShardInfo{
-		ShardID:                 shardID,
-		RangeID:                 0,
-		TransferAckLevel:        0,
-		ReplicationAckLevel:     0,
-		TimerAckLevel:           time.Time{},
-		ClusterTimerAckLevel:    map[string]time.Time{currentClusterName: time.Time{}},
-		ClusterTransferAckLevel: map[string]int64{currentClusterName: 0},
-	}
-	tb.TaskIDGenerator = &persistencetests.TestTransferTaskIDGenerator{}
-	err1 := tb.ShardMgr.CreateShard(&p.CreateShardRequest{
-		ShardInfo: tb.ShardInfo,
-	})
-	if err1 != nil {
-		log.Fatal(err1)
-	}
-}
-
-func getCadencePackageDir() (string, error) {
-	cadencePackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/cadence/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/cadence/")]
-	if err != nil {
-		panic(err)
-	}
-	return cadencePackageDir, err
 }
 
 // DatabaseName from PersistenceTestCluster interface
@@ -178,15 +80,10 @@ func (s *TestCluster) DatabaseName() string {
 }
 
 // SetupTestDatabase from PersistenceTestCluster interface
-func (s *TestCluster) SetupTestDatabase(options *persistencetests.TestBaseOptions) {
-	s.keyspace = options.DBName
-	if s.keyspace == "" {
-		s.keyspace = persistencetests.GenerateRandomDBName(10)
-	}
-
-	s.CreateSession(options)
-	s.CreateDatabase(1, options.DropDatabase)
-	schemaDir := options.SchemaDir + "/"
+func (s *TestCluster) SetupTestDatabase() {
+	s.CreateSession()
+	s.CreateDatabase()
+	schemaDir := testSchemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
 		cadencePackageDir, err := getCadencePackageDir()
@@ -207,8 +104,8 @@ func (s *TestCluster) TearDownTestDatabase() {
 }
 
 // CreateSession from PersistenceTestCluster interface
-func (s *TestCluster) CreateSession(options *persistencetests.TestBaseOptions) {
-	s.cluster = NewCassandraCluster(options.DBHost, options.DBPort, options.DBUser, options.DBPassword, options.Datacenter)
+func (s *TestCluster) CreateSession() {
+	s.cluster = NewCassandraCluster(testWorkflowClusterHosts, testPort, testUser, testPassword, "")
 	s.cluster.Consistency = gocql.Consistency(1)
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second
@@ -220,8 +117,8 @@ func (s *TestCluster) CreateSession(options *persistencetests.TestBaseOptions) {
 }
 
 // CreateDatabase from PersistenceTestCluster interface
-func (s *TestCluster) CreateDatabase(replicas int, dropKeySpace bool) {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), replicas, dropKeySpace)
+func (s *TestCluster) CreateDatabase() {
+	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -253,4 +150,17 @@ func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		log.Fatal(err)
 	}
+}
+
+func getCadencePackageDir() (string, error) {
+	cadencePackageDir, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	cadenceIndex := strings.LastIndex(cadencePackageDir, "/cadence/")
+	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/cadence/")]
+	if err != nil {
+		panic(err)
+	}
+	return cadencePackageDir, err
 }

@@ -42,6 +42,8 @@ type (
 	TaskStore = TaskManager
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore = MetadataManager
+	// VisibilityStore is the store interface for visibility
+	VisibilityStore = VisibilityManager
 
 	// ExecutionStore is used to manage workflow executions for Persistence layer
 	ExecutionStore interface {

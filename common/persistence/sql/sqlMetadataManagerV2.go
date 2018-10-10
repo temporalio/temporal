@@ -31,6 +31,7 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -169,10 +170,10 @@ func (m *sqlMetadataManagerV2) Close() {
 	}
 }
 
-// NewMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
-func NewMetadataPersistenceV2(host string, port int, username, password, dbName string, currentClusterName string,
+// newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
+func newMetadataPersistenceV2(cfg config.SQL, currentClusterName string,
 	logger bark.Logger) (persistence.MetadataManager, error) {
-	var db, err = newConnection(host, port, username, password, dbName)
+	var db, err = newConnection(cfg)
 	if err != nil {
 		return nil, err
 	}

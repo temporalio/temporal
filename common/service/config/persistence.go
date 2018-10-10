@@ -18,19 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package config
 
-import (
-	"testing"
+import "fmt"
 
-	"github.com/uber/cadence/common/persistence/sql"
+// SetMaxQPS sets the MaxQPS value for the given datastore
+func (c *Persistence) SetMaxQPS(key string, qps int) {
+	ds, ok := c.DataStores[key]
+	if !ok {
+		return
+	}
+	if ds.Cassandra != nil {
+		ds.Cassandra.MaxQPS = qps
+		return
+	}
+	ds.SQL.MaxQPS = qps
+}
 
-	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
-)
-
-func TestShardPersistenceSuite(t *testing.T) {
-	s := new(persistencetests.ShardPersistenceSuite)
-	sql.InitTestSuite(&s.TestBase)
-	suite.Run(t, s)
+// Validate validates the persistence config
+func (c *Persistence) Validate() error {
+	stores := []string{c.DefaultStore, c.VisibilityStore}
+	for _, st := range stores {
+		ds, ok := c.DataStores[st]
+		if !ok {
+			return fmt.Errorf("persistence: missing config for datastore %v", st)
+		}
+		if ds.SQL == nil && ds.Cassandra == nil {
+			return fmt.Errorf("persistence: datastore %v: must provide config for one of cassandra or sql stores", st)
+		}
+		if ds.SQL != nil && ds.Cassandra != nil {
+			return fmt.Errorf("persistce: datastore %v: only one of SQL or cassandra can be specified", st)
+		}
+	}
+	return nil
 }

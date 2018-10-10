@@ -34,8 +34,8 @@ type (
 	Config struct {
 		// Ringpop is the ringpop related configuration
 		Ringpop Ringpop `yaml:"ringpop"`
-		// Cassandra is the configuration for connecting to cassandra
-		Cassandra Cassandra `yaml:"cassandra"`
+		// Persistence contains the configuration for cadence datastores
+		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
 		Log Logger `yaml:"log"`
 		// ClustersInfo is the config containing all valid clusters and active acluster
@@ -90,6 +90,30 @@ type (
 		DiscoveryProvider discovery.DiscoverProvider `yaml:"-"`
 	}
 
+	// Persistence contains the configuration for data store / persistence layer
+	Persistence struct {
+		// DefaultStore is the name of the default data store to use
+		DefaultStore string `yaml:"defaultStore" validate:"nonzero"`
+		// VisibilityStore is the name of the datastore to be used for visibility records
+		VisibilityStore string `yaml:"visibilityStore" validate:"nonzero"`
+		// HistoryMaxConns is the desired number of conns to history store. Value specified
+		// here overrides the MaxConns config specified as part of datastore
+		HistoryMaxConns int `yaml:"historyMaxConns"`
+		// NumHistoryShards is the desired number of history shards. This config doesn't
+		// belong here, needs refactoring
+		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
+		// DataStores contains the configuration for all datastores
+		DataStores map[string]DataStore `yaml:"datastores"`
+	}
+
+	// DataStore is the configuration for a single datastore
+	DataStore struct {
+		// Cassandra contains the config for a cassandra datastore
+		Cassandra *Cassandra `yaml:"cassandra"`
+		// SQL contains the config for a SQL based datastore
+		SQL *SQL `yaml:"sql"`
+	}
+
 	// Cassandra contains configuration to connect to Cassandra cluster
 	Cassandra struct {
 		// Hosts is a csv of cassandra endpoints
@@ -102,14 +126,34 @@ type (
 		Password string `yaml:"password"`
 		// keyspace is the cassandra keyspace
 		Keyspace string `yaml:"keyspace" validate:"nonzero"`
-		// VisibilityKeyspace is the cassandra keyspace for visibility store
-		VisibilityKeyspace string `yaml:"visibilityKeyspace" validate:"nonzero"`
 		// Consistency is the default cassandra consistency level
 		Consistency string `yaml:"consistency"`
 		// Datacenter is the data center filter arg for cassandra
 		Datacenter string `yaml:"datacenter"`
-		// NumHistoryShards is the desired number of history shards
-		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
+		// MaxQPS is the max request rate to this datastore
+		MaxQPS int `yaml:"maxQPS"`
+		// MaxConns is the max number of connections to this datastore for a single keyspace
+		MaxConns int `yaml:"maxConns"`
+	}
+
+	// SQL is the configuration for connecting to a SQL backed datastore
+	SQL struct {
+		// User is the username to be used for the conn
+		User string `yaml:"user"`
+		// Password is the password corresponding to the user name
+		Password string `yaml:"password"`
+		// DriverName is the name of SQL driver
+		DriverName string `yaml:"driverName" validate:"nonzero"`
+		// DatabaseName is the name of SQL database to connect to
+		DatabaseName string `yaml:"databaseName" validate:"nonzero"`
+		// ConnectAddr is the remote addr of the database
+		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
+		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
+		ConnectProtocol string `yaml:"connectProtocol validate:"nonzero""`
+		// MaxQPS the max request rate on this datastore
+		MaxQPS int `yaml:"maxQPS"`
+		// MaxConns the max number of connections to this datastore
+		MaxConns int `yaml:"maxConns"`
 	}
 
 	// Replicator describes the configuration of replicator
@@ -171,6 +215,11 @@ type (
 	// BootstrapMode is an enum type for ringpop bootstrap mode
 	BootstrapMode int
 )
+
+// Validate validates this config
+func (c *Config) Validate() error {
+	return c.Persistence.Validate()
+}
 
 // String converts the config object into a string
 func (c *Config) String() string {

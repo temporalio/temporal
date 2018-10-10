@@ -272,8 +272,14 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	params.RingpopFactory = newRingpopFactory(rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
 	params.MessagingClient = c.messagingClient
-	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
-	params.CassandraConfig.Hosts = "127.0.0.1"
+	cassandraConfig := config.Cassandra{Hosts: "127.0.0.1"}
+	params.PersistenceConfig = config.Persistence{
+		NumHistoryShards: c.numberOfHistoryShards,
+		DefaultStore:     "test",
+		VisibilityStore:  "test",
+		DataStores:       map[string]config.DataStore{"test": {Cassandra: &cassandraConfig}},
+	}
+
 	params.DynamicConfig = dynamicconfig.NewNopClient()
 
 	// TODO when cross DC is public, remove this temporary override
@@ -314,7 +320,13 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup) {
 		params.RingpopFactory = newRingpopFactory(rpHosts)
 		params.ClusterMetadata = c.clusterMetadata
 		params.MessagingClient = c.messagingClient
-		params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+		cassandraConfig := config.Cassandra{Hosts: "127.0.0.1"}
+		params.PersistenceConfig = config.Persistence{
+			NumHistoryShards: c.numberOfHistoryShards,
+			DefaultStore:     "test",
+			VisibilityStore:  "test",
+			DataStores:       map[string]config.DataStore{"test": {Cassandra: &cassandraConfig}},
+		}
 		service := service.New(params)
 		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
@@ -339,7 +351,13 @@ func (c *cadenceImpl) startMatching(rpHosts []string, startWG *sync.WaitGroup) {
 	params.MetricScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
-	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+	cassandraConfig := config.Cassandra{Hosts: "127.0.0.1"}
+	params.PersistenceConfig = config.Persistence{
+		NumHistoryShards: c.numberOfHistoryShards,
+		DefaultStore:     "test",
+		VisibilityStore:  "test",
+		DataStores:       map[string]config.DataStore{"test": {Cassandra: &cassandraConfig}},
+	}
 	service := service.New(params)
 	c.matchingHandler = matching.NewHandler(
 		service, matching.NewConfig(dynamicconfig.NewNopCollection()), c.taskMgr, c.metadataMgr,
@@ -359,7 +377,13 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	params.MetricScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.RingpopFactory = newRingpopFactory(rpHosts)
 	params.ClusterMetadata = c.clusterMetadata
-	params.CassandraConfig.NumHistoryShards = c.numberOfHistoryShards
+	cassandraConfig := config.Cassandra{Hosts: "127.0.0.1"}
+	params.PersistenceConfig = config.Persistence{
+		NumHistoryShards: c.numberOfHistoryShards,
+		DefaultStore:     "test",
+		VisibilityStore:  "test",
+		DataStores:       map[string]config.DataStore{"test": {Cassandra: &cassandraConfig}},
+	}
 	service := service.New(params)
 	service.Start()
 

@@ -2327,7 +2327,7 @@ func (s *ExecutionManagerSuite) TestWorkflowReplicationState() {
 	}
 }
 
-// TestResetMutableStateCurrentIsSelf test
+// TestUpdateAndClearBufferedEvents test
 func (s *ExecutionManagerSuite) TestUpdateAndClearBufferedEvents() {
 	domainID := "4ca1faac-1a3a-47af-8e51-fdaa2b3d45b9"
 	workflowExecution := gen.WorkflowExecution{

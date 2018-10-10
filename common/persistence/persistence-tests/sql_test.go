@@ -18,17 +18,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package persistencetests
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 )
 
-func TestMatchingPersistenceSuite(t *testing.T) {
-	s := new(persistencetests.MatchingPersistenceSuite)
-	InitTestSuite(&s.TestBase)
+func TestSQLHistoryPersistenceSuite(t *testing.T) {
+	s := new(HistoryPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
+func TestSQLMatchingPersistenceSuite(t *testing.T) {
+	s := new(MatchingPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
+func TestSQLMetadataPersistenceSuiteV2(t *testing.T) {
+	s := new(MetadataPersistenceSuiteV2)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
+func TestSQLShardPersistenceSuite(t *testing.T) {
+	s := new(ShardPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
+func TestSQLExecutionManagerSuite(t *testing.T) {
+	t.Skip("Temporary skipping until SQL persistence is fixed")
+	s := new(ExecutionManagerSuite)
+	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
+	s.TestBase.Setup()
 	suite.Run(t, s)
 }

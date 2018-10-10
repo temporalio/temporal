@@ -52,17 +52,17 @@ type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
-		Name             string
-		Logger           bark.Logger
-		MetricScope      tally.Scope
-		RingpopFactory   RingpopFactory
-		RPCFactory       common.RPCFactory
-		PProfInitializer common.PProfInitializer
-		CassandraConfig  config.Cassandra
-		ClusterMetadata  cluster.Metadata
-		ReplicatorConfig config.Replicator
-		MessagingClient  messaging.Client
-		DynamicConfig    dynamicconfig.Client
+		Name              string
+		Logger            bark.Logger
+		MetricScope       tally.Scope
+		RingpopFactory    RingpopFactory
+		RPCFactory        common.RPCFactory
+		PProfInitializer  common.PProfInitializer
+		PersistenceConfig config.Persistence
+		ClusterMetadata   cluster.Metadata
+		ReplicatorConfig  config.Replicator
+		MessagingClient   messaging.Client
+		DynamicConfig     dynamicconfig.Client
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
@@ -104,7 +104,7 @@ func New(params *BootstrapParams) Service {
 		rpFactory:             params.RingpopFactory,
 		pprofInitializer:      params.PProfInitializer,
 		metricsScope:          params.MetricScope,
-		numberOfHistoryShards: params.CassandraConfig.NumHistoryShards,
+		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
 		clusterMetadata:       params.ClusterMetadata,
 		messagingClient:       params.MessagingClient,
 		dynamicCollection:     dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),

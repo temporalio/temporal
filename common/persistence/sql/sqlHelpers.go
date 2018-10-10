@@ -24,17 +24,20 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"strconv"
+
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const driverName = "mysql"
 
 // TODO: driverName parameter
-func newConnection(host string, port int, username, password, dbName string) (*sqlx.DB, error) {
-	var db, err = sqlx.Connect(driverName,
-		fmt.Sprintf(dataSourceName, username, password, host, port, dbName))
+func newConnection(cfg config.SQL) (*sqlx.DB, error) {
+	var db, err = sqlx.Connect(cfg.DriverName,
+		fmt.Sprintf(dataSourceName, cfg.User, cfg.Password, cfg.ConnectProtocol, cfg.ConnectAddr, cfg.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +46,9 @@ func newConnection(host string, port int, username, password, dbName string) (*s
 	return db, nil
 }
 
-func createDatabase(host string, port int, username, password, dbName string, overwrite bool) error {
-	var db, err = sqlx.Connect(driverName,
-		fmt.Sprintf(dataSourceName, username, password, host, port, ""))
+func createDatabase(driver string, host string, port int, username, password, dbName string, overwrite bool) error {
+	addr := host + ":" + strconv.Itoa(port)
+	var db, err = sqlx.Connect(driver, fmt.Sprintf(dataSourceName, username, password, "tcp", addr, ""))
 	if err != nil {
 		return fmt.Errorf("failure connecting to mysql database: %v", err)
 	}

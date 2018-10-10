@@ -29,6 +29,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
 // Fixed domain values for now
@@ -133,11 +134,10 @@ type (
 	}
 )
 
-// NewVisibilityPersistence is used to create an instance of VisibilityManager implementation
-func NewVisibilityPersistence(
-	hosts string, port int, user, password, dc string, keyspace string, logger bark.Logger) (p.VisibilityManager, error) {
-	cluster := NewCassandraCluster(hosts, port, user, password, dc)
-	cluster.Keyspace = keyspace
+// newVisibilityPersistence is used to create an instance of VisibilityManager implementation
+func newVisibilityPersistence(cfg config.Cassandra, logger bark.Logger) (p.VisibilityManager, error) {
+	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
+	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial

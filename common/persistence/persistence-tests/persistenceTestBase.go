@@ -28,10 +28,15 @@ import (
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/cassandra"
+	pfactory "github.com/uber/cadence/common/persistence/persistence-factory"
+	"github.com/uber/cadence/common/persistence/sql"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -42,24 +47,18 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		DBHost       string // database hostname
-		DBPort       int    // database port
-		DBUser       string // database user
-		DBPassword   string // database password
-		DBName       string // database name
-		Datacenter   string // database datacenter
-		DropDatabase bool   // drop existing database
-		SchemaDir    string // directory with schema files
+		DBName string
 		// TODO this is used for global domain test
 		// when crtoss DC is public, remove EnableGlobalDomain
 		EnableGlobalDomain bool // is global domain enabled
 		IsMasterCluster    bool // is master cluster
+		ClusterMetadata    cluster.Metadata
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		ShardMgr               p.ShardManager
-		ExecutionMgrFactory    p.ExecutionManagerFactory
+		ExecutionMgrFactory    pfactory.Factory
 		ExecutionManager       p.ExecutionManager
 		TaskMgr                p.TaskManager
 		HistoryMgr             p.HistoryManager
@@ -78,10 +77,11 @@ type (
 	// PersistenceTestCluster exposes management operations on a database
 	PersistenceTestCluster interface {
 		DatabaseName() string
-		SetupTestDatabase(options *TestBaseOptions)
+		SetupTestDatabase()
 		TearDownTestDatabase()
-		CreateSession(options *TestBaseOptions)
+		CreateSession()
 		DropDatabase()
+		Config() config.Persistence
 		LoadSchema(fileNames []string, schemaDir string)
 		LoadVisibilitySchema(fileNames []string, schemaDir string)
 	}
@@ -92,9 +92,94 @@ type (
 	}
 )
 
-// GetNextTransferTaskID helper
-func (g *TestTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
-	return atomic.AddInt64(&g.seqNum, 1), nil
+// NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
+func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
+	if options.DBName == "" {
+		options.DBName = GenerateRandomDBName(10)
+	}
+	testCluster := cassandra.NewTestCluster(options.DBName)
+	return newTestBase(options, testCluster)
+}
+
+// NewTestBaseWithSQL returns a new persistence test base backed by SQL
+func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
+	if options.DBName == "" {
+		options.DBName = GenerateRandomDBName(10)
+	}
+	testCluster := sql.NewTestCluster(options.DBName)
+	return newTestBase(options, testCluster)
+}
+
+func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
+	metadata := options.ClusterMetadata
+	if metadata == nil {
+		metadata = cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
+	}
+	options.ClusterMetadata = metadata
+	return TestBase{PersistenceTestCluster: testCluster, ClusterMetadata: metadata}
+}
+
+// Setup sets up the test base, must be called as part of SetupSuite
+func (s *TestBase) Setup() {
+	var err error
+	shardID := 0
+	clusterName := s.ClusterMetadata.GetCurrentClusterName()
+	log := bark.NewLoggerFromLogrus(log.New())
+
+	s.PersistenceTestCluster.SetupTestDatabase()
+
+	cfg := s.PersistenceTestCluster.Config()
+	factory := pfactory.New(&cfg, clusterName, nil, log)
+
+	s.TaskMgr, err = factory.NewTaskManager()
+	s.fatalOnError("NewTaskManager", err)
+
+	s.MetadataManager, err = factory.NewMetadataManager(pfactory.MetadataV1)
+	s.fatalOnError("NewMetadataManager", err)
+
+	s.MetadataManagerV2, err = factory.NewMetadataManager(pfactory.MetadataV2)
+	s.fatalOnError("NewMetadataManager", err)
+
+	s.MetadataProxy, err = factory.NewMetadataManager(pfactory.MetadataV1V2)
+	s.fatalOnError("NewMetadataManager", err)
+
+	s.HistoryMgr, err = factory.NewHistoryManager()
+	s.fatalOnError("NewHistoryManager", err)
+
+	s.ShardMgr, err = factory.NewShardManager()
+	s.fatalOnError("NewShardManager", err)
+
+	s.ExecutionMgrFactory = factory
+	s.ExecutionManager, err = factory.NewExecutionManager(shardID)
+	s.fatalOnError("NewExecutionManager", err)
+
+	// SQL currently doesn't have support for visibility manager
+	s.VisibilityMgr, err = factory.NewVisibilityManager()
+	if err != nil {
+		log.Warn("testBase.Setup: error creating visibility manager: %v", err)
+	}
+
+	s.ReadLevel = 0
+	s.ReplicationReadLevel = 0
+	s.ShardInfo = &p.ShardInfo{
+		ShardID:                 shardID,
+		RangeID:                 0,
+		TransferAckLevel:        0,
+		ReplicationAckLevel:     0,
+		TimerAckLevel:           time.Time{},
+		ClusterTimerAckLevel:    map[string]time.Time{clusterName: time.Time{}},
+		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
+	}
+
+	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
+	err = s.ShardMgr.CreateShard(&p.CreateShardRequest{ShardInfo: s.ShardInfo})
+	s.fatalOnError("CreateShard", err)
+}
+
+func (s *TestBase) fatalOnError(msg string, err error) {
+	if err != nil {
+		log.Fatalf("%v:%v", msg, err)
+	}
 }
 
 // CreateShard is a utility method to create the shard using persistence layer
@@ -1058,6 +1143,11 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 		return false
 	}
 	return true
+}
+
+// GetNextTransferTaskID helper
+func (g *TestTransferTaskIDGenerator) GetNextTransferTaskID() (int64, error) {
+	return atomic.AddInt64(&g.seqNum, 1), nil
 }
 
 // GenerateRandomDBName helper

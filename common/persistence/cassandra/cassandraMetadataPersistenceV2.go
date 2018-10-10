@@ -28,6 +28,7 @@ import (
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const constDomainPartition = 0
@@ -96,11 +97,10 @@ type (
 	}
 )
 
-// NewMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
-func NewMetadataPersistenceV2(hosts string, port int, user, password, dc string, keyspace string,
-	currentClusterName string, logger bark.Logger) (p.MetadataStore, error) {
-	cluster := NewCassandraCluster(hosts, port, user, password, dc)
-	cluster.Keyspace = keyspace
+// newMetadataPersistenceV2 is used to create an instance of HistoryManager implementation
+func newMetadataPersistenceV2(cfg config.Cassandra, currentClusterName string, logger bark.Logger) (p.MetadataStore, error) {
+	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
+	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial

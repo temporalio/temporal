@@ -180,13 +180,22 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		"./tool", "-k", visKeyspace, "-q", "setup-schema", "-f", visCqlFile, "-version", "10.0", "-o",
 	})
 
-	cfg := config.Cassandra{
-		Hosts:              "127.0.0.1",
-		Port:               defaultCassandraPort,
-		User:               "",
-		Password:           "",
-		Keyspace:           keyspace,
-		VisibilityKeyspace: visKeyspace,
+	defaultCfg := config.Cassandra{
+		Hosts:    "127.0.0.1",
+		Port:     defaultCassandraPort,
+		User:     "",
+		Password: "",
+		Keyspace: keyspace,
+	}
+	visibilityCfg := defaultCfg
+	visibilityCfg.Keyspace = visKeyspace
+	cfg := config.Persistence{
+		DefaultStore:    "default",
+		VisibilityStore: "visibility",
+		DataStores: map[string]config.DataStore{
+			"default":    {Cassandra: &defaultCfg},
+			"visibility": {Cassandra: &visibilityCfg},
+		},
 	}
 	s.NoError(VerifyCompatibleVersion(cfg, root))
 }

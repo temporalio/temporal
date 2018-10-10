@@ -23,14 +23,13 @@ package sql
 import (
 	"fmt"
 
-	"github.com/uber-common/bark"
-
 	"database/sql"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -107,9 +106,9 @@ task_type = :task_type
 		`WHERE domain_id = ? AND task_list_name = ? AND task_list_type = ? AND task_id = ?`
 )
 
-// NewTaskPersistence creates a new instance of TaskManager
-func NewTaskPersistence(host string, port int, username, password, dbName string, logger bark.Logger) (persistence.TaskManager, error) {
-	var db, err = newConnection(host, port, username, password, dbName)
+// newTaskPersistence creates a new instance of TaskManager
+func newTaskPersistence(cfg config.SQL) (persistence.TaskManager, error) {
+	var db, err = newConnection(cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -99,7 +99,7 @@ func (s *server) startService() common.Daemon {
 	params := service.BootstrapParams{}
 	params.Name = "cadence-" + s.name
 	params.Logger = s.cfg.Log.NewBarkLogger()
-	params.CassandraConfig = s.cfg.Cassandra
+	params.PersistenceConfig = s.cfg.Persistence
 
 	params.RingpopFactory, err = s.cfg.Ringpop.NewFactory()
 	if err != nil {

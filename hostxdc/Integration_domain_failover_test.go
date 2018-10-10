@@ -28,12 +28,12 @@ import (
 	"context"
 	"encoding/binary"
 	"flag"
-	"github.com/uber/cadence/common/persistence/cassandra"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
 	"os"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/uber/cadence/common/persistence/persistence-tests"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -115,18 +115,17 @@ func (s *integrationClustersTestSuite) newTestCluster(no int) *testCluster {
 
 func (s *testCluster) setupCluster(no int) {
 	options := persistencetests.TestBaseOptions{}
-	options.DBHost = "127.0.0.1"
 	options.DBName = "integration_" + clusterName[no]
-	options.DropDatabase = true
 	clusterInfo := clustersInfo[no]
-	metadata := cluster.NewMetadata(
+	options.ClusterMetadata = cluster.NewMetadata(
 		dynamicconfig.GetBoolPropertyFn(clusterInfo.EnableGlobalDomain),
 		clusterInfo.FailoverVersionIncrement,
 		clusterInfo.MasterClusterName,
 		clusterInfo.CurrentClusterName,
 		clusterInfo.ClusterInitialFailoverVersions,
 	)
-	cassandra.InitTestSuiteWithMetadata(&s.TestBase, &options, metadata)
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
+	s.TestBase.Setup()
 	s.setupShards()
 	messagingClient := s.createMessagingClient()
 	testNumberOfHistoryShards := 1 // use 1 shard so we can be sure when failover completed in standby cluster

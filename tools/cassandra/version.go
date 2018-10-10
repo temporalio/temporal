@@ -130,13 +130,21 @@ func getExpectedVersion(dir string) (string, error) {
 // In most cases, the versions should match. However if after a schema upgrade there is a code
 // rollback, the code version (expected version) would fall lower than the actual version in
 // cassandra.
-func VerifyCompatibleVersion(cfg config.Cassandra, rootPath string) error {
-	schemaPath := path.Join(rootPath, "schema/cassandra/cadence/versioned")
-	if err := checkCompatibleVersion(cfg, cfg.Keyspace, schemaPath); err != nil {
-		return err
+func VerifyCompatibleVersion(cfg config.Persistence, rootPath string) error {
+	ds, ok := cfg.DataStores[cfg.DefaultStore]
+	if ok && ds.Cassandra != nil {
+		schemaPath := path.Join(rootPath, "schema/cassandra/cadence/versioned")
+		err := checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+		if err != nil {
+			return err
+		}
 	}
-	schemaPath = path.Join(rootPath, "schema/cassandra/visibility/versioned")
-	return checkCompatibleVersion(cfg, cfg.VisibilityKeyspace, schemaPath)
+	ds, ok = cfg.DataStores[cfg.VisibilityStore]
+	if ok && ds.Cassandra != nil {
+		schemaPath := path.Join(rootPath, "schema/cassandra/visibility/versioned")
+		return checkCompatibleVersion(*ds.Cassandra, ds.Cassandra.Keyspace, schemaPath)
+	}
+	return nil
 }
 
 // checkCompatibleVersion check the version compatibility

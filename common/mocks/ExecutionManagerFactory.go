@@ -30,8 +30,8 @@ type ExecutionManagerFactory struct {
 	mock.Mock
 }
 
-// CreateExecutionManager provides a mock function with given fields: shardID
-func (_m *ExecutionManagerFactory) CreateExecutionManager(shardID int) (persistence.ExecutionManager, error) {
+// NewExecutionManager provides a mock function with given fields: shardID
+func (_m *ExecutionManagerFactory) NewExecutionManager(shardID int) (persistence.ExecutionManager, error) {
 	ret := _m.Called(shardID)
 
 	var r0 persistence.ExecutionManager

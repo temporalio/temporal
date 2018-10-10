@@ -124,7 +124,7 @@ func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
 	config *Config, logger bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 
-	executionMgr, err := executionMgrFactory.CreateExecutionManager(shardID)
+	executionMgr, err := executionMgrFactory.NewExecutionManager(shardID)
 	if err != nil {
 		return nil, err
 	}

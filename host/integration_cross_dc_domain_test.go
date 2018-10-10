@@ -37,7 +37,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	cassandra_persistence "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/common/persistence/persistence-tests"
 )
 
@@ -91,12 +90,10 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	options := persistencetests.TestBaseOptions{}
-	options.DBHost = "127.0.0.1"
-	options.DropDatabase = true
 	options.EnableGlobalDomain = enableGlobalDomain
 	options.IsMasterCluster = isMasterCluster
-	cassandra_persistence.InitTestSuiteWithOptions(&s.TestBase, &options)
-
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
+	s.TestBase.Setup()
 	s.setupShards()
 
 	// TODO: Use mock messaging client until we support kafka setup onebox to write end-to-end integration test

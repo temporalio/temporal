@@ -27,6 +27,7 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const (
@@ -96,12 +97,11 @@ type (
 	}
 )
 
-// NewMetadataPersistence is used to create an instance of HistoryManager implementation
-func NewMetadataPersistence(hosts string, port int, user, password, dc string, keyspace string,
-	currentClusterName string, logger bark.Logger) (p.MetadataStore,
+// newMetadataPersistence is used to create an instance of HistoryManager implementation
+func newMetadataPersistence(cfg config.Cassandra, clusterName string, logger bark.Logger) (p.MetadataStore,
 	error) {
-	cluster := NewCassandraCluster(hosts, port, user, password, dc)
-	cluster.Keyspace = keyspace
+	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)
+	cluster.Keyspace = cfg.Keyspace
 	cluster.ProtoVersion = cassandraProtoVersion
 	cluster.Consistency = gocql.LocalQuorum
 	cluster.SerialConsistency = gocql.LocalSerial
@@ -114,7 +114,7 @@ func NewMetadataPersistence(hosts string, port int, user, password, dc string, k
 
 	return &cassandraMetadataPersistence{
 		session:            session,
-		currentClusterName: currentClusterName,
+		currentClusterName: clusterName,
 		logger:             logger,
 	}, nil
 }

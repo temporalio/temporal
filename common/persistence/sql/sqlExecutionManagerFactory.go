@@ -24,35 +24,28 @@ import (
 	"github.com/uber/cadence/common/persistence"
 
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/common/service/config"
 )
 
 type (
 	sqlExecutionManagerFactory struct {
-		host               string
-		port               int
-		username           string
-		password           string
-		dbName             string
+		config             config.SQL
 		currentClusterName string
 		logger             bark.Logger
 	}
 )
 
-// NewExecutionManagerFactory creates ExecutionManagerFactory for SQL persistence.
-func NewExecutionManagerFactory(host string, port int, username, password, dbName string, currentClusterName string, logger bark.Logger) (persistence.ExecutionManagerFactory, error) {
+// newExecutionManagerFactory creates ExecutionManagerFactory for SQL persistence.
+func newExecutionManagerFactory(cfg config.SQL, currentClusterName string, logger bark.Logger) (persistence.ExecutionManagerFactory, error) {
 	return &sqlExecutionManagerFactory{
-		host:               host,
-		port:               port,
-		username:           username,
-		password:           password,
-		dbName:             dbName,
+		config:             cfg,
 		currentClusterName: currentClusterName,
 		logger:             logger,
 	}, nil
 }
 
-func (f *sqlExecutionManagerFactory) CreateExecutionManager(shardID int) (persistence.ExecutionManager, error) {
-	pMgr, err := NewSQLMatchingPersistence(f.host, f.port, f.username, f.password, f.dbName, f.logger)
+func (f *sqlExecutionManagerFactory) NewExecutionManager(shardID int) (persistence.ExecutionManager, error) {
+	pMgr, err := NewSQLMatchingPersistence(f.config, f.logger)
 	if err != nil {
 		return nil, err
 	}

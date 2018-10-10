@@ -21,18 +21,15 @@
 package sql
 
 import (
+	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/logging"
-	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	"github.com/uber/cadence/common/service/config"
 )
 
 const (
@@ -45,128 +42,24 @@ const (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	Options *persistencetests.TestBaseOptions
-	dbName  string
-	db      *sqlx.DB
+	dbName string
+	db     *sqlx.DB
+	cfg    config.SQL
 }
 
-// InitTestSuite initializes test suite to use cassandra
-func InitTestSuite(tb *persistencetests.TestBase) {
-	options := &persistencetests.TestBaseOptions{
-		SchemaDir:          testSchemaDir,
-		DBHost:             testWorkflowClusterHosts,
-		DBPort:             testPort,
-		DBUser:             testUser,
-		DBPassword:         testPassword,
-		DropDatabase:       true,
-		EnableGlobalDomain: false,
-		Datacenter:         "foo",
+// NewTestCluster returns a new SQL test cluster
+func NewTestCluster(dbName string) *TestCluster {
+	var result TestCluster
+	result.dbName = dbName
+	result.cfg = config.SQL{
+		User:            testUser,
+		Password:        testPassword,
+		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, testPort),
+		ConnectProtocol: "tcp",
+		DriverName:      driverName,
+		DatabaseName:    dbName,
 	}
-	InitTestSuiteWithOptions(tb, options)
-}
-
-// InitTestSuiteWithOptions initializes test suite to use cassandra given options
-func InitTestSuiteWithOptions(tb *persistencetests.TestBase, options *persistencetests.TestBaseOptions) {
-	InitTestSuiteWithMetadata(tb, options, cluster.GetTestClusterMetadata(
-		options.EnableGlobalDomain,
-		options.IsMasterCluster,
-	))
-}
-
-// InitTestSuiteWithMetadata initializes test suite to use cassandra given options and metadata
-func InitTestSuiteWithMetadata(tb *persistencetests.TestBase, options *persistencetests.TestBaseOptions, metadata cluster.Metadata) {
-	if metadata == nil {
-		panic("nil metadata")
-	}
-	if options.SchemaDir == "" {
-		options.SchemaDir = testSchemaDir
-	}
-	log := bark.NewLoggerFromLogrus(log.New())
-	tb.PersistenceTestCluster = &TestCluster{
-		Options: options,
-	}
-	tb.ClusterMetadata = metadata
-	currentClusterName := tb.ClusterMetadata.GetCurrentClusterName()
-	// Setup Workflow keyspace and deploy schema for tests
-	tb.PersistenceTestCluster.SetupTestDatabase(options)
-	shardID := 0
-	databaseName := tb.PersistenceTestCluster.DatabaseName()
-	var err error
-	tb.ShardMgr, err = NewShardPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, databaseName, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.ExecutionMgrFactory, err = NewExecutionManagerFactory(options.DBHost, options.DBPort,
-		options.DBUser, options.DBPassword, databaseName, options.Datacenter, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Create an ExecutionManager for the shard for use in unit tests
-	tb.ExecutionManager, err = tb.ExecutionMgrFactory.CreateExecutionManager(shardID)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.TaskMgr, err = NewTaskPersistence(options.DBHost, options.DBPort, options.DBUser, options.DBPassword,
-		databaseName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	historyPs, err := NewHistoryPersistence(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, databaseName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tb.HistoryMgr = p.NewHistoryManagerImpl(historyPs, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.MetadataManager, err = NewMetadataPersistenceV2(options.DBHost, options.DBPort, options.DBUser,
-		options.DBPassword, databaseName, currentClusterName, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tb.MetadataProxy = tb.MetadataManager
-	tb.MetadataManagerV2 = tb.MetadataManager
-	//tb.VisibilityMgr, err = NewVisibilityPersistence(options.DBHost, options.DBPort,
-	//	options.DBUser, options.DBPassword, options.Datacenter, databaseName, log)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	// Create a shard for test
-	tb.ReadLevel = 0
-	tb.ReplicationReadLevel = 0
-	tb.ShardInfo = &p.ShardInfo{
-		ShardID:                 shardID,
-		RangeID:                 0,
-		TransferAckLevel:        0,
-		ReplicationAckLevel:     0,
-		TimerAckLevel:           time.Time{},
-		ClusterTimerAckLevel:    map[string]time.Time{currentClusterName: time.Time{}},
-		ClusterTransferAckLevel: map[string]int64{currentClusterName: 0},
-	}
-	tb.TaskIDGenerator = &persistencetests.TestTransferTaskIDGenerator{}
-	err1 := tb.ShardMgr.CreateShard(&p.CreateShardRequest{
-		ShardInfo: tb.ShardInfo,
-	})
-	if err1 != nil {
-		log.Fatal(err1)
-	}
-}
-
-func getCadencePackageDir() (string, error) {
-	cadencePackageDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	cadenceIndex := strings.LastIndex(cadencePackageDir, "/cadence/")
-	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/cadence/")]
-	if err != nil {
-		panic(err)
-	}
-	return cadencePackageDir, err
+	return &result
 }
 
 // DatabaseName from PersistenceTestCluster interface
@@ -175,22 +68,29 @@ func (s *TestCluster) DatabaseName() string {
 }
 
 // SetupTestDatabase from PersistenceTestCluster interface
-func (s *TestCluster) SetupTestDatabase(options *persistencetests.TestBaseOptions) {
-	s.dbName = options.DBName
-	if s.dbName == "" {
-		s.dbName = persistencetests.GenerateRandomDBName(10)
-	}
-
-	s.CreateDatabase(options.DropDatabase)
-	s.CreateSession(options)
+func (s *TestCluster) SetupTestDatabase() {
+	s.CreateDatabase()
+	s.CreateSession()
 	cadencePackageDir, err := getCadencePackageDir()
 	if err != nil {
 		log.Fatal(err)
 	}
-	schemaDir := cadencePackageDir + options.SchemaDir + "/"
+	schemaDir := cadencePackageDir + testSchemaDir + "/"
 	s.LoadSchema([]string{"schema.sql"}, schemaDir)
 	// TODO: Visibility
 	//s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
+}
+
+// Config returns the persistence config for connecting to this test cluster
+func (s *TestCluster) Config() config.Persistence {
+	cfg := s.cfg
+	return config.Persistence{
+		DefaultStore:    "test",
+		VisibilityStore: "test",
+		DataStores: map[string]config.DataStore{
+			"test": {SQL: &cfg},
+		},
+	}
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface
@@ -200,17 +100,17 @@ func (s *TestCluster) TearDownTestDatabase() {
 }
 
 // CreateSession from PersistenceTestCluster interface
-func (s *TestCluster) CreateSession(options *persistencetests.TestBaseOptions) {
+func (s *TestCluster) CreateSession() {
 	var err error
-	s.db, err = newConnection(options.DBHost, options.DBPort, options.DBUser, options.DBPassword, s.dbName)
+	s.db, err = newConnection(s.cfg)
 	if err != nil {
 		log.WithField(logging.TagErr, err).Fatal(`CreateSession`)
 	}
 }
 
 // CreateDatabase from PersistenceTestCluster interface
-func (s *TestCluster) CreateDatabase(overwrite bool) {
-	err := createDatabase(s.Options.DBHost, s.Options.DBPort, s.Options.DBUser, s.Options.DBPassword, s.dbName, overwrite)
+func (s *TestCluster) CreateDatabase() {
+	err := createDatabase(driverName, testWorkflowClusterHosts, testPort, testUser, testPassword, s.dbName, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -236,4 +136,17 @@ func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
 // LoadVisibilitySchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
 	log.Fatal("LoadVisibilitySchema is not supportedy by SQL yet")
+}
+
+func getCadencePackageDir() (string, error) {
+	cadencePackageDir, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	cadenceIndex := strings.LastIndex(cadencePackageDir, "/cadence/")
+	cadencePackageDir = cadencePackageDir[:cadenceIndex+len("/cadence/")]
+	if err != nil {
+		panic(err)
+	}
+	return cadencePackageDir, err
 }

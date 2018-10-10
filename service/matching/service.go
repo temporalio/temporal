@@ -24,11 +24,10 @@ import (
 	"time"
 
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 
-	"github.com/uber/cadence/common/persistence/cassandra"
+	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 )
 
 // Config represents configuration for cadence-matching service
@@ -90,44 +89,26 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 // Start starts the service
 func (s *Service) Start() {
 
-	var p = s.params
-	var log = p.Logger
+	var params = s.params
+	var log = params.Logger
 
 	log.Infof("%v starting", common.MatchingServiceName)
 
-	base := service.New(p)
+	base := service.New(params)
 
-	persistenceMaxQPS := s.config.PersistenceMaxQPS()
-	persistenceRateLimiter := common.NewTokenBucket(persistenceMaxQPS, common.NewRealTimeSource())
+	pConfig := params.PersistenceConfig
+	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
+	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
-	taskPersistence, err := cassandra.NewTaskPersistence(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		log)
-
+	taskPersistence, err := pFactory.NewTaskManager()
 	if err != nil {
 		log.Fatalf("failed to create task persistence: %v", err)
 	}
-	taskPersistence = persistence.NewTaskPersistenceRateLimitedClient(taskPersistence, persistenceRateLimiter, log)
-	taskPersistence = persistence.NewTaskPersistenceMetricsClient(taskPersistence, base.GetMetricsClient(), log)
 
-	metadata, err := cassandra.NewMetadataManagerProxy(p.CassandraConfig.Hosts,
-		p.CassandraConfig.Port,
-		p.CassandraConfig.User,
-		p.CassandraConfig.Password,
-		p.CassandraConfig.Datacenter,
-		p.CassandraConfig.Keyspace,
-		p.ClusterMetadata.GetCurrentClusterName(),
-		log)
-
+	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
 	if err != nil {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
-	metadata = persistence.NewMetadataPersistenceRateLimitedClient(metadata, persistenceRateLimiter, log)
-	metadata = persistence.NewMetadataPersistenceMetricsClient(metadata, base.GetMetricsClient(), log)
 
 	handler := NewHandler(base, s.config, taskPersistence, metadata)
 	handler.Start()

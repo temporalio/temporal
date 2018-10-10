@@ -118,7 +118,7 @@ func (s *shardControllerSuite) TestAcquireShardSuccess() {
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
 			mockExecutionMgr := &mmocks.ExecutionManager{}
-			s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
+			s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 			mockEngine := &MockHistoryEngine{}
 			mockEngine.On("Start").Return().Once()
 			s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
@@ -208,7 +208,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewSuccess() {
 
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
-		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
+		s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		mockEngine := &MockHistoryEngine{}
 		mockEngine.On("Start").Return().Once()
 		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
@@ -283,7 +283,7 @@ func (s *shardControllerSuite) TestAcquireShardRenewLookupFailed() {
 
 	for shardID := 0; shardID < numShards; shardID++ {
 		mockExecutionMgr := &mmocks.ExecutionManager{}
-		s.mockExecutionMgrFactory.On("CreateExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
+		s.mockExecutionMgrFactory.On("NewExecutionManager", mock.Anything).Return(mockExecutionMgr, nil).Once()
 		mockEngine := &MockHistoryEngine{}
 		mockEngine.On("Start").Return().Once()
 		s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
@@ -580,7 +580,7 @@ func (s *shardControllerSuite) setupMocksForAcquireShard(shardID int, mockEngine
 
 	mockExecutionMgr := &mmocks.ExecutionManager{}
 	mockExecutionMgr.On("Close").Return()
-	s.mockExecutionMgrFactory.On("CreateExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
+	s.mockExecutionMgrFactory.On("NewExecutionManager", shardID).Return(mockExecutionMgr, nil).Once()
 	mockEngine.On("Start").Return().Once()
 	s.mockServiceResolver.On("Lookup", string(shardID)).Return(s.hostInfo, nil).Twice()
 	s.mockEngineFactory.On("CreateEngine", mock.Anything).Return(mockEngine).Once()
