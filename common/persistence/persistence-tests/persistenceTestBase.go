@@ -47,7 +47,8 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		DBName string
+		DBName    string
+		SchemaDir string
 		// TODO this is used for global domain test
 		// when crtoss DC is public, remove EnableGlobalDomain
 		EnableGlobalDomain bool // is global domain enabled
@@ -97,7 +98,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
@@ -106,7 +107,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	testCluster := sql.NewTestCluster(options.DBName)
+	testCluster := sql.NewTestCluster(options.DBName, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 

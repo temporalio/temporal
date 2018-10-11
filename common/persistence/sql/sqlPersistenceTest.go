@@ -42,15 +42,20 @@ const (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	dbName string
-	db     *sqlx.DB
-	cfg    config.SQL
+	dbName    string
+	schemaDir string
+	db        *sqlx.DB
+	cfg       config.SQL
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(dbName string) *TestCluster {
+func NewTestCluster(dbName string, schemaDir string) *TestCluster {
+	if schemaDir == "" {
+		schemaDir = testSchemaDir
+	}
 	var result TestCluster
 	result.dbName = dbName
+	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
 		User:            testUser,
 		Password:        testPassword,
@@ -75,7 +80,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	schemaDir := cadencePackageDir + testSchemaDir + "/"
+	schemaDir := cadencePackageDir + s.schemaDir + "/"
 	s.LoadSchema([]string{"schema.sql"}, schemaDir)
 	// TODO: Visibility
 	//s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)

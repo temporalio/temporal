@@ -41,16 +41,21 @@ const (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	keyspace string
-	cluster  *gocql.ClusterConfig
-	session  *gocql.Session
-	cfg      config.Cassandra
+	keyspace  string
+	schemaDir string
+	cluster   *gocql.ClusterConfig
+	session   *gocql.Session
+	cfg       config.Cassandra
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace string) *TestCluster {
+func NewTestCluster(keyspace string, schemaDir string) *TestCluster {
+	if schemaDir == "" {
+		schemaDir = testSchemaDir
+	}
 	var result TestCluster
 	result.keyspace = keyspace
+	result.schemaDir = schemaDir
 	result.cfg = config.Cassandra{
 		User:     testUser,
 		Password: testPassword,
@@ -83,7 +88,7 @@ func (s *TestCluster) DatabaseName() string {
 func (s *TestCluster) SetupTestDatabase() {
 	s.CreateSession()
 	s.CreateDatabase()
-	schemaDir := testSchemaDir + "/"
+	schemaDir := s.schemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
 		cadencePackageDir, err := getCadencePackageDir()
