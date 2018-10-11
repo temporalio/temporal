@@ -49,9 +49,12 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new SQL test cluster
-func NewTestCluster(dbName string, schemaDir string) *TestCluster {
+func NewTestCluster(port int, dbName string, schemaDir string) *TestCluster {
 	if schemaDir == "" {
 		schemaDir = testSchemaDir
+	}
+	if port == 0 {
+		port = testPort
 	}
 	var result TestCluster
 	result.dbName = dbName
@@ -59,7 +62,7 @@ func NewTestCluster(dbName string, schemaDir string) *TestCluster {
 	result.cfg = config.SQL{
 		User:            testUser,
 		Password:        testPassword,
-		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, testPort),
+		ConnectAddr:     fmt.Sprintf("%v:%v", testWorkflowClusterHosts, port),
 		ConnectProtocol: "tcp",
 		DriverName:      driverName,
 		DatabaseName:    dbName,
@@ -115,7 +118,7 @@ func (s *TestCluster) CreateSession() {
 
 // CreateDatabase from PersistenceTestCluster interface
 func (s *TestCluster) CreateDatabase() {
-	err := createDatabase(driverName, testWorkflowClusterHosts, testPort, testUser, testPassword, s.dbName, true)
+	err := createDatabase(driverName, s.cfg.ConnectAddr, testUser, testPassword, s.dbName, true)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -49,9 +49,12 @@ type TestCluster struct {
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace string, schemaDir string) *TestCluster {
+func NewTestCluster(port int, keyspace string, schemaDir string) *TestCluster {
 	if schemaDir == "" {
 		schemaDir = testSchemaDir
+	}
+	if port == 0 {
+		port = testPort
 	}
 	var result TestCluster
 	result.keyspace = keyspace
@@ -60,7 +63,7 @@ func NewTestCluster(keyspace string, schemaDir string) *TestCluster {
 		User:     testUser,
 		Password: testPassword,
 		Hosts:    testWorkflowClusterHosts,
-		Port:     testPort,
+		Port:     port,
 		MaxConns: 2,
 		Keyspace: keyspace,
 	}
@@ -110,7 +113,7 @@ func (s *TestCluster) TearDownTestDatabase() {
 
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession() {
-	s.cluster = NewCassandraCluster(testWorkflowClusterHosts, testPort, testUser, testPassword, "")
+	s.cluster = NewCassandraCluster(testWorkflowClusterHosts, s.cfg.Port, testUser, testPassword, "")
 	s.cluster.Consistency = gocql.Consistency(1)
 	s.cluster.Keyspace = "system"
 	s.cluster.Timeout = 40 * time.Second

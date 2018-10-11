@@ -24,8 +24,6 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"strconv"
-
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -46,8 +44,7 @@ func newConnection(cfg config.SQL) (*sqlx.DB, error) {
 	return db, nil
 }
 
-func createDatabase(driver string, host string, port int, username, password, dbName string, overwrite bool) error {
-	addr := host + ":" + strconv.Itoa(port)
+func createDatabase(driver string, addr string, username, password, dbName string, overwrite bool) error {
 	var db, err = sqlx.Connect(driver, fmt.Sprintf(dataSourceName, username, password, "tcp", addr, ""))
 	if err != nil {
 		return fmt.Errorf("failure connecting to mysql database: %v", err)

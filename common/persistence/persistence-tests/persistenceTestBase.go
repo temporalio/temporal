@@ -47,6 +47,7 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
+		DBPort    int
 		DBName    string
 		SchemaDir string
 		// TODO this is used for global domain test
@@ -98,7 +99,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.SchemaDir)
+	testCluster := cassandra.NewTestCluster(options.DBPort, options.DBName, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
@@ -107,7 +108,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	testCluster := sql.NewTestCluster(options.DBName, options.SchemaDir)
+	testCluster := sql.NewTestCluster(options.DBPort, options.DBName, options.SchemaDir)
 	return newTestBase(options, testCluster)
 }
 
