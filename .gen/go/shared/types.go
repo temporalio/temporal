@@ -6113,6 +6113,7 @@ type DecisionTaskCompletedEventAttributes struct {
 	ScheduledEventId *int64  `json:"scheduledEventId,omitempty"`
 	StartedEventId   *int64  `json:"startedEventId,omitempty"`
 	Identity         *string `json:"identity,omitempty"`
+	BinaryChecksum   *string `json:"binaryChecksum,omitempty"`
 }
 
 // ToWire translates a DecisionTaskCompletedEventAttributes struct into a Thrift-level intermediate
@@ -6132,7 +6133,7 @@ type DecisionTaskCompletedEventAttributes struct {
 //   }
 func (v *DecisionTaskCompletedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [4]wire.Field
+		fields [5]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -6168,6 +6169,14 @@ func (v *DecisionTaskCompletedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		w, err = wire.NewValueString(*(v.BinaryChecksum)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
 		i++
 	}
 
@@ -6234,6 +6243,16 @@ func (v *DecisionTaskCompletedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 50:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BinaryChecksum = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -6247,7 +6266,7 @@ func (v *DecisionTaskCompletedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [4]string
+	var fields [5]string
 	i := 0
 	if v.ExecutionContext != nil {
 		fields[i] = fmt.Sprintf("ExecutionContext: %v", v.ExecutionContext)
@@ -6263,6 +6282,10 @@ func (v *DecisionTaskCompletedEventAttributes) String() string {
 	}
 	if v.Identity != nil {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		fields[i] = fmt.Sprintf("BinaryChecksum: %v", *(v.BinaryChecksum))
 		i++
 	}
 
@@ -6284,6 +6307,9 @@ func (v *DecisionTaskCompletedEventAttributes) Equals(rhs *DecisionTaskCompleted
 		return false
 	}
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
+		return false
+	}
+	if !_String_EqualsPtr(v.BinaryChecksum, rhs.BinaryChecksum) {
 		return false
 	}
 
@@ -6325,6 +6351,16 @@ func (v *DecisionTaskCompletedEventAttributes) GetStartedEventId() (o int64) {
 func (v *DecisionTaskCompletedEventAttributes) GetIdentity() (o string) {
 	if v.Identity != nil {
 		return *v.Identity
+	}
+
+	return
+}
+
+// GetBinaryChecksum returns the value of BinaryChecksum if it is set or its
+// zero value if it is unset.
+func (v *DecisionTaskCompletedEventAttributes) GetBinaryChecksum() (o string) {
+	if v.BinaryChecksum != nil {
+		return *v.BinaryChecksum
 	}
 
 	return
@@ -23681,6 +23717,7 @@ type RespondDecisionTaskCompletedRequest struct {
 	StickyAttributes           *StickyExecutionAttributes `json:"stickyAttributes,omitempty"`
 	ReturnNewDecisionTask      *bool                      `json:"returnNewDecisionTask,omitempty"`
 	ForceCreateNewDecisionTask *bool                      `json:"forceCreateNewDecisionTask,omitempty"`
+	BinaryChecksum             *string                    `json:"binaryChecksum,omitempty"`
 }
 
 type _List_Decision_ValueList []*Decision
@@ -23729,7 +23766,7 @@ func (_List_Decision_ValueList) Close() {}
 //   }
 func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -23789,6 +23826,14 @@ func (v *RespondDecisionTaskCompletedRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		w, err = wire.NewValueString(*(v.BinaryChecksum)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 
@@ -23909,6 +23954,16 @@ func (v *RespondDecisionTaskCompletedRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 80:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BinaryChecksum = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -23922,7 +23977,7 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -23950,6 +24005,10 @@ func (v *RespondDecisionTaskCompletedRequest) String() string {
 	}
 	if v.ForceCreateNewDecisionTask != nil {
 		fields[i] = fmt.Sprintf("ForceCreateNewDecisionTask: %v", *(v.ForceCreateNewDecisionTask))
+		i++
+	}
+	if v.BinaryChecksum != nil {
+		fields[i] = fmt.Sprintf("BinaryChecksum: %v", *(v.BinaryChecksum))
 		i++
 	}
 
@@ -23995,6 +24054,9 @@ func (v *RespondDecisionTaskCompletedRequest) Equals(rhs *RespondDecisionTaskCom
 		return false
 	}
 	if !_Bool_EqualsPtr(v.ForceCreateNewDecisionTask, rhs.ForceCreateNewDecisionTask) {
+		return false
+	}
+	if !_String_EqualsPtr(v.BinaryChecksum, rhs.BinaryChecksum) {
 		return false
 	}
 
@@ -24066,6 +24128,16 @@ func (v *RespondDecisionTaskCompletedRequest) GetReturnNewDecisionTask() (o bool
 func (v *RespondDecisionTaskCompletedRequest) GetForceCreateNewDecisionTask() (o bool) {
 	if v.ForceCreateNewDecisionTask != nil {
 		return *v.ForceCreateNewDecisionTask
+	}
+
+	return
+}
+
+// GetBinaryChecksum returns the value of BinaryChecksum if it is set or its
+// zero value if it is unset.
+func (v *RespondDecisionTaskCompletedRequest) GetBinaryChecksum() (o string) {
+	if v.BinaryChecksum != nil {
+		return *v.BinaryChecksum
 	}
 
 	return

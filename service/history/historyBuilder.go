@@ -510,6 +510,7 @@ func (b *historyBuilder) newDecisionTaskCompletedEvent(scheduleEventID, startedE
 	attributes.ScheduledEventId = common.Int64Ptr(scheduleEventID)
 	attributes.StartedEventId = common.Int64Ptr(startedEventID)
 	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
+	attributes.BinaryChecksum = request.BinaryChecksum
 	historyEvent.DecisionTaskCompletedEventAttributes = attributes
 
 	return historyEvent
