@@ -201,13 +201,15 @@ func RegisterDomain(c *cli.Context) {
 	}
 
 	domainData := map[string]string{}
-	if len(requiredDomainDataKeys) > 0 {
+	if c.IsSet(FlagDomainData) {
 		domainDataStr := getRequiredOption(c, FlagDomainData)
 		domainData, err = parseDomainDataKVs(domainDataStr)
 		if err != nil {
 			fmt.Printf("Register Domain failed: %v.\n", err.Error())
 			return
 		}
+	}
+	if len(requiredDomainDataKeys) > 0 {
 		err = checkRequiredDomainDataKVs(domainData)
 		if err != nil {
 			fmt.Printf("Register Domain failed: %v.\n", err.Error())
