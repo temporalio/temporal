@@ -1023,8 +1023,8 @@ func (_m *mockMutableState) DeleteUserTimer(_a0 string) {
 }
 
 // FailDecision provides a mock function with given fields:
-func (_m *mockMutableState) FailDecision() {
-	_m.Called()
+func (_m *mockMutableState) FailDecision(incrementAttempt bool) {
+	_m.Called(incrementAttempt)
 }
 
 // FlushBufferedEvents provides a mock function with given fields:
@@ -1895,8 +1895,8 @@ func (_m *mockMutableState) ReplicateDecisionTaskCompletedEvent(_a0 int64, _a1 i
 }
 
 // ReplicateDecisionTaskFailedEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) ReplicateDecisionTaskFailedEvent(_a0 int64, _a1 int64) {
-	_m.Called(_a0, _a1)
+func (_m *mockMutableState) ReplicateDecisionTaskFailedEvent() {
+	_m.Called()
 }
 
 // ReplicateDecisionTaskScheduledEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
@@ -1932,8 +1932,8 @@ func (_m *mockMutableState) ReplicateDecisionTaskStartedEvent(_a0 *decisionInfo,
 }
 
 // ReplicateDecisionTaskTimedOutEvent provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) ReplicateDecisionTaskTimedOutEvent(_a0 int64, _a1 int64) {
-	_m.Called(_a0, _a1)
+func (_m *mockMutableState) ReplicateDecisionTaskTimedOutEvent(_a0 shared.TimeoutType) {
+	_m.Called(_a0)
 }
 
 // ReplicateExternalWorkflowExecutionCancelRequested provides a mock function with given fields: _a0

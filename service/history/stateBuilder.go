@@ -137,13 +137,10 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 
 		case shared.EventTypeDecisionTaskTimedOut:
 			attributes := event.DecisionTaskTimedOutEventAttributes
-			b.msBuilder.ReplicateDecisionTaskTimedOutEvent(attributes.GetScheduledEventId(),
-				attributes.GetStartedEventId())
+			b.msBuilder.ReplicateDecisionTaskTimedOutEvent(attributes.GetTimeoutType())
 
 		case shared.EventTypeDecisionTaskFailed:
-			attributes := event.DecisionTaskFailedEventAttributes
-			b.msBuilder.ReplicateDecisionTaskFailedEvent(attributes.GetScheduledEventId(),
-				attributes.GetStartedEventId())
+			b.msBuilder.ReplicateDecisionTaskFailedEvent()
 
 		case shared.EventTypeActivityTaskScheduled:
 			ai := b.msBuilder.ReplicateActivityTaskScheduledEvent(event)

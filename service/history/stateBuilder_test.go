@@ -1230,9 +1230,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskTimedOut() {
 		DecisionTaskTimedOutEventAttributes: &shared.DecisionTaskTimedOutEventAttributes{
 			ScheduledEventId: common.Int64Ptr(scheduleID),
 			StartedEventId:   common.Int64Ptr(startedID),
+			TimeoutType:      shared.TimeoutTypeStartToClose.Ptr(),
 		},
 	}
-	s.mockMutableState.On("ReplicateDecisionTaskTimedOutEvent", scheduleID, startedID).Once()
+	s.mockMutableState.On("ReplicateDecisionTaskTimedOutEvent", shared.TimeoutTypeStartToClose).Once()
 	s.mockUpdateVersion(event)
 
 	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil)
@@ -1375,7 +1376,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeDecisionTaskFailed() {
 			StartedEventId:   common.Int64Ptr(startedID),
 		},
 	}
-	s.mockMutableState.On("ReplicateDecisionTaskFailedEvent", scheduleID, startedID).Once()
+	s.mockMutableState.On("ReplicateDecisionTaskFailedEvent").Once()
 	s.mockUpdateVersion(event)
 
 	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil)

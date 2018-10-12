@@ -6193,6 +6193,181 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	s.Equal(101, signalCount)
 }
 
+func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
+	id := "interation-sticky-timeout-non-transient-decision"
+	wt := "interation-sticky-timeout-non-transient-decision-type"
+	tl := "interation-sticky-timeout-non-transient-decision-tasklist"
+	stl := "interation-sticky-timeout-non-transient-decision-tasklist-sticky"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	stickyTaskList := &workflow.TaskList{}
+	stickyTaskList.Name = common.StringPtr(stl)
+	stickyScheduleToStartTimeoutSeconds := common.Int32Ptr(2)
+
+	// Start workflow execution
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+	workflowExecution := &workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr(id),
+		RunId:      we.RunId,
+	}
+
+	// decider logic
+	localActivityDone := false
+	failureCount := 5
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		if !localActivityDone {
+			localActivityDone = true
+
+			return nil, []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeRecordMarker),
+				RecordMarkerDecisionAttributes: &workflow.RecordMarkerDecisionAttributes{
+					MarkerName: common.StringPtr("local activity marker"),
+					Details:    []byte("local activity data"),
+				},
+			}}, nil
+		}
+
+		if failureCount > 0 {
+			// send a signal on third failure to be buffered, forcing a non-transient decision when buffer is flushed
+			/*if failureCount == 3 {
+				err := s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+					Domain:            common.StringPtr(s.domainName),
+					WorkflowExecution: workflowExecution,
+					SignalName:        common.StringPtr("signalB"),
+					Input:             []byte("signal input"),
+					Identity:          common.StringPtr(identity),
+					RequestId:         common.StringPtr(uuid.New()),
+				})
+				s.Nil(err)
+			}*/
+			failureCount--
+			return nil, nil, errors.New("non deterministic error")
+		}
+
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:                              s.engine,
+		Domain:                              s.domainName,
+		TaskList:                            taskList,
+		Identity:                            identity,
+		DecisionHandler:                     dtHandler,
+		Logger:                              s.logger,
+		T:                                   s.T(),
+		StickyTaskList:                      stickyTaskList,
+		StickyScheduleToStartTimeoutSeconds: stickyScheduleToStartTimeoutSeconds,
+	}
+
+	_, err := poller.PollAndProcessDecisionTaskWithAttempt(false, false, false, true, int64(0))
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+
+	err = s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain:            common.StringPtr(s.domainName),
+		WorkflowExecution: workflowExecution,
+		SignalName:        common.StringPtr("signalA"),
+		Input:             []byte("signal input"),
+		Identity:          common.StringPtr(identity),
+		RequestId:         common.StringPtr(uuid.New()),
+	})
+
+	// Wait for decision timeout
+	stickyTimeout := false
+WaitForStickyTimeoutLoop:
+	for i := 0; i < 10; i++ {
+		events := s.getHistory(s.domainName, workflowExecution)
+		for _, event := range events {
+			if event.GetEventType() == workflow.EventTypeDecisionTaskTimedOut {
+				s.Equal(workflow.TimeoutTypeScheduleToStart, event.DecisionTaskTimedOutEventAttributes.GetTimeoutType())
+				stickyTimeout = true
+				break WaitForStickyTimeoutLoop
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	s.True(stickyTimeout, "Decision not timed out.")
+
+	for i := 0; i < 3; i++ {
+		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(err)
+	}
+
+	err = s.engine.SignalWorkflowExecution(createContext(), &workflow.SignalWorkflowExecutionRequest{
+		Domain:            common.StringPtr(s.domainName),
+		WorkflowExecution: workflowExecution,
+		SignalName:        common.StringPtr("signalB"),
+		Input:             []byte("signal input"),
+		Identity:          common.StringPtr(identity),
+		RequestId:         common.StringPtr(uuid.New()),
+	})
+	s.Nil(err)
+
+	for i := 0; i < 2; i++ {
+		_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(i))
+		s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+		s.Nil(err)
+	}
+
+	decisionTaskFailed := false
+	events := s.getHistory(s.domainName, workflowExecution)
+	for _, event := range events {
+		if event.GetEventType() == workflow.EventTypeDecisionTaskFailed {
+			decisionTaskFailed = true
+			break
+		}
+	}
+	s.True(decisionTaskFailed)
+
+	// Complete workflow execution
+	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, true, int64(2))
+
+	// Assert for single decision task failed and workflow completion
+	failedDecisions := 0
+	workflowComplete := false
+	events = s.getHistory(s.domainName, workflowExecution)
+	for _, event := range events {
+		switch event.GetEventType() {
+		case workflow.EventTypeDecisionTaskFailed:
+			failedDecisions++
+		case workflow.EventTypeWorkflowExecutionCompleted:
+			workflowComplete = true
+		}
+	}
+	s.True(workflowComplete, "Workflow not complete")
+	s.Equal(2, failedDecisions, "Mismatched failed decision count")
+	s.printWorkflowHistory(s.domainName, workflowExecution)
+}
+
 func (s *integrationSuite) getHistory(domain string, execution *workflow.WorkflowExecution) []*workflow.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
 		Domain:          common.StringPtr(domain),

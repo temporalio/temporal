@@ -107,7 +107,7 @@ type (
 		DeleteSignalRequested(requestID string)
 		DeletePendingSignal(int64)
 		DeleteUserTimer(string)
-		FailDecision()
+		FailDecision(bool)
 		FlushBufferedEvents() error
 		GetActivityByActivityID(string) (*persistence.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
@@ -165,10 +165,10 @@ type (
 		ReplicateChildWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
 		ReplicateChildWorkflowExecutionTimedOutEvent(*workflow.HistoryEvent)
 		ReplicateDecisionTaskCompletedEvent(int64, int64)
-		ReplicateDecisionTaskFailedEvent(int64, int64)
+		ReplicateDecisionTaskFailedEvent()
 		ReplicateDecisionTaskScheduledEvent(int64, int64, string, int32, int64) *decisionInfo
 		ReplicateDecisionTaskStartedEvent(*decisionInfo, int64, int64, int64, string, int64) *decisionInfo
-		ReplicateDecisionTaskTimedOutEvent(int64, int64)
+		ReplicateDecisionTaskTimedOutEvent(workflow.TimeoutType)
 		ReplicateExternalWorkflowExecutionCancelRequested(*workflow.HistoryEvent)
 		ReplicateExternalWorkflowExecutionSignaled(*workflow.HistoryEvent)
 		ReplicateRequestCancelExternalWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
