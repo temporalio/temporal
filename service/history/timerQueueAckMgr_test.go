@@ -134,10 +134,11 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.metricsClient, s.logger),
 		metricsClient:             s.metricsClient,
+		timerMaxReadLevelMap:      make(map[string]time.Time),
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
-	// this is used by shard context, not relevent to this test, so we do not care how many times "GetCurrentClusterName" os called
+	// this is used by shard context, not relevant to this test, so we do not care how many times "GetCurrentClusterName" is called
 	s.clusterName = cluster.TestCurrentClusterName
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
 		0,
@@ -151,6 +152,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 			return s.mockShard.UpdateTimerClusterAckLevel(s.clusterName, ackLevel.VisibilityTimestamp)
 		},
 		s.logger,
+		s.clusterName,
 	)
 }
 
@@ -509,7 +511,8 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
-	level := s.mockShard.UpdateTimerMaxReadLevel()
+	s.mockClusterMetadata.On("GetCurrentClusterName").Return(s.clusterName)
+	level := s.mockShard.UpdateTimerMaxReadLevel(s.clusterName)
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
@@ -580,6 +583,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, s.metricsClient, s.logger),
 		metricsClient:             s.metricsClient,
+		timerMaxReadLevelMap:      make(map[string]time.Time),
 	}
 	s.mockShard.config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 

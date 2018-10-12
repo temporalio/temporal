@@ -68,6 +68,8 @@ type (
 		minQueryLevel time.Time
 		maxQueryLevel time.Time
 		pageToken     []byte
+
+		clusterName string
 	}
 	// for each cluster, the ack level is the point in time when
 	// all timers before the ack level are processed.
@@ -95,7 +97,7 @@ func (t timerSequenceIDs) Less(i, j int) bool {
 }
 
 func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Client,
-	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger bark.Logger) *timerQueueAckMgrImpl {
+	minLevel time.Time, timeNow timeNow, updateTimerAckLevel updateTimerAckLevel, logger bark.Logger, clusterName string) *timerQueueAckMgrImpl {
 	ackLevel := TimerSequenceID{VisibilityTimestamp: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
@@ -117,6 +119,7 @@ func newTimerQueueAckMgr(scope int, shard ShardContext, metricsClient metrics.Cl
 		maxQueryLevel:       ackLevel.VisibilityTimestamp,
 		isReadFinished:      false,
 		finishedChan:        nil,
+		clusterName:         clusterName,
 	}
 
 	return timerQueueAckMgrImpl
@@ -158,7 +161,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.UpdateTimerMaxReadLevel()
+		t.maxQueryLevel = t.shard.UpdateTimerMaxReadLevel(t.clusterName)
 	}
 	minQueryLevel := t.minQueryLevel
 	maxQueryLevel := t.maxQueryLevel

@@ -127,6 +127,7 @@ func (s *timerQueueStandbyProcessorSuite) SetupTest() {
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
+		timerMaxReadLevelMap:      make(map[string]time.Time),
 	}
 
 	historyCache := newHistoryCache(s.mockShard)

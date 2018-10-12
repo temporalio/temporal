@@ -50,7 +50,7 @@ type Config struct {
 	RangeSizeBits        uint
 	AcquireShardInterval dynamicconfig.DurationPropertyFn
 
-	// the atrificial delay added to standby cluster's view of active cluster's time
+	// the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay dynamicconfig.DurationPropertyFn
 
 	// TimerQueueProcessor settings

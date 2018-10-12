@@ -1052,7 +1052,7 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 	return nil
 }
 
-// SyncShardStatus is called by processor to sync history shrad information from another cluster
+// SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, syncShardStatusRequest *hist.SyncShardStatusRequest) error {
 	h.startWG.Wait()
 

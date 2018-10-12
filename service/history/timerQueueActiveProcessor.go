@@ -74,6 +74,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		timeNow,
 		updateShardAckLevel,
 		logger,
+		currentClusterName,
 	)
 
 	processor := &timerQueueActiveProcessorImpl{

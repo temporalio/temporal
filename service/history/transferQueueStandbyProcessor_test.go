@@ -130,6 +130,7 @@ func (s *transferQueueStandbyProcessorSuite) SetupTest() {
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 		standbyClusterCurrentTime: make(map[string]time.Time),
+		timerMaxReadLevelMap:      make(map[string]time.Time),
 	}
 
 	historyCache := newHistoryCache(s.mockShard)

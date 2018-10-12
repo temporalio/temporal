@@ -79,8 +79,8 @@ type (
 		GetTimeSource() common.TimeSource
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
-		GetTimerMaxReadLevel() time.Time
-		UpdateTimerMaxReadLevel() time.Time
+		GetTimerMaxReadLevel(cluster string) time.Time
+		UpdateTimerMaxReadLevel(cluster string) time.Time
 	}
 
 	shardContextImpl struct {
@@ -105,7 +105,7 @@ type (
 		transferSequenceNumber    int64
 		maxTransferSequenceNumber int64
 		transferMaxReadLevel      int64
-		timerMaxReadLevel         time.Time
+		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
 
 		// exist only in memory
 		standbyClusterCurrentTime map[string]time.Time
@@ -312,19 +312,24 @@ func (s *shardContextImpl) UpdateDomainNotificationVersion(domainNotificationVer
 	return s.updateShardInfoLocked()
 }
 
-func (s *shardContextImpl) GetTimerMaxReadLevel() time.Time {
+func (s *shardContextImpl) GetTimerMaxReadLevel(cluster string) time.Time {
 	s.RLock()
 	defer s.RUnlock()
 
-	return s.timerMaxReadLevel
+	return s.timerMaxReadLevelMap[cluster]
 }
 
-func (s *shardContextImpl) UpdateTimerMaxReadLevel() time.Time {
+func (s *shardContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 	s.Lock()
 	defer s.Unlock()
 
-	s.timerMaxReadLevel = s.GetTimeSource().Now().Add(s.config.TimerProcessorMaxTimeShift())
-	return s.timerMaxReadLevel
+	currentTime := s.GetTimeSource().Now()
+	if cluster != "" && cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		currentTime = s.standbyClusterCurrentTime[cluster]
+	}
+
+	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift())
+	return s.timerMaxReadLevelMap[cluster]
 }
 
 func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (
@@ -793,17 +798,24 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
+	clusterMetadata := s.GetService().GetClusterMetadata()
+	cluster := s.currentCluster
 	for _, task := range timerTasks {
 		ts, err := persistence.GetVisibilityTSFrom(task)
 		if err != nil {
 			panic(err)
 		}
-		if ts.Before(s.timerMaxReadLevel) {
+
+		if task.GetVersion() != common.EmptyVersion {
+			cluster = clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		}
+
+		if ts.Before(s.timerMaxReadLevelMap[cluster]) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
-				time.Now(), ts, s.timerMaxReadLevel)
-			persistence.SetVisibilityTSFrom(task, s.timerMaxReadLevel.Add(time.Millisecond))
+			s.logger.WithField("Cluster", cluster).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+				time.Now(), ts, s.timerMaxReadLevelMap[cluster])
+			persistence.SetVisibilityTSFrom(task, s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
 		}
 
 		seqNum, err := s.getNextTransferTaskIDLocked()
@@ -815,7 +827,7 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 		if err != nil {
 			return err
 		}
-		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
+		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLevel: %v",
 			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel)
 	}
 	return nil
@@ -844,7 +856,7 @@ func (s *shardContextImpl) GetCurrentTime(cluster string) time.Time {
 	if cluster != s.GetService().GetClusterMetadata().GetCurrentClusterName() {
 		return s.standbyClusterCurrentTime[cluster]
 	}
-	return time.Now()
+	return s.GetTimeSource().Now()
 }
 
 // TODO: This method has too many parameters.  Clean it up.  Maybe create a struct to pass in as parameter.
@@ -901,13 +913,18 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 
 	// initialize the cluster current time to be the same as ack level
 	standbyClusterCurrentTime := make(map[string]time.Time)
+	timerMaxReadLevelMap := make(map[string]time.Time)
 	for clusterName := range shardItem.service.GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != shardItem.service.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
 				standbyClusterCurrentTime[clusterName] = currentTime
+				timerMaxReadLevelMap[clusterName] = currentTime
 			} else {
 				standbyClusterCurrentTime[clusterName] = shardInfo.TimerAckLevel
+				timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
 			}
+		} else { // active cluster
+			timerMaxReadLevelMap[clusterName] = shardInfo.TimerAckLevel
 		}
 	}
 
@@ -925,7 +942,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		metricsClient:             shardItem.metricsClient,
 		config:                    shardItem.config,
 		standbyClusterCurrentTime: standbyClusterCurrentTime,
-		timerMaxReadLevel:         updatedShardInfo.TimerAckLevel, // use ack to init read level
+		timerMaxReadLevelMap:      timerMaxReadLevelMap, // use ack to init read level
 	}
 	context.logger = shardItem.logger.WithFields(bark.Fields{
 		logging.TagHistoryShardID: shardItem.shardID,
