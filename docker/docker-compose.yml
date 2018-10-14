@@ -24,7 +24,7 @@ services:
       - cassandra
       - statsd
   cadence-web:
-    image: ubercadence/web:3.2.1
+    image: ubercadence/web:3.1.2
     environment:
       - "CADENCE_TCHANNEL_PEERS=cadence:7933"
     ports:
