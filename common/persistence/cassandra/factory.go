@@ -119,7 +119,13 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 	if f.execStoreFactory != nil {
 		return f.execStoreFactory, nil
 	}
-	return newExecutionStoreFactory(f.cfg, f.logger)
+
+	factory, err := newExecutionStoreFactory(f.cfg, f.logger)
+	if err != nil {
+		return nil, err
+	}
+	f.execStoreFactory = factory
+	return f.execStoreFactory, nil
 }
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
