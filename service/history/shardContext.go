@@ -801,21 +801,16 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 	clusterMetadata := s.GetService().GetClusterMetadata()
 	cluster := s.currentCluster
 	for _, task := range timerTasks {
-		ts, err := persistence.GetVisibilityTSFrom(task)
-		if err != nil {
-			panic(err)
-		}
-
+		ts := task.GetVisibilityTimestamp()
 		if task.GetVersion() != common.EmptyVersion {
 			cluster = clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
 		}
-
 		if ts.Before(s.timerMaxReadLevelMap[cluster]) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.WithField("Cluster", cluster).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+			s.logger.Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
 				time.Now(), ts, s.timerMaxReadLevelMap[cluster])
-			persistence.SetVisibilityTSFrom(task, s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
+			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
 		}
 
 		seqNum, err := s.getNextTransferTaskIDLocked()
@@ -823,11 +818,8 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 			return err
 		}
 		task.SetTaskID(seqNum)
-		visibilityTs, err := persistence.GetVisibilityTSFrom(task)
-		if err != nil {
-			return err
-		}
-		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLevel: %v",
+		visibilityTs := task.GetVisibilityTimestamp()
+		s.logger.Debugf("Assigning new timer (timestamp: %v, seq: %v) ackLeveL: %v",
 			visibilityTs, task.GetTaskID(), s.shardInfo.TimerAckLevel)
 	}
 	return nil

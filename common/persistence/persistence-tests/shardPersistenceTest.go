@@ -27,8 +27,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-
 	gen "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
 )
@@ -36,7 +34,6 @@ import (
 type (
 	// ShardPersistenceSuite contains shard persistence tests
 	ShardPersistenceSuite struct {
-		suite.Suite
 		TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -135,7 +132,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
-	s.Equal(updatedTimerAckLevel.Unix(), info1.TimerAckLevel.Unix())
+	s.EqualTimes(updatedTimerAckLevel, info1.TimerAckLevel)
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
 	failedUpdateInfo.Owner = "failed_owner"
@@ -154,7 +151,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
 	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
-	s.Equal(updatedTimerAckLevel.Unix(), info1.TimerAckLevel.Unix())
+	s.EqualTimes(updatedTimerAckLevel, info1.TimerAckLevel)
 }
 
 func copyShardInfo(sourceInfo *p.ShardInfo) *p.ShardInfo {

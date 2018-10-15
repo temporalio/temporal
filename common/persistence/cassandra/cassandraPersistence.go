@@ -335,7 +335,11 @@ const (
 		`IF range_id = ?`
 
 	templateUpdateCurrentWorkflowExecutionQuery = `UPDATE executions USING TTL 0 ` +
-		`SET current_run_id = ?, execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, replication_state = {start_version: ?, last_write_version: ?}, workflow_last_write_version = ?, workflow_state = ? ` +
+		`SET current_run_id = ?, 
+execution = {run_id: ?, create_request_id: ?, state: ?, close_status: ?}, 
+replication_state = {start_version: ?, last_write_version: ?}, 
+workflow_last_write_version = ?, 
+workflow_state = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and domain_id = ? ` +
@@ -843,12 +847,16 @@ var (
 )
 
 type (
+	cassandraStore struct {
+		session *gocql.Session
+		logger  bark.Logger
+	}
+
 	// Implements ExecutionManager, ShardManager and TaskManager
 	cassandraPersistence struct {
-		session            *gocql.Session
+		cassandraStore
 		shardID            int
 		currentClusterName string
-		logger             bark.Logger
 	}
 )
 
@@ -866,13 +874,17 @@ func newShardPersistence(cfg config.Cassandra, clusterName string, logger bark.L
 		return nil, err
 	}
 
-	return &cassandraPersistence{shardID: -1, session: session, currentClusterName: clusterName, logger: logger}, nil
+	return &cassandraPersistence{
+		cassandraStore:     cassandraStore{session: session, logger: logger},
+		shardID:            -1,
+		currentClusterName: clusterName,
+	}, nil
 }
 
 // NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewWorkflowExecutionPersistence(shardID int, session *gocql.Session,
 	logger bark.Logger) (p.ExecutionStore, error) {
-	return &cassandraPersistence{shardID: shardID, session: session, logger: logger}, nil
+	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: shardID}, nil
 }
 
 // newTaskPersistence is used to create an instance of TaskManager implementation
@@ -887,11 +899,15 @@ func newTaskPersistence(cfg config.Cassandra, logger bark.Logger) (p.TaskStore, 
 	if err != nil {
 		return nil, err
 	}
-	return &cassandraPersistence{shardID: -1, session: session, logger: logger}, nil
+	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: -1}, nil
+}
+
+func (d *cassandraStore) GetName() string {
+	return cassandraPersistenceName
 }
 
 // Close releases the underlying resources held by this object
-func (d *cassandraPersistence) Close() {
+func (d *cassandraStore) Close() {
 	if d.session != nil {
 		d.session.Close()
 	}
@@ -1447,7 +1463,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	childExecutionInfos := make(map[int64]*p.InternalChildExecutionInfo)
 	cMap := result["child_executions_map"].(map[int64]map[string]interface{})
 	for key, value := range cMap {
-		info := createChildExecutionInfo(value)
+		info := createChildExecutionInfo(value, d.logger)
 		childExecutionInfos[key] = info
 	}
 	state.ChildExecutionInfos = childExecutionInfos
@@ -1500,6 +1516,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	executionInfo := request.ExecutionInfo
 	replicationState := request.ReplicationState
 
+	completionData, completionEncoding := p.FromDataBlob(executionInfo.CompletionEvent)
 	if replicationState == nil {
 		// Updates will be called with null ReplicationState while the feature is disabled
 		batch.Query(templateUpdateWorkflowExecutionQuery,
@@ -1510,8 +1527,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.ParentWorkflowID,
 			executionInfo.ParentRunID,
 			executionInfo.InitiatedID,
-			executionInfo.CompletionEvent.Data,
-			executionInfo.CompletionEvent.Encoding,
+			completionData,
+			completionEncoding,
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
@@ -1571,8 +1588,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.ParentWorkflowID,
 			executionInfo.ParentRunID,
 			executionInfo.InitiatedID,
-			executionInfo.CompletionEvent.Data,
-			executionInfo.CompletionEvent.Encoding,
+			completionData,
+			completionEncoding,
 			executionInfo.TaskList,
 			executionInfo.WorkflowTypeName,
 			executionInfo.WorkflowTimeout,
@@ -1809,6 +1826,13 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		request.PrevRunID,
 	)
 
+	completionEvent := executionInfo.CompletionEvent
+	var completionEventData []byte
+	var completionEventEncoding common.EncodingType
+	if completionEvent != nil {
+		completionEventData = completionEvent.Data
+		completionEventEncoding = completionEvent.Encoding
+	}
 	batch.Query(templateUpdateWorkflowExecutionWithReplicationQuery,
 		executionInfo.DomainID,
 		executionInfo.WorkflowID,
@@ -1817,8 +1841,8 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		executionInfo.ParentWorkflowID,
 		parentRunID,
 		executionInfo.InitiatedID,
-		executionInfo.CompletionEvent.Data,
-		executionInfo.CompletionEvent.Encoding,
+		completionEventData,
+		completionEventEncoding,
 		executionInfo.TaskList,
 		executionInfo.WorkflowTypeName,
 		executionInfo.WorkflowTimeout,
@@ -2807,8 +2831,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		}
 
 		// Ignoring possible type cast errors.
-		t, _ := p.GetVisibilityTSFrom(task)
-		ts := p.UnixNanoToDBTimestamp(t.UnixNano())
+		ts := p.UnixNanoToDBTimestamp(task.GetVisibilityTimestamp().UnixNano())
 
 		batch.Query(templateCreateTimerTaskQuery,
 			d.shardID,
@@ -2832,8 +2855,7 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 
 	if deleteTimerTask != nil {
 		// Ignoring possible type cast errors.
-		t, _ := p.GetVisibilityTSFrom(deleteTimerTask)
-		ts := p.UnixNanoToDBTimestamp(t.UnixNano())
+		ts := p.UnixNanoToDBTimestamp(deleteTimerTask.GetVisibilityTimestamp().UnixNano())
 
 		batch.Query(templateCompleteTimerTaskQuery,
 			d.shardID,
@@ -2850,7 +2872,8 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 	domainID, workflowID, runID string, condition int64, rangeID int64) error {
 
 	for _, a := range activityInfos {
-		if a.StartedEvent.Encoding != a.ScheduledEvent.Encoding {
+		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
+		if a.StartedEvent != nil && a.StartedEvent.Encoding != a.ScheduledEvent.Encoding {
 			return p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
 
@@ -2861,7 +2884,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.ScheduledEvent.Data,
 			a.ScheduledTime,
 			a.StartedID,
-			a.StartedEvent.Data,
+			startedEventData,
 			a.StartedTime,
 			a.ActivityID,
 			a.RequestID,
@@ -2884,7 +2907,7 @@ func (d *cassandraPersistence) updateActivityInfos(batch *gocql.Batch, activityI
 			a.ExpirationTime,
 			a.MaximumAttempts,
 			a.NonRetriableErrors,
-			a.StartedEvent.Encoding,
+			a.ScheduledEvent.Encoding,
 			d.shardID,
 			rowTypeExecution,
 			domainID,
@@ -3007,19 +3030,23 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 	deleteInfo *int64, domainID, workflowID, runID string, condition int64, rangeID int64) error {
 
 	for _, c := range childExecutionInfos {
-		if c.StartedEvent.Encoding != c.InitiatedEvent.Encoding {
-			return p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
+		encoding := c.InitiatedEvent.GetEncoding()
+		var startedEventData []byte
+		if c.StartedEvent != nil {
+			startedEventData = c.StartedEvent.Data
+			if c.StartedEvent.GetEncoding() != encoding {
+				return p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", encoding, c.StartedEvent.GetEncoding()))
+			}
 		}
-
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			c.InitiatedID,
 			c.Version,
 			c.InitiatedID,
 			c.InitiatedEvent.Data,
 			c.StartedID,
-			c.StartedEvent.Data,
+			startedEventData,
 			c.CreateRequestID,
-			c.StartedEvent.Encoding,
+			encoding,
 			d.shardID,
 			rowTypeExecution,
 			domainID,
@@ -3048,7 +3075,7 @@ func (d *cassandraPersistence) updateChildExecutionInfos(batch *gocql.Batch, chi
 
 func (d *cassandraPersistence) resetChildExecutionInfos(batch *gocql.Batch, childExecutionInfos []*p.InternalChildExecutionInfo,
 	domainID, workflowID, runID string, condition int64) error {
-	infoMap, err := resetChildExecutionInfoMap(childExecutionInfos)
+	infoMap, err := resetChildExecutionInfoMap(childExecutionInfos, d.logger)
 	if err != nil {
 		return err
 	}
@@ -3344,9 +3371,9 @@ func createShardInfo(currentCluster string, result map[string]interface{}) *p.Sh
 }
 
 func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkflowExecutionInfo {
-	info := &p.InternalWorkflowExecutionInfo{
-		CompletionEvent: &p.DataBlob{},
-	}
+	info := &p.InternalWorkflowExecutionInfo{}
+	var completionEventData []byte
+	var completionEventEncoding common.EncodingType
 	for k, v := range result {
 		switch k {
 		case "domain_id":
@@ -3364,9 +3391,9 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 		case "initiated_id":
 			info.InitiatedID = v.(int64)
 		case "completion_event":
-			info.CompletionEvent.Data = v.([]byte)
+			completionEventData = v.([]byte)
 		case "completion_event_data_encoding":
-			info.CompletionEvent.Encoding = common.EncodingType(v.(string))
+			completionEventEncoding = common.EncodingType(v.(string))
 		case "task_list":
 			info.TaskList = v.(string)
 		case "workflow_type_name":
@@ -3441,7 +3468,7 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.NonRetriableErrors = v.([]string)
 		}
 	}
-
+	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)
 	return info
 }
 
@@ -3545,11 +3572,9 @@ func createReplicationTaskInfo(result map[string]interface{}) *p.ReplicationTask
 }
 
 func createActivityInfo(result map[string]interface{}) *p.InternalActivityInfo {
-	info := &p.InternalActivityInfo{
-		ScheduledEvent: &p.DataBlob{},
-		StartedEvent:   &p.DataBlob{},
-	}
+	info := &p.InternalActivityInfo{}
 	var sharedEncoding common.EncodingType
+	var scheduledEventData, startedEventData []byte
 	for k, v := range result {
 		switch k {
 		case "version":
@@ -3557,13 +3582,13 @@ func createActivityInfo(result map[string]interface{}) *p.InternalActivityInfo {
 		case "schedule_id":
 			info.ScheduleID = v.(int64)
 		case "scheduled_event":
-			info.ScheduledEvent.Data = v.([]byte)
+			scheduledEventData = v.([]byte)
 		case "scheduled_time":
 			info.ScheduledTime = v.(time.Time)
 		case "started_id":
 			info.StartedID = v.(int64)
 		case "started_event":
-			info.StartedEvent.Data = v.([]byte)
+			startedEventData = v.([]byte)
 		case "started_time":
 			info.StartedTime = v.(time.Time)
 		case "activity_id":
@@ -3612,8 +3637,8 @@ func createActivityInfo(result map[string]interface{}) *p.InternalActivityInfo {
 			sharedEncoding = common.EncodingType(v.(string))
 		}
 	}
-	info.ScheduledEvent.Encoding = sharedEncoding
-	info.StartedEvent.Encoding = sharedEncoding
+	info.ScheduledEvent = p.NewDataBlob(scheduledEventData, sharedEncoding)
+	info.StartedEvent = p.NewDataBlob(startedEventData, sharedEncoding)
 
 	return info
 }
@@ -3637,12 +3662,9 @@ func createTimerInfo(result map[string]interface{}) *p.TimerInfo {
 	return info
 }
 
-func createChildExecutionInfo(result map[string]interface{}) *p.InternalChildExecutionInfo {
-	info := &p.InternalChildExecutionInfo{
-		InitiatedEvent: &p.DataBlob{},
-		StartedEvent:   &p.DataBlob{},
-	}
-	var sharedEncoding common.EncodingType
+func createChildExecutionInfo(result map[string]interface{}, logger bark.Logger) *p.InternalChildExecutionInfo {
+	info := &p.InternalChildExecutionInfo{}
+	var startedData []byte
 	for k, v := range result {
 		switch k {
 		case "version":
@@ -3654,15 +3676,14 @@ func createChildExecutionInfo(result map[string]interface{}) *p.InternalChildExe
 		case "started_id":
 			info.StartedID = v.(int64)
 		case "started_event":
-			info.StartedEvent.Data = v.([]byte)
+			startedData = v.([]byte)
 		case "create_request_id":
 			info.CreateRequestID = v.(gocql.UUID).String()
 		case "event_data_encoding":
-			sharedEncoding = common.EncodingType(v.(string))
+			info.InitiatedEvent.Encoding = common.EncodingType(v.(string))
 		}
 	}
-	info.InitiatedEvent.Encoding = sharedEncoding
-	info.StartedEvent.Encoding = sharedEncoding
+	info.StartedEvent = p.NewDataBlob(startedData, info.InitiatedEvent.Encoding)
 	return info
 }
 
@@ -3733,17 +3754,17 @@ func resetActivityInfoMap(activityInfos []*p.InternalActivityInfo) (map[int64]ma
 
 	aMap := make(map[int64]map[string]interface{})
 	for _, a := range activityInfos {
-		if a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
+		if a.StartedEvent != nil && a.ScheduledEvent.Encoding != a.StartedEvent.Encoding {
 			return nil, p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", a.ScheduledEvent.Encoding, a.StartedEvent.Encoding))
 		}
-
+		startedEventData, _ := p.FromDataBlob(a.StartedEvent)
 		aInfo := make(map[string]interface{})
 		aInfo["version"] = a.Version
 		aInfo["schedule_id"] = a.ScheduleID
 		aInfo["scheduled_event"] = a.ScheduledEvent.Data
 		aInfo["scheduled_time"] = a.ScheduledTime
 		aInfo["started_id"] = a.StartedID
-		aInfo["started_event"] = a.StartedEvent.Data
+		aInfo["started_event"] = startedEventData
 		aInfo["started_time"] = a.StartedTime
 		aInfo["activity_id"] = a.ActivityID
 		aInfo["request_id"] = a.RequestID
@@ -3766,7 +3787,7 @@ func resetActivityInfoMap(activityInfos []*p.InternalActivityInfo) (map[int64]ma
 		aInfo["expiration_time"] = a.ExpirationTime
 		aInfo["max_attempts"] = a.MaximumAttempts
 		aInfo["non_retriable_errors"] = a.NonRetriableErrors
-		aInfo["event_data_encoding"] = a.StartedEvent.Encoding
+		aInfo["event_data_encoding"] = a.ScheduledEvent.Encoding
 
 		aMap[a.ScheduleID] = aInfo
 	}
@@ -3790,21 +3811,25 @@ func resetTimerInfoMap(timerInfos []*p.TimerInfo) map[string]map[string]interfac
 	return tMap
 }
 
-func resetChildExecutionInfoMap(childExecutionInfos []*p.InternalChildExecutionInfo) (map[int64]map[string]interface{}, error) {
+func resetChildExecutionInfoMap(childExecutionInfos []*p.InternalChildExecutionInfo, logger bark.Logger) (map[int64]map[string]interface{}, error) {
 	cMap := make(map[int64]map[string]interface{})
 	for _, c := range childExecutionInfos {
-		if c.StartedEvent.Encoding != c.InitiatedEvent.Encoding {
-			return nil, p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, c.StartedEvent.Encoding))
-		}
-
 		cInfo := make(map[string]interface{})
+		startedEvent := c.StartedEvent
+		if startedEvent != nil {
+			if startedEvent.Encoding != c.InitiatedEvent.Encoding {
+				return nil, p.NewHistorySerializationError(fmt.Sprintf("expect to have the same encoding, but %v != %v", c.InitiatedEvent.Encoding, startedEvent.Encoding))
+			}
+			cInfo["started_event"] = startedEvent.Data
+		} else {
+			cInfo["started_event"] = []byte{}
+		}
+		cInfo["event_data_encoding"] = c.InitiatedEvent.Encoding
 		cInfo["version"] = c.Version
 		cInfo["initiated_id"] = c.InitiatedID
 		cInfo["initiated_event"] = c.InitiatedEvent.Data
-		cInfo["started_id"] = c.StartedID
-		cInfo["started_event"] = c.StartedEvent.Data
 		cInfo["create_request_id"] = c.CreateRequestID
-		cInfo["event_data_encoding"] = c.StartedEvent.Encoding
+		cInfo["started_id"] = c.StartedID
 
 		cMap[c.InitiatedID] = cInfo
 	}

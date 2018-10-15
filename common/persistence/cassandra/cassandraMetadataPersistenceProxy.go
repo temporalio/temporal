@@ -53,6 +53,10 @@ func newMetadataManagerProxy(cfg config.Cassandra,
 	return &metadataManagerProxy{metadataMgr: metadataMgr, metadataMgrV2: metadataMgrV2, logger: logger}, nil
 }
 
+func (m *metadataManagerProxy) GetName() string {
+	return cassandraPersistenceName
+}
+
 func (m *metadataManagerProxy) GetDomain(request *p.GetDomainRequest) (*p.GetDomainResponse, error) {
 	// the reason this function does not call the v2 get domain is domain cache will
 	// use the list domain function to get all domain in the v2 table

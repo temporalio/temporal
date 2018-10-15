@@ -45,8 +45,14 @@ const (
 
 // Create Workflow Execution Mode
 const (
+	// Fail if current record exists
+	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeBrandNew = iota
+	// Update current record only if workflow is closed
+	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeWorkflowIDReuse
+	// Update current record only if workflow is open
+	// Only applicable for UpdateWorkflowExecution
 	CreateWorkflowModeContinueAsNew
 )
 
@@ -461,7 +467,7 @@ type (
 
 	// WorkflowMutableState indicates workflow related state
 	WorkflowMutableState struct {
-		ActivitInfos             map[int64]*ActivityInfo
+		ActivityInfos            map[int64]*ActivityInfo
 		TimerInfos               map[string]*TimerInfo
 		ChildExecutionInfos      map[int64]*ChildExecutionInfo
 		RequestCancelInfos       map[int64]*RequestCancelInfo
@@ -1053,6 +1059,7 @@ type (
 	// ShardManager is used to manage all shards
 	ShardManager interface {
 		Closeable
+		GetName() string
 		CreateShard(request *CreateShardRequest) error
 		GetShard(request *GetShardRequest) (*GetShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
@@ -1061,6 +1068,8 @@ type (
 	// ExecutionManager is used to manage workflow executions
 	ExecutionManager interface {
 		Closeable
+		GetName() string
+
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
@@ -1092,6 +1101,7 @@ type (
 	// TaskManager is used to manage tasks
 	TaskManager interface {
 		Closeable
+		GetName() string
 		LeaseTaskList(request *LeaseTaskListRequest) (*LeaseTaskListResponse, error)
 		UpdateTaskList(request *UpdateTaskListRequest) (*UpdateTaskListResponse, error)
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
@@ -1102,6 +1112,7 @@ type (
 	// HistoryManager is used to manage Workflow Execution HistoryEventBatch
 	HistoryManager interface {
 		Closeable
+		GetName() string
 		AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error)
 		// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
 		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse,
@@ -1112,6 +1123,7 @@ type (
 	// MetadataManager is used to manage metadata CRUD for domain entities
 	MetadataManager interface {
 		Closeable
+		GetName() string
 		CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error)
 		GetDomain(request *GetDomainRequest) (*GetDomainResponse, error)
 		UpdateDomain(request *UpdateDomainRequest) error
@@ -1742,94 +1754,6 @@ func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
 
 func (config *ClusterReplicationConfig) deserialize(input map[string]interface{}) {
 	config.ClusterName = input["cluster_name"].(string)
-}
-
-// GetVisibilityTSFrom - helper method to get visibility timestamp
-func GetVisibilityTSFrom(task Task) (time.Time, error) {
-	switch task.GetType() {
-	case TaskTypeDecisionTimeout:
-		if t, ok := task.(*DecisionTimeoutTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to DecisionTimeoutTask", task),
-		}
-
-	case TaskTypeActivityTimeout:
-		if t, ok := task.(*ActivityTimeoutTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to ActivityTimeoutTask", task),
-		}
-
-	case TaskTypeUserTimer:
-		if t, ok := task.(*UserTimerTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to UserTimerTask", task),
-		}
-
-	case TaskTypeWorkflowTimeout:
-		if t, ok := task.(*WorkflowTimeoutTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to WorkflowTimeoutTask", task),
-		}
-
-	case TaskTypeDeleteHistoryEvent:
-		if t, ok := task.(*DeleteHistoryEventTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to DeleteHistoryEventTask", task),
-		}
-
-	case TaskTypeActivityRetryTimer:
-		if t, ok := task.(*ActivityRetryTimerTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to ActivityRetryTimerTask", task),
-		}
-	case TaskTypeWorkflowRetryTimer:
-		if t, ok := task.(*WorkflowRetryTimerTask); ok {
-			return t.VisibilityTimestamp, nil
-		}
-		return time.Time{}, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to cast %v to TaskTypeWorkflowRetryTimer", task),
-		}
-	}
-
-	return time.Time{}, nil
-}
-
-// SetVisibilityTSFrom - helper method to set visibility timestamp
-func SetVisibilityTSFrom(task Task, t time.Time) {
-	switch task.GetType() {
-	case TaskTypeDecisionTimeout:
-		task.(*DecisionTimeoutTask).VisibilityTimestamp = t
-
-	case TaskTypeActivityTimeout:
-		task.(*ActivityTimeoutTask).VisibilityTimestamp = t
-
-	case TaskTypeUserTimer:
-		task.(*UserTimerTask).VisibilityTimestamp = t
-
-	case TaskTypeWorkflowTimeout:
-		task.(*WorkflowTimeoutTask).VisibilityTimestamp = t
-
-	case TaskTypeDeleteHistoryEvent:
-		task.(*DeleteHistoryEventTask).VisibilityTimestamp = t
-
-	case TaskTypeActivityRetryTimer:
-		task.(*ActivityRetryTimerTask).VisibilityTimestamp = t
-
-	case TaskTypeWorkflowRetryTimer:
-		task.(*WorkflowRetryTimerTask).VisibilityTimestamp = t
-	}
 }
 
 // DBTimestampToUnixNano converts CQL timestamp to UnixNano

@@ -28,6 +28,20 @@ type TaskManager struct {
 	mock.Mock
 }
 
+// GetName provides a mock function with given fields:
+func (_m *TaskManager) GetName() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // Close provides a mock function with given fields:
 func (_m *TaskManager) Close() {
 	_m.Called()

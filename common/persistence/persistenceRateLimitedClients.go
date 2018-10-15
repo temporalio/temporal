@@ -130,6 +130,10 @@ func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, ra
 	}
 }
 
+func (p *shardRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *shardRateLimitedPersistenceClient) CreateShard(request *CreateShardRequest) error {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return ErrPersistenceLimitExceeded
@@ -159,6 +163,10 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(request *UpdateShardRequ
 
 func (p *shardRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *workflowExecutionRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *workflowExecutionRateLimitedPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
@@ -291,6 +299,10 @@ func (p *workflowExecutionRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *taskRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *taskRateLimitedPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -340,6 +352,10 @@ func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *historyRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *historyRateLimitedPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -369,6 +385,10 @@ func (p *historyRateLimitedPersistenceClient) DeleteWorkflowExecutionHistory(req
 
 func (p *historyRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *metadataRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *metadataRateLimitedPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
@@ -436,6 +456,10 @@ func (p *metadataRateLimitedPersistenceClient) GetMetadata() (*GetMetadataRespon
 
 func (p *metadataRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *visibilityRateLimitedPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {

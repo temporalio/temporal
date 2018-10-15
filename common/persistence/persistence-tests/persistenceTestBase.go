@@ -21,6 +21,7 @@
 package persistencetests
 
 import (
+	"github.com/stretchr/testify/suite"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -59,6 +60,7 @@ type (
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
+		suite.Suite
 		ShardMgr               p.ShardManager
 		ExecutionMgrFactory    pfactory.Factory
 		ExecutionManager       p.ExecutionManager
@@ -236,10 +238,11 @@ func (s *TestBase) CreateWorkflowExecution(domainID string, workflowExecution wo
 		RangeID:              s.ShardInfo.RangeID,
 		TransferTasks: []p.Task{
 			&p.DecisionTask{
-				TaskID:     s.GetNextSequenceNumber(),
-				DomainID:   domainID,
-				TaskList:   taskList,
-				ScheduleID: decisionScheduleID,
+				TaskID:              s.GetNextSequenceNumber(),
+				DomainID:            domainID,
+				TaskList:            taskList,
+				ScheduleID:          decisionScheduleID,
+				VisibilityTimestamp: time.Now(),
 			},
 		},
 		TimerTasks:                  timerTasks,
@@ -736,7 +739,7 @@ func (s *TestBase) UpdateWorkflowExecutionForBufferEvents(
 // UpdateAllMutableState is a utility method to update workflow execution
 func (s *TestBase) UpdateAllMutableState(updatedMutableState *p.WorkflowMutableState, condition int64) error {
 	var aInfos []*p.ActivityInfo
-	for _, ai := range updatedMutableState.ActivitInfos {
+	for _, ai := range updatedMutableState.ActivityInfos {
 		aInfos = append(aInfos, ai)
 	}
 
@@ -1135,6 +1138,20 @@ func (s *TestBase) ClearReplicationQueue() {
 
 	log.Infof("Deleted '%v' replication tasks.", counter)
 	atomic.StoreInt64(&s.ReplicationReadLevel, 0)
+}
+
+// EqualTimesWithPrecision assertion that two times are equal within precision
+func (s *TestBase) EqualTimesWithPrecision(t1, t2 time.Time, precision time.Duration) {
+	s.True(timeComparator(t1, t2, precision),
+		"Not equal: \n"+
+			"expected: %s\n"+
+			"actual  : %s%s", t1, t2,
+	)
+}
+
+// EqualTimes assertion that two times are equal within two millisecond precision
+func (s *TestBase) EqualTimes(t1, t2 time.Time) {
+	s.EqualTimesWithPrecision(t1, t2, TimePrecision)
 }
 
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {

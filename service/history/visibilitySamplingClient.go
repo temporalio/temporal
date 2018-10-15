@@ -154,6 +154,10 @@ func (p *visibilitySamplingClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *visibilitySamplingClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func getRequestPriority(request *persistence.RecordWorkflowExecutionClosedRequest) int {
 	priority := 0
 	if request.Status == workflow.WorkflowExecutionCloseStatusCompleted {

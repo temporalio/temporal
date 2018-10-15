@@ -56,8 +56,7 @@ const (
 
 type (
 	cassandraHistoryPersistence struct {
-		session *gocql.Session
-		logger  bark.Logger
+		cassandraStore
 	}
 )
 
@@ -78,7 +77,7 @@ func newHistoryPersistence(cfg config.Cassandra, logger bark.Logger) (p.HistoryS
 		return nil, err
 	}
 
-	return &cassandraHistoryPersistence{session: session, logger: logger}, nil
+	return &cassandraHistoryPersistence{cassandraStore: cassandraStore{session: session, logger: logger}}, nil
 }
 
 // Close gracefully releases the resources held by this object

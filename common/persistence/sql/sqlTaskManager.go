@@ -22,6 +22,7 @@ package sql
 
 import (
 	"fmt"
+	"github.com/uber-common/bark"
 
 	"database/sql"
 	"time"
@@ -34,7 +35,7 @@ import (
 
 type (
 	sqlTaskManager struct {
-		db *sqlx.DB
+		sqlStore
 	}
 
 	tasksRow struct {
@@ -107,13 +108,16 @@ task_type = :task_type
 )
 
 // newTaskPersistence creates a new instance of TaskManager
-func newTaskPersistence(cfg config.SQL) (persistence.TaskManager, error) {
+func newTaskPersistence(cfg config.SQL, log bark.Logger) (persistence.TaskManager, error) {
 	var db, err = newConnection(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &sqlTaskManager{
-		db: db,
+		sqlStore: sqlStore{
+			db:     db,
+			logger: log,
+		},
 	}, nil
 }
 

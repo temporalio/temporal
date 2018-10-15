@@ -22,13 +22,67 @@ package sql
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
 )
+
+// TODO: Rename all SQL Managers to Stores
+type sqlStore struct {
+	db     *sqlx.DB
+	logger bark.Logger
+}
+
+func (m *sqlStore) GetName() string {
+	return m.db.DriverName()
+}
+
+func (m *sqlStore) txExecute(operation string, f func(tx *sqlx.Tx) error) error {
+	tx, err := m.db.Beginx()
+	if err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err),
+		}
+	}
+	err = f(tx)
+	if err != nil {
+		tx.Rollback()
+		switch err.(type) {
+		case *persistence.ConditionFailedError,
+			*persistence.CurrentWorkflowConditionFailedError,
+			*workflow.InternalServiceError,
+			*persistence.WorkflowExecutionAlreadyStartedError,
+			*persistence.ShardOwnershipLostError:
+			return err
+		default:
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("%v: %v", operation, err),
+			}
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err),
+		}
+	}
+	return nil
+}
+
+// ErrDupEntry MySQL Error 1062 indicates a duplicate primary key i.e. the row already exists,
+// so we don't do the insert and return a ConditionalUpdate error.
+const ErrDupEntry = 1062
+
+func isDupEntry(err error) bool {
+	sqlErr, ok := err.(*mysql.MySQLError)
+	return ok && sqlErr.Number == ErrDupEntry
+}
 
 func gobSerialize(x interface{}) ([]byte, error) {
 	b := bytes.Buffer{}
@@ -114,4 +168,17 @@ func runTransaction(name string, db *sqlx.DB, txFunc func(tx *sqlx.Tx) error) er
 		return convertErr(err)
 	}
 	return nil
+}
+
+func serializePageToken(offset int64) []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(offset))
+	return b
+}
+
+func deserializePageToken(payload []byte) (int64, error) {
+	if len(payload) != 8 {
+		return 0, fmt.Errorf("Invalid token of %v length", len(payload))
+	}
+	return int64(binary.LittleEndian.Uint64(payload)), nil
 }

@@ -343,10 +343,7 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 	clusterMetadata := s.GetService().GetClusterMetadata()
 	clusterName := clusterMetadata.GetCurrentClusterName()
 	for _, task := range request.TimerTasks {
-		ts, err := persistence.GetVisibilityTSFrom(task)
-		if err != nil {
-			panic(err)
-		}
+		ts := task.GetVisibilityTimestamp()
 		if task.GetVersion() != common.EmptyVersion {
 			clusterName = clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
 		}
@@ -355,17 +352,14 @@ func (s *TestShardContext) UpdateWorkflowExecution(request *persistence.UpdateWo
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.WithField("Cluster", clusterName).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
 				time.Now(), ts, s.timerMaxReadLevelMap[clusterName])
-			persistence.SetVisibilityTSFrom(task, s.timerMaxReadLevelMap[clusterName].Add(time.Millisecond))
+			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[clusterName].Add(time.Millisecond))
 		}
 		seqID, err := s.GetNextTransferTaskID()
 		if err != nil {
 			panic(err)
 		}
 		task.SetTaskID(seqID)
-		visibilityTs, err := persistence.GetVisibilityTSFrom(task)
-		if err != nil {
-			panic(err)
-		}
+		visibilityTs := task.GetVisibilityTimestamp()
 		s.logger.Infof("%v: TestShardContext: Assigning timer (timestamp: %v, seq: %v)",
 			time.Now().UTC(), visibilityTs, task.GetTaskID())
 	}

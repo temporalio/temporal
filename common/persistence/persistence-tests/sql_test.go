@@ -55,7 +55,6 @@ func TestSQLShardPersistenceSuite(t *testing.T) {
 }
 
 func TestSQLExecutionManagerSuite(t *testing.T) {
-	t.Skip("Temporary skipping until SQL persistence is fixed")
 	s := new(ExecutionManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(&TestBaseOptions{})
 	s.TestBase.Setup()

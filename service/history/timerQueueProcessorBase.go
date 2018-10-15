@@ -206,15 +206,9 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 
 	isActive := t.scope == metrics.TimerActiveQueueProcessorScope
 
-	newTime, err := persistence.GetVisibilityTSFrom(timerTasks[0])
-	if err != nil {
-		panic(err)
-	}
+	newTime := timerTasks[0].GetVisibilityTimestamp()
 	for _, task := range timerTasks {
-		ts, err := persistence.GetVisibilityTSFrom(task)
-		if err != nil {
-			panic(err)
-		}
+		ts := task.GetVisibilityTimestamp()
 		if ts.Before(newTime) {
 			newTime = ts
 		}

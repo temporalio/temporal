@@ -91,9 +91,8 @@ const (
 
 type (
 	cassandraMetadataPersistence struct {
-		session            *gocql.Session
+		cassandraStore
 		currentClusterName string
-		logger             bark.Logger
 	}
 )
 
@@ -113,9 +112,8 @@ func newMetadataPersistence(cfg config.Cassandra, clusterName string, logger bar
 	}
 
 	return &cassandraMetadataPersistence{
-		session:            session,
+		cassandraStore:     cassandraStore{session: session, logger: logger},
 		currentClusterName: clusterName,
-		logger:             logger,
 	}, nil
 }
 

@@ -47,7 +47,7 @@ func NewFactory(cfg config.SQL, clusterName string, logger bark.Logger) *Factory
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return newTaskPersistence(f.cfg)
+	return newTaskPersistence(f.cfg, f.logger)
 }
 
 // NewShardStore returns a new shard store

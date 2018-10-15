@@ -126,6 +126,10 @@ func NewVisibilityPersistenceMetricsClient(persistence VisibilityManager, metric
 	}
 }
 
+func (p *shardPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceRequests)
 
@@ -191,6 +195,10 @@ func (p *shardPersistenceClient) updateErrorMetric(scope int, err error) {
 
 func (p *shardPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *workflowExecutionPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
@@ -420,6 +428,10 @@ func (p *workflowExecutionPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *taskPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateTaskScope, metrics.PersistenceRequests)
 
@@ -513,6 +525,10 @@ func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *historyPersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
 func (p *historyPersistenceClient) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryEventsScope, metrics.PersistenceRequests)
 
@@ -580,6 +596,10 @@ func (p *historyPersistenceClient) updateErrorMetric(scope int, err error) {
 
 func (p *historyPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *metadataPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *metadataPersistenceClient) CreateDomain(request *CreateDomainRequest) (*CreateDomainResponse, error) {
@@ -702,6 +722,10 @@ func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
 		}).Error("Operation failed with internal error.")
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
+}
+
+func (p *visibilityPersistenceClient) GetName() string {
+	return p.persistence.GetName()
 }
 
 func (p *visibilityPersistenceClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {

@@ -4686,7 +4686,7 @@ func createMutableState(ms mutableState) *persistence.WorkflowMutableState {
 
 	return &persistence.WorkflowMutableState{
 		ExecutionInfo:       info,
-		ActivitInfos:        activityInfos,
+		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
 		BufferedEvents:      bufferedEvents,
 		SignalInfos:         signalInfos,

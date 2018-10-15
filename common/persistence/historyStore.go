@@ -57,6 +57,10 @@ func NewHistoryManagerImpl(persistence HistoryStore, logger bark.Logger) History
 	}
 }
 
+func (m *historyManagerImpl) GetName() string {
+	return m.persistence.GetName()
+}
+
 func (m *historyManagerImpl) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
 	eventsData, err := m.serializer.SerializeBatchEvents(request.Events, request.Encoding)
 	if err != nil {

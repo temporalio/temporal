@@ -1536,6 +1536,10 @@ func newTestTaskManager(logger bark.Logger) *testTaskManager {
 	return &testTaskManager{taskLists: make(map[taskListID]*testTaskListManager), logger: logger}
 }
 
+func (m *testTaskManager) GetName() string {
+	return "test"
+}
+
 func (m *testTaskManager) Close() {
 	return
 }

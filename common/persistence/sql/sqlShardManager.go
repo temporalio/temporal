@@ -35,9 +35,8 @@ import (
 
 type (
 	sqlShardManager struct {
-		db                 *sqlx.DB
+		sqlStore
 		currentClusterName string
-		log                bark.Logger
 	}
 
 	shardsRow struct {
@@ -115,7 +114,8 @@ WHERE
 shard_id = :shard_id
 `
 
-	lockShardSQLQuery = `SELECT range_id FROM shards WHERE shard_id = ? FOR UPDATE`
+	lockShardSQLQuery     = `SELECT range_id FROM shards WHERE shard_id = ? FOR UPDATE`
+	readLockShardSQLQuery = `SELECT range_id FROM shards WHERE shard_id = ? LOCK IN SHARE MODE`
 )
 
 // newShardPersistence creates an instance of ShardManager
@@ -125,9 +125,11 @@ func newShardPersistence(cfg config.SQL, currentClusterName string, log bark.Log
 		return nil, err
 	}
 	return &sqlShardManager{
-		db:                 db,
+		sqlStore: sqlStore{
+			db:     db,
+			logger: log,
+		},
 		currentClusterName: currentClusterName,
-		log:                log,
 	}, nil
 }
 
@@ -243,6 +245,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 	})
 }
 
+// initiated by the owning shard
 func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 	var rangeID int64
 
@@ -266,6 +269,32 @@ func lockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
 		}
 	}
 
+	return nil
+}
+
+// initiated by the owning shard
+func readLockShard(tx *sqlx.Tx, shardID int, oldRangeID int64) error {
+	var rangeID int64
+
+	err := tx.Get(&rangeID, readLockShardSQLQuery, shardID)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &workflow.InternalServiceError{
+				Message: fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID),
+			}
+		}
+		return &workflow.InternalServiceError{
+			Message: fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err),
+		}
+	}
+
+	if rangeID != oldRangeID {
+		return &persistence.ShardOwnershipLostError{
+			ShardID: shardID,
+			Msg:     fmt.Sprintf("Failed to lock shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
+		}
+	}
 	return nil
 }
 

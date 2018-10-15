@@ -21,6 +21,8 @@
 package persistence
 
 import (
+	"github.com/prometheus/common/log"
+	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 )
@@ -32,18 +34,24 @@ type (
 		serializer    HistorySerializer
 		persistence   ExecutionStore
 		statsComputer statsComputer
+		logger        bark.Logger
 	}
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
 
 // NewExecutionManagerImpl returns new ExecutionManager
-func NewExecutionManagerImpl(persistence ExecutionStore) ExecutionManager {
+func NewExecutionManagerImpl(persistence ExecutionStore, logger bark.Logger) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:    NewHistorySerializer(),
 		persistence:   persistence,
 		statsComputer: statsComputer{},
+		logger:        logger,
 	}
+}
+
+func (m *executionManagerImpl) GetName() string {
+	return m.persistence.GetName()
 }
 
 //The below three APIs are related to serialization/deserialization
@@ -62,7 +70,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(request *GetWorkflowExecutio
 		},
 	}
 
-	newResponse.State.ActivitInfos, err = m.DeserializeActivityInfos(response.State.ActivitInfos)
+	newResponse.State.ActivityInfos, err = m.DeserializeActivityInfos(response.State.ActivitInfos)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +189,7 @@ func (m *executionManagerImpl) DeserializeBufferedEvents(blobs []*DataBlob) ([]*
 func (m *executionManagerImpl) DeserializeChildExecutionInfos(infos map[int64]*InternalChildExecutionInfo) (map[int64]*ChildExecutionInfo, error) {
 	newInfos := make(map[int64]*ChildExecutionInfo, 0)
 	for k, v := range infos {
-		initiatedEvent, err := m.serializer.DeserializeEvent(v.InitiatedEvent)
+		initiatedEvent, err := m.serializer.DeserializeEvent(&v.InitiatedEvent)
 		if err != nil {
 			return nil, err
 		}
@@ -308,7 +316,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(request *UpdateWorkflowEx
 		DeleteBufferedReplicationTask: request.DeleteBufferedReplicationTask,
 	}
 	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
-	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, m.persistence.UpdateWorkflowExecution(newRequest)
+	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
+	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
 }
 
 func (m *executionManagerImpl) SerializeNewBufferedReplicationTask(task *BufferedReplicationTask, encoding common.EncodingType) (*InternalBufferedReplicationTask, error) {
@@ -344,6 +353,9 @@ func (m *executionManagerImpl) SerializeNewBufferedReplicationTask(task *Buffere
 func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*ChildExecutionInfo, encoding common.EncodingType) ([]*InternalChildExecutionInfo, error) {
 	newInfos := make([]*InternalChildExecutionInfo, 0)
 	for _, v := range infos {
+		if v.InitiatedEvent == nil {
+			log.Fatalf("nil InitiatedEvent for %v", v.InitiatedID)
+		}
 		initiatedEvent, err := m.serializer.SerializeEvent(v.InitiatedEvent, encoding)
 		if err != nil {
 			return nil, err
@@ -353,7 +365,7 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*Child
 			return nil, err
 		}
 		i := &InternalChildExecutionInfo{
-			InitiatedEvent: initiatedEvent,
+			InitiatedEvent: *initiatedEvent,
 			StartedEvent:   startedEvent,
 
 			Version:         v.Version,
@@ -369,6 +381,9 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*Child
 func (m *executionManagerImpl) SerializeUpsertActivityInfos(infos []*ActivityInfo, encoding common.EncodingType) ([]*InternalActivityInfo, error) {
 	newInfos := make([]*InternalActivityInfo, 0)
 	for _, v := range infos {
+		if v.ScheduledEvent == nil {
+			log.Fatal("SerializeUpsertActivityInfos ScheduledEvent is required")
+		}
 		scheduledEvent, err := m.serializer.SerializeEvent(v.ScheduledEvent, encoding)
 		if err != nil {
 			return nil, err
@@ -416,13 +431,9 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(infos []*ActivityInf
 
 func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInfo, encoding common.EncodingType) (*InternalWorkflowExecutionInfo, error) {
 	if info == nil {
-		return &InternalWorkflowExecutionInfo{
-			CompletionEvent: &DataBlob{},
-		}, nil
+		return &InternalWorkflowExecutionInfo{}, nil
 	}
-	var completionEvent *DataBlob
-	var err error
-	completionEvent, err = m.serializer.SerializeEvent(info.CompletionEvent, encoding)
+	completionEvent, err := m.serializer.SerializeEvent(info.CompletionEvent, encoding)
 	if err != nil {
 		return nil, err
 	}

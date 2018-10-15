@@ -128,9 +128,8 @@ const (
 
 type (
 	cassandraVisibilityPersistence struct {
-		session      *gocql.Session
+		cassandraStore
 		lowConslevel gocql.Consistency
-		logger       bark.Logger
 	}
 )
 
@@ -148,7 +147,10 @@ func newVisibilityPersistence(cfg config.Cassandra, logger bark.Logger) (p.Visib
 		return nil, err
 	}
 
-	return &cassandraVisibilityPersistence{session: session, lowConslevel: gocql.One, logger: logger}, nil
+	return &cassandraVisibilityPersistence{
+		cassandraStore: cassandraStore{session: session, logger: logger},
+		lowConslevel:   gocql.One,
+	}, nil
 }
 
 // Close releases the resources held by this object

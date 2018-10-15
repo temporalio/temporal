@@ -22,16 +22,17 @@ package cassandra
 
 import (
 	"fmt"
+	"github.com/uber/cadence/tools/cassandra"
 	"io/ioutil"
 	"os"
 	"strings"
 
-	"github.com/uber/cadence/common/logging"
-	"github.com/uber/cadence/tools/cassandra"
-
 	"github.com/gocql/gocql"
 	log "github.com/sirupsen/logrus"
+	"github.com/uber/cadence/common/logging"
 )
+
+const cassandraPersistenceName = "cassandra"
 
 // NewCassandraCluster creates a cassandra cluster given comma separated list of clusterHosts
 func NewCassandraCluster(clusterHosts string, port int, user, password, dc string) *gocql.ClusterConfig {

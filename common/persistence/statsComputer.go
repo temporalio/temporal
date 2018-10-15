@@ -203,8 +203,12 @@ func computeExecutionInfoSize(executionInfo *InternalWorkflowExecutionInfo) int 
 
 func computeActivityInfoSize(ai *InternalActivityInfo) int {
 	size := len(ai.ActivityID)
-	size += len(ai.ScheduledEvent.Data)
-	size += len(ai.StartedEvent.Data)
+	if ai.ScheduledEvent != nil {
+		size += len(ai.ScheduledEvent.Data)
+	}
+	if ai.StartedEvent != nil {
+		size += len(ai.StartedEvent.Data)
+	}
 	size += len(ai.Details)
 
 	return size
@@ -217,12 +221,10 @@ func computeTimerInfoSize(ti *TimerInfo) int {
 }
 
 func computeChildInfoSize(ci *InternalChildExecutionInfo) int {
-	if ci.InitiatedEvent == nil {
-		return 0
-	}
 	size := len(ci.InitiatedEvent.Data)
-	size += len(ci.StartedEvent.Data)
-
+	if ci.StartedEvent != nil {
+		size += len(ci.StartedEvent.Data)
+	}
 	return size
 }
 

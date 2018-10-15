@@ -145,7 +145,7 @@ func newMutableStateBuilderWithReplicationState(currentCluster string, config *C
 func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableState {
 	state := &persistence.WorkflowMutableState{}
 
-	state.ActivitInfos = e.pendingActivityInfoIDs
+	state.ActivityInfos = e.pendingActivityInfoIDs
 	state.TimerInfos = e.pendingTimerInfoIDs
 	state.ChildExecutionInfos = e.pendingChildExecutionInfoIDs
 	state.RequestCancelInfos = e.pendingRequestCancelInfoIDs
@@ -160,7 +160,7 @@ func (e *mutableStateBuilder) CopyToPersistence() *persistence.WorkflowMutableSt
 
 func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 
-	e.pendingActivityInfoIDs = state.ActivitInfos
+	e.pendingActivityInfoIDs = state.ActivityInfos
 	e.pendingTimerInfoIDs = state.TimerInfos
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
 	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
@@ -171,7 +171,7 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	e.replicationState = state.ReplicationState
 	e.bufferedEvents = state.BufferedEvents
 	e.bufferedReplicationTasks = state.BufferedReplicationTasks
-	for _, ai := range state.ActivitInfos {
+	for _, ai := range state.ActivityInfos {
 		e.pendingActivityInfoByActivityID[ai.ActivityID] = ai.ScheduleID
 	}
 }

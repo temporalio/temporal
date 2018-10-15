@@ -21,14 +21,15 @@
 package persistencetests
 
 import (
+	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 
 	gen "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -40,7 +41,6 @@ import (
 type (
 	// ExecutionManagerSuite contains matching persistence tests
 	ExecutionManagerSuite struct {
-		suite.Suite
 		TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -128,7 +128,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 	task0, err0 := s.CreateWorkflowExecutionWithReplication(domainID, workflowExecution, tasklist,
 		workflowType, workflowTimeout, decisionTimeout, nextEventID,
 		lastProcessedEventID, decisionScheduleID, replicationState, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	newExecution := gen.WorkflowExecution{
@@ -152,10 +152,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		ReplicationState:         replicationState,
 	})
 	s.NotNil(err)
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err, err.Error())
 
 	info, err := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
-	s.Nil(err)
+	s.NoError(err)
 
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedInfo.State = p.WorkflowStateCompleted
@@ -183,7 +183,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		FinishExecution:      true,
 		ReplicationState:     updateReplicationState,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	_, err = s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RequestID:                uuid.New(),
@@ -201,7 +201,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithReplica
 		PreviousLastWriteVersion: version,
 		ReplicationState:         replicationState,
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 // TestCreateWorkflowExecutionRunIDReuseWithoutReplication test
@@ -222,8 +222,20 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist,
 		workflowType, workflowTimeout, decisionTimeout, nil, nextEventID,
 		lastProcessedEventID, decisionScheduleID, nil)
-	s.Nil(err0, "No error expected.")
+	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err1)
+	info0 := state0.ExecutionInfo
+	closeInfo := copyWorkflowExecutionInfo(info0)
+	closeInfo.State = p.WorkflowStateCompleted
+	closeInfo.NextEventID = int64(5)
+	closeInfo.LastProcessedEvent = int64(2)
+
+	err2 := s.UpdateWorkflowExecution(closeInfo, nil, nil, nextEventID,
+		nil, nil, nil, nil, nil, nil)
+	s.NoError(err2)
 
 	newExecution := gen.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
@@ -231,7 +243,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	}
 	// this create should work since we are relying the business logic in history engine
 	// to check whether the existing running workflow has finished
-	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+	_, err3 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
 		RequestID:            uuid.New(),
 		DomainID:             domainID,
 		Execution:            newExecution,
@@ -245,49 +257,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 		CreateWorkflowMode:   p.CreateWorkflowModeWorkflowIDReuse,
 		PreviousRunID:        workflowExecution.GetRunId(),
 	})
-	s.Nil(err)
-}
-
-// TestCreateWorkflowExecutionContinueAsNew test
-func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionContinueAsNew() {
-	domainID := uuid.New()
-	workflowExecution := gen.WorkflowExecution{
-		WorkflowId: common.StringPtr("create-workflow-test-continue-as-new"),
-		RunId:      common.StringPtr(uuid.New()),
-	}
-	tasklist := "some random tasklist"
-	workflowType := "some random workflow type"
-	workflowTimeout := int32(10)
-	decisionTimeout := int32(14)
-	lastProcessedEventID := int64(0)
-	nextEventID := int64(3)
-	decisionScheduleID := int64(2)
-
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, tasklist,
-		workflowType, workflowTimeout, decisionTimeout, nil, nextEventID,
-		lastProcessedEventID, decisionScheduleID, nil)
-	s.Nil(err0, "No error expected.")
-	s.NotNil(task0, "Expected non empty task identifier.")
-
-	newExecution := gen.WorkflowExecution{
-		WorkflowId: workflowExecution.WorkflowId,
-		RunId:      common.StringPtr(uuid.New()),
-	}
-	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            newExecution,
-		TaskList:             tasklist,
-		WorkflowTypeName:     workflowType,
-		WorkflowTimeout:      workflowTimeout,
-		DecisionTimeoutValue: decisionTimeout,
-		NextEventID:          nextEventID,
-		LastProcessedEvent:   lastProcessedEventID,
-		RangeID:              s.ShardInfo.RangeID,
-		CreateWorkflowMode:   p.CreateWorkflowModeContinueAsNew,
-		PreviousRunID:        workflowExecution.GetRunId(),
-	})
-	s.Nil(err)
+	s.NoError(err3)
 }
 
 // TestCreateWorkflowExecutionConcurrentCreate test
@@ -314,35 +284,38 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 	times := 2
 	var wg sync.WaitGroup
 	wg.Add(times)
-	numOfErr := 0
+	var numOfErr int32
+	var lastError error
 	for i := 0; i < times; i++ {
 		go func() {
 			newExecution := gen.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
 				RunId:      common.StringPtr(uuid.New()),
 			}
-			_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-				RequestID:            uuid.New(),
-				DomainID:             domainID,
-				Execution:            newExecution,
-				TaskList:             tasklist,
-				WorkflowTypeName:     workflowType,
-				WorkflowTimeout:      workflowTimeout,
-				DecisionTimeoutValue: decisionTimeout,
-				NextEventID:          nextEventID,
-				LastProcessedEvent:   lastProcessedEventID,
-				RangeID:              s.ShardInfo.RangeID,
-				CreateWorkflowMode:   p.CreateWorkflowModeContinueAsNew,
-				PreviousRunID:        workflowExecution.GetRunId(),
-			})
-			if err != nil {
-				numOfErr++
+
+			state0, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+			s.NoError(err1)
+			info0 := state0.ExecutionInfo
+			continueAsNewInfo := copyWorkflowExecutionInfo(info0)
+			continueAsNewInfo.State = p.WorkflowStateCompleted
+			continueAsNewInfo.NextEventID = int64(5)
+			continueAsNewInfo.LastProcessedEvent = int64(2)
+
+			err2 := s.ContinueAsNewExecution(continueAsNewInfo, info0.NextEventID, newExecution, int64(3), int64(2))
+			if err2 != nil {
+				errCount := atomic.AddInt32(&numOfErr, 1)
+				if errCount > 1 {
+					lastError = err2
+				}
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	s.Equal(1, numOfErr)
+	if lastError != nil {
+		s.Fail("More than one error: %v", lastError.Error())
+	}
+	s.Equal(int32(1), atomic.LoadInt32(&numOfErr))
 }
 
 // TestPersistenceStartWorkflow test
@@ -360,7 +333,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	s.Error(err1, "Expected workflow creation to fail.")
 	log.Infof("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*p.WorkflowExecutionAlreadyStartedError)
-	s.True(ok)
+	s.True(ok, fmt.Sprintf("Expected WorkflowExecutionAlreadyStartedError, but actual is %v", err1))
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
 
 	s.Equal(p.WorkflowStateRunning, startedErr.State, startedErr.Msg)
@@ -721,7 +694,9 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 
 // TestDeleteCurrentWorkflow test
 func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
-	s.T().Skip("SQL doesn't support retention yet")
+	if s.ExecutionManager.GetName() != "cassandra" {
+		s.T().Skip("SQL doesn't support retention yet")
+	}
 	finishedCurrentExecutionRetentionTTL := int32(3) // 3 seconds
 	domainID := "54d15308-e20e-4b91-a00f-a518a3892790"
 	workflowExecution := gen.WorkflowExecution{
@@ -830,7 +805,8 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	err3 := s.CompleteTransferTask(task1.TaskID)
 	s.NoError(err3)
 
-	state0, _ := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	state0, err11 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
+	s.NoError(err11)
 	info0 := state0.ExecutionInfo
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
@@ -1205,7 +1181,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, timePrecision))
+		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
 	}
 	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
 	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
@@ -1302,7 +1278,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.NotNil(txTasks, "expected valid list of tasks.")
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
-		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, timePrecision))
+		s.True(timeComparator(tasks[index].GetVisibilityTimestamp(), txTasks[index].VisibilityTimestamp, TimePrecision))
 	}
 	s.Equal(p.TransferTaskTypeActivityTask, txTasks[0].TaskType)
 	s.Equal(p.TransferTaskTypeDecisionTask, txTasks[1].TaskType)
@@ -1465,7 +1441,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	currentTime := time.Now().UTC()
+	currentTime := time.Now()
 	activityInfos := []*p.ActivityInfo{{
 		Version:                  7789,
 		ScheduleID:               1,
@@ -1487,23 +1463,23 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	state, err1 := s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
-	s.Equal(1, len(state.ActivitInfos))
-	log.Printf("%+v", state.ActivitInfos)
-	ai, ok := state.ActivitInfos[1]
+	s.Equal(1, len(state.ActivityInfos))
+	log.Printf("%+v", state.ActivityInfos)
+	ai, ok := state.ActivityInfos[1]
 	s.True(ok)
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(1), ai.ScheduleID)
 	s.Equal(int64(1), *ai.ScheduledEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix()) // This line is flakey
+	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(2), ai.StartedID)
 	s.Equal(int64(2), *ai.StartedEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.EqualTimes(currentTime, ai.StartedTime)
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
 	s.Equal(int32(3), ai.StartToCloseTimeout)
 	s.Equal(int32(4), ai.HeartbeatTimeout)
-	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.EqualTimes(currentTime, ai.LastHeartBeatUpdatedTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
 	err2 = s.UpdateWorkflowExecution(updatedInfo, nil, nil, int64(5), nil, nil, nil, []int64{1}, nil, nil)
@@ -1512,7 +1488,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	state, err1 = s.GetWorkflowExecutionInfo(domainID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
-	s.Equal(0, len(state.ActivitInfos))
+	s.Equal(0, len(state.ActivityInfos))
 }
 
 // TestWorkflowMutableStateTimers test
@@ -1553,7 +1529,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 	s.Equal(1, len(state.TimerInfos))
 	s.Equal(int64(3345), state.TimerInfos[timerID].Version)
 	s.Equal(timerID, state.TimerInfos[timerID].TimerID)
-	s.Equal(currentTime.Unix(), state.TimerInfos[timerID].ExpiryTime.Unix()) // flakey
+	s.EqualTimesWithPrecision(currentTime, state.TimerInfos[timerID].ExpiryTime, time.Millisecond*500)
 	s.Equal(int64(2), state.TimerInfos[timerID].TaskID)
 	s.Equal(int64(5), state.TimerInfos[timerID].StartedID)
 
@@ -2520,7 +2496,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	}
 	updatedState := &p.WorkflowMutableState{
 		ExecutionInfo: updatedInfo,
-		ActivitInfos: map[int64]*p.ActivityInfo{
+		ActivityInfos: map[int64]*p.ActivityInfo{
 			4: {
 				Version:                  7789,
 				ScheduleID:               4,
@@ -2580,7 +2556,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 			9: {
 				Version:         2334,
 				InitiatedID:     9,
-				InitiatedEvent:  nil,
+				InitiatedEvent:  &gen.HistoryEvent{EventId: int64Ptr(123)},
 				StartedID:       11,
 				StartedEvent:    nil,
 				CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -2652,39 +2628,39 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	history1 := &gen.History{Events: state1.BufferedEvents}
 	s.True(history.Equals(history1))
 
-	s.Equal(2, len(state1.ActivitInfos))
-	ai, ok := state1.ActivitInfos[4]
+	s.Equal(2, len(state1.ActivityInfos))
+	ai, ok := state1.ActivityInfos[4]
 	s.True(ok)
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(4), ai.ScheduleID)
 	s.Equal(int64(40), *ai.ScheduledEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix()) // flakey test
+	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(6), ai.StartedID)
 	s.Equal(int64(60), *ai.StartedEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.EqualTimes(currentTime, ai.StartedTime)
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
 	s.Equal(int32(3), ai.StartToCloseTimeout)
 	s.Equal(int32(4), ai.HeartbeatTimeout)
-	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.EqualTimes(currentTime, ai.LastHeartBeatUpdatedTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
-	ai, ok = state1.ActivitInfos[5]
+	ai, ok = state1.ActivityInfos[5]
 	s.True(ok)
 	s.NotNil(ai)
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(5), ai.ScheduleID)
 	s.Equal(int64(50), *ai.ScheduledEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.ScheduledTime.Unix())
+	s.EqualTimes(currentTime, ai.ScheduledTime)
 	s.Equal(int64(7), ai.StartedID)
 	s.Equal(int64(70), *ai.StartedEvent.EventId)
-	s.Equal(currentTime.Unix(), ai.StartedTime.Unix())
+	s.EqualTimes(currentTime, ai.StartedTime)
 	s.Equal(int32(1), ai.ScheduleToCloseTimeout)
 	s.Equal(int32(2), ai.ScheduleToStartTimeout)
 	s.Equal(int32(3), ai.StartToCloseTimeout)
 	s.Equal(int32(4), ai.HeartbeatTimeout)
-	s.Equal(currentTime.Unix(), ai.LastHeartBeatUpdatedTime.Unix())
+	s.EqualTimes(currentTime, ai.LastHeartBeatUpdatedTime)
 	s.Equal(int32(1), ai.TimerTaskStatus)
 
 	s.Equal(3, len(state1.TimerInfos))
@@ -2783,7 +2759,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 		{
 			Version:         3334,
 			InitiatedID:     10,
-			InitiatedEvent:  nil,
+			InitiatedEvent:  &gen.HistoryEvent{EventId: common.Int64Ptr(10)},
 			StartedID:       15,
 			StartedEvent:    nil,
 			CreateRequestID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -2834,8 +2810,8 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.NotNil(info4, "Valid Workflow info expected.")
 	s.Equal(int64(3), info4.NextEventID)
 
-	s.Equal(1, len(state4.ActivitInfos))
-	ai, ok = state4.ActivitInfos[40]
+	s.Equal(1, len(state4.ActivityInfos))
+	ai, ok = state4.ActivityInfos[40]
 	s.True(ok)
 	s.NotNil(ai)
 	s.Equal(int64(8789), ai.Version)
@@ -2992,7 +2968,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 		resetChildExecutionInfos, resetRequestCancelInfos, resetSignalInfos, nil)
 	s.NoError(err)
 
-	// this test only assert whether the current workflow execution record is reseted
+	// this test only assert whether the current workflow execution record is reset
 	runID, err := s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
 
@@ -3021,34 +2997,6 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsNotSelf() {
 	// this test only assert whether the current workflow execution record is reseted
 	runID, err = s.GetCurrentWorkflowRunID(domainID, workflowID)
 	s.Equal(workflowExecutionReset.GetRunId(), runID)
-}
-
-func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowExecutionInfo {
-	return &p.WorkflowExecutionInfo{
-		DomainID:             sourceInfo.DomainID,
-		WorkflowID:           sourceInfo.WorkflowID,
-		RunID:                sourceInfo.RunID,
-		ParentDomainID:       sourceInfo.ParentDomainID,
-		ParentWorkflowID:     sourceInfo.ParentWorkflowID,
-		ParentRunID:          sourceInfo.ParentRunID,
-		InitiatedID:          sourceInfo.InitiatedID,
-		CompletionEvent:      sourceInfo.CompletionEvent,
-		TaskList:             sourceInfo.TaskList,
-		WorkflowTypeName:     sourceInfo.WorkflowTypeName,
-		WorkflowTimeout:      sourceInfo.WorkflowTimeout,
-		DecisionTimeoutValue: sourceInfo.DecisionTimeoutValue,
-		ExecutionContext:     sourceInfo.ExecutionContext,
-		State:                sourceInfo.State,
-		NextEventID:          sourceInfo.NextEventID,
-		LastProcessedEvent:   sourceInfo.LastProcessedEvent,
-		LastUpdatedTimestamp: sourceInfo.LastUpdatedTimestamp,
-		CreateRequestID:      sourceInfo.CreateRequestID,
-		DecisionVersion:      sourceInfo.DecisionVersion,
-		DecisionScheduleID:   sourceInfo.DecisionScheduleID,
-		DecisionStartedID:    sourceInfo.DecisionStartedID,
-		DecisionRequestID:    sourceInfo.DecisionRequestID,
-		DecisionTimeout:      sourceInfo.DecisionTimeout,
-	}
 }
 
 // TestCreateGetShardBackfill test
@@ -3083,9 +3031,9 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	}
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
@@ -3128,9 +3076,9 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.Nil(s.ShardMgr.CreateShard(createRequest))
 	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
@@ -3169,12 +3117,40 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 
 	resp, err = s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
 	s.NoError(err)
-	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], timePrecision))
-	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], timePrecision))
+	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
+	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
+}
+
+func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowExecutionInfo {
+	return &p.WorkflowExecutionInfo{
+		DomainID:             sourceInfo.DomainID,
+		WorkflowID:           sourceInfo.WorkflowID,
+		RunID:                sourceInfo.RunID,
+		ParentDomainID:       sourceInfo.ParentDomainID,
+		ParentWorkflowID:     sourceInfo.ParentWorkflowID,
+		ParentRunID:          sourceInfo.ParentRunID,
+		InitiatedID:          sourceInfo.InitiatedID,
+		CompletionEvent:      sourceInfo.CompletionEvent,
+		TaskList:             sourceInfo.TaskList,
+		WorkflowTypeName:     sourceInfo.WorkflowTypeName,
+		WorkflowTimeout:      sourceInfo.WorkflowTimeout,
+		DecisionTimeoutValue: sourceInfo.DecisionTimeoutValue,
+		ExecutionContext:     sourceInfo.ExecutionContext,
+		State:                sourceInfo.State,
+		NextEventID:          sourceInfo.NextEventID,
+		LastProcessedEvent:   sourceInfo.LastProcessedEvent,
+		LastUpdatedTimestamp: sourceInfo.LastUpdatedTimestamp,
+		CreateRequestID:      sourceInfo.CreateRequestID,
+		DecisionVersion:      sourceInfo.DecisionVersion,
+		DecisionScheduleID:   sourceInfo.DecisionScheduleID,
+		DecisionStartedID:    sourceInfo.DecisionStartedID,
+		DecisionRequestID:    sourceInfo.DecisionRequestID,
+		DecisionTimeout:      sourceInfo.DecisionTimeout,
+	}
 }
 
 // Note: cassandra only provide millisecond precision timestamp
@@ -3187,9 +3163,9 @@ func timestampConvertor(t time.Time) time.Time {
 	).UTC()
 }
 
-func timeComparator(t1 time.Time, t2 time.Time, timeTolerance time.Duration) bool {
-	tolerance := timeTolerance.Nanoseconds()
-	if t1.UnixNano()-t2.UnixNano() < tolerance && t2.UnixNano()-t1.UnixNano() < tolerance {
+func timeComparator(t1, t2 time.Time, timeTolerance time.Duration) bool {
+	diff := t2.Sub(t1)
+	if diff.Nanoseconds() <= timeTolerance.Nanoseconds() {
 		return true
 	}
 	return false
