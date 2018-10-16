@@ -942,6 +942,8 @@ struct PollForActivityTaskResponse {
   120: optional i32 attempt
   130: optional i64 (js.type = "Long") scheduledTimestampOfThisAttempt
   140: optional binary heartbeatDetails
+  150: optional WorkflowType workflowType
+  160: optional string workflowDomain
 }
 
 struct RecordActivityTaskHeartbeatRequest {

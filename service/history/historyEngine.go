@@ -854,7 +854,11 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	domainID := domainEntry.GetInfo().ID
+
+	domainInfo := domainEntry.GetInfo()
+
+	domainID := domainInfo.ID
+	domainName := domainInfo.Name
 
 	execution := workflow.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
@@ -918,6 +922,9 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 			response.StartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
 			response.Attempt = common.Int64Ptr(int64(ai.Attempt))
 			response.HeartbeatDetails = ai.Details
+
+			response.WorkflowType = msBuilder.GetWorkflowType()
+			response.WorkflowDomain = common.StringPtr(domainName)
 
 			// Start a timer for the activity task.
 			timerTasks := []persistence.Task{}

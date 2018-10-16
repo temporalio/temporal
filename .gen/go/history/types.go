@@ -1998,6 +1998,8 @@ type RecordActivityTaskStartedResponse struct {
 	Attempt                         *int64               `json:"attempt,omitempty"`
 	ScheduledTimestampOfThisAttempt *int64               `json:"scheduledTimestampOfThisAttempt,omitempty"`
 	HeartbeatDetails                []byte               `json:"heartbeatDetails,omitempty"`
+	WorkflowType                    *shared.WorkflowType `json:"workflowType,omitempty"`
+	WorkflowDomain                  *string              `json:"workflowDomain,omitempty"`
 }
 
 // ToWire translates a RecordActivityTaskStartedResponse struct into a Thrift-level intermediate
@@ -2017,7 +2019,7 @@ type RecordActivityTaskStartedResponse struct {
 //   }
 func (v *RecordActivityTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -2061,6 +2063,22 @@ func (v *RecordActivityTaskStartedResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.WorkflowType != nil {
+		w, err = v.WorkflowType.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
+	if v.WorkflowDomain != nil {
+		w, err = wire.NewValueString(*(v.WorkflowDomain)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 80, Value: w}
 		i++
 	}
 
@@ -2141,6 +2159,24 @@ func (v *RecordActivityTaskStartedResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 70:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowType, err = _WorkflowType_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 80:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.WorkflowDomain = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -2154,7 +2190,7 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [7]string
 	i := 0
 	if v.ScheduledEvent != nil {
 		fields[i] = fmt.Sprintf("ScheduledEvent: %v", v.ScheduledEvent)
@@ -2174,6 +2210,14 @@ func (v *RecordActivityTaskStartedResponse) String() string {
 	}
 	if v.HeartbeatDetails != nil {
 		fields[i] = fmt.Sprintf("HeartbeatDetails: %v", v.HeartbeatDetails)
+		i++
+	}
+	if v.WorkflowType != nil {
+		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
+		i++
+	}
+	if v.WorkflowDomain != nil {
+		fields[i] = fmt.Sprintf("WorkflowDomain: %v", *(v.WorkflowDomain))
 		i++
 	}
 
@@ -2198,6 +2242,12 @@ func (v *RecordActivityTaskStartedResponse) Equals(rhs *RecordActivityTaskStarte
 		return false
 	}
 	if !((v.HeartbeatDetails == nil && rhs.HeartbeatDetails == nil) || (v.HeartbeatDetails != nil && rhs.HeartbeatDetails != nil && bytes.Equal(v.HeartbeatDetails, rhs.HeartbeatDetails))) {
+		return false
+	}
+	if !((v.WorkflowType == nil && rhs.WorkflowType == nil) || (v.WorkflowType != nil && rhs.WorkflowType != nil && v.WorkflowType.Equals(rhs.WorkflowType))) {
+		return false
+	}
+	if !_String_EqualsPtr(v.WorkflowDomain, rhs.WorkflowDomain) {
 		return false
 	}
 
@@ -2249,6 +2299,26 @@ func (v *RecordActivityTaskStartedResponse) GetScheduledTimestampOfThisAttempt()
 func (v *RecordActivityTaskStartedResponse) GetHeartbeatDetails() (o []byte) {
 	if v.HeartbeatDetails != nil {
 		return v.HeartbeatDetails
+	}
+
+	return
+}
+
+// GetWorkflowType returns the value of WorkflowType if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetWorkflowType() (o *shared.WorkflowType) {
+	if v.WorkflowType != nil {
+		return v.WorkflowType
+	}
+
+	return
+}
+
+// GetWorkflowDomain returns the value of WorkflowDomain if it is set or its
+// zero value if it is unset.
+func (v *RecordActivityTaskStartedResponse) GetWorkflowDomain() (o string) {
+	if v.WorkflowDomain != nil {
+		return *v.WorkflowDomain
 	}
 
 	return
