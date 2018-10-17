@@ -812,6 +812,7 @@ struct RegisterDomainRequest {
   70: optional string activeClusterName
   // A key-value map for any customized purpose
   80: optional map<string,string> data
+  90: optional string securityToken
 }
 
 struct ListDomainsRequest {
@@ -841,6 +842,7 @@ struct UpdateDomainRequest {
  20: optional UpdateDomainInfo updatedInfo
  30: optional DomainConfiguration configuration
  40: optional DomainReplicationConfiguration replicationConfiguration
+ 50: optional string securityToken
 }
 
 struct UpdateDomainResponse {
@@ -853,6 +855,7 @@ struct UpdateDomainResponse {
 
 struct DeprecateDomainRequest {
  10: optional string name
+ 20: optional string securityToken
 }
 
 struct StartWorkflowExecutionRequest {

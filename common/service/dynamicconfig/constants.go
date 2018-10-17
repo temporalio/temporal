@@ -131,8 +131,9 @@ var keys = map[Key]string{
 	ShardUpdateMinInterval:                                "history.shardUpdateMinInterval",
 	ShardSyncMinInterval:                                  "history.shardSyncMinInterval",
 	DefaultEventEncoding:                                  "history.defaultEventEncoding",
+	EnableAdminProtection:                                 "history.enableAdminProtection",
+	AdminOperationToken:                                   "history.adminOperationToken",
 
-	// worker settings
 	WorkerPersistenceMaxQPS: "worker.persistenceMaxQPS",
 }
 
@@ -314,6 +315,12 @@ const (
 	ShardSyncMinInterval
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding
+
+	// EnableAdminProtection is whether to enable admin checking
+	EnableAdminProtection
+	// AdminOperationToken is the token to pass admin checking
+	AdminOperationToken
+
 	// key for histoworkerry
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB

@@ -40,6 +40,10 @@ type Config struct {
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
 
 	MaxDecisionStartToCloseTimeout dynamicconfig.IntPropertyFnWithDomainFilter
+
+	// security protection settings
+	EnableAdminProtection dynamicconfig.BoolPropertyFn
+	AdminOperationToken   dynamicconfig.StringPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -51,6 +55,8 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		RPS:                            dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		HistoryMgrNumConns:             dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
 		MaxDecisionStartToCloseTimeout: dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
+		EnableAdminProtection:          dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
+		AdminOperationToken:            dc.GetStringProperty(dynamicconfig.AdminOperationToken, "CadenceTeamONLY"),
 	}
 }
 

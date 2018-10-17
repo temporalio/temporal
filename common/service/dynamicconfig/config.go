@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"fmt"
+
 	"github.com/uber-common/bark"
 )
 
@@ -87,6 +88,9 @@ type DurationPropertyFnWithTaskListInfoFilters func(domain string, taskList stri
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
 type BoolPropertyFn func(opts ...FilterOption) bool
+
+// StringPropertyFn is a wrapper to get string property from dynamic config
+type StringPropertyFn func(opts ...FilterOption) string
 
 // StringPropertyFnWithDomainFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithDomainFilter func(domain string) string
@@ -211,6 +215,18 @@ func (c *Collection) GetDurationPropertyFilteredByTaskListInfo(key Key, defaultV
 func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
 	return func(opts ...FilterOption) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
+		if err != nil {
+			c.logNoValue(key, err)
+		}
+		c.logValue(key, val, defaultValue)
+		return val
+	}
+}
+
+// GetStringProperty gets property and asserts that it's an string
+func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPropertyFn {
+	return func(opts ...FilterOption) string {
+		val, err := c.client.GetStringValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
 			c.logNoValue(key, err)
 		}
