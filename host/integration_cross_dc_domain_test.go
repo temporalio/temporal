@@ -191,6 +191,88 @@ func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainE
 	s.Equal(clusters, resp.ReplicationConfiguration.Clusters)
 }
 
+func (s *integrationCrossDCSuite) TestIntegrationRegister_GlobalDomainEnabled_LocalDomainWithSameNameExists() {
+	// re-initialize to enable global domain
+	s.TearDownTest()
+	s.setupTest(true, true)
+
+	domainName := "some random domain name"
+	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+		Info: &persistence.DomainInfo{
+			ID:          uuid.New(),
+			Name:        domainName,
+			Status:      persistence.DomainStatusRegistered,
+			Description: "",
+			OwnerEmail:  "",
+		},
+		Config: &persistence.DomainConfig{
+			Retention:  0,
+			EmitMetric: false,
+		},
+		IsGlobalDomain: false,
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
+			Clusters: []*persistence.ClusterReplicationConfig{
+				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+			},
+		},
+	})
+	s.Nil(err)
+
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(replicationConfig.ClusterName),
+		})
+	}
+
+	err = s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.IsType(&workflow.DomainAlreadyExistsError{}, err)
+}
+
+func (s *integrationCrossDCSuite) TestIntegrationRegister_GlobalDomainEnabled_GlobalDomainWithSameNameExists() {
+	// re-initialize to enable global domain
+	s.TearDownTest()
+	s.setupTest(true, true)
+
+	domainName := "some random domain name"
+	_, err := s.MetadataManagerV2.CreateDomain(&persistence.CreateDomainRequest{
+		Info: &persistence.DomainInfo{
+			ID:          uuid.New(),
+			Name:        domainName,
+			Status:      persistence.DomainStatusRegistered,
+			Description: "",
+			OwnerEmail:  "",
+		},
+		Config: &persistence.DomainConfig{
+			Retention:  0,
+			EmitMetric: false,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: s.ClusterMetadata.GetCurrentClusterName(),
+			Clusters: []*persistence.ClusterReplicationConfig{
+				&persistence.ClusterReplicationConfig{ClusterName: s.ClusterMetadata.GetCurrentClusterName()},
+			},
+		},
+		FailoverVersion: 0,
+	})
+	s.Nil(err)
+
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for _, replicationConfig := range persistence.GetOrUseDefaultClusters(s.ClusterMetadata.GetCurrentClusterName(), nil) {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(replicationConfig.ClusterName),
+		})
+	}
+
+	err = s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.IsType(&workflow.DomainAlreadyExistsError{}, err)
+}
+
 // Note: if the global domain is not enabled, active clusters and clusters
 // will be ignored on the server side
 func (s *integrationCrossDCSuite) TestIntegrationRegisterGetDomain_GlobalDomainDisabled_NoDefault() {
@@ -464,7 +546,76 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainDis
 	testFn(true)
 }
 
-func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_NotMaster_AllSet() {
+func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_NotMaster_AllSet_LocalDomain() {
+	// re-initialize to enable global domain
+	s.TearDownTest()
+	s.setupTest(true, false)
+
+	domainName := "some random domain name"
+	currentClusterName := s.ClusterMetadata.GetCurrentClusterName()
+	// bypass to create a domain, since this cluster is not the master
+	// set all attr to default
+	_, err := s.MetadataManager.CreateDomain(&persistence.CreateDomainRequest{
+		Info: &persistence.DomainInfo{
+			ID:          uuid.New(),
+			Name:        domainName,
+			Status:      persistence.DomainStatusRegistered,
+			Description: "",
+			OwnerEmail:  "",
+		},
+		Config: &persistence.DomainConfig{
+			Retention:  0,
+			EmitMetric: false,
+		},
+		ReplicationConfig: &persistence.DomainReplicationConfig{
+			ActiveClusterName: currentClusterName,
+			Clusters: []*persistence.ClusterReplicationConfig{
+				&persistence.ClusterReplicationConfig{ClusterName: currentClusterName},
+			},
+		},
+		FailoverVersion: 0,
+	})
+	s.Nil(err)
+
+	description := "some random description"
+	email := "some random email"
+	retention := int32(7)
+	emitMetric := true
+	clusters := []*workflow.ClusterReplicationConfiguration{&workflow.ClusterReplicationConfiguration{
+		ClusterName: common.StringPtr(currentClusterName),
+	}}
+
+	_, err = s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		UpdatedInfo: &workflow.UpdateDomainInfo{
+			Description: common.StringPtr(description),
+			OwnerEmail:  common.StringPtr(email),
+		},
+		Configuration: &workflow.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(retention),
+			EmitMetric:                             common.BoolPtr(emitMetric),
+		},
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			Clusters: clusters,
+		},
+	})
+	s.Nil(err)
+
+	describeResp, err := s.engine.DescribeDomain(createContext(), &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	})
+	s.Nil(err)
+	s.Equal(domainName, describeResp.DomainInfo.GetName())
+	s.Equal(workflow.DomainStatusRegistered, *describeResp.DomainInfo.Status)
+	s.Equal(description, describeResp.DomainInfo.GetDescription())
+	s.Equal(email, describeResp.DomainInfo.GetOwnerEmail())
+	s.Equal(retention, describeResp.Configuration.GetWorkflowExecutionRetentionPeriodInDays())
+	s.Equal(emitMetric, describeResp.Configuration.GetEmitMetric())
+	s.Equal(currentClusterName, describeResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(clusters, describeResp.ReplicationConfiguration.Clusters)
+}
+
+func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEnabled_NotMaster_AllSet_GlobalDomain() {
 	// re-initialize to enable global domain
 	s.TearDownTest()
 	s.setupTest(true, false)
@@ -528,8 +679,16 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	s.setupTest(true, true)
 
 	domainName := "some random domain name"
+	clusters := []*workflow.ClusterReplicationConfiguration{}
+	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
+		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
+			ClusterName: common.StringPtr(clusterName),
+		})
+	}
 	err := s.engine.RegisterDomain(createContext(), &workflow.RegisterDomainRequest{
-		Name: common.StringPtr(domainName),
+		Name:              common.StringPtr(domainName),
+		ActiveClusterName: common.StringPtr(s.ClusterMetadata.GetCurrentClusterName()),
+		Clusters:          clusters,
 	})
 	s.Nil(err)
 
@@ -537,12 +696,6 @@ func (s *integrationCrossDCSuite) TestIntegrationUpdateGetDomain_GlobalDomainEna
 	email := "some random email"
 	retention := int32(7)
 	emitMetric := true
-	clusters := []*workflow.ClusterReplicationConfiguration{}
-	for clusterName := range s.ClusterMetadata.GetAllClusterFailoverVersions() {
-		clusters = append(clusters, &workflow.ClusterReplicationConfiguration{
-			ClusterName: common.StringPtr(clusterName),
-		})
-	}
 
 	updateResp, err := s.engine.UpdateDomain(createContext(), &workflow.UpdateDomainRequest{
 		Name: common.StringPtr(domainName),

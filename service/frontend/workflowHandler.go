@@ -28,8 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/cadence/common/messaging"
-
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -47,6 +45,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/client"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
@@ -106,7 +105,7 @@ var (
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
 	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
 	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
-	errCannotRemoveClustersFromDomain  = &gen.BadRequestError{Message: "Cannot remove existing replicated clusters from a domain."}
+	errCannotModifyClustersFromDomain  = &gen.BadRequestError{Message: "Cannot modify existing replicated clusters from a domain."}
 	errActiveClusterNotInClusters      = &gen.BadRequestError{Message: "Active cluster is not contained in all clusters."}
 	errCannotDoDomainFailoverAndUpdate = &gen.BadRequestError{Message: "Cannot set active cluster to current cluster when other parameters are set."}
 
@@ -216,6 +215,18 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(errDomainNotSet, scope)
 	}
 
+	// first check if the name is already resigered as the local domain
+	_, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: registerRequest.GetName()})
+	if err != nil {
+		if _, ok := err.(*gen.EntityNotExistsError); !ok {
+			return wh.error(err, scope)
+		}
+		// extity not exists, we can proceed to create the domain
+	} else {
+		// domain already exists, cannot proceed
+		return wh.error(&gen.DomainAlreadyExistsError{Message: "Domain already exists."}, scope)
+	}
+
 	activeClusterName := clusterMetadata.GetCurrentClusterName()
 	// input validation on cluster names
 	if registerRequest.ActiveClusterName != nil {
@@ -272,8 +283,7 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(err, scope)
 	}
 
-	// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-	if clusterMetadata.IsGlobalDomainEnabled() {
+	if domainRequest.IsGlobalDomain {
 		err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationCreate,
 			domainRequest.Info, domainRequest.Config, domainRequest.ReplicationConfig, 0,
 			domainRequest.FailoverVersion, domainRequest.IsGlobalDomain)
@@ -431,10 +441,28 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 				clusters = append(clusters, &persistence.ClusterReplicationConfig{ClusterName: clusterName})
 				targetClustersNames[clusterName] = true
 			}
+
+			// NOTE: this is to validate that target cluster cannot change
+			// For future adding new cluster and backfill workflow remove this logic
+			// -- START
+			existingClustersNames := make(map[string]bool)
+			for _, cluster := range existingDomain.ReplicationConfig.Clusters {
+				existingClustersNames[cluster.ClusterName] = true
+			}
+			if len(existingClustersNames) != len(targetClustersNames) {
+				return errCannotModifyClustersFromDomain
+			}
+			for clusterName := range existingClustersNames {
+				if _, ok := targetClustersNames[clusterName]; !ok {
+					return errCannotModifyClustersFromDomain
+				}
+			}
+			// -- END
+
 			// validate that updated clusters is a superset of existing clusters
 			for _, cluster := range replicationConfig.Clusters {
 				if _, ok := targetClustersNames[cluster.ClusterName]; !ok {
-					return errCannotRemoveClustersFromDomain
+					return errCannotModifyClustersFromDomain
 				}
 			}
 			replicationConfig.Clusters = clusters
@@ -502,8 +530,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	if configurationChanged && activeClusterChanged {
 		return nil, wh.error(errCannotDoDomainFailoverAndUpdate, scope)
 	} else if configurationChanged || activeClusterChanged {
-		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-		if configurationChanged && clusterMetadata.IsGlobalDomainEnabled() && !clusterMetadata.IsMasterCluster() {
+		if configurationChanged && getResponse.IsGlobalDomain && !clusterMetadata.IsMasterCluster() {
 			return nil, wh.error(errNotMasterCluster, scope)
 		}
 
@@ -540,8 +567,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 			return nil, wh.error(err, scope)
 		}
 
-		// TODO remove the IsGlobalDomainEnabled check once cross DC is public
-		if clusterMetadata.IsGlobalDomainEnabled() && getResponse.IsGlobalDomain {
+		if getResponse.IsGlobalDomain {
 			err = wh.domainReplicator.HandleTransmissionTask(replicator.DomainOperationUpdate,
 				info, config, replicationConfig, configVersion, failoverVersion, getResponse.IsGlobalDomain)
 			if err != nil {
