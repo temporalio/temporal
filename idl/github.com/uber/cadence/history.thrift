@@ -240,6 +240,20 @@ struct SyncShardStatusRequest {
   30: optional i64 (js.type = "Long") timestamp
 }
 
+struct SyncActivityRequest {
+  10: optional string domainId
+  20: optional string workflowId
+  30: optional string runId
+  40: optional i64 (js.type = "Long") version
+  50: optional i64 (js.type = "Long") scheduledId
+  60: optional i64 (js.type = "Long") scheduledTime
+  70: optional i64 (js.type = "Long") startedId
+  80: optional i64 (js.type = "Long") startedTime
+  90: optional i64 (js.type = "Long") lastHeartbeatTime
+  100: optional binary details
+  110: optional i32 attempt
+}
+
 /**
 * HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 * of workflow instances already created.
@@ -581,6 +595,18 @@ service HistoryService {
       4: ShardOwnershipLostError shardOwnershipLostError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.ServiceBusyError serviceBusyError,
+    )
+
+  /**
+  * SyncActivity sync the activity status
+  **/
+  void SyncActivity(1: SyncActivityRequest syncActivityRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+      5: shared.ServiceBusyError serviceBusyError,
     )
 
   /**

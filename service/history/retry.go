@@ -29,11 +29,11 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-func prepareNextRetry(a *persistence.ActivityInfo, errReason string) persistence.Task {
-	return prepareNextRetryWithNowTime(a, errReason, time.Now())
+func prepareActivityNextRetry(version int64, a *persistence.ActivityInfo, errReason string) persistence.Task {
+	return prepareActivityNextRetryWithNowTime(version, a, errReason, time.Now())
 }
 
-func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, now time.Time) persistence.Task {
+func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityInfo, errReason string, now time.Time) persistence.Task {
 	if !a.HasRetryPolicy || a.CancelRequested {
 		return nil
 	}
@@ -45,6 +45,7 @@ func prepareNextRetryWithNowTime(a *persistence.ActivityInfo, errReason string, 
 	nextScheduleTime := now.Add(backoffInterval)
 
 	// a retry is needed, update activity info for next retry
+	a.Version = version
 	a.Attempt++
 	a.ScheduledTime = nextScheduleTime // update to next schedule time
 	a.StartedID = common.EmptyEventID

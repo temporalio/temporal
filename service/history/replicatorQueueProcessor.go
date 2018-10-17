@@ -40,6 +40,7 @@ type (
 	replicatorQueueProcessorImpl struct {
 		currentClusterNamer string
 		shard               ShardContext
+		historyCache        *historyCache
 		executionMgr        persistence.ExecutionManager
 		historyMgr          persistence.HistoryManager
 		replicator          messaging.Producer
@@ -60,7 +61,7 @@ var (
 	defaultHistoryPageSize    = 1000
 )
 
-func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Producer,
+func newReplicatorQueueProcessor(shard ShardContext, historyCache *historyCache, replicator messaging.Producer,
 	executionMgr persistence.ExecutionManager, historyMgr persistence.HistoryManager, logger bark.Logger) queueProcessor {
 
 	currentClusterNamer := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
@@ -86,6 +87,7 @@ func newReplicatorQueueProcessor(shard ShardContext, replicator messaging.Produc
 	processor := &replicatorQueueProcessorImpl{
 		currentClusterNamer: currentClusterNamer,
 		shard:               shard,
+		historyCache:        historyCache,
 		executionMgr:        executionMgr,
 		historyMgr:          historyMgr,
 		replicator:          replicator,
@@ -109,6 +111,12 @@ func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) (int, error)
 	}
 
 	switch task.TaskType {
+	case persistence.ReplicationTaskTypeSyncActivity:
+		err := p.processSyncActivityTask(task)
+		if err == nil {
+			err = p.executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{TaskID: task.GetTaskID()})
+		}
+		return metrics.ReplicatorTaskSyncActivityScope, err
 	case persistence.ReplicationTaskTypeHistory:
 		err := p.processHistoryReplicationTask(task)
 		if _, ok := err.(*shared.EntityNotExistsError); ok {
@@ -126,6 +134,65 @@ func (p *replicatorQueueProcessorImpl) process(qTask queueTaskInfo) (int, error)
 func (p *replicatorQueueProcessorImpl) queueShutdown() error {
 	// there is no shutdown specific behavior for replication queue
 	return nil
+}
+
+func (p *replicatorQueueProcessorImpl) processSyncActivityTask(task *persistence.ReplicationTaskInfo) (retError error) {
+	domainID := task.DomainID
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(task.WorkflowID),
+		RunId:      common.StringPtr(task.RunID),
+	}
+	context, release, err := p.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		if _, ok := err.(*shared.EntityNotExistsError); ok {
+			return nil
+		}
+		return err
+	}
+	if !msBuilder.IsWorkflowExecutionRunning() {
+		// workflow already finished, no need to process the timer
+		return nil
+	}
+
+	activityInfo, ok := msBuilder.GetActivityInfo(task.ScheduledID)
+	if !ok {
+		return nil
+	}
+
+	// int64 can only represent several hundred years of time
+	// when activity is started, the hearbeat timestamp will be empty
+	// but due the in64 limitation, the actual timestamp got is
+	// roughly 17xx year.
+	// set the heartbeat timestamp to started time if empty
+	heartbeatTime := activityInfo.LastHeartBeatUpdatedTime.UnixNano()
+	if heartbeatTime < activityInfo.StartedTime.UnixNano() {
+		heartbeatTime = activityInfo.StartedTime.UnixNano()
+	}
+
+	replicationTask := &replicator.ReplicationTask{
+		TaskType: replicator.ReplicationTaskType.Ptr(replicator.ReplicationTaskTypeSyncActivity),
+		SyncActicvityTaskAttributes: &replicator.SyncActicvityTaskAttributes{
+			DomainId:          common.StringPtr(task.DomainID),
+			WorkflowId:        common.StringPtr(task.WorkflowID),
+			RunId:             common.StringPtr(task.RunID),
+			Version:           common.Int64Ptr(activityInfo.Version),
+			ScheduledId:       common.Int64Ptr(activityInfo.ScheduleID),
+			ScheduledTime:     common.Int64Ptr(activityInfo.ScheduledTime.UnixNano()),
+			StartedId:         common.Int64Ptr(activityInfo.StartedID),
+			StartedTime:       common.Int64Ptr(activityInfo.StartedTime.UnixNano()),
+			LastHeartbeatTime: common.Int64Ptr(heartbeatTime),
+			Details:           activityInfo.Details,
+			Attempt:           common.Int32Ptr(activityInfo.Attempt),
+		},
+	}
+
+	return p.replicator.Publish(replicationTask)
 }
 
 func (p *replicatorQueueProcessorImpl) processHistoryReplicationTask(task *persistence.ReplicationTaskInfo) error {

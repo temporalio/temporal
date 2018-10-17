@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
@@ -78,6 +77,8 @@ type (
 
 var (
 	errUnexpectedQueueTask = errors.New("unexpected queue task")
+
+	loadQueueTaskThrottleRetryDelay = 5 * time.Second
 )
 
 func newQueueProcessorBase(clusterName string, shard ShardContext, options *QueueProcessorOptions, processor processor, queueAckMgr queueAckMgr, logger bark.Logger) *queueProcessorBase {
@@ -207,7 +208,7 @@ processorPumpLoop:
 
 func (p *queueProcessorBase) processBatch(tasksCh chan<- queueTaskInfo) {
 
-	if !p.rateLimiter.Consume(1, p.options.MaxPollInterval()) {
+	if !p.rateLimiter.Consume(1, loadQueueTaskThrottleRetryDelay) {
 		p.notifyNewTask() // re-enqueue the event
 		return
 	}

@@ -27,6 +27,7 @@ enum ReplicationTaskType {
   Domain
   History
   SyncShardStatus
+  SyncActivity
 }
 
 enum DomainOperation {
@@ -63,10 +64,25 @@ struct SyncShardStatusTaskAttributes {
   30: optional i64 (js.type = "Long") timestamp
 }
 
+struct SyncActicvityTaskAttributes {
+  10: optional string domainId
+  20: optional string workflowId
+  30: optional string runId
+  40: optional i64 (js.type = "Long") version
+  50: optional i64 (js.type = "Long") scheduledId
+  60: optional i64 (js.type = "Long") scheduledTime
+  70: optional i64 (js.type = "Long") startedId
+  80: optional i64 (js.type = "Long") startedTime
+  90: optional i64 (js.type = "Long") lastHeartbeatTime
+  100: optional binary details
+  110: optional i32 attempt
+}
+
 struct ReplicationTask {
   10: optional ReplicationTaskType taskType
   20: optional DomainTaskAttributes domainTaskAttributes
   30: optional HistoryTaskAttributes historyTaskAttributes
   40: optional SyncShardStatusTaskAttributes syncShardStatusTaskAttributes
+  50: optional SyncActicvityTaskAttributes syncActicvityTaskAttributes
 }
 

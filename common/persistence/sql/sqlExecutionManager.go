@@ -23,15 +23,14 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/uber/cadence/common/collection"
 	"time"
-
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	p "github.com/uber/cadence/common/persistence"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
+	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/collection"
+	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
 )
 
@@ -134,6 +133,7 @@ type (
 		NextEventID         int64
 		Version             int64
 		LastReplicationInfo []byte
+		ScheduledID         int64
 		ShardID             int
 	}
 
@@ -328,7 +328,7 @@ domain_id = ? AND
 workflow_id = ? AND
 run_id = ?`
 
-	transferTaskInfoColumns = `task_id, 
+	transferTaskInfoColumns = `task_id,
 domain_id,
 workflow_id,
 run_id,
@@ -373,12 +373,12 @@ task_id <= ?
 (shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version) VALUES
 (:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version)`
 
-	getCurrentExecutionSQLQuery = `SELECT 
-ce.shard_id, s.range_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.state, ce.close_status, ce.start_version, e.last_write_version 
+	getCurrentExecutionSQLQuery = `SELECT
+ce.shard_id, s.range_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
 FROM current_executions ce
 INNER JOIN shards s ON s.shard_id = ce.shard_id
-INNER JOIN executions e ON s.shard_id = e.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id 
-                           AND ce.run_id = e.run_id 
+INNER JOIN executions e ON s.shard_id = e.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id
+                           AND ce.run_id = e.run_id
 WHERE ce.shard_id = ? AND ce.domain_id = ? AND ce.workflow_id = ?
 `
 
@@ -435,7 +435,8 @@ task_type,
 first_event_id,
 next_event_id,
 version,
-last_replication_info`
+last_replication_info,
+scheduled_id`
 
 	replicationTaskInfoColumnsTags = `:task_id,
 :domain_id,
@@ -445,7 +446,8 @@ last_replication_info`
 :first_event_id,
 :next_event_id,
 :version,
-:last_replication_info`
+:last_replication_info,
+:scheduled_id`
 
 	replicationTasksColumns     = `shard_id, ` + replicationTaskInfoColumns
 	replicationTasksColumnsTags = `:shard_id, ` + replicationTaskInfoColumnsTags
@@ -1375,9 +1377,11 @@ func (m *sqlExecutionManager) GetReplicationTasks(request *p.GetReplicationTasks
 	var tasks = make([]*p.ReplicationTaskInfo, len(rows))
 	for i, row := range rows {
 		var lastReplicationInfo map[string]*p.ReplicationInfo
-		if err := gobDeserialize(row.LastReplicationInfo, &lastReplicationInfo); err != nil {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("GetReplicationTasks operation failed. Failed to deserialize LastReplicationInfo. Error: %v", err),
+		if row.TaskType == p.ReplicationTaskTypeHistory {
+			if err := gobDeserialize(row.LastReplicationInfo, &lastReplicationInfo); err != nil {
+				return nil, &workflow.InternalServiceError{
+					Message: fmt.Sprintf("GetReplicationTasks operation failed. Failed to deserialize LastReplicationInfo. Error: %v", err),
+				}
 			}
 		}
 
@@ -1748,7 +1752,8 @@ func createReplicationTasks(tx *sqlx.Tx, replicationTasks []p.Task, shardID int,
 
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
-		version := int64(0)
+		version := common.EmptyVersion
+		activityScheduleID := common.EmptyEventID
 		var lastReplicationInfo []byte
 		var err error
 
@@ -1771,6 +1776,11 @@ func createReplicationTasks(tx *sqlx.Tx, replicationTasks []p.Task, shardID int,
 				}
 			}
 
+		case p.ReplicationTaskTypeSyncActivity:
+			version = task.GetVersion()
+			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
+			lastReplicationInfo = []byte{}
+
 		default:
 			return &workflow.InternalServiceError{
 				Message: fmt.Sprintf("Unknown replication task: %v", task),
@@ -1781,6 +1791,7 @@ func createReplicationTasks(tx *sqlx.Tx, replicationTasks []p.Task, shardID int,
 		replicationTasksRows[i].NextEventID = nextEventID
 		replicationTasksRows[i].Version = version
 		replicationTasksRows[i].LastReplicationInfo = lastReplicationInfo
+		replicationTasksRows[i].ScheduledID = activityScheduleID
 	}
 
 	query, args, err := tx.BindNamed(createReplicationTasksSQLQuery, replicationTasksRows)

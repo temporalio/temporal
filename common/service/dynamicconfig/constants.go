@@ -74,6 +74,7 @@ var keys = map[Key]string{
 	MatchingMaxTaskBatchSize:                "matching.maxTaskBatchSize",
 
 	// history settings
+	EnableSyncActivityHeartbeat:                           "history.enableSyncActivityHeartbeat",
 	HistoryRPS:                                            "history.rps",
 	HistoryPersistenceMaxQPS:                              "history.persistenceMaxQPS",
 	HistoryVisibilityOpenMaxQPS:                           "history.historyVisibilityOpenMaxQPS",
@@ -199,6 +200,8 @@ const (
 
 	// key for history
 
+	// EnableSyncActivityHeartbeat whether enable sending out sync activity heartbeat replication task
+	EnableSyncActivityHeartbeat
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS
 	// HistoryPersistenceMaxQPS is the max qps history host can query DB

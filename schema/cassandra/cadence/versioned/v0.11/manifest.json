@@ -5,6 +5,7 @@
   "SchemaUpdateCqlFiles": [
     "workflow_retry.cql",
     "history_size.cql",
-    "event_encoding.cql"
+    "event_encoding.cql",
+    "sync_activity.cql"
   ]
 }

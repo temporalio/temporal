@@ -442,4 +442,18 @@ func (_m *MockHistoryEngine) SyncShardStatus(ctx context.Context, request *gohis
 	return r0
 }
 
+// SyncActivity is mock implementation for SyncActivity of HistoryEngine
+func (_m *MockHistoryEngine) SyncActivity(ctx context.Context, request *gohistory.SyncActivityRequest) error {
+	ret := _m.Called(request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*gohistory.SyncActivityRequest) error); ok {
+		r0 = rf(request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 var _ Engine = (*MockHistoryEngine)(nil)

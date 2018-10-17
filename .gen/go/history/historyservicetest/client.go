@@ -736,6 +736,37 @@ func (mr *_MockClientRecorder) StartWorkflowExecution(
 	return mr.mock.ctrl.RecordCall(mr.mock, "StartWorkflowExecution", args...)
 }
 
+// SyncActivity responds to a SyncActivity call based on the mock expectations. This
+// call will fail if the mock does not expect this call. Use EXPECT to expect
+// a call to this function.
+//
+// 	client.EXPECT().SyncActivity(gomock.Any(), ...).Return(...)
+// 	... := client.SyncActivity(...)
+func (m *MockClient) SyncActivity(
+	ctx context.Context,
+	_SyncActivityRequest *history.SyncActivityRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := []interface{}{ctx, _SyncActivityRequest}
+	for _, o := range opts {
+		args = append(args, o)
+	}
+	i := 0
+	ret := m.ctrl.Call(m, "SyncActivity", args...)
+	err, _ = ret[i].(error)
+	return
+}
+
+func (mr *_MockClientRecorder) SyncActivity(
+	ctx interface{},
+	_SyncActivityRequest interface{},
+	opts ...interface{},
+) *gomock.Call {
+	args := append([]interface{}{ctx, _SyncActivityRequest}, opts...)
+	return mr.mock.ctrl.RecordCall(mr.mock, "SyncActivity", args...)
+}
+
 // SyncShardStatus responds to a SyncShardStatus call based on the mock expectations. This
 // call will fail if the mock does not expect this call. Use EXPECT to expect
 // a call to this function.

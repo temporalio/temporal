@@ -1094,6 +1094,47 @@ func (h *Handler) SyncShardStatus(ctx context.Context, syncShardStatusRequest *h
 	return nil
 }
 
+// SyncActivity is called by processor to sync activity
+func (h *Handler) SyncActivity(ctx context.Context, syncActivityRequest *hist.SyncActivityRequest) error {
+	h.startWG.Wait()
+
+	scope := metrics.HistorySyncActivityScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		h.updateErrorMetric(scope, errHistoryHostThrottle)
+		return errHistoryHostThrottle
+	}
+
+	if syncActivityRequest.DomainId == nil || uuid.Parse(syncActivityRequest.GetDomainId()) == nil {
+		return errDomainNotSet
+	}
+
+	if syncActivityRequest.WorkflowId == nil {
+		return errWorkflowIDNotSet
+	}
+
+	if syncActivityRequest.RunId == nil || uuid.Parse(syncActivityRequest.GetRunId()) == nil {
+		return errRunIDNotValid
+	}
+
+	engine, err := h.controller.GetEngine(syncActivityRequest.GetWorkflowId())
+	if err != nil {
+		h.updateErrorMetric(scope, err)
+		return err
+	}
+
+	err = engine.SyncActivity(ctx, syncActivityRequest)
+	if err != nil {
+		h.updateErrorMetric(scope, h.convertError(err))
+		return h.convertError(err)
+	}
+
+	return nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

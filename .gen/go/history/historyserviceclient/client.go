@@ -162,6 +162,12 @@ type Interface interface {
 		opts ...yarpc.CallOption,
 	) (*shared.StartWorkflowExecutionResponse, error)
 
+	SyncActivity(
+		ctx context.Context,
+		SyncActivityRequest *history.SyncActivityRequest,
+		opts ...yarpc.CallOption,
+	) error
+
 	SyncShardStatus(
 		ctx context.Context,
 		SyncShardStatusRequest *history.SyncShardStatusRequest,
@@ -679,6 +685,29 @@ func (c client) StartWorkflowExecution(
 	}
 
 	success, err = history.HistoryService_StartWorkflowExecution_Helper.UnwrapResponse(&result)
+	return
+}
+
+func (c client) SyncActivity(
+	ctx context.Context,
+	_SyncActivityRequest *history.SyncActivityRequest,
+	opts ...yarpc.CallOption,
+) (err error) {
+
+	args := history.HistoryService_SyncActivity_Helper.Args(_SyncActivityRequest)
+
+	var body wire.Value
+	body, err = c.c.Call(ctx, args, opts...)
+	if err != nil {
+		return
+	}
+
+	var result history.HistoryService_SyncActivity_Result
+	if err = result.FromWire(body); err != nil {
+		return
+	}
+
+	err = history.HistoryService_SyncActivity_Helper.UnwrapResponse(&result)
 	return
 }
 

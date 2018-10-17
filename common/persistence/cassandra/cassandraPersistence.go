@@ -192,7 +192,8 @@ const (
 		`first_event_id: ?,` +
 		`next_event_id: ?,` +
 		`version: ?,` +
-		`last_replication_info: ?` +
+		`last_replication_info: ?, ` +
+		`scheduled_id: ?` +
 		`}`
 
 	templateTimerTaskType = `{` +
@@ -2766,8 +2767,9 @@ func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replic
 		// Replication task specific information
 		firstEventID := common.EmptyEventID
 		nextEventID := common.EmptyEventID
-		version := int64(0)
+		version := common.EmptyVersion
 		var lastReplicationInfo map[string]map[string]interface{}
+		activityScheduleID := common.EmptyEventID
 
 		switch task.GetType() {
 		case p.ReplicationTaskTypeHistory:
@@ -2778,7 +2780,11 @@ func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replic
 			for k, v := range task.(*p.HistoryReplicationTask).LastReplicationInfo {
 				lastReplicationInfo[k] = createReplicationInfoMap(v)
 			}
-
+		case p.ReplicationTaskTypeSyncActivity:
+			version = task.GetVersion()
+			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
+			// cassandra does not like null
+			lastReplicationInfo = make(map[string]map[string]interface{})
 		default:
 			d.logger.Fatal("Unknown Replication Task.")
 		}
@@ -2798,6 +2804,7 @@ func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replic
 			nextEventID,
 			version,
 			lastReplicationInfo,
+			activityScheduleID,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -3565,6 +3572,8 @@ func createReplicationTaskInfo(result map[string]interface{}) *p.ReplicationTask
 			for key, value := range replicationInfoMap {
 				info.LastReplicationInfo[key] = createReplicationInfo(value)
 			}
+		case "scheduled_id":
+			info.ScheduledID = v.(int64)
 		}
 	}
 

@@ -139,6 +139,11 @@ type Interface interface {
 		StartRequest *history.StartWorkflowExecutionRequest,
 	) (*shared.StartWorkflowExecutionResponse, error)
 
+	SyncActivity(
+		ctx context.Context,
+		SyncActivityRequest *history.SyncActivityRequest,
+	) error
+
 	SyncShardStatus(
 		ctx context.Context,
 		SyncShardStatusRequest *history.SyncShardStatusRequest,
@@ -393,6 +398,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "SyncActivity",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.SyncActivity),
+				},
+				Signature:    "SyncActivity(SyncActivityRequest *history.SyncActivityRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "SyncShardStatus",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -416,7 +432,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 23)
+	procedures := make([]transport.Procedure, 0, 24)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -813,6 +829,25 @@ func (h handler) StartWorkflowExecution(ctx context.Context, body wire.Value) (t
 
 	hadError := err != nil
 	result, err := history.HistoryService_StartWorkflowExecution_Helper.WrapResponse(success, err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) SyncActivity(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_SyncActivity_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.SyncActivity(ctx, args.SyncActivityRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_SyncActivity_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

@@ -173,7 +173,8 @@ CREATE TABLE replication_tasks (
 	next_event_id BIGINT NOT NULL,
 	version BIGINT NOT NULL,
   last_replication_info BLOB NOT NULL,
-PRIMARY KEY (shard_id, task_id)
+	scheduled_id BIGINT NOT NULL,
+	PRIMARY KEY (shard_id, task_id)
 );
 
 CREATE TABLE timer_tasks (

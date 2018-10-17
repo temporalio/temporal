@@ -155,7 +155,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 
 	// Only start the replicator processor if valid publisher is passed in
 	if publisher != nil {
-		replicatorProcessor := newReplicatorQueueProcessor(shard, publisher, executionManager, historyManager, logger)
+		replicatorProcessor := newReplicatorQueueProcessor(shard, historyEngImpl.historyCache, publisher, executionManager, historyManager, logger)
 		historyEngImpl.replicatorProcessor = replicatorProcessor
 		shardWrapper.replcatorProcessor = replicatorProcessor
 		historyEngImpl.replicator = newHistoryReplicator(shard, historyEngImpl, historyCache, shard.GetDomainCache(), historyManager,
@@ -1656,7 +1656,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(ctx context.Context, req *
 			}
 
 			postActions := &updateWorkflowAction{}
-			retryTask := msBuilder.CreateRetryTimer(ai, req.FailedRequest.GetReason())
+			retryTask := msBuilder.CreateActivityRetryTimer(ai, req.FailedRequest.GetReason())
 			if retryTask != nil {
 				// need retry
 				postActions.timerTasks = append(postActions.timerTasks, retryTask)
@@ -1758,7 +1758,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(ctx context.Context,
 	err = e.updateWorkflowExecution(ctx, domainID, workflowExecution, false, false,
 		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				e.logger.Errorf("Heartbeat failed ")
+				e.logger.Debug("Heartbeat failed")
 				return nil, ErrWorkflowCompleted
 			}
 
@@ -2326,6 +2326,10 @@ func (e *historyEngineImpl) SyncShardStatus(ctx context.Context, request *h.Sync
 	e.txProcessor.NotifyNewTask(clusterName, []persistence.Task{})
 	e.timerProcessor.NotifyNewTimers(clusterName, now, []persistence.Task{})
 	return nil
+}
+
+func (e *historyEngineImpl) SyncActivity(ctx context.Context, request *h.SyncActivityRequest) (retError error) {
+	return e.replicator.SyncActivity(ctx, request)
 }
 
 type updateWorkflowAction struct {

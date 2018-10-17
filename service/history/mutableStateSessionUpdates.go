@@ -31,6 +31,7 @@ type (
 		newEventsBuilder                 *historyBuilder
 		updateActivityInfos              []*persistence.ActivityInfo
 		deleteActivityInfos              []int64
+		syncActivityTasks                []persistence.Task
 		updateTimerInfos                 []*persistence.TimerInfo
 		deleteTimerInfos                 []string
 		updateChildExecutionInfos        []*persistence.ChildExecutionInfo

@@ -418,3 +418,20 @@ func (c *metricClient) SyncShardStatus(
 
 	return err
 }
+
+func (c *metricClient) SyncActivity(
+	context context.Context,
+	request *h.SyncActivityRequest,
+	opts ...yarpc.CallOption) error {
+	c.metricsClient.IncCounter(metrics.HistoryClientSyncActivityScope, metrics.CadenceClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientSyncActivityScope, metrics.CadenceClientLatency)
+	err := c.client.SyncActivity(context, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientSyncActivityScope, metrics.CadenceClientFailures)
+	}
+
+	return err
+}

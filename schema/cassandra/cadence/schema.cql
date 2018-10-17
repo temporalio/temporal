@@ -108,6 +108,7 @@ CREATE TYPE replication_task (
   next_event_id              bigint,  -- Used by ReplicationTask to set the next event ID of the applied transaction
   version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
   last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
+  scheduled_id               bigint, -- Used by ReplicationTask to sync activity info
 );
 
 CREATE TYPE timer_task (

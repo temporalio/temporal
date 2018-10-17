@@ -444,16 +444,18 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Success() {
 		EventID:             di.ScheduleID,
 	}
 
-	addActivityTaskCompletedEvent(msBuilder, scheduleEvent.GetEventId(), startedEvent.GetEventId(), []byte(nil), identity)
+	completeEvent := addActivityTaskCompletedEvent(msBuilder, scheduleEvent.GetEventId(), startedEvent.GetEventId(), []byte(nil), identity)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), completeEvent.GetVersion(), completeEvent.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", version).Return(s.mockClusterMetadata.GetCurrentClusterName())
 
 	_, err := s.timerQueueStandbyProcessor.process(timerTask)
 	s.Nil(err)
 }
 
-func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple() {
+func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
 	domainID := "some random domain ID"
 	execution := workflow.WorkflowExecution{
 		WorkflowId: common.StringPtr("some random workflow ID"),
@@ -494,8 +496,12 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple() 
 	activityID2 := "activity 2"
 	activityType2 := "activity type 2"
 	timerTimeout2 := 20 * time.Second
-	_, timerInfo2 := addActivityTaskScheduledEvent(msBuilder, event.GetEventId(), activityID2, activityType2, tasklist, []byte(nil),
+	scheduleEvent2, timerInfo2 := addActivityTaskScheduledEvent(msBuilder, event.GetEventId(), activityID2, activityType2, tasklist, []byte(nil),
 		int32(timerTimeout2.Seconds()), int32(timerTimeout2.Seconds()), int32(timerTimeout2.Seconds()))
+	addActivityTaskStartedEvent(msBuilder, scheduleEvent2.GetEventId(), tasklist, identity)
+	activityInfo2 := msBuilder.pendingActivityInfoIDs[scheduleEvent2.GetEventId()]
+	activityInfo2.TimerTaskStatus |= TimerTaskStatusCreatedHeartbeat
+	activityInfo2.LastHeartBeatUpdatedTime = time.Now()
 
 	tBuilder := newTimerBuilder(s.mockShard.GetConfig(), s.logger, common.NewRealTimeSource())
 	tBuilder.AddStartToCloseActivityTimeout(timerInfo1)
@@ -508,15 +514,54 @@ func (s *timerQueueStandbyProcessorSuite) TestProcessActivityTimeout_Multiple() 
 		RunID:               execution.GetRunId(),
 		TaskID:              int64(100),
 		TaskType:            persistence.TaskTypeActivityTimeout,
-		TimeoutType:         int(workflow.TimeoutTypeStartToClose),
-		VisibilityTimestamp: tBuilder.GetActivityTimerTaskIfNeeded(msBuilder).(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp(),
-		EventID:             di.ScheduleID,
+		TimeoutType:         int(workflow.TimeoutTypeHeartbeat),
+		VisibilityTimestamp: activityInfo2.LastHeartBeatUpdatedTime.Add(-5 * time.Second),
+		EventID:             scheduleEvent2.GetEventId(),
 	}
 
-	addActivityTaskCompletedEvent(msBuilder, scheduleEvent1.GetEventId(), startedEvent1.GetEventId(), []byte(nil), identity)
+	completeEvent1 := addActivityTaskCompletedEvent(msBuilder, scheduleEvent1.GetEventId(), startedEvent1.GetEventId(), []byte(nil), identity)
+	msBuilder.UpdateReplicationStateLastEventID(s.mockClusterMetadata.GetCurrentClusterName(), completeEvent1.GetVersion(), completeEvent1.GetEventId())
 
 	persistenceMutableState := createMutableState(msBuilder)
 	s.mockExecutionMgr.On("GetWorkflowExecution", mock.Anything).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).Once()
+	// make the version match the cluster name in standby cluster, so standby cluster can do update on mutable state
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", version).Return(s.clusterName)
+	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
+		s.Equal(1, len(input.TimerTasks))
+		s.Equal(1, len(input.UpsertActivityInfos))
+		msBuilder.executionInfo.LastUpdatedTimestamp = input.ExecutionInfo.LastUpdatedTimestamp
+		input.RangeID = 0
+		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
+			ExecutionInfo:                 msBuilder.executionInfo,
+			ReplicationState:              msBuilder.replicationState,
+			TransferTasks:                 nil,
+			ReplicationTasks:              nil,
+			TimerTasks:                    input.TimerTasks,
+			Condition:                     msBuilder.GetNextEventID(),
+			DeleteTimerTask:               nil,
+			UpsertActivityInfos:           input.UpsertActivityInfos,
+			DeleteActivityInfos:           []int64{},
+			UpserTimerInfos:               []*persistence.TimerInfo{},
+			DeleteTimerInfos:              []string{},
+			UpsertChildExecutionInfos:     []*persistence.ChildExecutionInfo{},
+			DeleteChildExecutionInfo:      nil,
+			UpsertRequestCancelInfos:      []*persistence.RequestCancelInfo{},
+			DeleteRequestCancelInfo:       nil,
+			UpsertSignalInfos:             []*persistence.SignalInfo{},
+			DeleteSignalInfo:              nil,
+			UpsertSignalRequestedIDs:      []string{},
+			DeleteSignalRequestedID:       "",
+			NewBufferedEvents:             nil,
+			ClearBufferedEvents:           false,
+			NewBufferedReplicationTask:    nil,
+			DeleteBufferedReplicationTask: nil,
+			ContinueAsNew:                 nil,
+			FinishExecution:               false,
+			FinishedExecutionTTL:          0,
+			Encoding:                      common.EncodingType("json"),
+		}, input)
+		return true
+	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Once()
 
 	_, err := s.timerQueueStandbyProcessor.process(timerTask)
 	s.Nil(err)

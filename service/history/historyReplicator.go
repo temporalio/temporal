@@ -74,6 +74,8 @@ var (
 	ErrRetryExistingWorkflow = &shared.RetryTaskError{Message: "workflow with same version is running"}
 	// ErrRetryBufferEvents is returned when events are arriving out of order, should retry, or specify force apply
 	ErrRetryBufferEvents = &shared.RetryTaskError{Message: "retry on applying buffer events"}
+	// ErrRetrySyncActivity is returned when sync activity replication tasks are arriving out of order, should retry
+	ErrRetrySyncActivity = &shared.RetryTaskError{Message: "retry on applying sync activity"}
 	// ErrRetryExecutionAlreadyStarted is returned to indicate another workflow execution already started,
 	// this error can be return if we encounter race condition, i.e. terminating the target workflow while
 	// the target workflow has done continue as new.
@@ -120,6 +122,125 @@ func newHistoryReplicator(shard ShardContext, historyEngine *historyEngineImpl, 
 	}
 
 	return replicator
+}
+
+func (r *historyReplicator) SyncActivity(ctx context.Context, request *h.SyncActivityRequest) (retError error) {
+
+	// sync activity info will only be sent from active side, when
+	// 1. activity has retry policy and activity got started
+	// 2. activity heart beat
+	// no sync activity task will be sent when active side fail / timeout activity,
+	// since standby side does not have activity retry timer
+
+	domainID := request.GetDomainId()
+	execution := workflow.WorkflowExecution{
+		WorkflowId: request.WorkflowId,
+		RunId:      request.RunId,
+	}
+
+	context, release, err := r.historyCache.getOrCreateWorkflowExecutionWithTimeout(ctx, domainID, execution)
+	if err != nil {
+		// for get workflow execution context, with valid run id
+		// err will not be of type EntityNotExistsError
+		return err
+	}
+	defer func() { release(retError) }()
+
+	msBuilder, err := context.loadWorkflowExecution()
+	if err != nil {
+		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
+			return err
+		}
+
+		// this can happen if the workflow start event and this sync activity task are out of order
+		// or the target workflow is long gone
+		// the safe solution to this is to throw away the sync activity task
+		// or otherwise, worker attempt will exceeds limit and put this message to DLQ
+		return nil
+	}
+
+	if !msBuilder.IsWorkflowExecutionRunning() {
+		// perhaps conflict resolution force termination
+		return nil
+	}
+
+	version := request.GetVersion()
+	scheduleID := request.GetScheduledId()
+	if scheduleID >= msBuilder.GetNextEventID() {
+		if version < msBuilder.GetLastWriteVersion() {
+			// activity version < workflow last write version
+			// this can happen if target workflow has
+			return nil
+		}
+
+		// version >= last write version
+		// this can happen if out of order delivery heppens
+		return ErrRetrySyncActivity
+	}
+
+	ai, isRunning := msBuilder.GetActivityInfo(scheduleID)
+	if !isRunning {
+		// this should not retry, can be caused by out of order delivery
+		// since the activity is already finished
+		return nil
+	}
+
+	if ai.Version > request.GetVersion() {
+		// this should not retry, can be caused by failover or reset
+		return nil
+	}
+
+	lastHeartbeatTime := time.Unix(0, request.GetLastHeartbeatTime())
+	if ai.Version == request.GetVersion() {
+		if ai.Attempt > request.GetAttempt() {
+			// this should not retry, can be caused by failover or reset
+			return nil
+		}
+		if ai.Attempt == request.GetAttempt() {
+			if ai.LastHeartBeatUpdatedTime.After(lastHeartbeatTime) {
+				// this should not retry, can be caused by out of order delivery
+				return nil
+			}
+			// version equal & attempt equal & last heartbeat after existing heartbeat
+			// should update activity
+		}
+		// version equal & attempt larger then existing, should update activity
+	}
+	// version latger then existing, should update activity
+
+	// calculate whether to reset the activity timer task status bits
+	// reset timer task status bits if
+	// 1. same source cluster & attemp changes
+	// 2. different source cluster
+	resetActivityTimerTaskStatus := false
+	if !r.clusterMetadata.IsVersionFromSameCluster(request.GetVersion(), ai.Version) {
+		resetActivityTimerTaskStatus = true
+	} else if ai.Attempt < request.GetAttempt() {
+		resetActivityTimerTaskStatus = true
+	}
+	err = msBuilder.ReplicateActivityInfo(request, resetActivityTimerTaskStatus)
+	if err != nil {
+		return err
+	}
+
+	// see whether we need to refresh the activity timer
+	eventTime := request.GetScheduledTime()
+	if eventTime < request.GetStartedTime() {
+		eventTime = request.GetStartedTime()
+	}
+	if eventTime < request.GetLastHeartbeatTime() {
+		eventTime = request.GetLastHeartbeatTime()
+	}
+	now := time.Unix(0, eventTime)
+	timerTasks := []persistence.Task{}
+	timeSource := common.NewEventTimeSource()
+	timeSource.Update(now)
+	timerBuilder := newTimerBuilder(r.shard.GetConfig(), r.logger, timeSource)
+	if tt := timerBuilder.GetActivityTimerTaskIfNeeded(msBuilder); tt != nil {
+		timerTasks = append(timerTasks, tt)
+	}
+
+	return r.updateMutableStateWithTimer(context, msBuilder, now, timerTasks)
 }
 
 func (r *historyReplicator) ApplyEvents(ctx context.Context, request *h.ReplicateEventsRequest) (retError error) {
@@ -410,7 +531,7 @@ func (r *historyReplicator) ApplyOtherEvents(ctx context.Context, context *workf
 			logError(logger, "Failed to buffer out of order replication task.", err)
 			return err
 		}
-		return r.updateBufferedReplicationTask(context, msBuilder)
+		return r.updateMutableStateOnly(context, msBuilder)
 	}
 
 	// Apply the replication task
@@ -494,7 +615,7 @@ func (r *historyReplicator) FlushBuffer(ctx context.Context, context *workflowEx
 	logger bark.Logger) error {
 
 	if !msBuilder.IsWorkflowExecutionRunning() {
-		logger.Warnf("Workflow already finished, cannot flush buffer.")
+		logger.Debugf("Workflow already finished, cannot flush buffer.")
 		return nil
 	}
 
@@ -527,7 +648,7 @@ func (r *historyReplicator) FlushBuffer(ctx context.Context, context *workflowEx
 		msBuilder.DeleteBufferedReplicationTask(nextEventID)
 
 		if bt.Version < msBuilder.GetLastWriteVersion() {
-			return r.updateBufferedReplicationTask(context, msBuilder)
+			return r.updateMutableStateOnly(context, msBuilder)
 		}
 
 		sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(bt.Version)
@@ -915,7 +1036,11 @@ func (r *historyReplicator) resetMutableState(ctx context.Context, context *work
 	return msBuilder, nil
 }
 
-func (r *historyReplicator) updateBufferedReplicationTask(context *workflowExecutionContext, msBuilder mutableState) error {
+func (r *historyReplicator) updateMutableStateOnly(context *workflowExecutionContext, msBuilder mutableState) error {
+	return r.updateMutableStateWithTimer(context, msBuilder, time.Time{}, nil)
+}
+
+func (r *historyReplicator) updateMutableStateWithTimer(context *workflowExecutionContext, msBuilder mutableState, now time.Time, timerTasks []persistence.Task) error {
 	// Generate a transaction ID for appending events to history
 	transactionID, err := r.shard.GetNextTransferTaskID()
 	if err != nil {
@@ -926,7 +1051,7 @@ func (r *historyReplicator) updateBufferedReplicationTask(context *workflowExecu
 	// so nothing on the replication state should be changed
 	lastWriteVersion := msBuilder.GetLastWriteVersion()
 	sourceCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	return context.updateHelper(nil, nil, transactionID, time.Time{}, false, nil, sourceCluster)
+	return context.updateHelper(nil, timerTasks, transactionID, now, false, nil, sourceCluster)
 }
 
 func (r *historyReplicator) notify(clusterName string, now time.Time, transferTasks []persistence.Task,

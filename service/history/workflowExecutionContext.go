@@ -332,9 +332,14 @@ func (c *workflowExecutionContext) updateHelper(transferTasks []persistence.Task
 
 	var replicationTasks []persistence.Task
 	// Check if the update resulted in new history events before generating replication task
-	if hasNewActiveHistoryEvents && createReplicationTask {
+	if createReplicationTask {
 		// Let's create a replication task as part of this update
-		replicationTasks = append(replicationTasks, c.msBuilder.CreateReplicationTask())
+		if hasNewActiveHistoryEvents {
+			replicationTasks = append(replicationTasks, c.msBuilder.CreateReplicationTask())
+		}
+		if c.shard.GetConfig().EnableSyncActivityHeartbeat() {
+			replicationTasks = append(replicationTasks, updates.syncActivityTasks...)
+		}
 	}
 
 	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)

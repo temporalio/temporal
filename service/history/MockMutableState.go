@@ -932,8 +932,8 @@ func (_m *mockMutableState) CreateReplicationTask() *persistence.HistoryReplicat
 	return r0
 }
 
-// CreateRetryTimer provides a mock function with given fields: _a0, _a1
-func (_m *mockMutableState) CreateRetryTimer(_a0 *persistence.ActivityInfo, _a1 string) persistence.Task {
+// CreateActivityRetryTimer provides a mock function with given fields: _a0, _a1
+func (_m *mockMutableState) CreateActivityRetryTimer(_a0 *persistence.ActivityInfo, _a1 string) persistence.Task {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 persistence.Task
@@ -1766,6 +1766,20 @@ func (_m *mockMutableState) IsWorkflowExecutionRunning() bool {
 // Load provides a mock function with given fields: _a0
 func (_m *mockMutableState) Load(_a0 *persistence.WorkflowMutableState) {
 	_m.Called(_a0)
+}
+
+// ReplicateActivityInfo provides a mock function with given fields: _a0
+func (_m *mockMutableState) ReplicateActivityInfo(_a0 *h.SyncActivityRequest, _a1 bool) error {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*h.SyncActivityRequest, bool) error); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // ReplicateActivityTaskCancelRequestedEvent provides a mock function with given fields: _a0

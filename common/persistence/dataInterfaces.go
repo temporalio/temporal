@@ -99,7 +99,7 @@ const (
 // Types of replication tasks
 const (
 	ReplicationTaskTypeHistory = iota
-	ReplicationTaskTypeHeartbeat
+	ReplicationTaskTypeSyncActivity
 )
 
 // Types of timers
@@ -282,6 +282,7 @@ type (
 		NextEventID         int64
 		Version             int64
 		LastReplicationInfo map[string]*ReplicationInfo
+		ScheduledID         int64
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -449,7 +450,7 @@ type (
 		Version             int64
 	}
 
-	// HistoryReplicationTask is the transfer task created for shipping history replication events to other clusters
+	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
 	HistoryReplicationTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -457,6 +458,14 @@ type (
 		NextEventID         int64
 		Version             int64
 		LastReplicationInfo map[string]*ReplicationInfo
+	}
+
+	// SyncActivityTask is the replication task created for shipping activity info to other clusters
+	SyncActivityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+		ScheduledID         int64
 	}
 
 	// ReplicationInfo represents the information stored for last replication event details per cluster
@@ -1645,6 +1654,41 @@ func (a *HistoryReplicationTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (a *HistoryReplicationTask) SetVisibilityTimestamp(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}
+
+// GetType returns the type of the history replication task
+func (a *SyncActivityTask) GetType() int {
+	return ReplicationTaskTypeSyncActivity
+}
+
+// GetVersion returns the version of the history replication task
+func (a *SyncActivityTask) GetVersion() int64 {
+	return a.Version
+}
+
+// SetVersion returns the version of the history replication task
+func (a *SyncActivityTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+// GetTaskID returns the sequence ID of the history replication task
+func (a *SyncActivityTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+// SetTaskID sets the sequence ID of the history replication task
+func (a *SyncActivityTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+// GetVisibilityTimestamp get the visibility timestamp
+func (a *SyncActivityTask) GetVisibilityTimestamp() time.Time {
+	return a.VisibilityTimestamp
+}
+
+// SetVisibilityTimestamp set the visibility timestamp
+func (a *SyncActivityTask) SetVisibilityTimestamp(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
 }
 

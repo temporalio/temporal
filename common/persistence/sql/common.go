@@ -25,6 +25,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
@@ -65,7 +66,6 @@ func (m *sqlStore) txExecute(operation string, f func(tx *sqlx.Tx) error) error 
 				Message: fmt.Sprintf("%v: %v", operation, err),
 			}
 		}
-		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return &workflow.InternalServiceError{

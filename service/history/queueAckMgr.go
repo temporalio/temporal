@@ -56,7 +56,7 @@ type (
 )
 
 const (
-	warnPendingTasks = 1000
+	warnPendingTasks = 2000
 )
 
 func newQueueAckMgr(shard ShardContext, options *QueueProcessorOptions, processor processor, ackLevel int64, logger bark.Logger) *queueAckMgrImpl {

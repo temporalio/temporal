@@ -365,3 +365,15 @@ func (c *retryableClient) SyncShardStatus(
 
 	return backoff.Retry(op, c.policy, c.isRetryable)
 }
+
+func (c *retryableClient) SyncActivity(
+	ctx context.Context,
+	request *h.SyncActivityRequest,
+	opts ...yarpc.CallOption) error {
+
+	op := func() error {
+		return c.client.SyncActivity(ctx, request, opts...)
+	}
+
+	return backoff.Retry(op, c.policy, c.isRetryable)
+}

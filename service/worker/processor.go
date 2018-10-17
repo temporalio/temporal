@@ -300,6 +300,9 @@ func (p *replicationTaskProcessor) process(msg messaging.Message, logger bark.Lo
 	case replicator.ReplicationTaskTypeSyncShardStatus:
 		scope = metrics.SyncShardTaskScope
 		err = p.handleSyncShardTask(task, logger)
+	case replicator.ReplicationTaskTypeSyncActivity:
+		scope = metrics.SyncActivityTaskScope
+		err = p.handleActivityTask(task, logger)
 	case replicator.ReplicationTaskTypeHistory:
 		attr := task.HistoryTaskAttributes
 		logger = logger.WithFields(bark.Fields{
@@ -353,6 +356,32 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return p.historyClient.SyncShardStatus(ctx, req)
+}
+
+func (p *replicationTaskProcessor) handleActivityTask(task *replicator.ReplicationTask, logger bark.Logger) error {
+	p.metricsClient.IncCounter(metrics.SyncActivityTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ReplicatorLatency)
+	defer sw.Stop()
+
+	attr := task.SyncActicvityTaskAttributes
+	logger.Debugf("Received sync activity task %v.", attr)
+
+	req := &h.SyncActivityRequest{
+		DomainId:          attr.DomainId,
+		WorkflowId:        attr.WorkflowId,
+		RunId:             attr.RunId,
+		Version:           attr.Version,
+		ScheduledId:       attr.ScheduledId,
+		ScheduledTime:     attr.ScheduledTime,
+		StartedId:         attr.StartedId,
+		StartedTime:       attr.StartedTime,
+		LastHeartbeatTime: attr.LastHeartbeatTime,
+		Details:           attr.Details,
+		Attempt:           attr.Attempt,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return p.historyClient.SyncActivity(ctx, req)
 }
 
 func (p *replicationTaskProcessor) handleHistoryReplicationTask(task *replicator.ReplicationTask, logger bark.Logger, inRetry bool) error {

@@ -360,7 +360,7 @@ Update_History_Loop:
 				if timeoutType != workflow.TimeoutTypeScheduleToStart {
 					// ScheduleToStart (queue timeout) is not retriable. Instead of retry, customer should set larger
 					// ScheduleToStart timeout.
-					retryTask := msBuilder.CreateRetryTimer(ai, getTimeoutErrorReason(timeoutType))
+					retryTask := msBuilder.CreateActivityRetryTimer(ai, getTimeoutErrorReason(timeoutType))
 					if retryTask != nil {
 						timerTasks = append(timerTasks, retryTask)
 						updateState = true
