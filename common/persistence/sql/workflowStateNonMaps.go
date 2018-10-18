@@ -21,7 +21,9 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
+
 	"github.com/jmoiron/sqlx"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 )
@@ -122,7 +124,7 @@ func getSignalsRequested(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get signals requested. Error: %v", err),
 		}

@@ -23,6 +23,7 @@ package persistencetests
 import (
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,7 +36,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	p "github.com/uber/cadence/common/persistence"
-	"sync"
 )
 
 type (
@@ -2675,7 +2675,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t1", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
-	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.EqualTimes(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(500), ti.TaskID)
 
 	ti, ok = state1.TimerInfos["t2"]
@@ -2684,7 +2684,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t2", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
-	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.EqualTimes(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(501), ti.TaskID)
 
 	ti, ok = state1.TimerInfos["t3"]
@@ -2693,7 +2693,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.Equal(int64(2333), ti.Version)
 	s.Equal("t3", ti.TimerID)
 	s.Equal(int64(3), ti.StartedID)
-	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.EqualTimes(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(502), ti.TaskID)
 
 	s.Equal(1, len(state1.ChildExecutionInfos))
@@ -2840,7 +2840,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.Equal(int64(3333), ti.Version)
 	s.Equal("t1_new", ti.TimerID)
 	s.Equal(int64(1), ti.StartedID)
-	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.EqualTimes(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(600), ti.TaskID)
 
 	ti, ok = state4.TimerInfos["t2_new"]
@@ -2849,7 +2849,7 @@ func (s *ExecutionManagerSuite) TestResetMutableStateCurrentIsSelf() {
 	s.Equal(int64(3333), ti.Version)
 	s.Equal("t2_new", ti.TimerID)
 	s.Equal(int64(2), ti.StartedID)
-	s.Equal(expiryTime.Unix(), ti.ExpiryTime.Unix())
+	s.EqualTimes(expiryTime, ti.ExpiryTime)
 	s.Equal(int64(601), ti.TaskID)
 
 	s.Equal(1, len(state4.ChildExecutionInfos))
@@ -3039,6 +3039,8 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
@@ -3084,6 +3086,8 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
+	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
@@ -3125,7 +3129,9 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	s.True(timeComparator(shardInfo.UpdatedAt, resp.ShardInfo.UpdatedAt, TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
 	s.True(timeComparator(shardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestAlternativeClusterName], TimePrecision))
+	s.Equal(shardInfo.TimerAckLevel.UnixNano(), resp.ShardInfo.TimerAckLevel.UnixNano())
 	resp.ShardInfo.UpdatedAt = shardInfo.UpdatedAt
+	resp.ShardInfo.TimerAckLevel = shardInfo.TimerAckLevel
 	resp.ShardInfo.ClusterTimerAckLevel = shardInfo.ClusterTimerAckLevel
 	s.Equal(shardInfo, resp.ShardInfo)
 }

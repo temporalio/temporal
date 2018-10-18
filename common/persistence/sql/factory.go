@@ -23,6 +23,9 @@ package sql
 import (
 	"errors"
 
+	"sync"
+
+	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
@@ -31,9 +34,15 @@ import (
 type (
 	// Factory vends store objects backed by MySQL
 	Factory struct {
-		cfg         config.SQL
-		clusterName string
-		logger      bark.Logger
+		sync.RWMutex
+		cfg              config.SQL
+		clusterName      string
+		logger           bark.Logger
+		execStoreFactory *executionStoreFactory
+	}
+	executionStoreFactory struct {
+		db     *sqlx.DB
+		logger bark.Logger
 	}
 )
 
@@ -77,8 +86,11 @@ func (f *Factory) NewMetadataStoreV2() (p.MetadataStore, error) {
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
-	// todo: this is only a placeholder
-	return NewSQLMatchingPersistence(f.cfg, f.logger)
+	factory, err := f.newExecutionStoreFactory()
+	if err != nil {
+		return nil, err
+	}
+	return factory.new(shardID)
 }
 
 // NewVisibilityStore returns a visibility store
@@ -87,4 +99,50 @@ func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
 }
 
 // Close closes the factory
-func (f *Factory) Close() {}
+func (f *Factory) Close() {
+	f.Lock()
+	defer f.Unlock()
+	if f.execStoreFactory != nil {
+		f.execStoreFactory.close()
+	}
+}
+
+// newExecutionStoreFactory returns a new instance of a factory that vends
+// execution stores. This factory exist to make sure all of the execution
+// managers reuse the same underlying db connection / object and that closing
+// one closes all of them
+func (f *Factory) newExecutionStoreFactory() (*executionStoreFactory, error) {
+	f.RLock()
+	if f.execStoreFactory != nil {
+		f.RUnlock()
+		return f.execStoreFactory, nil
+	}
+	f.RUnlock()
+	f.Lock()
+	defer f.Unlock()
+	var err error
+	f.execStoreFactory, err = newExecutionStoreFactory(f.cfg, f.logger)
+	return f.execStoreFactory, err
+}
+
+func newExecutionStoreFactory(cfg config.SQL, logger bark.Logger) (*executionStoreFactory, error) {
+	db, err := newConnection(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &executionStoreFactory{
+		db:     db,
+		logger: logger,
+	}, nil
+}
+
+func (f *executionStoreFactory) new(shardID int) (p.ExecutionStore, error) {
+	return NewSQLMatchingPersistence(f.db, f.logger, shardID)
+}
+
+// close closes the factory
+func (f *executionStoreFactory) close() {
+	if f.db != nil {
+		f.db.Close()
+	}
+}

@@ -21,7 +21,6 @@
 package persistence
 
 import (
-	"github.com/prometheus/common/log"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -354,7 +353,7 @@ func (m *executionManagerImpl) SerializeUpsertChildExecutionInfos(infos []*Child
 	newInfos := make([]*InternalChildExecutionInfo, 0)
 	for _, v := range infos {
 		if v.InitiatedEvent == nil {
-			log.Fatalf("nil InitiatedEvent for %v", v.InitiatedID)
+			m.logger.Fatalf("nil InitiatedEvent for %v", v.InitiatedID)
 		}
 		initiatedEvent, err := m.serializer.SerializeEvent(v.InitiatedEvent, encoding)
 		if err != nil {
@@ -382,7 +381,7 @@ func (m *executionManagerImpl) SerializeUpsertActivityInfos(infos []*ActivityInf
 	newInfos := make([]*InternalActivityInfo, 0)
 	for _, v := range infos {
 		if v.ScheduledEvent == nil {
-			log.Fatal("SerializeUpsertActivityInfos ScheduledEvent is required")
+			m.logger.Fatal("SerializeUpsertActivityInfos ScheduledEvent is required")
 		}
 		scheduledEvent, err := m.serializer.SerializeEvent(v.ScheduledEvent, encoding)
 		if err != nil {

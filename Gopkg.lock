@@ -10,25 +10,6 @@
   version = "v1.19.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:a74730e052a45a3fab1d310fdef2ec17ae3d6af16228421e238320846f2aaec8"
-  name = "github.com/alecthomas/template"
-  packages = [
-    ".",
-    "parse",
-  ]
-  pruneopts = ""
-  revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
-
-[[projects]]
-  branch = "master"
-  digest = "1:8483994d21404c8a1d489f6be756e25bfccd3b45d65821f25695577791a08e68"
-  name = "github.com/alecthomas/units"
-  packages = ["."]
-  pruneopts = ""
-  revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
-
-[[projects]]
   digest = "1:21a774cd1c70bc7b328522ad415933eb1f329ad72773f4d0112210fc0dbccc55"
   name = "github.com/apache/thrift"
   packages = ["lib/go/thrift"]
@@ -334,7 +315,6 @@
   packages = [
     "expfmt",
     "internal/bitbucket.org/ww/goautoneg",
-    "log",
     "model",
   ]
   pruneopts = ""
@@ -560,6 +540,7 @@
     "internal/envelope/exception",
     "protocol",
     "protocol/binary",
+    "ptr",
     "thriftreflect",
     "version",
     "wire",
@@ -656,8 +637,6 @@
   packages = [
     "unix",
     "windows",
-    "windows/registry",
-    "windows/svc/eventlog",
   ]
   pruneopts = ""
   revision = "fa43e7bc11baaae89f3f902b2b4d832b68234844"
@@ -677,14 +656,6 @@
   pruneopts = ""
   revision = "ae0ab99deb4dc413a2b4bd6c8bdd0eb67f1e4d06"
   version = "v1.2.0"
-
-[[projects]]
-  digest = "1:15d017551627c8bb091bde628215b2861bed128855343fdd570c62d08871f6e1"
-  name = "gopkg.in/alecthomas/kingpin.v2"
-  packages = ["."]
-  pruneopts = ""
-  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
-  version = "v2.2.6"
 
 [[projects]]
   digest = "1:75fb3fcfc73a8c723efde7777b40e8e8ff9babf30d8c56160d01beffea8a95a6"
@@ -728,7 +699,6 @@
     "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",
     "github.com/pborman/uuid",
-    "github.com/prometheus/common/log",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/mock",
@@ -762,6 +732,7 @@
     "go.uber.org/cadence/worker",
     "go.uber.org/cadence/workflow",
     "go.uber.org/thriftrw/protocol",
+    "go.uber.org/thriftrw/ptr",
     "go.uber.org/thriftrw/thriftreflect",
     "go.uber.org/thriftrw/wire",
     "go.uber.org/yarpc",

@@ -22,15 +22,16 @@ package sql
 
 import (
 	"fmt"
-	"github.com/prometheus/common/log"
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common"
 	"time"
+
+	"github.com/uber/cadence/common"
 
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
 
 	"strings"
+
+	"database/sql"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -214,13 +215,11 @@ func updateActivityInfos(tx *sqlx.Tx,
 	shardID int,
 	domainID,
 	workflowID,
-	runID string,
-	logger bark.Logger) error {
+	runID string) error {
 
 	if len(activityInfos) > 0 {
 		activityInfoMapsRows := make([]*activityInfoMapsRow, len(activityInfos))
 		for i, v := range activityInfos {
-			log.Infof("updateActivityInfos activityId=%v, scheduledTime=%v", v.ActivityID, v.ScheduledTime)
 			row := &activityInfoMapsRow{
 				activityInfoMapsPrimaryKey: activityInfoMapsPrimaryKey{
 					ShardID:    int64(shardID),
@@ -361,7 +360,7 @@ func getActivityInfoMap(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get activity info. Error: %v", err),
 		}
@@ -369,7 +368,6 @@ func getActivityInfoMap(tx *sqlx.Tx,
 
 	ret := make(map[int64]*persistence.InternalActivityInfo)
 	for _, v := range activityInfoMapsRows {
-		log.Infof("getActivityInfoMap activityId=%v, scheduledTime=%v", v.ActivityID, v.ScheduledTime)
 
 		info := &persistence.InternalActivityInfo{
 			Version:                  v.Version,
@@ -559,7 +557,7 @@ func getTimerInfoMap(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get timer info. Error: %v", err),
 		}
@@ -707,7 +705,7 @@ func getChildExecutionInfoMap(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get timer info. Error: %v", err),
 		}
@@ -857,7 +855,7 @@ func getRequestCancelInfoMap(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get request cancel info. Error: %v", err),
 		}
@@ -1005,7 +1003,7 @@ func getSignalInfoMap(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get signal info. Error: %v", err),
 		}
@@ -1205,7 +1203,7 @@ func getBufferedReplicationTasks(tx *sqlx.Tx,
 		shardID,
 		domainID,
 		workflowID,
-		runID); err != nil {
+		runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("Failed to get buffered replication tasks. Error: %v", err),
 		}

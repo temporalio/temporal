@@ -320,6 +320,7 @@ func NewDataBlob(data []byte, encodingType common.EncodingType) *DataBlob {
 	}
 }
 
+// FromDataBlob decodes a datablob into a (payload, encodingType) tuple
 func FromDataBlob(blob *DataBlob) ([]byte, string) {
 	if blob == nil || len(blob.Data) == 0 {
 		return nil, ""

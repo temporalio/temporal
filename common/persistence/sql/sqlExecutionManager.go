@@ -31,7 +31,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/collection"
 	p "github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/config"
 )
 
 type (
@@ -697,7 +696,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		ClientImpl:                   execution.ClientImpl,
 	}
 
-	if execution.ExecutionContext != nil {
+	if execution.ExecutionContext != nil && len(*execution.ExecutionContext) > 0 {
 		state.ExecutionInfo.ExecutionContext = *execution.ExecutionContext
 	}
 
@@ -714,7 +713,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 	if execution.LastWriteEventID != nil {
 		state.ReplicationState.LastWriteEventID = *execution.LastWriteEventID
 	}
-	if execution.LastReplicationInfo != nil {
+	if execution.LastReplicationInfo != nil && len(*execution.LastReplicationInfo) > 0 {
 		state.ReplicationState.LastReplicationInfo = make(map[string]*p.ReplicationInfo)
 		if err := gobDeserialize(*execution.LastReplicationInfo, &state.ReplicationState.LastReplicationInfo); err != nil {
 			return nil, &workflow.InternalServiceError{
@@ -860,7 +859,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 func getBufferedEvents(tx *sqlx.Tx, shardID int, domainID string, workflowID string, runID string) (result []*p.DataBlob, err error) {
 	var rows []bufferedEventsRow
 
-	if err := tx.Select(&rows, getBufferedEventsQuery, shardID, domainID, workflowID, runID); err != nil {
+	if err := tx.Select(&rows, getBufferedEventsQuery, shardID, domainID, workflowID, runID); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("getBufferedEvents operation failed. Select failed: %v", err),
 		}
@@ -913,14 +912,14 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx *sqlx.Tx, request *p.
 		}
 	}
 
-	if err := updateExecution(tx, executionInfo, request.ReplicationState, request.Condition); err != nil {
+	if err := updateExecution(tx, executionInfo, request.ReplicationState, request.Condition, shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
 	}
 
 	if err := updateActivityInfos(tx, request.UpsertActivityInfos, request.DeleteActivityInfos, shardID, domainID,
-		workflowID, runID, m.logger); err != nil {
+		workflowID, runID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err),
 		}
@@ -1123,7 +1122,7 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx *sqlx.Tx, request *p.Intern
 		}
 	}
 
-	if err := updateExecution(tx, info, request.ReplicationState, request.Condition); err != nil {
+	if err := updateExecution(tx, info, request.ReplicationState, request.Condition, m.shardID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("UpdateWorkflowExecution operation failed. Failed to update executions row. Erorr: %v", err),
 		}
@@ -1145,8 +1144,7 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx *sqlx.Tx, request *p.Intern
 		m.shardID,
 		info.DomainID,
 		info.WorkflowID,
-		info.RunID,
-		m.logger); err != nil {
+		info.RunID); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("ResetMutableState operation failed. Failed to insert into activity info map after clearing. Error: %v", err),
 		}
@@ -1316,11 +1314,12 @@ func (m *sqlExecutionManager) GetTransferTasks(request *p.GetTransferTasksReques
 		m.shardID,
 		request.ReadLevel,
 		request.MaxReadLevel); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err),
+		if err != sql.ErrNoRows {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err),
+			}
 		}
 	}
-
 	return &resp, nil
 }
 
@@ -1366,8 +1365,10 @@ func (m *sqlExecutionManager) GetReplicationTasks(request *p.GetReplicationTasks
 		readLevel,
 		maxReadLevelInclusive,
 		request.BatchSize); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
+		if err != sql.ErrNoRows {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err),
+			}
 		}
 	}
 	if len(rows) == 0 {
@@ -1423,7 +1424,7 @@ func (m *sqlExecutionManager) GetTimerIndexTasks(request *p.GetTimerIndexTasksRe
 	if err := m.db.Select(&resp.Timers, getTimerTasksSQLQuery,
 		m.shardID,
 		request.MinTimestamp,
-		request.MaxTimestamp); err != nil {
+		request.MaxTimestamp); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err),
 		}
@@ -1453,12 +1454,9 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(request *p.RangeCompleteTim
 }
 
 // NewSQLMatchingPersistence creates an instance of ExecutionStore
-func NewSQLMatchingPersistence(cfg config.SQL, logger bark.Logger) (p.ExecutionStore, error) {
-	db, err := newConnection(cfg)
-	if err != nil {
-		return nil, err
-	}
+func NewSQLMatchingPersistence(db *sqlx.DB, logger bark.Logger, shardID int) (p.ExecutionStore, error) {
 	return &sqlExecutionManager{
+		shardID: shardID,
 		sqlStore: sqlStore{
 			db:     db,
 			logger: logger,
@@ -1471,8 +1469,10 @@ func NewSQLMatchingPersistence(cfg config.SQL, logger bark.Logger) (p.ExecutionS
 func lockCurrentExecutionIfExists(tx *sqlx.Tx, shardID int64, domainID string, workflowID string) (*currentExecutionRow, error) {
 	var rows []*currentExecutionRow
 	if err := tx.Select(&rows, getCurrentExecutionSQLQueryForUpdate, shardID, domainID, workflowID); err != nil {
-		return nil, &workflow.InternalServiceError{
-			Message: fmt.Sprintf("Failed to get current_executions row for (shard,domain,workflow) = (%v, %v, %v). Error: %v", shardID, domainID, workflowID, err),
+		if err != sql.ErrNoRows {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("Failed to get current_executions row for (shard,domain,workflow) = (%v, %v, %v). Error: %v", shardID, domainID, workflowID, err),
+			}
 		}
 	}
 	size := len(rows)
@@ -1948,7 +1948,8 @@ func updateCurrentExecution(tx *sqlx.Tx, shardID int, domainID, workflowID, runI
 func updateExecution(tx *sqlx.Tx,
 	executionInfo *p.InternalWorkflowExecutionInfo,
 	replicationState *p.ReplicationState,
-	condition int64) error {
+	condition int64,
+	shardID int) error {
 	args := updateExecutionRow{
 		executionRow{
 			DomainID:                     executionInfo.DomainID,
@@ -1982,6 +1983,7 @@ func updateExecution(tx *sqlx.Tx,
 			ClientLibraryVersion:         executionInfo.ClientLibraryVersion,
 			ClientFeatureVersion:         executionInfo.ClientFeatureVersion,
 			ClientImpl:                   executionInfo.ClientImpl,
+			ShardID:                      int64(shardID),
 		},
 		condition,
 	}
