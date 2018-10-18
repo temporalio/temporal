@@ -468,8 +468,9 @@ service HistoryService {
   * SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
   * If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
   * and a decision task being created for the execution.
-  * If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
-  * event recorded in history, and a decision task being created for the execution
+  * If workflow is not running or not found, it will first try start workflow with given WorkflowIDResuePolicy,
+  * and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
+  * It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
   **/
   shared.StartWorkflowExecutionResponse SignalWithStartWorkflowExecution(1: SignalWithStartWorkflowExecutionRequest signalWithStartRequest)
     throws (
@@ -479,6 +480,7 @@ service HistoryService {
       4: shared.DomainNotActiveError domainNotActiveError,
       5: shared.LimitExceededError limitExceededError,
       6: shared.ServiceBusyError serviceBusyError,
+      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,
     )
 
   /**

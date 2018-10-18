@@ -430,50 +430,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 		return execution.GetRunId(), nil
 	}
 
-	workflowExistsErrHandler := func(err *persistence.WorkflowExecutionAlreadyStartedError) error {
-		// set the prev run ID for database conditional update
-		prevStartRequestID := err.StartRequestID
-		prevRunID := err.RunID
-		prevState := err.State
-		prevCloseState := err.CloseStatus
-
-		errFn := func(errMsg string, createRequestID string, workflowID string, runID string) error {
-			msg := fmt.Sprintf(errMsg, workflowID, runID)
-			return &workflow.WorkflowExecutionAlreadyStartedError{
-				Message:        common.StringPtr(msg),
-				StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
-				RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
-			}
-		}
-
-		// here we know there is some information about the prev workflow, i.e. either running right now
-		// or has history check if the this workflow is finished
-		if prevState != persistence.WorkflowStateCompleted {
-			e.deleteEvents(domainID, execution)
-			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-		}
-		switch startRequest.StartRequest.GetWorkflowIdReusePolicy() {
-		case workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
-			if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {
-				e.deleteEvents(domainID, execution)
-				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
-				return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-			}
-		case workflow.WorkflowIdReusePolicyAllowDuplicate:
-			// as long as workflow not running, so this case has no check
-		case workflow.WorkflowIdReusePolicyRejectDuplicate:
-			e.deleteEvents(domainID, execution)
-			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
-			return errFn(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
-		default:
-			e.deleteEvents(domainID, execution)
-			return &workflow.InternalServiceError{Message: "Failed to process start workflow reuse policy."}
-		}
-
-		return nil
-	}
-
 	// try to create the workflow execution
 	isBrandNew := true
 	resultRunID := ""
@@ -488,7 +444,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(startRequest *h.StartWorkflow
 			)
 		}
 
-		if err = workflowExistsErrHandler(errExist); err == nil {
+		err = e.applyWorkflowIDReusePolicy(errExist, domainID, execution, startRequest.StartRequest.GetWorkflowIdReusePolicy())
+		if err == nil {
 			isBrandNew = false
 			resultRunID, err = createWorkflow(isBrandNew, errExist.RunID, errExist.LastWriteVersion)
 		}
@@ -1931,8 +1888,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return nil, err
 	}
 
-	isBrandNew := false
-	prevRunID := ""
+	var prevExecutionInfo *persistence.WorkflowExecutionInfo
 	prevLastWriteVersion := common.EmptyVersion
 	attempt := 0
 
@@ -1942,16 +1898,17 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		defer func() { release(retError) }()
 	Just_Signal_Loop:
 		for ; attempt < conditionalRetryCount; attempt++ {
+			// workflow not exist, will create workflow then signal
 			msBuilder, err1 := context.loadWorkflowExecution()
 			if err1 != nil {
 				if _, ok := err1.(*workflow.EntityNotExistsError); ok {
-					isBrandNew = true
 					break
 				}
 				return nil, err1
 			}
+			// workflow exist but not running, will restart workflow then signal
 			if !msBuilder.IsWorkflowExecutionRunning() {
-				prevRunID = msBuilder.GetExecutionInfo().RunID
+				prevExecutionInfo = msBuilder.GetExecutionInfo()
 				prevLastWriteVersion = msBuilder.GetLastWriteVersion()
 				break
 			}
@@ -1999,11 +1956,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 			return nil, ErrMaxAttemptsExceeded
 		}
 	} else {
-		if _, ok := err0.(*workflow.EntityNotExistsError); ok {
-			isBrandNew = true
-		} else {
+		if _, ok := err0.(*workflow.EntityNotExistsError); !ok {
 			return nil, err0
 		}
+		// workflow not exist, will create workflow then signal
 	}
 
 	// Start workflow and signal
@@ -2153,27 +2109,33 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 		return execution.GetRunId(), nil
 	}
 
-	// try to create the workflow execution
-	if !isBrandNew && msBuilder.GetCurrentVersion() < prevLastWriteVersion {
+	if prevExecutionInfo != nil && msBuilder.GetCurrentVersion() < prevLastWriteVersion {
 		return nil, ce.NewDomainNotActiveError(
 			domainEntry.GetInfo().Name,
 			clusterMetadata.GetCurrentClusterName(),
 			clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 		)
 	}
-	resultRunID, err := createWorkflow(isBrandNew, prevRunID, prevLastWriteVersion) // (true, "", 0) or (false, "prevRunID", "prevLastWriteVersion")
+
+	// try to create the workflow execution
+	var resultRunID string
+	if prevExecutionInfo == nil { // create workflow as brand new
+		resultRunID, err = createWorkflow(true, "", prevLastWriteVersion)
+	} else { // start workflow with policy
+		policy := getWorkflowIdReusePolicyForSigStart(startRequest.StartRequest.WorkflowIdReusePolicy)
+		err = e.applyWorkflowIDReusePolicyForSigStart(prevExecutionInfo, domainID, execution, policy)
+		if err != nil {
+			return nil, err
+		}
+		resultRunID, err = createWorkflow(false, prevExecutionInfo.RunID, prevLastWriteVersion)
+	}
+
 	if err == nil {
 		e.timerProcessor.NotifyNewTimers(e.currentClusterName, e.shard.GetCurrentTime(e.currentClusterName), timerTasks)
 
 		return &workflow.StartWorkflowExecutionResponse{
 			RunId: common.StringPtr(resultRunID),
 		}, nil
-	} else if alreadyStartedErr, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		return nil, &workflow.WorkflowExecutionAlreadyStartedError{
-			Message:        common.StringPtr("Workflow is already running"),
-			StartRequestId: common.StringPtr(alreadyStartedErr.StartRequestID),
-			RunId:          common.StringPtr(alreadyStartedErr.RunID),
-		}
 	}
 	return nil, err
 }
@@ -2907,7 +2869,6 @@ func getSignalRequest(request *workflow.SignalWithStartWorkflowExecutionRequest)
 
 func getStartRequest(domainID string,
 	request *workflow.SignalWithStartWorkflowExecutionRequest) *h.StartWorkflowExecutionRequest {
-	policy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	req := &workflow.StartWorkflowExecutionRequest{
 		Domain:                              request.Domain,
 		WorkflowId:                          request.WorkflowId,
@@ -2918,7 +2879,7 @@ func getStartRequest(domainID string,
 		TaskStartToCloseTimeoutSeconds:      request.TaskStartToCloseTimeoutSeconds,
 		Identity:                            request.Identity,
 		RequestId:                           request.RequestId,
-		WorkflowIdReusePolicy:               &policy,
+		WorkflowIdReusePolicy:               request.WorkflowIdReusePolicy,
 		RetryPolicy:                         request.RetryPolicy,
 	}
 
@@ -2965,4 +2926,76 @@ func setTaskInfo(version int64, timestamp time.Time, transferTasks []persistence
 	for _, task := range timerTasks {
 		task.SetVersion(version)
 	}
+}
+
+// for startWorkflowExecution to handle workflow reuse policy
+func (e *historyEngineImpl) applyWorkflowIDReusePolicy(err *persistence.WorkflowExecutionAlreadyStartedError,
+	domainID string, execution workflow.WorkflowExecution, wfIDReusePolicy workflow.WorkflowIdReusePolicy) error {
+	// set the prev run ID for database conditional update
+	prevStartRequestID := err.StartRequestID
+	prevRunID := err.RunID
+	prevState := err.State
+	prevCloseState := err.CloseStatus
+
+	return e.applyWorkflowIDReusePolicyHelper(prevStartRequestID, prevRunID, prevState, prevCloseState, domainID, execution, wfIDReusePolicy)
+}
+
+// for signalWithStart to handle workflow reuse policy
+func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSigStart(prevExecutionInfo *persistence.WorkflowExecutionInfo,
+	domainID string, execution workflow.WorkflowExecution, wfIDReusePolicy workflow.WorkflowIdReusePolicy) error {
+
+	prevStartRequestID := prevExecutionInfo.CreateRequestID
+	prevRunID := prevExecutionInfo.RunID
+	prevState := prevExecutionInfo.State
+	prevCloseState := prevExecutionInfo.CloseStatus
+
+	return e.applyWorkflowIDReusePolicyHelper(prevStartRequestID, prevRunID, prevState, prevCloseState, domainID, execution, wfIDReusePolicy)
+
+}
+
+func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(prevStartRequestID, prevRunID string, prevState, prevCloseState int,
+	domainID string, execution workflow.WorkflowExecution, wfIDReusePolicy workflow.WorkflowIdReusePolicy) error {
+
+	// here we know there is some information about the prev workflow, i.e. either running right now
+	// or has history check if the this workflow is finished
+	if prevState != persistence.WorkflowStateCompleted {
+		e.deleteEvents(domainID, execution)
+		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
+		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+	}
+	switch wfIDReusePolicy {
+	case workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly:
+		if _, ok := FailedWorkflowCloseState[prevCloseState]; !ok {
+			e.deleteEvents(domainID, execution)
+			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: allow duplicate workflow ID if last run failed."
+			return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+		}
+	case workflow.WorkflowIdReusePolicyAllowDuplicate:
+		// as long as workflow not running, so this case has no check
+	case workflow.WorkflowIdReusePolicyRejectDuplicate:
+		e.deleteEvents(domainID, execution)
+		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow ID reuse policy: reject duplicate workflow ID."
+		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
+	default:
+		e.deleteEvents(domainID, execution)
+		return &workflow.InternalServiceError{Message: "Failed to process start workflow reuse policy."}
+	}
+
+	return nil
+}
+
+func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workflowID string, runID string) error {
+	return &workflow.WorkflowExecutionAlreadyStartedError{
+		Message:        common.StringPtr(fmt.Sprintf(errMsg, workflowID, runID)),
+		StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
+		RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
+	}
+}
+
+// change default policy to "AllowDuplicate" for signalWithStart if not set in request.
+func getWorkflowIdReusePolicyForSigStart(policy *workflow.WorkflowIdReusePolicy) workflow.WorkflowIdReusePolicy {
+	if policy == nil {
+		return workflow.WorkflowIdReusePolicyAllowDuplicate
+	}
+	return *policy
 }

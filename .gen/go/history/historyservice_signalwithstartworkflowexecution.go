@@ -237,6 +237,8 @@ func init() {
 			return true
 		case *shared.ServiceBusyError:
 			return true
+		case *shared.WorkflowExecutionAlreadyStartedError:
+			return true
 		default:
 			return false
 		}
@@ -278,6 +280,11 @@ func init() {
 				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SignalWithStartWorkflowExecution_Result.ServiceBusyError")
 			}
 			return &HistoryService_SignalWithStartWorkflowExecution_Result{ServiceBusyError: e}, nil
+		case *shared.WorkflowExecutionAlreadyStartedError:
+			if e == nil {
+				return nil, errors.New("WrapResponse received non-nil error type with nil value for HistoryService_SignalWithStartWorkflowExecution_Result.WorkflowAlreadyStartedError")
+			}
+			return &HistoryService_SignalWithStartWorkflowExecution_Result{WorkflowAlreadyStartedError: e}, nil
 		}
 
 		return nil, err
@@ -307,6 +314,10 @@ func init() {
 			err = result.ServiceBusyError
 			return
 		}
+		if result.WorkflowAlreadyStartedError != nil {
+			err = result.WorkflowAlreadyStartedError
+			return
+		}
 
 		if result.Success != nil {
 			success = result.Success
@@ -326,13 +337,14 @@ func init() {
 // Success is set only if the function did not throw an exception.
 type HistoryService_SignalWithStartWorkflowExecution_Result struct {
 	// Value returned by SignalWithStartWorkflowExecution after a successful execution.
-	Success                 *shared.StartWorkflowExecutionResponse `json:"success,omitempty"`
-	BadRequestError         *shared.BadRequestError                `json:"badRequestError,omitempty"`
-	InternalServiceError    *shared.InternalServiceError           `json:"internalServiceError,omitempty"`
-	ShardOwnershipLostError *ShardOwnershipLostError               `json:"shardOwnershipLostError,omitempty"`
-	DomainNotActiveError    *shared.DomainNotActiveError           `json:"domainNotActiveError,omitempty"`
-	LimitExceededError      *shared.LimitExceededError             `json:"limitExceededError,omitempty"`
-	ServiceBusyError        *shared.ServiceBusyError               `json:"serviceBusyError,omitempty"`
+	Success                     *shared.StartWorkflowExecutionResponse       `json:"success,omitempty"`
+	BadRequestError             *shared.BadRequestError                      `json:"badRequestError,omitempty"`
+	InternalServiceError        *shared.InternalServiceError                 `json:"internalServiceError,omitempty"`
+	ShardOwnershipLostError     *ShardOwnershipLostError                     `json:"shardOwnershipLostError,omitempty"`
+	DomainNotActiveError        *shared.DomainNotActiveError                 `json:"domainNotActiveError,omitempty"`
+	LimitExceededError          *shared.LimitExceededError                   `json:"limitExceededError,omitempty"`
+	ServiceBusyError            *shared.ServiceBusyError                     `json:"serviceBusyError,omitempty"`
+	WorkflowAlreadyStartedError *shared.WorkflowExecutionAlreadyStartedError `json:"workflowAlreadyStartedError,omitempty"`
 }
 
 // ToWire translates a HistoryService_SignalWithStartWorkflowExecution_Result struct into a Thrift-level intermediate
@@ -352,7 +364,7 @@ type HistoryService_SignalWithStartWorkflowExecution_Result struct {
 //   }
 func (v *HistoryService_SignalWithStartWorkflowExecution_Result) ToWire() (wire.Value, error) {
 	var (
-		fields [7]wire.Field
+		fields [8]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -414,6 +426,14 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) ToWire() (wire.
 		fields[i] = wire.Field{ID: 6, Value: w}
 		i++
 	}
+	if v.WorkflowAlreadyStartedError != nil {
+		w, err = v.WorkflowAlreadyStartedError.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 7, Value: w}
+		i++
+	}
 
 	if i != 1 {
 		return wire.Value{}, fmt.Errorf("HistoryService_SignalWithStartWorkflowExecution_Result should have exactly one field: got %v fields", i)
@@ -424,6 +444,12 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) ToWire() (wire.
 
 func _StartWorkflowExecutionResponse_Read(w wire.Value) (*shared.StartWorkflowExecutionResponse, error) {
 	var v shared.StartWorkflowExecutionResponse
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _WorkflowExecutionAlreadyStartedError_Read(w wire.Value) (*shared.WorkflowExecutionAlreadyStartedError, error) {
+	var v shared.WorkflowExecutionAlreadyStartedError
 	err := v.FromWire(w)
 	return &v, err
 }
@@ -506,6 +532,14 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) FromWire(w wire
 				}
 
 			}
+		case 7:
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowAlreadyStartedError, err = _WorkflowExecutionAlreadyStartedError_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -531,6 +565,9 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) FromWire(w wire
 	if v.ServiceBusyError != nil {
 		count++
 	}
+	if v.WorkflowAlreadyStartedError != nil {
+		count++
+	}
 	if count != 1 {
 		return fmt.Errorf("HistoryService_SignalWithStartWorkflowExecution_Result should have exactly one field: got %v fields", count)
 	}
@@ -545,7 +582,7 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) String() string
 		return "<nil>"
 	}
 
-	var fields [7]string
+	var fields [8]string
 	i := 0
 	if v.Success != nil {
 		fields[i] = fmt.Sprintf("Success: %v", v.Success)
@@ -573,6 +610,10 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) String() string
 	}
 	if v.ServiceBusyError != nil {
 		fields[i] = fmt.Sprintf("ServiceBusyError: %v", v.ServiceBusyError)
+		i++
+	}
+	if v.WorkflowAlreadyStartedError != nil {
+		fields[i] = fmt.Sprintf("WorkflowAlreadyStartedError: %v", v.WorkflowAlreadyStartedError)
 		i++
 	}
 
@@ -603,6 +644,9 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) Equals(rhs *His
 		return false
 	}
 	if !((v.ServiceBusyError == nil && rhs.ServiceBusyError == nil) || (v.ServiceBusyError != nil && rhs.ServiceBusyError != nil && v.ServiceBusyError.Equals(rhs.ServiceBusyError))) {
+		return false
+	}
+	if !((v.WorkflowAlreadyStartedError == nil && rhs.WorkflowAlreadyStartedError == nil) || (v.WorkflowAlreadyStartedError != nil && rhs.WorkflowAlreadyStartedError != nil && v.WorkflowAlreadyStartedError.Equals(rhs.WorkflowAlreadyStartedError))) {
 		return false
 	}
 
@@ -674,6 +718,16 @@ func (v *HistoryService_SignalWithStartWorkflowExecution_Result) GetLimitExceede
 func (v *HistoryService_SignalWithStartWorkflowExecution_Result) GetServiceBusyError() (o *shared.ServiceBusyError) {
 	if v.ServiceBusyError != nil {
 		return v.ServiceBusyError
+	}
+
+	return
+}
+
+// GetWorkflowAlreadyStartedError returns the value of WorkflowAlreadyStartedError if it is set or its
+// zero value if it is unset.
+func (v *HistoryService_SignalWithStartWorkflowExecution_Result) GetWorkflowAlreadyStartedError() (o *shared.WorkflowExecutionAlreadyStartedError) {
+	if v.WorkflowAlreadyStartedError != nil {
+		return v.WorkflowAlreadyStartedError
 	}
 
 	return

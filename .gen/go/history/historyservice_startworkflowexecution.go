@@ -442,12 +442,6 @@ func (v *HistoryService_StartWorkflowExecution_Result) ToWire() (wire.Value, err
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-func _WorkflowExecutionAlreadyStartedError_Read(w wire.Value) (*shared.WorkflowExecutionAlreadyStartedError, error) {
-	var v shared.WorkflowExecutionAlreadyStartedError
-	err := v.FromWire(w)
-	return &v, err
-}
-
 // FromWire deserializes a HistoryService_StartWorkflowExecution_Result struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.

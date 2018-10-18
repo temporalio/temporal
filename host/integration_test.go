@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -5637,6 +5638,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	// Send a signal
 	signalName := "my signal"
 	signalInput := []byte("my signal input.")
+	wfIDReusePolicy := workflow.WorkflowIdReusePolicyAllowDuplicate
 	sRequest := &workflow.SignalWithStartWorkflowExecutionRequest{
 		RequestId:                           common.StringPtr(uuid.New()),
 		Domain:                              common.StringPtr(s.domainName),
@@ -5649,6 +5651,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 		SignalName:                          common.StringPtr(signalName),
 		SignalInput:                         signalInput,
 		Identity:                            common.StringPtr(identity),
+		WorkflowIdReusePolicy:               &wfIDReusePolicy,
 	}
 	resp, err := s.engine.SignalWithStartWorkflowExecution(createContext(), sRequest)
 	s.Nil(err)
@@ -5776,6 +5779,153 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	listClosedResp, err := s.engine.ListClosedWorkflowExecutions(createContext(), listClosedRequest)
 	s.NoError(err)
 	s.Equal(1, len(listClosedResp.Executions))
+}
+
+func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
+	id := "integration-signal-with-start-workflow-id-reuse-test"
+	wt := "integration-signal-with-start-workflow-id-reuse-test-type"
+	tl := "integration-signal-with-start-workflow-id-reuse-test-tasklist"
+	identity := "worker1"
+	activityName := "activity_type1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	// Start a workflow
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	workflowComplete := false
+	activityCount := int32(1)
+	activityCounter := int32(0)
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeScheduleActivityTask),
+				ScheduleActivityTaskDecisionAttributes: &workflow.ScheduleActivityTaskDecisionAttributes{
+					ActivityId:                    common.StringPtr(strconv.Itoa(int(activityCounter))),
+					ActivityType:                  &workflow.ActivityType{Name: common.StringPtr(activityName)},
+					TaskList:                      &workflow.TaskList{Name: &tl},
+					Input:                         buf.Bytes(),
+					ScheduleToCloseTimeoutSeconds: common.Int32Ptr(100),
+					ScheduleToStartTimeoutSeconds: common.Int32Ptr(10),
+					StartToCloseTimeoutSeconds:    common.Int32Ptr(50),
+					HeartbeatTimeoutSeconds:       common.Int32Ptr(5),
+				},
+			}}, nil
+		}
+
+		workflowComplete = true
+		return []byte(strconv.Itoa(int(activityCounter))), []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	atHandler := func(execution *workflow.WorkflowExecution, activityType *workflow.ActivityType,
+		activityID string, input []byte, taskToken []byte) ([]byte, bool, error) {
+		return []byte("Activity Result."), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: atHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// Start workflows, make some progress and complete workflow
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.True(workflowComplete)
+
+	// test policy WorkflowIdReusePolicyRejectDuplicate
+	signalName := "my signal"
+	signalInput := []byte("my signal input.")
+	wfIDReusePolicy := workflow.WorkflowIdReusePolicyRejectDuplicate
+	sRequest := &workflow.SignalWithStartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		SignalName:                          common.StringPtr(signalName),
+		SignalInput:                         signalInput,
+		Identity:                            common.StringPtr(identity),
+		WorkflowIdReusePolicy:               &wfIDReusePolicy,
+	}
+	resp, err := s.engine.SignalWithStartWorkflowExecution(createContext(), sRequest)
+	s.Nil(resp)
+	s.Error(err)
+	errMsg := err.(*workflow.WorkflowExecutionAlreadyStartedError).GetMessage()
+	s.True(strings.Contains(errMsg, "reject duplicate workflow ID"))
+
+	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	wfIDReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	resp, err = s.engine.SignalWithStartWorkflowExecution(createContext(), sRequest)
+	s.Nil(resp)
+	s.Error(err)
+	errMsg = err.(*workflow.WorkflowExecutionAlreadyStartedError).GetMessage()
+	s.True(strings.Contains(errMsg, "allow duplicate workflow ID if last run failed"))
+
+	// test policy WorkflowIdReusePolicyAllowDuplicate
+	wfIDReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicate
+	resp, err = s.engine.SignalWithStartWorkflowExecution(createContext(), sRequest)
+	s.Nil(err)
+	s.NotEmpty(resp.GetRunId())
+
+	// Terminate workflow execution
+	err = s.engine.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+		Reason:   common.StringPtr("test WorkflowIdReusePolicyAllowDuplicateFailedOnly"),
+		Details:  nil,
+		Identity: common.StringPtr(identity),
+	})
+	s.Nil(err)
+
+	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly success start
+	wfIDReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly
+	resp, err = s.engine.SignalWithStartWorkflowExecution(createContext(), sRequest)
+	s.Nil(err)
+	s.NotEmpty(resp.GetRunId())
 }
 
 func (s *integrationSuite) TestTransientDecisionTimeout() {

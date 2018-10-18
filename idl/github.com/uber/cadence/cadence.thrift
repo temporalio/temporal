@@ -374,6 +374,7 @@ service WorkflowService {
       4: shared.ServiceBusyError serviceBusyError,
       5: shared.DomainNotActiveError domainNotActiveError,
       6: shared.LimitExceededError limitExceededError,
+      7: shared.WorkflowExecutionAlreadyStartedError workflowAlreadyStartedError,
     )
 
   /**
