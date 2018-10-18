@@ -123,6 +123,8 @@ const (
 	FlagEventIDWithAlias           = FlagEventID + ", eid"
 	FlagMaxFieldLength             = "max_field_length"
 	FlagMaxFieldLengthWithAlias    = FlagMaxFieldLength + ", maxl"
+	FlagSecurityToken              = "security_token"
+	FlagSecurityTokenWithAlias     = FlagSecurityToken + ", st"
 )
 
 const (
@@ -187,9 +189,11 @@ func RegisterDomain(c *cli.Context) {
 	description := c.String(FlagDescription)
 	ownerEmail := c.String(FlagOwnerEmail)
 	retentionDays := defaultDomainRetentionDays
+
 	if c.IsSet(FlagRetentionDays) {
 		retentionDays = c.Int(FlagRetentionDays)
 	}
+	securityToken := c.String(FlagSecurityToken)
 	emitMetric := false
 	var err error
 	if c.IsSet(FlagEmitMetric) {
@@ -243,6 +247,7 @@ func RegisterDomain(c *cli.Context) {
 		EmitMetric:                             common.BoolPtr(emitMetric),
 		Clusters:                               clusters,
 		ActiveClusterName:                      common.StringPtr(activeClusterName),
+		SecurityToken:                          common.StringPtr(securityToken),
 	}
 
 	ctx, cancel := newContext()
@@ -350,6 +355,8 @@ func UpdateDomain(c *cli.Context) {
 		}
 	}
 
+	securityToken := c.String(FlagSecurityToken)
+	updateRequest.SecurityToken = common.StringPtr(securityToken)
 	err := domainClient.Update(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*s.EntityNotExistsError); !ok {

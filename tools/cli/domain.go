@@ -95,7 +95,11 @@ func newDomainCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:  FlagDomainDataWithAlias,
-					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
+					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
+				},
+				cli.StringFlag{
+					Name:  FlagSecurityTokenWithAlias,
+					Usage: "Security token with permission",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -134,6 +138,10 @@ func newDomainCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagDomainDataWithAlias,
 					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
+				},
+				cli.StringFlag{
+					Name:  FlagSecurityTokenWithAlias,
+					Usage: "Security token with permission ",
 				},
 			},
 			Action: func(c *cli.Context) {
