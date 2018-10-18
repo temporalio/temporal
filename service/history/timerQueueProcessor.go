@@ -145,7 +145,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
 	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
 	// we should consider make the failover idempotent
-	failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
+	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
 		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
 
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -153,17 +153,7 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	}
 
 	failoverTimerProcessor.Start()
-
-	// err is ignored
-	t.shard.UpdateTimerFailoverLevel(
-		domainID,
-		persistence.TimerFailoverLevel{
-			MinLevel:     minLevel,
-			CurrentLevel: minLevel,
-			MaxLevel:     maxLevel,
-			DomainIDs:    []string{domainID},
-		},
-	)
+	updateShardAckLevel(TimerSequenceID{VisibilityTimestamp: minLevel})
 }
 
 func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 {

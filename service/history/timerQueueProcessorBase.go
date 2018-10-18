@@ -402,6 +402,7 @@ func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan stru
 		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
 	retryCondition := func(err error) bool { return true }
+	defer func() { t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime)) }()
 
 	for {
 		select {

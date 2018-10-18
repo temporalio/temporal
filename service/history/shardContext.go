@@ -26,16 +26,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber/cadence/common/cache"
-
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-
-	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/service"
 )
 
@@ -255,7 +253,10 @@ func (s *shardContextImpl) DeleteTransferFailoverLevel(failoverID string) error 
 	s.Lock()
 	defer s.Unlock()
 
-	delete(s.shardInfo.TransferFailoverLevels, failoverID)
+	if level, ok := s.shardInfo.TransferFailoverLevels[failoverID]; ok {
+		s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferFailoverLatencyTimer, time.Since(level.StartTime))
+		delete(s.shardInfo.TransferFailoverLevels, failoverID)
+	}
 	return s.updateShardInfoLocked()
 }
 
@@ -282,7 +283,10 @@ func (s *shardContextImpl) DeleteTimerFailoverLevel(failoverID string) error {
 	s.Lock()
 	defer s.Unlock()
 
-	delete(s.shardInfo.TimerFailoverLevels, failoverID)
+	if level, ok := s.shardInfo.TimerFailoverLevels[failoverID]; ok {
+		s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverLatencyTimer, time.Since(level.StartTime))
+		delete(s.shardInfo.TimerFailoverLevels, failoverID)
+	}
 	return s.updateShardInfoLocked()
 }
 
@@ -773,6 +777,9 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
 	timerLag := time.Since(s.shardInfo.TimerAckLevel)
 
+	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
+	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
+
 	if logWarnTransferLevelDiff < diffTransferLevel ||
 		logWarnTimerLevelDiff < diffTimerLevel ||
 		logWarnTransferLevelDiff < transferLag ||
@@ -794,6 +801,9 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoReplicationLagTimer, time.Duration(replicationLag))
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferLagTimer, time.Duration(transferLag))
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerLagTimer, timerLag)
+
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTransferFailoverInProgressTimer, time.Duration(transferFailoverInProgress))
+	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressTimer, time.Duration(timerFailoverInProgress))
 }
 
 func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {

@@ -824,6 +824,10 @@ const (
 	ShardInfoTimerLagTimer
 	ShardInfoTransferDiffTimer
 	ShardInfoTimerDiffTimer
+	ShardInfoTransferFailoverInProgressTimer
+	ShardInfoTimerFailoverInProgressTimer
+	ShardInfoTransferFailoverLatencyTimer
+	ShardInfoTimerFailoverLatencyTimer
 	MembershipChangedCounter
 	NumShardsGauge
 	GetEngineForShardErrorCounter
@@ -993,6 +997,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardInfoTimerLagTimer:                       {metricName: "shardinfo-timer-lag", metricType: Timer},
 		ShardInfoTransferDiffTimer:                   {metricName: "shardinfo-transfer-diff", metricType: Timer},
 		ShardInfoTimerDiffTimer:                      {metricName: "shardinfo-timer-diff", metricType: Timer},
+		ShardInfoTransferFailoverInProgressTimer:     {metricName: "shardinfo-transfer-failover-in-progress", metricType: Timer},
+		ShardInfoTimerFailoverInProgressTimer:        {metricName: "shardinfo-timer-failover-in-progress", metricType: Timer},
+		ShardInfoTransferFailoverLatencyTimer:        {metricName: "shardinfo-transfer-failover-latency", metricType: Timer},
+		ShardInfoTimerFailoverLatencyTimer:           {metricName: "shardinfo-timer-failover-latency", metricType: Timer},
 		MembershipChangedCounter:                     {metricName: "membership-changed-count", metricType: Counter},
 		NumShardsGauge:                               {metricName: "numshards-gauge", metricType: Gauge},
 		GetEngineForShardErrorCounter:                {metricName: "get-engine-for-shard-errors", metricType: Counter},

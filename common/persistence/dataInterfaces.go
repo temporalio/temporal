@@ -181,6 +181,7 @@ type (
 
 	// TransferFailoverLevel contains corresponding start / end level
 	TransferFailoverLevel struct {
+		StartTime    time.Time
 		MinLevel     int64
 		CurrentLevel int64
 		MaxLevel     int64
@@ -189,6 +190,7 @@ type (
 
 	// TimerFailoverLevel contains domain IDs and corresponding start / end level
 	TimerFailoverLevel struct {
+		StartTime    time.Time
 		MinLevel     time.Time
 		CurrentLevel time.Time
 		MaxLevel     time.Time

@@ -21,8 +21,9 @@
 package history
 
 import (
-	"github.com/uber-common/bark"
+	"time"
 
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/client/history"
@@ -112,7 +113,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 
 func newTransferQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, visibilityMgr persistence.VisibilityManager,
 	matchingClient matching.Client, historyClient history.Client, domainID string, standbyClusterName string,
-	minLevel int64, maxLevel int64, logger bark.Logger) *transferQueueActiveProcessorImpl {
+	minLevel int64, maxLevel int64, logger bark.Logger) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorFailoverStartDelay,
@@ -138,10 +139,12 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
 	}
+	failoverStartTime := time.Now()
 	updateTransferAckLevel := func(ackLevel int64) error {
 		return shard.UpdateTransferFailoverLevel(
 			domainID,
 			persistence.TransferFailoverLevel{
+				StartTime:    failoverStartTime,
 				MinLevel:     minLevel,
 				CurrentLevel: ackLevel,
 				MaxLevel:     maxLevel,
@@ -172,7 +175,7 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	queueProcessorBase := newQueueProcessorBase(currentClusterName, shard, options, processor, queueAckMgr, logger)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
-	return processor
+	return updateTransferAckLevel, processor
 }
 
 func (t *transferQueueActiveProcessorImpl) notifyNewTask() {

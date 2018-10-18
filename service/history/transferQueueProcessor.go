@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/uber-common/bark"
-
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common/logging"
@@ -157,7 +156,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 	// the ack manager is exclusive, so add 1
 	maxLevel := t.activeTaskProcessor.getQueueReadLevel() + 1
 	t.logger.Infof("Transfer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
-	failoverTaskProcessor := newTransferQueueFailoverProcessor(
+	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard, t.historyService, t.visibilityMgr, t.matchingClient, t.historyClient,
 		domainID, standbyClusterName, minLevel, maxLevel, t.logger,
 	)
@@ -167,17 +166,7 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 	}
 
 	failoverTaskProcessor.Start()
-
-	// err is ignored
-	t.shard.UpdateTransferFailoverLevel(
-		domainID,
-		persistence.TransferFailoverLevel{
-			MinLevel:     minLevel,
-			CurrentLevel: minLevel,
-			MaxLevel:     maxLevel,
-			DomainIDs:    []string{domainID},
-		},
-	)
+	updateShardAckLevel(minLevel)
 }
 
 func (t *transferQueueProcessorImpl) completeTransferLoop() {
