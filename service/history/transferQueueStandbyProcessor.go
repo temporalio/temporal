@@ -206,7 +206,7 @@ func (t *transferQueueStandbyProcessorImpl) processDecisionTask(transferTask *pe
 		wfTypeName := executionInfo.WorkflowTypeName
 		startTimestamp := executionInfo.StartTimestamp
 
-		markWorkflowAsOpen := transferTask.ScheduleID <= common.FirstEventID+2 && msBuilder.IsWorkflowExecutionRunning()
+		markWorkflowAsOpen := transferTask.ScheduleID <= common.FirstEventID+2
 
 		if !isPending {
 			if markWorkflowAsOpen {
@@ -418,12 +418,14 @@ func (t *transferQueueStandbyProcessorImpl) discardTask(transferTask *persistenc
 	discard := now.Sub(transferTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
 	if discard {
 		t.logger.WithFields(bark.Fields{
-			logging.TagTaskID:              transferTask.GetTaskID(),
-			logging.TagTaskType:            transferTask.GetTaskType(),
-			logging.TagVersion:             transferTask.GetVersion(),
 			logging.TagDomainID:            transferTask.DomainID,
 			logging.TagWorkflowExecutionID: transferTask.WorkflowID,
 			logging.TagWorkflowRunID:       transferTask.RunID,
+			logging.TagTaskID:              transferTask.GetTaskID(),
+			logging.TagTaskType:            transferTask.GetTaskType(),
+			logging.TagVersion:             transferTask.GetVersion(),
+			logging.TagTimestamp:           transferTask.VisibilityTimestamp,
+			logging.TagEventID:             transferTask.ScheduleID,
 		}).Error("Discarding standby transfer task due to task being pending for too long.")
 	}
 	return discard

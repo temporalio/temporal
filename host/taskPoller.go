@@ -22,6 +22,9 @@ package host
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
@@ -34,8 +37,6 @@ import (
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"go.uber.org/yarpc"
-	"testing"
-	"time"
 )
 
 type (

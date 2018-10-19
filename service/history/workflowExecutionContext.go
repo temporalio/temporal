@@ -539,6 +539,9 @@ func (c *workflowExecutionContext) scheduleNewDecision(transferTasks []persisten
 	executionInfo := msBuilder.GetExecutionInfo()
 	if !msBuilder.HasPendingDecisionTask() {
 		di := msBuilder.AddDecisionTaskScheduledEvent()
+		if di == nil {
+			return nil, nil, &workflow.InternalServiceError{Message: "Failed to add decision scheduled event."}
+		}
 		transferTasks = append(transferTasks, &persistence.DecisionTask{
 			DomainID:   executionInfo.DomainID,
 			TaskList:   di.TaskList,

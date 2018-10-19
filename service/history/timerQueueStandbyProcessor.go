@@ -421,13 +421,16 @@ func (t *timerQueueStandbyProcessorImpl) discardTask(timerTask *persistence.Time
 	discard := now.Sub(timerTask.GetVisibilityTimestamp()) > t.shard.GetConfig().StandbyClusterDelay()
 	if discard {
 		t.logger.WithFields(bark.Fields{
+			logging.TagDomainID:            timerTask.DomainID,
+			logging.TagWorkflowExecutionID: timerTask.WorkflowID,
+			logging.TagWorkflowRunID:       timerTask.RunID,
 			logging.TagTaskID:              timerTask.GetTaskID(),
 			logging.TagTaskType:            timerTask.GetTaskType(),
 			logging.TagVersion:             timerTask.GetVersion(),
 			logging.TagTimeoutType:         timerTask.TimeoutType,
-			logging.TagDomainID:            timerTask.DomainID,
-			logging.TagWorkflowExecutionID: timerTask.WorkflowID,
-			logging.TagWorkflowRunID:       timerTask.RunID,
+			logging.TagTimestamp:           timerTask.VisibilityTimestamp,
+			logging.TagEventID:             timerTask.EventID,
+			logging.TagAttempt:             timerTask.ScheduleAttempt,
 		}).Error("Discarding standby timer task due to task being pending for too long.")
 	}
 	return discard

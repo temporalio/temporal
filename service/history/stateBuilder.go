@@ -139,8 +139,24 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			attributes := event.DecisionTaskTimedOutEventAttributes
 			b.msBuilder.ReplicateDecisionTaskTimedOutEvent(attributes.GetTimeoutType())
 
+			// this is for transient decision
+			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
+				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
+					di.ScheduleID))
+				// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+				lastDecision = di
+			}
+
 		case shared.EventTypeDecisionTaskFailed:
 			b.msBuilder.ReplicateDecisionTaskFailedEvent()
+
+			// this is for transient decision
+			if di := b.msBuilder.ReplicateTransientDecisionTaskScheduled(); di != nil {
+				b.transferTasks = append(b.transferTasks, b.scheduleDecisionTransferTask(domainID, b.getTaskList(b.msBuilder),
+					di.ScheduleID))
+				// since we do not use stickyness on the standby side, there shall be no decision schedule to start timeout
+				lastDecision = di
+			}
 
 		case shared.EventTypeActivityTaskScheduled:
 			ai := b.msBuilder.ReplicateActivityTaskScheduledEvent(event)

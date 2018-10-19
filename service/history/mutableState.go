@@ -181,6 +181,7 @@ type (
 		ReplicateTimerCanceledEvent(*workflow.HistoryEvent)
 		ReplicateTimerFiredEvent(*workflow.HistoryEvent)
 		ReplicateTimerStartedEvent(*workflow.HistoryEvent) *persistence.TimerInfo
+		ReplicateTransientDecisionTaskScheduled() *decisionInfo
 		ReplicateWorkflowExecutionCancelRequestedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCanceledEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionCompletedEvent(*workflow.HistoryEvent)

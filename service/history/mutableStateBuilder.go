@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
+	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -31,9 +33,6 @@ import (
 	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/persistence"
-
-	"github.com/pborman/uuid"
-	"github.com/uber-common/bark"
 )
 
 const (
@@ -1238,6 +1237,35 @@ func (e *mutableStateBuilder) AddDecisionTaskScheduledEvent() *decisionInfo {
 		startToCloseTimeoutSeconds,
 		e.executionInfo.DecisionAttempt,
 	)
+}
+
+func (e *mutableStateBuilder) ReplicateTransientDecisionTaskScheduled() *decisionInfo {
+	if e.HasPendingDecisionTask() || e.GetExecutionInfo().DecisionAttempt == 0 {
+		return nil
+	}
+
+	// the schedule ID for this decision is guaranteed to be wrong
+	// since the next event ID is assigned at the very end of when
+	// all events are applied for replication.
+	// this is OK
+	// 1. if a failover happen just after this transient decisioon,
+	// AddDecisionTaskStartedEvent will handle the correction of schedule ID
+	// and set the attempt to 0
+	// 2. if no failover happen during the life time of this transient decision
+	// then ReplicateDecisionTaskScheduledEvent will overwrite evenything
+	// including the decision schedule ID
+	di := &decisionInfo{
+		Version:         e.GetCurrentVersion(),
+		ScheduleID:      e.GetNextEventID(),
+		StartedID:       common.EmptyEventID,
+		RequestID:       emptyUUID,
+		DecisionTimeout: e.GetExecutionInfo().DecisionTimeoutValue,
+		TaskList:        e.GetExecutionInfo().TaskList,
+		Attempt:         e.GetExecutionInfo().DecisionAttempt,
+	}
+
+	e.UpdateDecision(di)
+	return di
 }
 
 func (e *mutableStateBuilder) ReplicateDecisionTaskScheduledEvent(version, scheduleID int64, taskList string,

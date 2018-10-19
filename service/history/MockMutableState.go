@@ -2049,6 +2049,22 @@ func (_m *mockMutableState) ReplicateTimerStartedEvent(_a0 *shared.HistoryEvent)
 	return r0
 }
 
+// ReplicateTransientDecisionTaskScheduled provides a mock function with given fields: _a0
+func (_m *mockMutableState) ReplicateTransientDecisionTaskScheduled() *decisionInfo {
+	ret := _m.Called()
+
+	var r0 *decisionInfo
+	if rf, ok := ret.Get(0).(func() *decisionInfo); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*decisionInfo)
+		}
+	}
+
+	return r0
+}
+
 // ReplicateWorkflowExecutionCancelRequestedEvent provides a mock function with given fields: _a0
 func (_m *mockMutableState) ReplicateWorkflowExecutionCancelRequestedEvent(_a0 *shared.HistoryEvent) {
 	_m.Called(_a0)
