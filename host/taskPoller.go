@@ -272,6 +272,77 @@ Loop:
 	return false, nil, matching.ErrNoTasks
 }
 
+func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTaskResponse) (
+	*workflow.RespondDecisionTaskCompletedResponse, error) {
+	if response == nil || len(response.TaskToken) == 0 {
+		p.Logger.Info("Empty Decision task: Polling again.")
+		return nil, nil
+	}
+
+	var events []*workflow.HistoryEvent
+	history := response.History
+	if history == nil {
+		p.Logger.Fatal("History is nil")
+	}
+
+	events = history.Events
+	if events == nil || len(events) == 0 {
+		p.Logger.Fatalf("History Events are empty: %v", events)
+	}
+
+	nextPageToken := response.NextPageToken
+	for nextPageToken != nil {
+		resp, err2 := p.Engine.GetWorkflowExecutionHistory(createContext(), &workflow.GetWorkflowExecutionHistoryRequest{
+			Domain:        common.StringPtr(p.Domain),
+			Execution:     response.WorkflowExecution,
+			NextPageToken: nextPageToken,
+		})
+
+		if err2 != nil {
+			return nil, err2
+		}
+
+		events = append(events, resp.History.Events...)
+		nextPageToken = resp.NextPageToken
+	}
+
+	executionCtx, decisions, err := p.DecisionHandler(response.WorkflowExecution, response.WorkflowType,
+		common.Int64Default(response.PreviousStartedEventId), common.Int64Default(response.StartedEventId), response.History)
+	if err != nil {
+		p.Logger.Infof("Failing Decision. Decision handler failed with error: %v", err)
+		return nil, p.Engine.RespondDecisionTaskFailed(createContext(), &workflow.RespondDecisionTaskFailedRequest{
+			TaskToken: response.TaskToken,
+			Cause:     common.DecisionTaskFailedCausePtr(workflow.DecisionTaskFailedCauseWorkflowWorkerUnhandledFailure),
+			Details:   []byte(err.Error()),
+			Identity:  common.StringPtr(p.Identity),
+		})
+	}
+
+	p.Logger.Infof("Completing Decision.  Decisions: %v", decisions)
+
+	// sticky tasklist
+	newTask, err := p.Engine.RespondDecisionTaskCompleted(
+		createContext(),
+		&workflow.RespondDecisionTaskCompletedRequest{
+			TaskToken:        response.TaskToken,
+			Identity:         common.StringPtr(p.Identity),
+			ExecutionContext: executionCtx,
+			Decisions:        decisions,
+			StickyAttributes: &workflow.StickyExecutionAttributes{
+				WorkerTaskList:                p.StickyTaskList,
+				ScheduleToStartTimeoutSeconds: p.StickyScheduleToStartTimeoutSeconds,
+			},
+			ReturnNewDecisionTask:      common.BoolPtr(true),
+			ForceCreateNewDecisionTask: common.BoolPtr(true),
+		},
+		yarpc.WithHeader(common.LibraryVersionHeaderName, "0.0.1"),
+		yarpc.WithHeader(common.FeatureVersionHeaderName, "1.0.0"),
+		yarpc.WithHeader(common.ClientImplHeaderName, "go"),
+	)
+
+	return newTask, err
+}
+
 // PollAndProcessActivityTask for activity tasks
 func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:

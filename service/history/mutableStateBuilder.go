@@ -267,14 +267,44 @@ func (e *mutableStateBuilder) FlushBufferedEvents() error {
 		}
 	}
 
+	// Sometimes we see buffered events are out of order when read back from database.  This is mostly not an issue
+	// except in the Activity case where ActivityStarted and ActivityCompleted gets out of order.  The following code
+	// is added to reorder buffered events to guarantee all activity completion events will always be processed at the end.
+	var reorderedEvents []*workflow.HistoryEvent
+	reorderFunc := func(bufferedEvents []*workflow.HistoryEvent) {
+		for _, e := range bufferedEvents {
+			switch e.GetEventType() {
+			case workflow.EventTypeActivityTaskCompleted,
+				workflow.EventTypeActivityTaskFailed,
+				workflow.EventTypeActivityTaskCanceled,
+				workflow.EventTypeActivityTaskTimedOut:
+				reorderedEvents = append(reorderedEvents, e)
+			case workflow.EventTypeChildWorkflowExecutionCompleted,
+				workflow.EventTypeChildWorkflowExecutionFailed,
+				workflow.EventTypeChildWorkflowExecutionCanceled,
+				workflow.EventTypeChildWorkflowExecutionTimedOut,
+				workflow.EventTypeChildWorkflowExecutionTerminated:
+				reorderedEvents = append(reorderedEvents, e)
+			default:
+				newCommittedEvents = append(newCommittedEvents, e)
+			}
+		}
+	}
+
 	// no decision in-flight, flush all buffered events to committed bucket
 	if !e.HasInFlightDecisionTask() {
 
 		// flush persisted buffered events
-		newCommittedEvents = append(newCommittedEvents, e.bufferedEvents...)
+		reorderFunc(e.bufferedEvents)
+
 		// flush pending buffered events
 		if e.updateBufferedEvents != nil {
-			newCommittedEvents = append(newCommittedEvents, e.updateBufferedEvents...)
+			reorderFunc(e.updateBufferedEvents)
+		}
+
+		// Put back all the reordered buffer events at the end
+		if len(reorderedEvents) > 0 {
+			newCommittedEvents = append(newCommittedEvents, reorderedEvents...)
 		}
 
 		// flush new buffered events that were not saved to persistence yet

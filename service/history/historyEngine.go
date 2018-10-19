@@ -1384,7 +1384,8 @@ Update_History_Loop:
 		}
 
 		// Schedule another decision task if new events came in during this decision or if request forced to
-		createNewDecisionTask := hasUnhandledEvents || request.GetForceCreateNewDecisionTask()
+		createNewDecisionTask := !isComplete && (hasUnhandledEvents ||
+			request.GetForceCreateNewDecisionTask())
 
 		var newDecisionTaskScheduledID int64
 		if createNewDecisionTask {

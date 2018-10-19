@@ -21,8 +21,11 @@
 package history
 
 import (
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 	"os"
 	"testing"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
@@ -138,4 +141,101 @@ OtherEventsLoop:
 	// to either workflow.EventTypeTimerCanceled, or workflow.EventTypeCancelTimerFailed.
 	s.Equal(len(workflow.DecisionType_Values())+1, len(decisionEvents),
 		"This assertaion will be broken a new decision is added and no corresponding logic added to shouldBufferEvent()")
+}
+
+func (s *mutableStateSuite) TestReorderEvents() {
+	domainID := validDomainID
+	we := workflow.WorkflowExecution{
+		WorkflowId: common.StringPtr("wId"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	tl := "testTaskList"
+	activityID := "activity_id"
+	activityResult := []byte("activity_result")
+
+	info := &persistence.WorkflowExecutionInfo{
+		DomainID:             domainID,
+		WorkflowID:           we.GetWorkflowId(),
+		RunID:                we.GetRunId(),
+		TaskList:             tl,
+		WorkflowTypeName:     "wType",
+		WorkflowTimeout:      200,
+		DecisionTimeoutValue: 100,
+		State:                persistence.WorkflowStateRunning,
+		CloseStatus:          persistence.WorkflowCloseStatusNone,
+		NextEventID:          int64(8),
+		LastProcessedEvent:   int64(3),
+		LastUpdatedTimestamp: time.Now(),
+		DecisionVersion:      common.EmptyVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionTimeout:      100,
+	}
+
+	activityInfos := map[int64]*persistence.ActivityInfo{
+		5: &persistence.ActivityInfo{
+			Version:                int64(1),
+			ScheduleID:             int64(5),
+			ScheduledTime:          time.Now(),
+			StartedID:              common.EmptyEventID,
+			StartedTime:            time.Now(),
+			ActivityID:             activityID,
+			ScheduleToStartTimeout: 100,
+			ScheduleToCloseTimeout: 200,
+			StartToCloseTimeout:    300,
+			HeartbeatTimeout:       50,
+		},
+	}
+
+	bufferedEvents := []*workflow.HistoryEvent{
+		&workflow.HistoryEvent{
+			EventId:   common.Int64Ptr(common.BufferedEventID),
+			EventType: workflow.EventTypeActivityTaskCompleted.Ptr(),
+			Version:   common.Int64Ptr(1),
+			ActivityTaskCompletedEventAttributes: &workflow.ActivityTaskCompletedEventAttributes{
+				Result:           []byte(activityResult),
+				ScheduledEventId: common.Int64Ptr(5),
+				StartedEventId:   common.Int64Ptr(common.BufferedEventID),
+			},
+		},
+
+		&workflow.HistoryEvent{
+			EventId:   common.Int64Ptr(common.BufferedEventID),
+			EventType: workflow.EventTypeActivityTaskStarted.Ptr(),
+			Version:   common.Int64Ptr(1),
+			ActivityTaskStartedEventAttributes: &workflow.ActivityTaskStartedEventAttributes{
+				ScheduledEventId: common.Int64Ptr(5),
+			},
+		},
+	}
+
+	replicationState := &persistence.ReplicationState{
+		StartVersion:        int64(1),
+		CurrentVersion:      int64(1),
+		LastWriteVersion:    common.EmptyVersion,
+		LastWriteEventID:    common.EmptyEventID,
+		LastReplicationInfo: make(map[string]*persistence.ReplicationInfo),
+	}
+
+	dbState := &persistence.WorkflowMutableState{
+		ExecutionInfo:    info,
+		ActivityInfos:    activityInfos,
+		BufferedEvents:   bufferedEvents,
+		ReplicationState: replicationState,
+	}
+
+	s.msBuilder.Load(dbState)
+	s.Equal(workflow.EventTypeActivityTaskCompleted, s.msBuilder.bufferedEvents[0].GetEventType())
+	s.Equal(workflow.EventTypeActivityTaskStarted, s.msBuilder.bufferedEvents[1].GetEventType())
+
+	err := s.msBuilder.FlushBufferedEvents()
+	s.Nil(err)
+	s.Equal(workflow.EventTypeActivityTaskStarted, s.msBuilder.hBuilder.history[0].GetEventType())
+	s.Equal(int64(8), s.msBuilder.hBuilder.history[0].GetEventId())
+	s.Equal(int64(5), s.msBuilder.hBuilder.history[0].ActivityTaskStartedEventAttributes.GetScheduledEventId())
+	s.Equal(workflow.EventTypeActivityTaskCompleted, s.msBuilder.hBuilder.history[1].GetEventType())
+	s.Equal(int64(9), s.msBuilder.hBuilder.history[1].GetEventId())
+	s.Equal(int64(8), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetStartedEventId())
+	s.Equal(int64(5), s.msBuilder.hBuilder.history[1].ActivityTaskCompletedEventAttributes.GetScheduledEventId())
+
 }
