@@ -299,7 +299,7 @@ func buildRatelimiters(cfg *config.Persistence) map[string]common.TokenBucket {
 			qps = ds.SQL.MaxQPS
 		}
 		if qps > 0 {
-			result[dsName] = common.NewTokenBucket(ds.Cassandra.MaxQPS, common.NewRealTimeSource())
+			result[dsName] = common.NewTokenBucket(qps, common.NewRealTimeSource())
 		}
 	}
 	return result
