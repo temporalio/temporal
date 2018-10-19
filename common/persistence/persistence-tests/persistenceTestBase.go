@@ -55,8 +55,9 @@ type (
 			SchemaDir string
 		}
 		SQL struct {
-			DBPort    int
-			SchemaDir string
+			DBPort     int
+			SchemaDir  string
+			DriverName string
 		}
 		// TODO this is used for global domain test
 		// when crtoss DC is public, remove EnableGlobalDomain
@@ -118,7 +119,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName(10)
 	}
-	defaultCluster := sql.NewTestCluster(options.SQL.DBPort, options.DBName, options.SQL.SchemaDir)
+	sqlOpts := options.SQL
+	defaultCluster := sql.NewTestCluster(sqlOpts.DBPort, options.DBName, sqlOpts.SchemaDir, sqlOpts.DriverName)
 	visibilityCluster := cassandra.NewTestCluster(options.Cassandra.DBPort, options.DBName, options.Cassandra.SchemaDir)
 	return newTestBase(options, defaultCluster, visibilityCluster)
 }

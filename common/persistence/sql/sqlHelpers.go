@@ -30,9 +30,8 @@ import (
 	"github.com/uber/cadence/common/service/config"
 )
 
-const driverName = "mysql"
+const defaultDriverName = "mysql"
 
-// TODO: driverName parameter
 func newConnection(cfg config.SQL) (*sqlx.DB, error) {
 	var db, err = sqlx.Connect(cfg.DriverName,
 		fmt.Sprintf(dataSourceName, cfg.User, cfg.Password, cfg.ConnectProtocol, cfg.ConnectAddr, cfg.DatabaseName))
