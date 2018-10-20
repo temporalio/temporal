@@ -226,7 +226,7 @@ func (m *sqlShardManager) UpdateShard(request *persistence.UpdateShardRequest) e
 			Message: fmt.Sprintf("UpdateShard operation failed. Error: %v", err),
 		}
 	}
-	return runTransaction("UpdateShard", m.db, func(tx *sqlx.Tx) error {
+	return m.txExecute("UpdateShard", func(tx *sqlx.Tx) error {
 		if err := lockShard(tx, request.ShardInfo.ShardID, request.PreviousRangeID); err != nil {
 			return err
 		}

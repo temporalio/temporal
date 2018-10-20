@@ -244,7 +244,7 @@ func (m *sqlMetadataManagerV2) CreateDomain(request *persistence.CreateDomainReq
 	}
 
 	var resp *persistence.CreateDomainResponse
-	err = runTransaction("CreateDomain", m.db, func(tx *sqlx.Tx) error {
+	err = m.txExecute("CreateDomain", func(tx *sqlx.Tx) error {
 		if _, err1 := tx.NamedExec(createDomainSQLQuery, &domainRow{
 			domainCommon: domainCommon{
 				Name:        request.Info.Name,
@@ -394,7 +394,7 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 		}
 	}
 
-	return runTransaction("UpdateDomain", m.db, func(tx *sqlx.Tx) error {
+	return m.txExecute("UpdateDomain", func(tx *sqlx.Tx) error {
 		result, err := tx.NamedExec(updateDomainSQLQuery, &flatUpdateDomainRequest{
 			domainCommon: domainCommon{
 				Name:        request.Info.Name,
@@ -432,14 +432,14 @@ func (m *sqlMetadataManagerV2) UpdateDomain(request *persistence.UpdateDomainReq
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomain(request *persistence.DeleteDomainRequest) error {
-	return runTransaction("DeleteDomain", m.db, func(tx *sqlx.Tx) error {
+	return m.txExecute("DeleteDomain", func(tx *sqlx.Tx) error {
 		_, err := tx.NamedExec(deleteDomainByIDSQLQuery, request)
 		return err
 	})
 }
 
 func (m *sqlMetadataManagerV2) DeleteDomainByName(request *persistence.DeleteDomainByNameRequest) error {
-	return runTransaction("DeleteDomainByName", m.db, func(tx *sqlx.Tx) error {
+	return m.txExecute("DeleteDomainByName", func(tx *sqlx.Tx) error {
 		_, err := m.db.NamedExec(deleteDomainByNameSQLQuery, request)
 		return err
 	})

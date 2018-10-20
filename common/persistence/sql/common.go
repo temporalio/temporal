@@ -31,7 +31,6 @@ import (
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/persistence"
-	p "github.com/uber/cadence/common/persistence"
 )
 
 // TODO: Rename all SQL Managers to Stores
@@ -59,6 +58,7 @@ func (m *sqlStore) txExecute(operation string, f func(tx *sqlx.Tx) error) error 
 			*persistence.CurrentWorkflowConditionFailedError,
 			*workflow.InternalServiceError,
 			*persistence.WorkflowExecutionAlreadyStartedError,
+			*workflow.DomainAlreadyExistsError,
 			*persistence.ShardOwnershipLostError:
 			return err
 		default:
@@ -137,35 +137,6 @@ func takeAddressIfNotNil(a []byte) *[]byte {
 func dereferenceIfNotNil(a *[]byte) []byte {
 	if a != nil {
 		return *a
-	}
-	return nil
-}
-
-func runTransaction(name string, db *sqlx.DB, txFunc func(tx *sqlx.Tx) error) error {
-	convertErr := func(err error) error {
-		switch err.(type) {
-		case *workflow.InternalServiceError, *workflow.DomainAlreadyExistsError:
-			return err
-		case *p.ShardOwnershipLostError, *p.ConditionFailedError:
-			return err
-		default:
-			return &workflow.InternalServiceError{
-				Message: fmt.Sprintf("%v: %v", name, err),
-			}
-		}
-	}
-	tx, err := db.Beginx()
-	if err != nil {
-		return &workflow.InternalServiceError{
-			Message: fmt.Sprintf("%v: failed to begin transaction: %v", name, err),
-		}
-	}
-	if err := txFunc(tx); err != nil {
-		tx.Rollback()
-		return convertErr(err)
-	}
-	if err := tx.Commit(); err != nil {
-		return convertErr(err)
 	}
 	return nil
 }

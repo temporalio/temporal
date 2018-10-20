@@ -154,7 +154,7 @@ func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest
 	}
 
 	var resp *persistence.LeaseTaskListResponse
-	err := runTransaction("LeaseTaskList", m.db, func(tx *sqlx.Tx) error {
+	err := m.txExecute("LeaseTaskList", func(tx *sqlx.Tx) error {
 		rangeID = row.RangeID
 		ackLevel = row.AckLevel
 		// We need to separately check the condition and do the
@@ -217,7 +217,7 @@ func (m *sqlTaskManager) UpdateTaskList(request *persistence.UpdateTaskListReque
 		}
 	}
 	var resp *persistence.UpdateTaskListResponse
-	err := runTransaction("UpdateTaskList", m.db, func(tx *sqlx.Tx) error {
+	err := m.txExecute("UpdateTaskList", func(tx *sqlx.Tx) error {
 		err1 := lockTaskList(
 			tx, request.TaskListInfo.DomainID, request.TaskListInfo.Name, request.TaskListInfo.TaskType, request.TaskListInfo.RangeID)
 		if err1 != nil {
@@ -271,7 +271,7 @@ func (m *sqlTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*
 		}
 	}
 	var resp *persistence.CreateTasksResponse
-	err := runTransaction("CreateTasks", m.db, func(tx *sqlx.Tx) error {
+	err := m.txExecute("CreateTasks", func(tx *sqlx.Tx) error {
 		query, args, err1 := m.db.BindNamed(createTaskSQLQuery, tasksRows)
 		if err1 != nil {
 			return err1

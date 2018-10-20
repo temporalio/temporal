@@ -200,7 +200,7 @@ func (m *sqlHistoryManager) Close() {
 }
 
 func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *eventsRow) error {
-	return runTransaction("AppendHistoryEvents", m.db, func(tx *sqlx.Tx) error {
+	return m.txExecute("AppendHistoryEvents", func(tx *sqlx.Tx) error {
 		if err := lockEventForUpdate(tx, request); err != nil {
 			return err
 		}
