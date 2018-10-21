@@ -246,7 +246,7 @@ func (t *timerQueueStandbyProcessorImpl) processActivityTimeout(timerTask *persi
 		}
 
 		// for reason to update mutable state & generate a new activity task,
-		// see comments at the begining of this function.
+		// see comments at the beginning of this function.
 		// NOTE: this is the only place in the standby logic where mutable state can be updated
 
 		// need to clear the activity heartbeat timer task marks

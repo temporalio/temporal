@@ -97,7 +97,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 
 func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTaskInfo, activityScheduleToStartTimeout int32) error {
 	if task.TaskType != persistence.TransferTaskTypeActivityTask {
-		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannnot process non activity task")
+		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannot process non activity task")
 	}
 
 	err := t.matchingClient.AddActivityTask(nil, &m.AddActivityTaskRequest{
@@ -117,7 +117,7 @@ func (t *transferQueueProcessorBase) pushActivity(task *persistence.TransferTask
 
 func (t *transferQueueProcessorBase) pushDecision(task *persistence.TransferTaskInfo, tasklist *workflow.TaskList, decisionScheduleToStartTimeout int32) error {
 	if task.TaskType != persistence.TransferTaskTypeDecisionTask {
-		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannnot process non decision task")
+		t.logger.WithField(logging.TagTaskType, task.GetTaskType()).Fatal("Cannot process non decision task")
 	}
 
 	err := t.matchingClient.AddDecisionTask(nil, &m.AddDecisionTaskRequest{

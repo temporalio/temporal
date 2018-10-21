@@ -210,7 +210,7 @@ func (r *historyReplicator) SyncActivity(ctx context.Context, request *h.SyncAct
 
 	// calculate whether to reset the activity timer task status bits
 	// reset timer task status bits if
-	// 1. same source cluster & attemp changes
+	// 1. same source cluster & attempt changes
 	// 2. different source cluster
 	resetActivityTimerTaskStatus := false
 	if !r.clusterMetadata.IsVersionFromSameCluster(request.GetVersion(), ai.Version) {
@@ -865,7 +865,7 @@ func (r *historyReplicator) flushCurrentWorkflowBuffer(ctx context.Context, doma
 	if err != nil {
 		return err
 	}
-	// since this new workflow cannnot make progress due to existing workflow being open
+	// since this new workflow cannot make progress due to existing workflow being open
 	// try flush the existing workflow's buffer see if we can make it move forward
 	// First check if there are events which needs to be flushed before applying the update
 	err = r.FlushBuffer(ctx, currentContext, currentMutableState, logger)
