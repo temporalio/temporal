@@ -1221,3 +1221,20 @@ struct RetryPolicy {
   // Expiration time for the whole retry process.
   60: optional i32 expirationIntervalInSeconds
 }
+
+// HistoryBranchRange represents a piece of range for a branch.
+struct HistoryBranchRange{
+  // branchID of original branch forked from
+  10: optional string branchID
+  // beinning node for the range, inclusive
+  20: optional i64 beginNodeID
+  // ending node for the range, exclusive
+  30: optional i64 endNodeID
+}
+
+// For history persistence to serialize/deserialize branch details
+struct HistoryBranch{
+  10: optional string treeID
+  20: optional string branchID
+  30: optional list<HistoryBranchRange>  ancestors
+}

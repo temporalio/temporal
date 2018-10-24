@@ -142,4 +142,8 @@ const (
 	// task list tags
 	TagTaskListType = "task-list-type"
 	TagTaskListName = "task-list-name"
+
+	// persistence tags
+	TagTreeID   = "tree-id"
+	TagBranchID = "branch-id"
 )

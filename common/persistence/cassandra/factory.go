@@ -69,6 +69,11 @@ func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
 	return newHistoryPersistence(f.cfg, f.logger)
 }
 
+// NewHistoryV2Store returns a new history store
+func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
+	return newHistoryV2Persistence(f.cfg, f.logger)
+}
+
 // NewMetadataStore returns a new metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	return newMetadataManagerProxy(f.cfg, f.clusterName, f.logger)

@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.12",
+  "MinCompatibleVersion": "0.12",
+  "Description": "Support history events v2",
+  "SchemaUpdateCqlFiles": [
+    "events_v2.cql"
+  ]
+}

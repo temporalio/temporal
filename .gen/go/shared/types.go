@@ -14706,6 +14706,505 @@ func (v *History) GetEvents() (o []*HistoryEvent) {
 	return
 }
 
+type HistoryBranch struct {
+	TreeID    *string               `json:"treeID,omitempty"`
+	BranchID  *string               `json:"branchID,omitempty"`
+	Ancestors []*HistoryBranchRange `json:"ancestors,omitempty"`
+}
+
+type _List_HistoryBranchRange_ValueList []*HistoryBranchRange
+
+func (v _List_HistoryBranchRange_ValueList) ForEach(f func(wire.Value) error) error {
+	for i, x := range v {
+		if x == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", i)
+		}
+		w, err := x.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v _List_HistoryBranchRange_ValueList) Size() int {
+	return len(v)
+}
+
+func (_List_HistoryBranchRange_ValueList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_List_HistoryBranchRange_ValueList) Close() {}
+
+// ToWire translates a HistoryBranch struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryBranch) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.TreeID != nil {
+		w, err = wire.NewValueString(*(v.TreeID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.BranchID != nil {
+		w, err = wire.NewValueString(*(v.BranchID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.Ancestors != nil {
+		w, err = wire.NewValueList(_List_HistoryBranchRange_ValueList(v.Ancestors)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _HistoryBranchRange_Read(w wire.Value) (*HistoryBranchRange, error) {
+	var v HistoryBranchRange
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _List_HistoryBranchRange_Read(l wire.ValueList) ([]*HistoryBranchRange, error) {
+	if l.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make([]*HistoryBranchRange, 0, l.Size())
+	err := l.ForEach(func(x wire.Value) error {
+		i, err := _HistoryBranchRange_Read(x)
+		if err != nil {
+			return err
+		}
+		o = append(o, i)
+		return nil
+	})
+	l.Close()
+	return o, err
+}
+
+// FromWire deserializes a HistoryBranch struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryBranch struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryBranch
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryBranch) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.TreeID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BranchID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TList {
+				v.Ancestors, err = _List_HistoryBranchRange_Read(field.Value.GetList())
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryBranch
+// struct.
+func (v *HistoryBranch) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.TreeID != nil {
+		fields[i] = fmt.Sprintf("TreeID: %v", *(v.TreeID))
+		i++
+	}
+	if v.BranchID != nil {
+		fields[i] = fmt.Sprintf("BranchID: %v", *(v.BranchID))
+		i++
+	}
+	if v.Ancestors != nil {
+		fields[i] = fmt.Sprintf("Ancestors: %v", v.Ancestors)
+		i++
+	}
+
+	return fmt.Sprintf("HistoryBranch{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _List_HistoryBranchRange_Equals(lhs, rhs []*HistoryBranchRange) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for i, lv := range lhs {
+		rv := rhs[i]
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equals returns true if all the fields of this HistoryBranch match the
+// provided HistoryBranch.
+//
+// This function performs a deep comparison.
+func (v *HistoryBranch) Equals(rhs *HistoryBranch) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.TreeID, rhs.TreeID) {
+		return false
+	}
+	if !_String_EqualsPtr(v.BranchID, rhs.BranchID) {
+		return false
+	}
+	if !((v.Ancestors == nil && rhs.Ancestors == nil) || (v.Ancestors != nil && rhs.Ancestors != nil && _List_HistoryBranchRange_Equals(v.Ancestors, rhs.Ancestors))) {
+		return false
+	}
+
+	return true
+}
+
+type _List_HistoryBranchRange_Zapper []*HistoryBranchRange
+
+// MarshalLogArray implements zapcore.ArrayMarshaler, enabling
+// fast logging of _List_HistoryBranchRange_Zapper.
+func (l _List_HistoryBranchRange_Zapper) MarshalLogArray(enc zapcore.ArrayEncoder) (err error) {
+	for _, v := range l {
+		err = multierr.Append(err, enc.AppendObject(v))
+	}
+	return err
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryBranch.
+func (v *HistoryBranch) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.TreeID != nil {
+		enc.AddString("treeID", *v.TreeID)
+	}
+	if v.BranchID != nil {
+		enc.AddString("branchID", *v.BranchID)
+	}
+	if v.Ancestors != nil {
+		err = multierr.Append(err, enc.AddArray("ancestors", (_List_HistoryBranchRange_Zapper)(v.Ancestors)))
+	}
+	return err
+}
+
+// GetTreeID returns the value of TreeID if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranch) GetTreeID() (o string) {
+	if v.TreeID != nil {
+		return *v.TreeID
+	}
+
+	return
+}
+
+// GetBranchID returns the value of BranchID if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranch) GetBranchID() (o string) {
+	if v.BranchID != nil {
+		return *v.BranchID
+	}
+
+	return
+}
+
+// GetAncestors returns the value of Ancestors if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranch) GetAncestors() (o []*HistoryBranchRange) {
+	if v.Ancestors != nil {
+		return v.Ancestors
+	}
+
+	return
+}
+
+type HistoryBranchRange struct {
+	BranchID    *string `json:"branchID,omitempty"`
+	BeginNodeID *int64  `json:"beginNodeID,omitempty"`
+	EndNodeID   *int64  `json:"endNodeID,omitempty"`
+}
+
+// ToWire translates a HistoryBranchRange struct into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// An error is returned if the struct or any of its fields failed to
+// validate.
+//
+//   x, err := v.ToWire()
+//   if err != nil {
+//     return err
+//   }
+//
+//   if err := binaryProtocol.Encode(x, writer); err != nil {
+//     return err
+//   }
+func (v *HistoryBranchRange) ToWire() (wire.Value, error) {
+	var (
+		fields [3]wire.Field
+		i      int = 0
+		w      wire.Value
+		err    error
+	)
+
+	if v.BranchID != nil {
+		w, err = wire.NewValueString(*(v.BranchID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 10, Value: w}
+		i++
+	}
+	if v.BeginNodeID != nil {
+		w, err = wire.NewValueI64(*(v.BeginNodeID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 20, Value: w}
+		i++
+	}
+	if v.EndNodeID != nil {
+		w, err = wire.NewValueI64(*(v.EndNodeID)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+
+	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+// FromWire deserializes a HistoryBranchRange struct from its Thrift-level
+// representation. The Thrift-level representation may be obtained
+// from a ThriftRW protocol implementation.
+//
+// An error is returned if we were unable to build a HistoryBranchRange struct
+// from the provided intermediate representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TStruct)
+//   if err != nil {
+//     return nil, err
+//   }
+//
+//   var v HistoryBranchRange
+//   if err := v.FromWire(x); err != nil {
+//     return nil, err
+//   }
+//   return &v, nil
+func (v *HistoryBranchRange) FromWire(w wire.Value) error {
+	var err error
+
+	for _, field := range w.GetStruct().Fields {
+		switch field.ID {
+		case 10:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.BranchID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 20:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.BeginNodeID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.EndNodeID = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	}
+
+	return nil
+}
+
+// String returns a readable string representation of a HistoryBranchRange
+// struct.
+func (v *HistoryBranchRange) String() string {
+	if v == nil {
+		return "<nil>"
+	}
+
+	var fields [3]string
+	i := 0
+	if v.BranchID != nil {
+		fields[i] = fmt.Sprintf("BranchID: %v", *(v.BranchID))
+		i++
+	}
+	if v.BeginNodeID != nil {
+		fields[i] = fmt.Sprintf("BeginNodeID: %v", *(v.BeginNodeID))
+		i++
+	}
+	if v.EndNodeID != nil {
+		fields[i] = fmt.Sprintf("EndNodeID: %v", *(v.EndNodeID))
+		i++
+	}
+
+	return fmt.Sprintf("HistoryBranchRange{%v}", strings.Join(fields[:i], ", "))
+}
+
+// Equals returns true if all the fields of this HistoryBranchRange match the
+// provided HistoryBranchRange.
+//
+// This function performs a deep comparison.
+func (v *HistoryBranchRange) Equals(rhs *HistoryBranchRange) bool {
+	if v == nil {
+		return rhs == nil
+	} else if rhs == nil {
+		return false
+	}
+	if !_String_EqualsPtr(v.BranchID, rhs.BranchID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.BeginNodeID, rhs.BeginNodeID) {
+		return false
+	}
+	if !_I64_EqualsPtr(v.EndNodeID, rhs.EndNodeID) {
+		return false
+	}
+
+	return true
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of HistoryBranchRange.
+func (v *HistoryBranchRange) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	if v == nil {
+		return nil
+	}
+	if v.BranchID != nil {
+		enc.AddString("branchID", *v.BranchID)
+	}
+	if v.BeginNodeID != nil {
+		enc.AddInt64("beginNodeID", *v.BeginNodeID)
+	}
+	if v.EndNodeID != nil {
+		enc.AddInt64("endNodeID", *v.EndNodeID)
+	}
+	return err
+}
+
+// GetBranchID returns the value of BranchID if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranchRange) GetBranchID() (o string) {
+	if v.BranchID != nil {
+		return *v.BranchID
+	}
+
+	return
+}
+
+// GetBeginNodeID returns the value of BeginNodeID if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranchRange) GetBeginNodeID() (o int64) {
+	if v.BeginNodeID != nil {
+		return *v.BeginNodeID
+	}
+
+	return
+}
+
+// GetEndNodeID returns the value of EndNodeID if it is set or its
+// zero value if it is unset.
+func (v *HistoryBranchRange) GetEndNodeID() (o int64) {
+	if v.EndNodeID != nil {
+		return *v.EndNodeID
+	}
+
+	return
+}
+
 type HistoryEvent struct {
 	EventId                                                        *int64                                                          `json:"eventId,omitempty"`
 	Timestamp                                                      *int64                                                          `json:"timestamp,omitempty"`

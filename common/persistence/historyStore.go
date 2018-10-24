@@ -39,6 +39,7 @@ type (
 		logger      bark.Logger
 	}
 
+	// historyToken is used to serialize/deserialize pagination token for GetWorkflowExecutionHistory
 	historyToken struct {
 		LastEventBatchVersion int64
 		LastEventID           int64
@@ -62,6 +63,9 @@ func (m *historyManagerImpl) GetName() string {
 }
 
 func (m *historyManagerImpl) AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error) {
+	if len(request.Events) == 0 {
+		return nil, fmt.Errorf("events to be appended cannot be empty")
+	}
 	eventsData, err := m.serializer.SerializeBatchEvents(request.Events, request.Encoding)
 	if err != nil {
 		return nil, err
@@ -110,7 +114,7 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 	newResponse := &GetWorkflowExecutionHistoryResponse{}
 
 	history := &workflow.History{
-		Events: make([]*workflow.HistoryEvent, 0),
+		Events: make([]*workflow.HistoryEvent, 0, request.PageSize),
 	}
 
 	// first_event_id of the last batch

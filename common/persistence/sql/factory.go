@@ -23,6 +23,7 @@ package sql
 import (
 	"errors"
 
+	"fmt"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
@@ -67,6 +68,11 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 // NewHistoryStore returns a new history store
 func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
 	return newHistoryPersistence(f.cfg, f.logger)
+}
+
+// NewHistoryV2Store returns a new history store
+func (f *Factory) NewHistoryV2Store() (p.HistoryV2Store, error) {
+	return nil, fmt.Errorf("Not implemented")
 }
 
 // NewMetadataStore returns a new metadata store

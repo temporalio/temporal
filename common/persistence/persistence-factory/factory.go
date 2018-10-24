@@ -45,6 +45,8 @@ type (
 		NewShardManager() (p.ShardManager, error)
 		// NewHistoryManager returns a new history manager
 		NewHistoryManager() (p.HistoryManager, error)
+		// NewHistoryManager returns a new historyV2 manager
+		NewHistoryV2Manager() (p.HistoryV2Manager, error)
 		// NewMetadataManager returns a new metadata manager that can speak
 		// the given version or versions
 		NewMetadataManager(version MetadataVersion) (p.MetadataManager, error)
@@ -64,6 +66,8 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewHistoryStore returns a new history store
 		NewHistoryStore() (p.HistoryStore, error)
+		// NewHistoryV2Store returns a new historyV2 store
+		NewHistoryV2Store() (p.HistoryV2Store, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewMetadataStoreV1 returns a metadata store that can talk v1
@@ -192,6 +196,23 @@ func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	}
 	if f.metricsClient != nil {
 		result = p.NewHistoryPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	}
+	return result, nil
+}
+
+// NewHistoryManager returns a new history manager
+func (f *factoryImpl) NewHistoryV2Manager() (p.HistoryV2Manager, error) {
+	ds := f.datastores[storeTypeHistory]
+	store, err := ds.factory.NewHistoryV2Store()
+	if err != nil {
+		return nil, err
+	}
+	result := p.NewHistoryV2ManagerImpl(store, f.logger)
+	if ds.ratelimit != nil {
+		result = p.NewHistoryV2PersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+	}
+	if f.metricsClient != nil {
+		result = p.NewHistoryV2PersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 	return result, nil
 }

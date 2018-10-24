@@ -74,6 +74,7 @@ type (
 		ExecutionManager      p.ExecutionManager
 		TaskMgr               p.TaskManager
 		HistoryMgr            p.HistoryManager
+		HistoryV2Mgr          p.HistoryV2Manager
 		MetadataManager       p.MetadataManager
 		MetadataManagerV2     p.MetadataManager
 		MetadataProxy         p.MetadataManager
@@ -108,7 +109,7 @@ type (
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
-		options.DBName = GenerateRandomDBName(10)
+		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
 	testCluster := cassandra.NewTestCluster(options.Cassandra.DBPort, options.DBName, options.Cassandra.SchemaDir)
 	return newTestBase(options, testCluster, testCluster)
@@ -168,6 +169,10 @@ func (s *TestBase) Setup() {
 
 	s.HistoryMgr, err = factory.NewHistoryManager()
 	s.fatalOnError("NewHistoryManager", err)
+
+	s.HistoryV2Mgr, err = factory.NewHistoryV2Manager()
+	// TODO SQL currently doesn't have support for HistoryV2Mgr.
+	//s.fatalOnError("NewHistoryV2Manager", err)
 
 	s.ShardMgr, err = factory.NewShardManager()
 	s.fatalOnError("NewShardManager", err)

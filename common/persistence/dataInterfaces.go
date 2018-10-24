@@ -126,6 +126,11 @@ const (
 )
 
 type (
+	// InvalidPersistenceRequestError represents invalid request to persistence
+	InvalidPersistenceRequestError struct {
+		Msg string
+	}
+
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
 		Msg string
@@ -854,6 +859,7 @@ type (
 	}
 
 	// AppendHistoryEventsRequest is used to append new events to workflow execution history
+	//Deprecated: use v2 API-AppendHistoryNodes() instead
 	AppendHistoryEventsRequest struct {
 		DomainID          string
 		Execution         workflow.WorkflowExecution
@@ -868,6 +874,7 @@ type (
 	}
 
 	// GetWorkflowExecutionHistoryRequest is used to retrieve history of a workflow execution
+	//Deprecated: use v2 API-AppendHistoryNodes() instead
 	GetWorkflowExecutionHistoryRequest struct {
 		DomainID  string
 		Execution workflow.WorkflowExecution
@@ -882,6 +889,7 @@ type (
 	}
 
 	// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistoryRequest
+	// Deprecated: use V2 API instead-ReadHistoryBranch()
 	GetWorkflowExecutionHistoryResponse struct {
 		History *workflow.History
 		// Token to read next page if there are more events beyond page size.
@@ -894,6 +902,7 @@ type (
 	}
 
 	// DeleteWorkflowExecutionHistoryRequest is used to delete workflow execution history
+	//Deprecated: use v2 API-AppendHistoryNodes() instead
 	DeleteWorkflowExecutionHistoryRequest struct {
 		DomainID  string
 		Execution workflow.WorkflowExecution
@@ -1057,7 +1066,101 @@ type (
 		MutableStateUpdateSessionStats *MutableStateUpdateSessionStats
 	}
 
+	// NewHistoryBranchRequest is used to create a new history branch
+	NewHistoryBranchRequest struct {
+		TreeID string
+	}
+
+	// NewHistoryBranchResponse is a response to NewHistoryBranchRequest
+	NewHistoryBranchResponse struct {
+		//BranchToken represents a branch
+		BranchToken []byte
+	}
+
+	// AppendHistoryNodesRequest is used to append a batch of history nodes
+	AppendHistoryNodesRequest struct {
+		// The branch to be appended
+		BranchToken []byte
+		// The batch of events to be appended. The first eventID will become the nodeID of this batch
+		Events []*workflow.HistoryEvent
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
+		TransactionID int64
+		// It is to suggest a binary encoding type to serialize history events
+		Encoding common.EncodingType
+	}
+
+	// AppendHistoryNodesResponse is a response to AppendHistoryNodesRequest
+	AppendHistoryNodesResponse struct {
+		// the size of the event data that has been appended
+		Size int
+	}
+
+	// ReadHistoryBranchRequest is used to read a history branch
+	ReadHistoryBranchRequest struct {
+		// The branch to be read
+		BranchToken []byte
+		// Get the history nodes from MinEventID. Inclusive.
+		MinEventID int64
+		// Get the history nodes upto MaxEventID.  Exclusive.
+		MaxEventID int64
+		// Maximum number of batches of events per page. Not that number of events in a batch >=1, it is not number of events per page.
+		// However for a single page, it is also possible that the returned events is less than PageSize (event zero events) due to stale events.
+		PageSize int
+		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
+		NextPageToken []byte
+		// Optional parameter for validating event version. The starting version of the events returned need to be greater than it and should never decrease.
+		// Using zero if don't you want to check the version of the first event
+		LastEventVersion int64
+	}
+
+	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
+	ReadHistoryBranchResponse struct {
+		// History events
+		History []*workflow.HistoryEvent
+		// Token to read next page if there are more events beyond page size.
+		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
+		// Empty means we have reached the last page, not need to continue
+		NextPageToken []byte
+		// Size of history read from store
+		Size int
+	}
+
+	// ForkHistoryBranchRequest is used to fork a history branch
+	ForkHistoryBranchRequest struct {
+		// The branch to be fork
+		ForkBranchToken []byte
+		// The nodeID to fork from, the new branch will start from ForkNodeID
+		// Application must provide a void forking nodeID, it must be a valid nodeID in that branch. A valid nodeID is the firstEventID of a valid batch of events.
+		// And ForkNodeID > 1 because forking from 1 doesn't make any sense.
+		ForkNodeID int64
+	}
+
+	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
+	ForkHistoryBranchResponse struct {
+		// branchToken to represent the new branch
+		NewBranchToken []byte
+	}
+
+	// DeleteHistoryBranchRequest is used to remove a history branch
+	DeleteHistoryBranchRequest struct {
+		// branch to be deleted
+		BranchToken []byte
+	}
+
+	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
+	GetHistoryTreeRequest struct {
+		// A UUID of a tree
+		TreeID string
+	}
+
+	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
+	GetHistoryTreeResponse struct {
+		// all branches of a tree
+		Branches []*workflow.HistoryBranch
+	}
+
 	// AppendHistoryEventsResponse is response for AppendHistoryEventsRequest
+	// Deprecated: uses V2 API-AppendHistoryNodesRequest
 	AppendHistoryEventsResponse struct {
 		Size int
 	}
@@ -1121,14 +1224,43 @@ type (
 	}
 
 	// HistoryManager is used to manage Workflow Execution HistoryEventBatch
+	// Deprecated: use HistoryV2Manager instead
 	HistoryManager interface {
 		Closeable
 		GetName() string
+
+		//Deprecated: use v2 API-AppendHistoryNodes() instead
 		AppendHistoryEvents(request *AppendHistoryEventsRequest) (*AppendHistoryEventsResponse, error)
 		// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
-		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse,
-			error)
+		//Deprecated: use v2 API-ReadHistoryBranch() instead
+		GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
+		//Deprecated: use v2 API-DeleteHistoryBranch instead
 		DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error
+	}
+
+	// HistoryV2Manager is used to manager workflow history events
+	HistoryV2Manager interface {
+		Closeable
+		GetName() string
+
+		// The below are history V2 APIs
+		// V2 regards history events growing as a tree, decoupled from workflow concepts
+		// For Cadence, treeID will be a UUID, shared for the same workflow_id,
+		//     a workflow run may have one or more than one branchID(after reset/continueAsNew/etc)
+		//     NodeID is the same as EventID
+		// NewHistoryBranch creates a new branch from tree root. If tree doesn't exist, then create one. Return error if the branch already exists.
+		NewHistoryBranch(request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
+		// AppendHistoryNodes add(or override) a batach of nodes to a history branch
+		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+		// ReadHistoryBranch returns history node data for a branch
+		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
+		// ForkHistoryBranch forks a new branch from a old branch
+		ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
+		// DeleteHistoryBranch removes a branch
+		// If this is the last branch to delete, it will also remove the root node
+		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
+		// GetHistoryTree returns all branch information of a tree
+		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for domain entities
@@ -1144,6 +1276,10 @@ type (
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 )
+
+func (e *InvalidPersistenceRequestError) Error() string {
+	return e.Msg
+}
 
 func (e *CurrentWorkflowConditionFailedError) Error() string {
 	return e.Msg

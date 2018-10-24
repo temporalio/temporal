@@ -75,9 +75,6 @@ func NewHistorySerializer() HistorySerializer {
 
 func (t *serializerImpl) SerializeBatchEvents(events []*workflow.HistoryEvent, encodingType common.EncodingType) (*DataBlob, error) {
 	batch := &workflow.History{Events: events}
-	if batch == nil {
-		batch = &workflow.History{}
-	}
 
 	switch encodingType {
 	case common.EncodingTypeGob:

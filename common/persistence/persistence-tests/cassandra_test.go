@@ -26,6 +26,13 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestCassandraHistoryV2Persistence(t *testing.T) {
+	s := new(HistoryV2PersistenceSuite)
+	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}
+
 func TestCassandraHistoryPersistence(t *testing.T) {
 	s := new(HistoryPersistenceSuite)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})

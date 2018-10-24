@@ -169,7 +169,7 @@ func (h *cassandraHistoryPersistence) GetWorkflowExecutionHistory(request *p.Int
 	eventBatchVersion := common.EmptyVersion
 
 	eventBatch := &p.DataBlob{}
-	history := make([]*p.DataBlob, 0)
+	history := make([]*p.DataBlob, 0, request.PageSize)
 
 	for iter.Scan(nil, &eventBatchVersionPointer, &eventBatch.Data, &eventBatch.Encoding) {
 		found = true
