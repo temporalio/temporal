@@ -51,7 +51,6 @@ func prepareActivityNextRetryWithNowTime(version int64, a *persistence.ActivityI
 	a.StartedID = common.EmptyEventID
 	a.RequestID = ""
 	a.StartedTime = time.Time{}
-	a.LastHeartBeatUpdatedTime = time.Time{}
 	a.TimerTaskStatus = TimerTaskStatusNone
 
 	return &persistence.ActivityRetryTimerTask{
