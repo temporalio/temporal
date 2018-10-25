@@ -83,6 +83,12 @@ func NewCliApp() *cli.App {
 					Usage:       "Run admin operation on history host",
 					Subcommands: newAdminHistoryHostCommands(),
 				},
+				{
+					Name:        "kafka",
+					Aliases:     []string{"ka"},
+					Usage:       "Run admin operation on kafka messages",
+					Subcommands: newAdminKafkaCommands(),
+				},
 			},
 		},
 	}

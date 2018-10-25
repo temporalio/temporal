@@ -75,3 +75,34 @@ func newAdminHistoryHostCommands() []cli.Command {
 		},
 	}
 }
+
+func newAdminKafkaCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "parse",
+			Aliases: []string{"par"},
+			Usage:   "Parse replication tasks from kafka messages",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input file to use, if not present assumes piping",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID, if not provided then no filters by WorkflowID are applied",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID, if not provided then no filters by RunID are applied",
+				},
+				cli.StringFlag{
+					Name:  FlagOutputFilenameWithAlias,
+					Usage: "Output file to write to, if not provided output is written to stdout",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminKafkaParse(c)
+			},
+		},
+	}
+}
