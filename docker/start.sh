@@ -89,7 +89,7 @@ init_env() {
     fi
 
     if [ -z "$LOG_LEVEL" ]; then
-        export LOG_LEVEL="debug"
+        export LOG_LEVEL="info"
     fi
 }
 
