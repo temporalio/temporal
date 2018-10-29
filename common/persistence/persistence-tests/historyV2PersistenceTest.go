@@ -316,7 +316,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	treeID := uuid.New()
 
 	wg := sync.WaitGroup{}
-	concurrency := 10
+	concurrency := 20
 	masterBr, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 	branches := s.descTree(treeID)
@@ -361,7 +361,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			s.Equal(true, ok)
 
 			// append second batch to first level
-			eids = []int64{}
+			eids := make([]int64, 0)
 			for i := forkNodeID; i <= int64(concurrency)*2+1; i++ {
 				eids = append(eids, i)
 			}
@@ -403,7 +403,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			level2Br.Store(idx, bi)
 
 			// append second batch to second level
-			eids = []int64{}
+			eids := make([]int64, 0)
 			for i := forkNodeID; i <= int64(concurrency)*3+1; i++ {
 				eids = append(eids, i)
 			}
