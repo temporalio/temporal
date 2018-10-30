@@ -1556,7 +1556,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(ctx context.Context, re
 			}
 
 			if !isRunning || ai.StartedID == common.EmptyEventID ||
-				(token.ScheduleAttempt != 0 && int64(ai.Attempt) != token.ScheduleAttempt) {
+				(token.ScheduleID != common.EmptyEventID && token.ScheduleAttempt != int64(ai.Attempt)) {
 				return nil, ErrActivityTaskNotFound
 			}
 
