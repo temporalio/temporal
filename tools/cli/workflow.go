@@ -317,6 +317,10 @@ func newWorkflowCommands() []cli.Command {
 					Value: 30,
 					Usage: "Optional timeout for list command context in seconds",
 				},
+				cli.StringFlag{
+					Name:  FlagWorkflowStatusWithAlias,
+					Usage: "Closed workflow status [completed, failed, canceled, terminated, continueasnew, timedout]",
+				},
 			},
 			Action: func(c *cli.Context) {
 				ListWorkflow(c)
@@ -359,6 +363,10 @@ func newWorkflowCommands() []cli.Command {
 					Name:  FlagContextTimeoutWithAlias,
 					Value: 30,
 					Usage: "Optional timeout for list command context in seconds",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowStatusWithAlias,
+					Usage: "Closed workflow status [completed, failed, canceled, terminated, continueasnew, timedout]",
 				},
 			},
 			Action: func(c *cli.Context) {

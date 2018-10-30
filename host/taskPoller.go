@@ -272,6 +272,7 @@ Loop:
 	return false, nil, matching.ErrNoTasks
 }
 
+// HandlePartialDecision for decision task
 func (p *TaskPoller) HandlePartialDecision(response *workflow.PollForDecisionTaskResponse) (
 	*workflow.RespondDecisionTaskCompletedResponse, error) {
 	if response == nil || len(response.TaskToken) == 0 {

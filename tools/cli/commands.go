@@ -67,6 +67,8 @@ const (
 	FlagTaskListTypeWithAlias      = FlagTaskListType + ", tlt"
 	FlagWorkflowType               = "workflow_type"
 	FlagWorkflowTypeWithAlias      = FlagWorkflowType + ", wt"
+	FlagWorkflowStatus             = "status"
+	FlagWorkflowStatusWithAlias    = FlagWorkflowStatus + ", s"
 	FlagExecutionTimeout           = "execution_timeout"
 	FlagExecutionTimeoutWithAlias  = FlagExecutionTimeout + ", et"
 	FlagDecisionTimeout            = "decision_timeout"
@@ -141,6 +143,8 @@ const (
 	defaultContextTimeoutForLongPoll = 2 * time.Minute
 	defaultDecisionTimeoutInSeconds  = 10
 	defaultPageSizeForList           = 500
+
+	workflowStatusNotSet = -1
 )
 
 // For color output to terminal
@@ -151,6 +155,28 @@ var (
 
 	tableHeaderBlue = tablewriter.Colors{tablewriter.FgHiBlueColor}
 )
+
+var optionErr = "there is something wrong with your command options"
+
+var workflowClosedStatusMap = map[string]s.WorkflowExecutionCloseStatus{
+	"completed":      s.WorkflowExecutionCloseStatusCompleted,
+	"failed":         s.WorkflowExecutionCloseStatusFailed,
+	"canceled":       s.WorkflowExecutionCloseStatusCanceled,
+	"terminated":     s.WorkflowExecutionCloseStatusTerminated,
+	"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
+	"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
+	// below are some alias
+	"c":         s.WorkflowExecutionCloseStatusCompleted,
+	"complete":  s.WorkflowExecutionCloseStatusCompleted,
+	"f":         s.WorkflowExecutionCloseStatusFailed,
+	"fail":      s.WorkflowExecutionCloseStatusFailed,
+	"cancel":    s.WorkflowExecutionCloseStatusCanceled,
+	"terminate": s.WorkflowExecutionCloseStatusTerminated,
+	"term":      s.WorkflowExecutionCloseStatusTerminated,
+	"continue":  s.WorkflowExecutionCloseStatusContinuedAsNew,
+	"cont":      s.WorkflowExecutionCloseStatusContinuedAsNew,
+	"timeout":   s.WorkflowExecutionCloseStatusTimedOut,
+}
 
 // cBuilder is used to create cadence clients
 // To provide customized builder, call SetBuilder() before call NewCliApp()
@@ -963,8 +989,18 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 	}
 	timeout := time.Duration(c.Int(FlagContextTimeout)) * time.Second
 
+	var workflowStatus s.WorkflowExecutionCloseStatus
+	if c.IsSet(FlagWorkflowStatus) {
+		if queryOpen {
+			ErrorAndExit(optionErr, errors.New("you can only filter on status for closed workflow, not open workflow"))
+		}
+		workflowStatus = getWorkflowStatus(c.String(FlagWorkflowStatus))
+	} else {
+		workflowStatus = workflowStatusNotSet
+	}
+
 	if len(workflowID) > 0 && len(workflowType) > 0 {
-		ExitIfError(errors.New("you can filter on workflow_id or workflow_type, but not on both"))
+		ErrorAndExit(optionErr, errors.New("you can filter on workflow_id or workflow_type, but not on both"))
 	}
 
 	prepareTable := func(next []byte) ([]byte, int) {
@@ -973,7 +1009,7 @@ func listWorkflow(c *cli.Context, table *tablewriter.Table) func([]byte) ([]byte
 		if queryOpen {
 			result, nextPageToken = listOpenWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, timeout)
 		} else {
-			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, next, timeout)
+			result, nextPageToken = listClosedWorkflow(wfClient, pageSize, earliestTime, latestTime, workflowID, workflowType, workflowStatus, next, timeout)
 		}
 
 		for _, e := range result {
@@ -1021,7 +1057,7 @@ func listOpenWorkflow(client client.Client, pageSize int, earliestTime, latestTi
 }
 
 func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latestTime int64, workflowID, workflowType string,
-	nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
+	workflowStatus s.WorkflowExecutionCloseStatus, nextPageToken []byte, timeout time.Duration) ([]*s.WorkflowExecutionInfo, []byte) {
 
 	request := &s.ListClosedWorkflowExecutionsRequest{
 		MaximumPageSize: common.Int32Ptr(int32(pageSize)),
@@ -1036,6 +1072,9 @@ func listClosedWorkflow(client client.Client, pageSize int, earliestTime, latest
 	}
 	if len(workflowType) > 0 {
 		request.TypeFilter = &s.WorkflowTypeFilter{Name: common.StringPtr(workflowType)}
+	}
+	if workflowStatus != workflowStatusNotSet {
+		request.StatusFilter = &workflowStatus
 	}
 
 	ctx, cancel := newContextForLongPoll(timeout)
@@ -1314,4 +1353,13 @@ func clustersToString(clusters []*s.ClusterReplicationConfiguration) string {
 		}
 	}
 	return res
+}
+
+func getWorkflowStatus(statusStr string) s.WorkflowExecutionCloseStatus {
+	if status, ok := workflowClosedStatusMap[strings.ToLower(statusStr)]; ok {
+		return status
+	}
+	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
+		"[completed, failed, canceled, terminated, continueasnew, timedout]"))
+	return 0
 }
