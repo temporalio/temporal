@@ -784,6 +784,8 @@ const (
 	DomainCacheBeforeCallbackLatency
 	DomainCacheAfterCallbackLatency
 
+	HistorySize
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -872,7 +874,6 @@ const (
 	CacheMissCounter
 	AcquireLockFailedCounter
 	WorkflowContextCleared
-	HistorySize
 	MutableStateSize
 	ExecutionInfoSize
 	ActivityInfoSize
@@ -960,6 +961,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DomainCacheTotalCallbacksLatency:                    {metricName: "domain-cache.total-callbacks.latency", metricType: Timer},
 		DomainCacheBeforeCallbackLatency:                    {metricName: "domain-cache.before-callbacks.latency", metricType: Timer},
 		DomainCacheAfterCallbackLatency:                     {metricName: "domain-cache.after-callbacks.latency", metricType: Timer},
+		HistorySize:                                         {metricName: "history-size", metricType: Timer},
 	},
 	Frontend: {},
 	History: {
@@ -1045,7 +1047,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CacheMissCounter:                             {metricName: "cache-miss", metricType: Counter},
 		AcquireLockFailedCounter:                     {metricName: "acquire-lock-failed", metricType: Counter},
 		WorkflowContextCleared:                       {metricName: "workflow-context-cleared", metricType: Counter},
-		HistorySize:                                  {metricName: "history-size", metricType: Timer},
 		MutableStateSize:                             {metricName: "mutable-state-size", metricType: Timer},
 		ExecutionInfoSize:                            {metricName: "execution-info-size", metricType: Timer},
 		ActivityInfoSize:                             {metricName: "activity-info-size", metricType: Timer},
