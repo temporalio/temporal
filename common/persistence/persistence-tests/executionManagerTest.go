@@ -100,7 +100,12 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.NotNil(err)
-	s.IsType(&p.WorkflowExecutionAlreadyStartedError{}, err)
+	alreadyStartedErr, ok := err.(*p.WorkflowExecutionAlreadyStartedError)
+	s.True(ok, "err is not WorkflowExecutionAlreadyStartedError")
+	s.Equal(req.RequestID, alreadyStartedErr.StartRequestID)
+	s.Equal(workflowExecution.GetRunId(), alreadyStartedErr.RunID)
+	s.Equal(0, alreadyStartedErr.CloseStatus)
+	s.Equal(p.WorkflowStateRunning, alreadyStartedErr.State)
 }
 
 // TestCreateWorkflowExecutionRunIDReuseWithReplication test
@@ -244,18 +249,19 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	// this create should work since we are relying the business logic in history engine
 	// to check whether the existing running workflow has finished
 	_, err3 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
-		RequestID:            uuid.New(),
-		DomainID:             domainID,
-		Execution:            newExecution,
-		TaskList:             tasklist,
-		WorkflowTypeName:     workflowType,
-		WorkflowTimeout:      workflowTimeout,
-		DecisionTimeoutValue: decisionTimeout,
-		NextEventID:          nextEventID,
-		LastProcessedEvent:   lastProcessedEventID,
-		RangeID:              s.ShardInfo.RangeID,
-		CreateWorkflowMode:   p.CreateWorkflowModeWorkflowIDReuse,
-		PreviousRunID:        workflowExecution.GetRunId(),
+		RequestID:                uuid.New(),
+		DomainID:                 domainID,
+		Execution:                newExecution,
+		TaskList:                 tasklist,
+		WorkflowTypeName:         workflowType,
+		WorkflowTimeout:          workflowTimeout,
+		DecisionTimeoutValue:     decisionTimeout,
+		NextEventID:              nextEventID,
+		LastProcessedEvent:       lastProcessedEventID,
+		RangeID:                  s.ShardInfo.RangeID,
+		CreateWorkflowMode:       p.CreateWorkflowModeWorkflowIDReuse,
+		PreviousRunID:            workflowExecution.GetRunId(),
+		PreviousLastWriteVersion: common.EmptyVersion,
 	})
 	s.NoError(err3)
 }

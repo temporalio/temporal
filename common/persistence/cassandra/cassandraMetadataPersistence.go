@@ -269,6 +269,7 @@ func (m *cassandraMetadataPersistence) GetDomain(request *p.GetDomainRequest) (*
 		ConfigVersion:       configVersion,
 		FailoverVersion:     failoverVersion,
 		NotificationVersion: dbVersion,
+		TableVersion:        p.DomainTableVersionV1,
 	}, nil
 }
 

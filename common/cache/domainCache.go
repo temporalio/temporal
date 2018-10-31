@@ -21,6 +21,7 @@
 package cache
 
 import (
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -350,7 +351,9 @@ func (c *domainCache) loadDomain(name string, id string) (*persistence.GetDomain
 			// if this actually happen, just discard the result
 			// since we need to guarantee that domainNotificationVersion > all notification versions
 			// inside the cache
-			return nil, &workflow.EntityNotExistsError{}
+			return nil, &workflow.EntityNotExistsError{
+				Message: fmt.Sprintf("Domain: %v", name),
+			}
 		}
 	}
 	return resp, err

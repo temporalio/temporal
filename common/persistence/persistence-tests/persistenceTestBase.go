@@ -112,7 +112,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 		options.DBName = "test_" + GenerateRandomDBName(10)
 	}
 	testCluster := cassandra.NewTestCluster(options.Cassandra.DBPort, options.DBName, options.Cassandra.SchemaDir)
-	return newTestBase(options, testCluster, testCluster)
+	return newTestBase(options, testCluster)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -121,21 +121,19 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		options.DBName = GenerateRandomDBName(10)
 	}
 	sqlOpts := options.SQL
-	defaultCluster := sql.NewTestCluster(sqlOpts.DBPort, options.DBName, sqlOpts.SchemaDir, sqlOpts.DriverName)
-	visibilityCluster := cassandra.NewTestCluster(options.Cassandra.DBPort, options.DBName, options.Cassandra.SchemaDir)
-	return newTestBase(options, defaultCluster, visibilityCluster)
+	testCluster := sql.NewTestCluster(sqlOpts.DBPort, options.DBName, sqlOpts.SchemaDir, sqlOpts.DriverName)
+	return newTestBase(options, testCluster)
 }
 
-func newTestBase(options *TestBaseOptions,
-	defaultCluster PersistenceTestCluster, visibilityCluster PersistenceTestCluster) TestBase {
+func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
 		metadata = cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
 	}
 	options.ClusterMetadata = metadata
 	return TestBase{
-		DefaultTestCluster:    defaultCluster,
-		VisibilityTestCluster: visibilityCluster,
+		DefaultTestCluster:    testCluster,
+		VisibilityTestCluster: testCluster,
 		ClusterMetadata:       metadata,
 	}
 }

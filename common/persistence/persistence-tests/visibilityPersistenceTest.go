@@ -157,7 +157,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	})
 	s.Nil(err2)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution2.WorkflowId, resp.Executions[0].Execution.WorkflowId)
+	s.Equal(workflowExecution2.GetWorkflowId(), resp.Executions[0].GetExecution().GetWorkflowId())
 
 	// Use token to get the second one
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
@@ -169,18 +169,23 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	})
 	s.Nil(err3)
 	s.Equal(1, len(resp.Executions))
-	s.Equal(workflowExecution1.WorkflowId, resp.Executions[0].Execution.WorkflowId)
+	s.Equal(workflowExecution1.GetWorkflowId(), resp.Executions[0].GetExecution().GetWorkflowId())
 
-	// Now should get empty result by using token
-	resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
-		DomainUUID:        testDomainUUID,
-		PageSize:          1,
-		EarliestStartTime: startTime1.UnixNano(),
-		LatestStartTime:   startTime2.UnixNano(),
-		NextPageToken:     resp.NextPageToken,
-	})
-	s.Nil(err4)
-	s.Equal(0, len(resp.Executions))
+	// TODO: See if it is possible in Cassandra to not return non empty token which is going to return empty result
+	if s.ExecutionManager.GetName() == "cassandra" {
+		// Now should get empty result by using token
+		resp, err4 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+			DomainUUID:        testDomainUUID,
+			PageSize:          1,
+			EarliestStartTime: startTime1.UnixNano(),
+			LatestStartTime:   startTime2.UnixNano(),
+			NextPageToken:     resp.NextPageToken,
+		})
+		s.Nil(err4)
+		s.Equal(0, len(resp.Executions))
+	} else {
+		s.Equal(0, len(resp.NextPageToken))
+	}
 }
 
 // TestFilteringByType test
@@ -423,11 +428,14 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 	})
 	s.Nil(err0)
 
-	_, err1 := s.VisibilityMgr.GetClosedWorkflowExecution(&p.GetClosedWorkflowExecutionRequest{
+	closedResp, err1 := s.VisibilityMgr.GetClosedWorkflowExecution(&p.GetClosedWorkflowExecutionRequest{
 		DomainUUID: testDomainUUID,
 		Execution:  workflowExecution,
 	})
-	s.NotNil(err1)
+	s.Error(err1)
+	_, ok := err1.(*gen.EntityNotExistsError)
+	s.True(ok, "EntityNotExistsError")
+	s.Nil(closedResp)
 
 	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&p.RecordWorkflowExecutionClosedRequest{
 		DomainUUID:       testDomainUUID,

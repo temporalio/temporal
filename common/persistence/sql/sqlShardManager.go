@@ -133,12 +133,6 @@ func newShardPersistence(cfg config.SQL, currentClusterName string, log bark.Log
 	}, nil
 }
 
-func (m *sqlShardManager) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
-
 func (m *sqlShardManager) CreateShard(request *persistence.CreateShardRequest) error {
 	var row *shardsRow
 	if _, err := m.GetShard(&persistence.GetShardRequest{

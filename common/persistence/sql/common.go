@@ -43,6 +43,12 @@ func (m *sqlStore) GetName() string {
 	return m.db.DriverName()
 }
 
+func (m *sqlStore) Close() {
+	if m.db != nil {
+		m.db.Close()
+	}
+}
+
 func (m *sqlStore) txExecute(operation string, f func(tx *sqlx.Tx) error) error {
 	tx, err := m.db.Beginx()
 	if err != nil {

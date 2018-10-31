@@ -75,9 +75,9 @@ type (
 		ExecutionContext             *[]byte
 		State                        int64
 		CloseStatus                  int64
-		StartVersion                 *int64
-		CurrentVersion               *int64
-		LastWriteVersion             *int64
+		StartVersion                 int64
+		CurrentVersion               int64
+		LastWriteVersion             int64
 		LastWriteEventID             *int64
 		LastReplicationInfo          *[]byte
 		LastFirstEventID             int64
@@ -113,8 +113,8 @@ type (
 		CreateRequestID  string
 		State            int
 		CloseStatus      int
-		LastWriteVersion *int64
-		StartVersion     *int64
+		LastWriteVersion int64
+		StartVersion     int64
 	}
 
 	transferTasksRow struct {
@@ -369,11 +369,11 @@ task_id <= ?
 `
 
 	createCurrentExecutionSQLQuery = `INSERT INTO current_executions
-(shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version) VALUES
-(:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version)`
+(shard_id, domain_id, workflow_id, run_id, create_request_id, state, close_status, start_version, last_write_version) VALUES
+(:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
 
 	getCurrentExecutionSQLQuery = `SELECT
-ce.shard_id, s.range_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
+ce.shard_id, s.range_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
 FROM current_executions ce
 INNER JOIN shards s ON s.shard_id = ce.shard_id
 INNER JOIN executions e ON s.shard_id = e.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id
@@ -511,12 +511,6 @@ func (m *sqlExecutionManager) txExecuteShardLocked(operation string, rangeID int
 	})
 }
 
-func (m *sqlExecutionManager) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
-
 func (m *sqlExecutionManager) CreateWorkflowExecution(request *p.CreateWorkflowExecutionRequest) (response *p.CreateWorkflowExecutionResponse, err error) {
 	err = m.txExecuteShardLocked("CreateWorkflowExecution", request.RangeID, func(tx *sqlx.Tx) error {
 		response, err = m.createWorkflowExecutionTx(tx, request)
@@ -544,9 +538,14 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx *sqlx.Tx, request *p.
 		}
 	}
 	lastWriteVersion := common.EmptyVersion
+
 	if row != nil {
 		switch request.CreateWorkflowMode {
 		case p.CreateWorkflowModeBrandNew:
+			if request.ReplicationState != nil {
+				lastWriteVersion = row.LastWriteVersion
+			}
+
 			return nil, &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
 				StartRequestID:   row.CreateRequestID,
@@ -556,15 +555,12 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx *sqlx.Tx, request *p.
 				LastWriteVersion: lastWriteVersion,
 			}
 		case p.CreateWorkflowModeWorkflowIDReuse:
-			if row.LastWriteVersion != nil {
-				if request.PreviousLastWriteVersion != *row.LastWriteVersion {
-					return nil, &p.CurrentWorkflowConditionFailedError{
-						Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-							"LastWriteVersion: %v, PreviousLastWriteVersion: %v",
-							workflowID, *row.LastWriteVersion, request.PreviousLastWriteVersion),
-					}
+			if request.PreviousLastWriteVersion != row.LastWriteVersion {
+				return nil, &p.CurrentWorkflowConditionFailedError{
+					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
+						"LastWriteVersion: %v, PreviousLastWriteVersion: %v",
+						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
 				}
-				lastWriteVersion = *row.LastWriteVersion
 			}
 			if row.State != p.WorkflowStateCompleted {
 				return nil, &p.CurrentWorkflowConditionFailedError{
@@ -700,17 +696,11 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		state.ExecutionInfo.ExecutionContext = *execution.ExecutionContext
 	}
 
-	state.ReplicationState = &p.ReplicationState{}
-	if execution.StartVersion != nil {
-		state.ReplicationState.StartVersion = *execution.StartVersion
-	}
-	if execution.CurrentVersion != nil {
-		state.ReplicationState.CurrentVersion = *execution.CurrentVersion
-	}
-	if execution.LastWriteVersion != nil {
-		state.ReplicationState.LastWriteVersion = *execution.LastWriteVersion
-	}
 	if execution.LastWriteEventID != nil {
+		state.ReplicationState = &p.ReplicationState{}
+		state.ReplicationState.StartVersion = execution.StartVersion
+		state.ReplicationState.CurrentVersion = execution.CurrentVersion
+		state.ReplicationState.LastWriteVersion = execution.LastWriteVersion
 		state.ReplicationState.LastWriteEventID = *execution.LastWriteEventID
 	}
 	if execution.LastReplicationInfo != nil && len(*execution.LastReplicationInfo) > 0 {
@@ -1013,11 +1003,11 @@ func (m *sqlExecutionManager) updateWorkflowExecutionTx(tx *sqlx.Tx, request *p.
 		}
 	} else {
 		executionInfo := request.ExecutionInfo
-		var startVersion *int64
-		var lastWriteVersion *int64
+		startVersion := common.EmptyVersion
+		lastWriteVersion := common.EmptyVersion
 		if request.ReplicationState != nil {
-			startVersion = common.Int64Ptr(request.ReplicationState.StartVersion)
-			lastWriteVersion = common.Int64Ptr(request.ReplicationState.LastWriteVersion)
+			startVersion = request.ReplicationState.StartVersion
+			lastWriteVersion = request.ReplicationState.LastWriteVersion
 		}
 		if request.FinishExecution {
 			m.logger.Info("Finish Execution")
@@ -1097,8 +1087,8 @@ func (m *sqlExecutionManager) resetMutableStateTx(tx *sqlx.Tx, request *p.Intern
 		info.CreateRequestID,
 		info.State,
 		info.CloseStatus,
-		&replicationState.StartVersion,
-		&replicationState.LastWriteVersion,
+		replicationState.StartVersion,
+		replicationState.LastWriteVersion,
 	); err != nil {
 		return &workflow.InternalServiceError{
 			Message: fmt.Sprintf("CreateWorkflowExecution operation failed. Failed to continue as new. Error: %v", err),
@@ -1453,8 +1443,8 @@ func (m *sqlExecutionManager) RangeCompleteTimerTask(request *p.RangeCompleteTim
 	return nil
 }
 
-// NewSQLMatchingPersistence creates an instance of ExecutionStore
-func NewSQLMatchingPersistence(db *sqlx.DB, logger bark.Logger, shardID int) (p.ExecutionStore, error) {
+// NewSQLExecutionStore creates an instance of ExecutionStore
+func NewSQLExecutionStore(db *sqlx.DB, logger bark.Logger, shardID int) (p.ExecutionStore, error) {
 	return &sqlExecutionManager{
 		shardID: shardID,
 		sqlStore: sqlStore{
@@ -1519,9 +1509,9 @@ func createExecution(tx *sqlx.Tx, request *p.CreateWorkflowExecutionRequest, sha
 	}
 
 	if request.ReplicationState != nil {
-		args.StartVersion = &request.ReplicationState.StartVersion
-		args.CurrentVersion = &request.ReplicationState.CurrentVersion
-		args.LastWriteVersion = &request.ReplicationState.LastWriteVersion
+		args.StartVersion = request.ReplicationState.StartVersion
+		args.CurrentVersion = request.ReplicationState.CurrentVersion
+		args.LastWriteVersion = request.ReplicationState.LastWriteVersion
 		args.LastWriteEventID = &request.ReplicationState.LastWriteEventID
 
 		lastReplicationInfo, err := gobSerialize(&request.ReplicationState.LastReplicationInfo)
@@ -1552,18 +1542,20 @@ func createExecution(tx *sqlx.Tx, request *p.CreateWorkflowExecutionRequest, sha
 
 func createOrUpdateCurrentExecution(tx *sqlx.Tx, request *p.CreateWorkflowExecutionRequest, shardID int) error {
 	arg := currentExecutionRow{
-		ShardID:         int64(shardID),
-		DomainID:        request.DomainID,
-		WorkflowID:      *request.Execution.WorkflowId,
-		RunID:           *request.Execution.RunId,
-		CreateRequestID: request.RequestID,
-		State:           p.WorkflowStateRunning,
-		CloseStatus:     p.WorkflowCloseStatusNone,
+		ShardID:          int64(shardID),
+		DomainID:         request.DomainID,
+		WorkflowID:       *request.Execution.WorkflowId,
+		RunID:            *request.Execution.RunId,
+		CreateRequestID:  request.RequestID,
+		State:            p.WorkflowStateRunning,
+		CloseStatus:      p.WorkflowCloseStatusNone,
+		StartVersion:     common.EmptyVersion,
+		LastWriteVersion: common.EmptyVersion,
 	}
 	replicationState := request.ReplicationState
 	if replicationState != nil {
-		arg.StartVersion = &replicationState.StartVersion
-		arg.LastWriteVersion = &replicationState.LastWriteVersion
+		arg.StartVersion = replicationState.StartVersion
+		arg.LastWriteVersion = replicationState.LastWriteVersion
 	}
 	if request.ParentExecution != nil {
 		arg.State = p.WorkflowStateCreated
@@ -1896,7 +1888,7 @@ func createTimerTasks(tx *sqlx.Tx, timerTasks []p.Task, deleteTimerTask p.Task, 
 }
 
 func continueAsNew(tx *sqlx.Tx, shardID int, domainID, workflowID, runID, previousRunID string,
-	createRequestID string, state int, closeStatus int, startVersion *int64, lastWriteVersion *int64) error {
+	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
 
 	var currentRunID string
 	if err := tx.Get(&currentRunID, continueAsNewLockRunIDSQLQuery, int64(shardID), domainID, workflowID); err != nil {
@@ -1913,7 +1905,7 @@ func continueAsNew(tx *sqlx.Tx, shardID int, domainID, workflowID, runID, previo
 }
 
 func updateCurrentExecution(tx *sqlx.Tx, shardID int, domainID, workflowID, runID,
-	createRequestID string, state int, closeStatus int, startVersion *int64, lastWriteVersion *int64) error {
+	createRequestID string, state int, closeStatus int, startVersion int64, lastWriteVersion int64) error {
 
 	result, err := tx.NamedExec(updateCurrentExecutionsSQLQuery, &currentExecutionRow{
 		ShardID:          int64(shardID),
@@ -1984,6 +1976,8 @@ func updateExecution(tx *sqlx.Tx,
 			ClientFeatureVersion:         executionInfo.ClientFeatureVersion,
 			ClientImpl:                   executionInfo.ClientImpl,
 			ShardID:                      int64(shardID),
+			LastWriteVersion:             common.EmptyVersion,
+			CurrentVersion:               common.EmptyVersion,
 		},
 		condition,
 	}
@@ -1998,9 +1992,9 @@ func updateExecution(tx *sqlx.Tx,
 		args.executionRow.CompletionEventEncoding = common.StringPtr(string(completionEvent.Encoding))
 	}
 	if replicationState != nil {
-		args.StartVersion = &replicationState.StartVersion
-		args.CurrentVersion = &replicationState.CurrentVersion
-		args.LastWriteVersion = &replicationState.LastWriteVersion
+		args.StartVersion = replicationState.StartVersion
+		args.CurrentVersion = replicationState.CurrentVersion
+		args.LastWriteVersion = replicationState.LastWriteVersion
 		args.LastWriteEventID = &replicationState.LastWriteEventID
 		lastReplicationInfo, err := gobSerialize(&replicationState.LastReplicationInfo)
 		if err != nil {

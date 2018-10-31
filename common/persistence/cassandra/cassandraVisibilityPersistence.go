@@ -553,8 +553,8 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	query := v.session.Query(templateGetClosedWorkflowExecution,
 		request.DomainUUID,
 		domainPartition,
-		*execution.WorkflowId,
-		*execution.RunId)
+		execution.GetWorkflowId(),
+		execution.GetRunId())
 
 	iter := query.Iter()
 	if iter == nil {
@@ -567,7 +567,7 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	if !has {
 		return nil, &workflow.EntityNotExistsError{
 			Message: fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-				*execution.WorkflowId, *execution.RunId),
+				execution.GetWorkflowId(), execution.GetRunId()),
 		}
 	}
 

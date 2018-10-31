@@ -163,12 +163,6 @@ SET notification_version = :notification_version + 1
 WHERE notification_version = :notification_version`
 )
 
-func (m *sqlMetadataManagerV2) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
-
 // newMetadataPersistenceV2 creates an instance of sqlMetadataManagerV2
 func newMetadataPersistenceV2(cfg config.SQL, currentClusterName string,
 	logger bark.Logger) (persistence.MetadataManager, error) {
@@ -358,6 +352,7 @@ func (m *sqlMetadataManagerV2) domainRowToGetDomainResponse(result *domainRow) (
 	}
 
 	return &persistence.GetDomainResponse{
+		TableVersion: persistence.DomainTableVersionV2,
 		Info: &persistence.DomainInfo{
 			ID:          result.ID,
 			Name:        result.Name,

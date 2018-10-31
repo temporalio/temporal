@@ -193,12 +193,6 @@ func (m *sqlHistoryManager) DeleteWorkflowExecutionHistory(request *p.DeleteWork
 	return nil
 }
 
-func (m *sqlHistoryManager) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
-
 func (m *sqlHistoryManager) overWriteHistoryEvents(request *p.InternalAppendHistoryEventsRequest, row *eventsRow) error {
 	return m.txExecute("AppendHistoryEvents", func(tx *sqlx.Tx) error {
 		if err := lockEventForUpdate(tx, request); err != nil {

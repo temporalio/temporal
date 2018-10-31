@@ -21,8 +21,6 @@
 package sql
 
 import (
-	"errors"
-
 	"fmt"
 	"sync"
 
@@ -46,8 +44,6 @@ type (
 		logger bark.Logger
 	}
 )
-
-var errNoVisibility = errors.New("visibility not supported by SQL datastore")
 
 // NewFactory returns an instance of a factory object which can be used to create
 // datastores backed by any kind of SQL store
@@ -101,7 +97,7 @@ func (f *Factory) NewExecutionStore(shardID int) (p.ExecutionStore, error) {
 
 // NewVisibilityStore returns a visibility store
 func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
-	return nil, errNoVisibility
+	return NewSQLVisibilityStore(f.cfg, f.logger)
 }
 
 // Close closes the factory
@@ -143,7 +139,7 @@ func newExecutionStoreFactory(cfg config.SQL, logger bark.Logger) (*executionSto
 }
 
 func (f *executionStoreFactory) new(shardID int) (p.ExecutionStore, error) {
-	return NewSQLMatchingPersistence(f.db, f.logger, shardID)
+	return NewSQLExecutionStore(f.db, f.logger, shardID)
 }
 
 // close closes the factory

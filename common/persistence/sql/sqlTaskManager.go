@@ -121,12 +121,6 @@ func newTaskPersistence(cfg config.SQL, log bark.Logger) (persistence.TaskManage
 	}, nil
 }
 
-func (m *sqlTaskManager) Close() {
-	if m.db != nil {
-		m.db.Close()
-	}
-}
-
 func (m *sqlTaskManager) LeaseTaskList(request *persistence.LeaseTaskListRequest) (*persistence.LeaseTaskListResponse, error) {
 	var row tasksListsRow
 	var rangeID int64
