@@ -322,7 +322,7 @@ func (tb *timerBuilder) loadActivityTimers(msBuilder mutableState) {
 				tb.activityTimers = append(tb.activityTimers, td)
 				if v.HeartbeatTimeout > 0 && tb.enableActivityHeartbeat {
 					lastHeartBeatTS := v.LastHeartBeatUpdatedTime
-					if lastHeartBeatTS.IsZero() {
+					if lastHeartBeatTS.Before(v.StartedTime) {
 						lastHeartBeatTS = v.StartedTime
 					}
 					heartBeatExpiry := lastHeartBeatTS.Add(time.Duration(v.HeartbeatTimeout) * time.Second)
