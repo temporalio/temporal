@@ -367,7 +367,7 @@ func (s *shardContextImpl) CreateWorkflowExecution(request *persistence.CreateWo
 
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
-	s.allocateTimerIDsLocked(request.TimerTasks)
+	s.allocateTimerIDsLocked(request.TimerTasks, request.DomainID, request.Execution.GetWorkflowId())
 
 Create_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -481,7 +481,7 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
-	s.allocateTimerIDsLocked(request.TimerTasks)
+	s.allocateTimerIDsLocked(request.TimerTasks, request.ExecutionInfo.DomainID, request.ExecutionInfo.WorkflowID)
 
 Update_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -806,7 +806,7 @@ func (s *shardContextImpl) emitShardInfoMetricsLogsLocked() {
 	s.metricsClient.RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressTimer, time.Duration(timerFailoverInProgress))
 }
 
-func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task) error {
+func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task, domainID, workflowID string) error {
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	clusterMetadata := s.GetService().GetClusterMetadata()
 	cluster := s.currentCluster
@@ -818,7 +818,11 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task)
 		if ts.Before(s.timerMaxReadLevelMap[cluster]) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
+			s.logger.WithFields(bark.Fields{
+				logging.TagWorkflowEventID:     logging.ShardAllocateTimerBeforeRead,
+				logging.TagDomainID:            domainID,
+				logging.TagWorkflowExecutionID: workflowID,
+			}).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
 				time.Now(), ts, s.timerMaxReadLevelMap[cluster])
 			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
 		}

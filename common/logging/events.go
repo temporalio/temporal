@@ -49,7 +49,8 @@ const (
 	TransferTaskProcessingFailed           = 2105
 
 	// Shard context events
-	ShardRangeUpdatedEventID = 3000
+	ShardRangeUpdatedEventID     = 3000
+	ShardAllocateTimerBeforeRead = 3001
 
 	// ShardController events
 	ShardControllerStarted          = 4000
