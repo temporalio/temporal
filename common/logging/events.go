@@ -94,3 +94,11 @@ const (
 	OperationStuck    = 9001
 	OperationCritical = 9002
 )
+
+// Tag values
+const (
+	// ListWorkflow FilterType values
+	ListWorkflowFilterByID     = "WID"
+	ListWorkflowFilterByType   = "WType"
+	ListWorkflowFilterByStatus = "status"
+)

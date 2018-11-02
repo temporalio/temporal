@@ -472,3 +472,19 @@ func LogClosedWorkflowSampled(logger bark.Logger, domain, wid, rid, wfType strin
 		"WorkflowType": wfType,
 	}).Info("Request for closed workflow is sampled")
 }
+
+// LogListOpenWorkflowByFilter is used to log msg for open visibility requests using filter
+func LogListOpenWorkflowByFilter(logger bark.Logger, domain, filter string) {
+	logger.WithFields(bark.Fields{
+		"Domain":     domain,
+		"FilterType": filter,
+	}).Info("List open workflow with filter")
+}
+
+// LogListClosedWorkflowByFilter is used to log msg for closed visibility requests using filter
+func LogListClosedWorkflowByFilter(logger bark.Logger, domain, filter string) {
+	logger.WithFields(bark.Fields{
+		"Domain":     domain,
+		"FilterType": filter,
+	}).Info("List closed workflow with filter")
+}
