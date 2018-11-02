@@ -26,6 +26,7 @@ import (
 
 	"github.com/uber-go/tally/m3"
 	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/ringpop-go/discovery"
 )
 
@@ -104,6 +105,8 @@ type (
 		NumHistoryShards int `yaml:"numHistoryShards" validate:"nonzero"`
 		// DataStores contains the configuration for all datastores
 		DataStores map[string]DataStore `yaml:"datastores"`
+		// SamplingConfig is config for visibility sampling
+		SamplingConfig SamplingConfig
 	}
 
 	// DataStore is the configuration for a single datastore
@@ -112,6 +115,16 @@ type (
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
 		SQL *SQL `yaml:"sql"`
+	}
+
+	// SamplingConfig is config for visibility sampling
+	SamplingConfig struct {
+		// VisibilityOpenMaxQPS max QPS for record open workflows
+		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		// VisibilityClosedMaxQPS max QPS for record closed workflows
+		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
+		// VisibilityListMaxQPS max QPS for list workflow
+		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithDomainFilter
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster

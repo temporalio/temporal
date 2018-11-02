@@ -31,10 +31,12 @@ import (
 
 // Config represents configuration for cadence-frontend service
 type Config struct {
-	PersistenceMaxQPS     dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithDomainFilter
-	HistoryMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
-	RPS                   dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS        dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize    dynamicconfig.IntPropertyFnWithDomainFilter
+	EnableVisibilitySampling dynamicconfig.BoolPropertyFn
+	VisibilityListMaxQPS     dynamicconfig.IntPropertyFnWithDomainFilter
+	HistoryMaxPageSize       dynamicconfig.IntPropertyFnWithDomainFilter
+	RPS                      dynamicconfig.IntPropertyFn
 
 	// Persistence settings
 	HistoryMgrNumConns dynamicconfig.IntPropertyFn
@@ -51,6 +53,8 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		PersistenceMaxQPS:              dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		VisibilityMaxPageSize:          dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableVisibilitySampling:       dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
+		VisibilityListMaxQPS:           dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendVisibilityListMaxQPS, 1),
 		HistoryMaxPageSize:             dc.GetIntPropertyFilteredByDomain(dynamicconfig.FrontendHistoryMaxPageSize, 1000),
 		RPS:                            dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
 		HistoryMgrNumConns:             dc.GetIntProperty(dynamicconfig.FrontendHistoryMgrNumConns, 10),
@@ -90,6 +94,7 @@ func (s *Service) Start() {
 	pConfig := params.PersistenceConfig
 	pConfig.HistoryMaxConns = s.config.HistoryMgrNumConns()
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
+	pConfig.SamplingConfig.VisibilityListMaxQPS = s.config.VisibilityListMaxQPS
 	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), base.GetMetricsClient(), log)
 
 	metadata, err := pFactory.NewMetadataManager(persistencefactory.MetadataV1V2)
@@ -97,7 +102,7 @@ func (s *Service) Start() {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
 
-	visibility, err := pFactory.NewVisibilityManager()
+	visibility, err := pFactory.NewVisibilityManager(s.config.EnableVisibilitySampling()) // enable rate limit on list operations
 	if err != nil {
 		log.Fatalf("failed to create visibility manager: %v", err)
 	}

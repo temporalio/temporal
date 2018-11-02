@@ -57,6 +57,7 @@ type (
 	// ListWorkflowExecutionsRequest is used to list executions in a domain
 	ListWorkflowExecutionsRequest struct {
 		DomainUUID        string
+		Domain            string // domain name is not persisted, but used as config filter key
 		EarliestStartTime int64
 		LatestStartTime   int64
 		// Maximum number of workflow executions per page

@@ -225,6 +225,8 @@ func (s *Service) Start() {
 	pConfig := params.PersistenceConfig
 	pConfig.HistoryMaxConns = s.config.HistoryMgrNumConns()
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
+	pConfig.SamplingConfig.VisibilityOpenMaxQPS = s.config.VisibilityOpenMaxQPS
+	pConfig.SamplingConfig.VisibilityClosedMaxQPS = s.config.VisibilityClosedMaxQPS
 	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
 
 	shardMgr, err := pFactory.NewShardManager()
@@ -237,7 +239,7 @@ func (s *Service) Start() {
 		log.Fatalf("failed to create metadata manager: %v", err)
 	}
 
-	visibility, err := pFactory.NewVisibilityManager()
+	visibility, err := pFactory.NewVisibilityManager(s.config.EnableVisibilitySampling())
 	if err != nil {
 		log.Fatalf("failed to create visibility manager: %v", err)
 	}

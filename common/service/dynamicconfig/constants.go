@@ -55,6 +55,7 @@ var keys = map[Key]string{
 	// frontend settings
 	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
 	FrontendVisibilityMaxPageSize:  "frontend.visibilityMaxPageSize",
+	FrontendVisibilityListMaxQPS:   "frontend.visibilityListMaxQPS",
 	FrontendHistoryMaxPageSize:     "frontend.historyMaxPageSize",
 	FrontendRPS:                    "frontend.rps",
 	FrontendHistoryMgrNumConns:     "frontend.historyMgrNumConns",
@@ -165,6 +166,8 @@ const (
 	FrontendPersistenceMaxQPS
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
+	// FrontendVisibilityListMaxQPS is max qps frontend can list open/close workflows
+	FrontendVisibilityListMaxQPS
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second

@@ -53,7 +53,7 @@ type (
 		// NewExecutionManager returns a new execution manager for a given shardID
 		NewExecutionManager(shardID int) (p.ExecutionManager, error)
 		// NewVisibilityManager returns a new visibility manager
-		NewVisibilityManager() (p.VisibilityManager, error)
+		NewVisibilityManager(enableSampling bool) (p.VisibilityManager, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
 	// Examples of datastores are cassandra, mysql etc
@@ -263,7 +263,7 @@ func (f *factoryImpl) NewExecutionManager(shardID int) (p.ExecutionManager, erro
 }
 
 // NewVisibilityManager returns a new visibility manager
-func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
+func (f *factoryImpl) NewVisibilityManager(enableSampling bool) (p.VisibilityManager, error) {
 	ds := f.datastores[storeTypeVisibility]
 	result, err := ds.factory.NewVisibilityStore()
 	if err != nil {
@@ -271,6 +271,9 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	}
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+	}
+	if enableSampling {
+		result = p.NewVisibilitySamplingClient(result, &f.config.SamplingConfig, f.metricsClient, f.logger)
 	}
 	if f.metricsClient != nil {
 		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)

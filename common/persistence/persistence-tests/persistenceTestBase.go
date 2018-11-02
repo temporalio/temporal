@@ -185,7 +185,7 @@ func (s *TestBase) Setup() {
 		visibilityFactory = pfactory.New(&vCfg, clusterName, nil, log)
 	}
 	// SQL currently doesn't have support for visibility manager
-	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
+	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager(false)
 	if err != nil {
 		s.fatalOnError("NewVisibilityManager", err)
 	}

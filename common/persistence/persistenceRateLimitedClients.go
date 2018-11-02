@@ -29,6 +29,8 @@ import (
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
 	ErrPersistenceLimitExceeded = &workflow.ServiceBusyError{Message: "Persistence Max QPS Reached."}
+	// ErrPersistenceLimitExceededForList is the error indicating QPS limit reached for list visibility.
+	ErrPersistenceLimitExceededForList = &workflow.ServiceBusyError{Message: "Persistence Max QPS Reached for List Operations."}
 )
 
 type (
