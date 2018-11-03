@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.3",
+  "MinCompatibleVersion": "0.3",
+  "Description": "change close_executions to order by close_time instead of start_time",
+  "SchemaUpdateCqlFiles": [
+    "sort_by_close_time.cql"
+  ]
+}
