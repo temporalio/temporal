@@ -99,6 +99,10 @@ func newAdminKafkaCommands() []cli.Command {
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
+				cli.BoolFlag{
+					Name:  FlagSkipErrorModeWithAlias,
+					Usage: "Skip errors in parsing messages",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminKafkaParse(c)

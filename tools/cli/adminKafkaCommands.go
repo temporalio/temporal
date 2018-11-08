@@ -62,11 +62,17 @@ func AdminKafkaParse(c *cli.Context) {
 	writerCh := make(chan *replicator.ReplicationTask, chanBufferSize)
 	doneCh := make(chan struct{})
 
+	var skippedCount int
+	skipErrMode := c.Bool(FlagSkipErrorMode)
 	go startReader(inputFile, readerCh)
-	go startParser(readerCh, writerCh)
+	go startParser(readerCh, writerCh, skipErrMode, &skippedCount)
 	go startWriter(outputFile, writerCh, filter, doneCh)
 
 	<-doneCh
+
+	if skipErrMode {
+		fmt.Printf("%v messages were skipped due to errors in parsing", skippedCount)
+	}
 }
 
 func buildFilterFn(workflowID, runID string) filterFn {
@@ -131,7 +137,7 @@ func startReader(file *os.File, readerCh chan<- []byte) {
 	}
 }
 
-func startParser(readerCh <-chan []byte, writerCh chan<- *replicator.ReplicationTask) {
+func startParser(readerCh <-chan []byte, writerCh chan<- *replicator.ReplicationTask, skipErrors bool, skippedCount *int) {
 	defer close(writerCh)
 
 	var buffer []byte
@@ -145,8 +151,9 @@ Loop:
 			buffer = append(buffer, data...)
 			data, nextBuffer := splitBuffer(buffer)
 			buffer = nextBuffer
-			messages := getMessages(data)
-			tasks := deserializeMessages(messages)
+			messages, skippedGetMsgCount := getMessages(data, skipErrors)
+			tasks, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
+			*skippedCount += skippedGetMsgCount + skippedDeserializeCount
 			for _, t := range tasks {
 				writerCh <- t
 			}
@@ -180,7 +187,7 @@ func splitBuffer(buffer []byte) ([]byte, []byte) {
 	return buffer[:splitIndex], buffer[splitIndex:]
 }
 
-func getMessages(data []byte) [][]byte {
+func getMessages(data []byte, skipErrors bool) ([][]byte, int) {
 	str := string(data)
 	messagesWithHeaders := r.Split(str, -1)
 	if len(messagesWithHeaders[0]) != 0 {
@@ -188,6 +195,7 @@ func getMessages(data []byte) [][]byte {
 	}
 	messagesWithHeaders = messagesWithHeaders[1:]
 	var rawMessages [][]byte
+	skipped := 0
 	for _, m := range messagesWithHeaders {
 		if len(m) == 0 {
 			ErrorAndExit(malformedMessage, errors.New("got empty message between valid headers"))
@@ -195,24 +203,35 @@ func getMessages(data []byte) [][]byte {
 		curr := []byte(m)
 		messageStart := bytes.Index(curr, []byte{preambleVersion0})
 		if messageStart == -1 {
-			ErrorAndExit(malformedMessage, errors.New("failed to find message preamble"))
+			if !skipErrors {
+				ErrorAndExit(malformedMessage, errors.New("failed to find message preamble"))
+			} else {
+				skipped++
+				continue
+			}
 		}
 		rawMessages = append(rawMessages, curr[messageStart:])
 	}
-	return rawMessages
+	return rawMessages, skipped
 }
 
-func deserializeMessages(messages [][]byte) []*replicator.ReplicationTask {
+func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.ReplicationTask, int) {
 	var replicationTasks []*replicator.ReplicationTask
+	skipped := 0
 	for _, m := range messages {
 		var task replicator.ReplicationTask
 		err := decode(m, &task)
 		if err != nil {
-			ErrorAndExit(malformedMessage, err)
+			if !skipErrors {
+				ErrorAndExit(malformedMessage, err)
+			} else {
+				skipped++
+				continue
+			}
 		}
 		replicationTasks = append(replicationTasks, &task)
 	}
-	return replicationTasks
+	return replicationTasks, skipped
 }
 
 func decode(message []byte, val *replicator.ReplicationTask) error {
