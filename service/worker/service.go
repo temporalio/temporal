@@ -21,6 +21,7 @@
 package worker
 
 import (
+	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/metrics"
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
@@ -80,6 +81,25 @@ func (s *Service) Start() {
 
 	s.metricsClient = base.GetMetricsClient()
 
+	if s.params.ClusterMetadata.IsGlobalDomainEnabled() {
+		s.startReplicator(params, base, log)
+	}
+
+	log.Infof("%v started", common.WorkerServiceName)
+	<-s.stopC
+	base.Stop()
+}
+
+// Stop is called to stop the service
+func (s *Service) Stop() {
+	select {
+	case s.stopC <- struct{}{}:
+	default:
+	}
+	s.params.Logger.Infof("%v stopped", common.WorkerServiceName)
+}
+
+func (s *Service) startReplicator(params *service.BootstrapParams, base service.Service, log bark.Logger) {
 	pConfig := params.PersistenceConfig
 	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.PersistenceMaxQPS())
 	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
@@ -100,17 +120,4 @@ func (s *Service) Start() {
 		replicator.Stop()
 		log.Fatalf("Fail to start replicator: %v", err)
 	}
-
-	log.Infof("%v started", common.WorkerServiceName)
-	<-s.stopC
-	base.Stop()
-}
-
-// Stop is called to stop the service
-func (s *Service) Stop() {
-	select {
-	case s.stopC <- struct{}{}:
-	default:
-	}
-	s.params.Logger.Infof("%v stopped", common.WorkerServiceName)
 }

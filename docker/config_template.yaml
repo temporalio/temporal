@@ -52,6 +52,15 @@ services:
         hostPort: "${STATSD_ENDPOINT}"
         prefix: "cadence-history"
 
+  worker:
+    rpc:
+      port: 7939
+      bindOnLocalHost: ${BIND_ON_LOCALHOST}
+    metrics:
+      statsd:
+        hostPort: "${STATSD_ENDPOINT}"
+        prefix: "cadence-worker"
+
 clustersInfo:
   enableGlobalDomain: false
   failoverVersionIncrement: 10

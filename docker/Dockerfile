@@ -67,7 +67,7 @@ RUN go get -u github.com/golang/lint/golint
 RUN git clone https://github.com/uber/cadence.git $CADENCE_HOME
 RUN cd $CADENCE_HOME && git checkout $git_branch && make bins_nothrift
 
-EXPOSE 7933 7934 7935
+EXPOSE 7933 7934 7935 7939
 
 COPY ./start.sh $CADENCE_HOME/start.sh
 COPY ./config_template.yaml $CADENCE_HOME/config/docker_template.yaml

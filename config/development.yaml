@@ -54,6 +54,17 @@ services:
     pprof:
       port: 7937
 
+  worker:
+    rpc:
+      port: 7939
+      bindOnLocalHost: true
+    metrics:
+      statsd:
+        hostPort: "127.0.0.1:8125"
+        prefix: "cadence"
+    pprof:
+      port: 7940
+
 clustersInfo:
   enableGlobalDomain: false
   failoverVersionIncrement: 10

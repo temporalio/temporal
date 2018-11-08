@@ -17,6 +17,7 @@ services:
      - "7933:7933"
      - "7934:7934"
      - "7935:7935"
+     - "7939:7939"
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "STATSD_ENDPOINT=statsd:8125"

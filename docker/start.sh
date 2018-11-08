@@ -78,7 +78,7 @@ init_env() {
     fi
 
     if [ -z "$RINGPOP_SEEDS" ]; then
-        export RINGPOP_SEEDS_JSON_ARRAY="[\"$HOST_IP:7933\",\"$HOST_IP:7934\",\"$HOST_IP:7935\"]"
+        export RINGPOP_SEEDS_JSON_ARRAY="[\"$HOST_IP:7933\",\"$HOST_IP:7934\",\"$HOST_IP:7935\",\"$HOST_IP:7939\"]"
     else
         array=(${RINGPOP_SEEDS//,/ })
         export RINGPOP_SEEDS_JSON_ARRAY=$(json_array "${array[@]}")
@@ -100,7 +100,7 @@ if [ -z "$RF" ]; then
 fi
 
 if [ -z "$SERVICES" ]; then
-    SERVICES="history,matching,frontend"
+    SERVICES="history,matching,frontend,worker"
 fi
 
 init_env
