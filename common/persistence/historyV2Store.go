@@ -60,26 +60,6 @@ func (m *historyV2ManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
-// NewHistoryBranch creates a new branch from tree root. If tree doesn't exist, then create one. Return error if the branch already exists.
-func (m *historyV2ManagerImpl) NewHistoryBranch(request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error) {
-	req := &InternalNewHistoryBranchRequest{
-		TreeID:   request.TreeID,
-		BranchID: uuid.New(),
-	}
-	resp, err := m.persistence.NewHistoryBranch(req)
-	response := &NewHistoryBranchResponse{}
-	if err != nil {
-		return response, err
-	}
-	token, err := m.thrifteEncoder.Encode(&resp.BranchInfo)
-	if err != nil {
-		return response, err
-	}
-	return &NewHistoryBranchResponse{
-		BranchToken: token,
-	}, nil
-}
-
 // ForkHistoryBranch forks a new branch from a old branch
 func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	if request.ForkNodeID <= 1 {
@@ -197,6 +177,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 	size := len(blob.Data)
 
 	req := &InternalAppendHistoryNodesRequest{
+		IsNewBranch:   request.IsNewBranch,
 		BranchInfo:    branch,
 		NodeID:        nodeID,
 		Events:        blob,

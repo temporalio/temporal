@@ -24,8 +24,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/codec"
 )
 
 // TODO remove this table version
@@ -1066,19 +1068,10 @@ type (
 		MutableStateUpdateSessionStats *MutableStateUpdateSessionStats
 	}
 
-	// NewHistoryBranchRequest is used to create a new history branch
-	NewHistoryBranchRequest struct {
-		TreeID string
-	}
-
-	// NewHistoryBranchResponse is a response to NewHistoryBranchRequest
-	NewHistoryBranchResponse struct {
-		//BranchToken represents a branch
-		BranchToken []byte
-	}
-
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
 	AppendHistoryNodesRequest struct {
+		// true if it is the first append request to the branch
+		IsNewBranch bool
 		// The branch to be appended
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
@@ -1245,11 +1238,8 @@ type (
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
-		// For Cadence, treeID will be a UUID, shared for the same workflow_id,
-		//     a workflow run may have one or more than one branchID(after reset/continueAsNew/etc)
-		//     NodeID is the same as EventID
-		// NewHistoryBranch creates a new branch from tree root. If tree doesn't exist, then create one. Return error if the branch already exists.
-		NewHistoryBranch(request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
+
+		// For Cadence, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 		// AppendHistoryNodes add(or override) a batach of nodes to a history branch
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
@@ -1946,4 +1936,21 @@ func DBTimestampToUnixNano(milliseconds int64) int64 {
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
 	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+}
+
+var internalThriftEncoder = codec.NewThriftRWEncoder()
+
+// NewHistoryBranchToken return a new branch token
+func NewHistoryBranchToken(treeID string) ([]byte, error) {
+	branchID := uuid.New()
+	bi := &workflow.HistoryBranch{
+		TreeID:    &treeID,
+		BranchID:  &branchID,
+		Ancestors: []*workflow.HistoryBranchRange{},
+	}
+	token, err := internalThriftEncoder.Encode(bi)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
 }

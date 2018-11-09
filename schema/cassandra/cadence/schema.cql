@@ -320,12 +320,10 @@ CREATE TABLE history_node (
 
 CREATE TABLE history_tree (
 tree_id           uuid,
-row_type          bigint, -- 0: root node row, 1: branch row
-branch_id         uuid, -- for branch row
-ancestors         list<frozen<branch_range>>, -- Only for branch row.
-deleted           boolean, -- Only for branch row to mark a branch as deleted
-txn_id            bigint, -- Only for root node: a tree operation transactionID
-PRIMARY KEY ((tree_id), row_type, branch_id )
+branch_id         uuid,
+ancestors         list<frozen<branch_range>>,
+in_progress       boolean, -- For fork operation to prevent race condition to leak event data when forking branches
+PRIMARY KEY ((tree_id), branch_id )
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };

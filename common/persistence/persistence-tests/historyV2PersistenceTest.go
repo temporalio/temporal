@@ -112,80 +112,6 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	s.Equal(concurrency, cnt)
 }
 
-// TestConcurrentlyCreateAndDeleteEmptyBranches test
-func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndDeleteEmptyBranches() {
-	treeID := uuid.New()
-
-	wg := sync.WaitGroup{}
-	//page size in GetHistoryTree is 100
-	concurrency := 101
-	m := sync.Map{}
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			br, err := s.newHistoryBranch(treeID)
-			s.Nil(err)
-			m.Store(idx, br)
-		}(i)
-	}
-
-	wg.Wait()
-
-	branches := s.descTree(treeID)
-	s.Equal(concurrency, len(branches))
-
-	wg = sync.WaitGroup{}
-	m2 := sync.Map{}
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			br, err := s.newHistoryBranch(treeID)
-			s.Nil(err)
-			m2.Store(idx, br)
-		}(i)
-	}
-
-	m.Range(func(k, v interface{}) bool {
-		br := v.([]byte)
-		// delete old branches along with create new branches
-		err := s.deleteHistoryBranch(br)
-		s.Nil(err)
-
-		return true
-	})
-
-	wg.Wait()
-	branches = s.descTree(treeID)
-	s.Equal(concurrency, len(branches))
-
-	// delete the newly empty branches
-	m2.Range(func(k, v interface{}) bool {
-		br := v.([]byte)
-		// delete old branches along with create new branches
-		err := s.deleteHistoryBranch(br)
-		s.Nil(err)
-
-		return true
-	})
-
-	branches = s.descTree(treeID)
-	s.Equal(0, len(branches))
-
-	// create one more try after delete the whole tree
-	br, err := s.newHistoryBranch(treeID)
-	s.Nil(err)
-	branches = s.descTree(treeID)
-	s.Equal(1, len(branches))
-
-	// a final clean up
-	err = s.deleteHistoryBranch(br)
-	s.Nil(err)
-	branches = s.descTree(treeID)
-	s.Equal(0, len(branches))
-}
-
 //TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	treeID := uuid.New()
@@ -205,22 +131,22 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			m.Store(idx, bi)
 
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
-			err = s.append(bi, events, 1)
+			err = s.append(bi, events, 1, true)
 			s.Nil(err)
 			historyW.Events = events
 
 			events = s.genRandomEvents([]int64{4}, 1)
-			err = s.append(bi, events, 1)
+			err = s.append(bi, events, 1, false)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
-			err = s.append(bi, events, 1)
+			err = s.append(bi, events, 1, false)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
-			err = s.append(bi, events, 1)
+			err = s.append(bi, events, 1, false)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
@@ -249,7 +175,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
-			err := s.append(branch, events, 0)
+			err := s.append(branch, events, 0, false)
 			s.Nil(err)
 			// it shouldn't change anything
 			events = s.read(branch, 1, 25)
@@ -257,7 +183,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with same txn_id but greater version
 			events = s.genRandomEvents([]int64{5}, 2)
-			err = s.append(branch, events, 1)
+			err = s.append(branch, events, 1, false)
 			s.Nil(err)
 
 			// read to verify override success
@@ -266,7 +192,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override with larger txn_id and same version
 			events = s.genRandomEvents([]int64{5, 6}, 1)
-			err = s.append(branch, events, 2)
+			err = s.append(branch, events, 2, false)
 			s.Nil(err)
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
@@ -279,7 +205,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
-			err = s.append(branch, events, 2)
+			err = s.append(branch, events, 2, false)
 			s.Nil(err)
 
 			// read to verify override
@@ -287,7 +213,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			s.Equal(20, len(events))
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
-			err = s.append(branch, events, 2)
+			err = s.append(branch, events, 2, false)
 			s.Nil(err)
 
 			events = s.read(branch, 1, 25)
@@ -320,8 +246,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	masterBr, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 	branches := s.descTree(treeID)
-	s.Equal(1, len(branches))
-	mbrID := *branches[0].BranchID
+	s.Equal(0, len(branches))
 
 	// append first batch to master branch
 	eids := []int64{}
@@ -334,6 +259,10 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	events = s.read(masterBr, 1, int64(concurrency)+2)
 	s.Nil(err)
 	s.Equal((concurrency)+1, len(events))
+
+	branches = s.descTree(treeID)
+	s.Equal(1, len(branches))
+	mbrID := *branches[0].BranchID
 
 	// cannot fork on un-existing node
 	_, err = s.fork(masterBr, int64(concurrency)+2)
@@ -356,7 +285,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 			//cannot append to ancestors
 			events := s.genRandomEvents([]int64{forkNodeID - 1}, 1)
-			err = s.append(bi, events, 1)
+			err = s.append(bi, events, 1, true)
 			_, ok := err.(*p.InvalidPersistenceRequestError)
 			s.Equal(true, ok)
 
@@ -416,7 +345,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 			// try override last event
 			events = s.genRandomEvents([]int64{int64(concurrency)*3 + 1}, 1)
-			err = s.append(bi, events, 2)
+			err = s.append(bi, events, 2, false)
 			s.Nil(err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
 			s.Nil(err)
@@ -426,6 +355,10 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			bi, err = s.newHistoryBranch(treeID)
 			s.Nil(err)
 			level2Br.Store(concurrency+idx, bi)
+
+			events = s.genRandomEvents([]int64{1}, 1)
+			err = s.append(bi, events, 0, true)
+			s.Nil(err)
 		}(i)
 	}
 
@@ -500,22 +433,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
-
-	var bi []byte
-
-	op := func() error {
-		var err error
-		resp, err := s.HistoryV2Mgr.NewHistoryBranch(&p.NewHistoryBranchRequest{
-			TreeID: treeID,
-		})
-		if resp != nil {
-			bi = resp.BranchToken
-		}
-		return err
-	}
-
-	err := backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
-	return bi, err
+	return p.NewHistoryBranchToken(treeID)
 }
 
 // persistence helper
@@ -584,8 +502,12 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 }
 
 func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*workflow.HistoryEvent, txnID int64) error {
+	err := s.append(branch, []*workflow.HistoryEvent{events[0]}, txnID, true)
+	if err != nil {
+		return err
+	}
 	for _, e := range events {
-		err := s.append(branch, []*workflow.HistoryEvent{e}, txnID)
+		err := s.append(branch, []*workflow.HistoryEvent{e}, txnID, false)
 		if err != nil {
 			return err
 		}
@@ -594,13 +516,14 @@ func (s *HistoryV2PersistenceSuite) appendOneByOne(branch []byte, events []*work
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*workflow.HistoryEvent, txnID int64) error {
+func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*workflow.HistoryEvent, txnID int64, isNewBranch bool) error {
 
 	var resp *p.AppendHistoryNodesResponse
 
 	op := func() error {
 		var err error
 		resp, err = s.HistoryV2Mgr.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
+			IsNewBranch:   isNewBranch,
 			BranchToken:   branch,
 			Events:        events,
 			TransactionID: txnID,

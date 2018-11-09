@@ -41,28 +41,6 @@ func (_m *HistoryV2Manager) GetName() string {
 	return r0
 }
 
-// NewHistoryBranch provides a mock function with given fields: request
-func (_m *HistoryV2Manager) NewHistoryBranch(request *persistence.NewHistoryBranchRequest) (*persistence.NewHistoryBranchResponse, error) {
-	ret := _m.Called(request)
-
-	var r0 *persistence.NewHistoryBranchResponse
-	if rf, ok := ret.Get(0).(func(*persistence.NewHistoryBranchRequest) *persistence.NewHistoryBranchResponse); ok {
-		r0 = rf(request)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*persistence.NewHistoryBranchResponse)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(*persistence.NewHistoryBranchRequest) error); ok {
-		r1 = rf(request)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
 // AppendHistoryNodes provides a mock function with given fields: request
 func (_m *HistoryV2Manager) AppendHistoryNodes(request *persistence.AppendHistoryNodesRequest) (*persistence.AppendHistoryNodesResponse, error) {
 	ret := _m.Called(request)

@@ -96,11 +96,7 @@ type (
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
-		// For Cadence, treeID will be a UUID, shared for the same workflow_id,
-		//     a workflow run may have one or more than one branchID
-		//     NodeID is the same as EventID, except that it will grow continuously in a branch.
-		// NewHistoryBranch creates a new branch from tree root. If tree doesn't exist, then create one. Return error if the branch already exists.
-		NewHistoryBranch(request *InternalNewHistoryBranchRequest) (*InternalNewHistoryBranchResponse, error)
+
 		// AppendHistoryNodes add(or override) a node to a history branch
 		AppendHistoryNodes(request *InternalAppendHistoryNodesRequest) error
 		// ReadHistoryBranch returns history node data for a branch
@@ -301,20 +297,10 @@ type (
 		Overwrite         bool
 	}
 
-	// InternalNewHistoryBranchRequest is used to create a new history branch
-	InternalNewHistoryBranchRequest struct {
-		TreeID   string
-		BranchID string
-	}
-
-	// InternalNewHistoryBranchResponse is a response to NewHistoryBranchRequest
-	InternalNewHistoryBranchResponse struct {
-		//BranchInfo represents a branch
-		BranchInfo workflow.HistoryBranch
-	}
-
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
 	InternalAppendHistoryNodesRequest struct {
+		// true if it is the first append request to the branch
+		IsNewBranch bool
 		// The branch to be appended
 		BranchInfo workflow.HistoryBranch
 		// The first eventID becomes the nodeID to be appended

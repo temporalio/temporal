@@ -232,12 +232,7 @@ func (s *HistoryPerfSuite) genRandomEvents(firstID, lastID int64) []*workflow.Hi
 
 // persistence helper
 func (s *HistoryPerfSuite) newHistoryBranch(treeID string) ([]byte, error) {
-
-	resp, err := s.HistoryV2Mgr.NewHistoryBranch(&p.NewHistoryBranchRequest{
-		TreeID: treeID,
-	})
-
-	return resp.BranchToken, err
+	return p.NewHistoryBranchToken(treeID)
 }
 
 // persistence helper
