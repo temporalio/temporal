@@ -1176,6 +1176,7 @@ type (
 	ExecutionManager interface {
 		Closeable
 		GetName() string
+		GetShardID() int
 
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)

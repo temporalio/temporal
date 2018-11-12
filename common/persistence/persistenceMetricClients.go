@@ -217,6 +217,10 @@ func (p *workflowExecutionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
+func (p *workflowExecutionPersistenceClient) GetShardID() int {
+	return p.persistence.GetShardID()
+}
+
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
@@ -433,8 +437,9 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.WithFields(bark.Fields{
-			logging.TagScope: scope,
-			logging.TagErr:   err,
+			logging.TagScope:          scope,
+			logging.TagHistoryShardID: p.GetShardID(),
+			logging.TagErr:            err,
 		}).Error("Operation failed with internal error.")
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}

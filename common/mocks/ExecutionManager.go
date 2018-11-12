@@ -41,6 +41,20 @@ func (_m *ExecutionManager) GetName() string {
 	return r0
 }
 
+// GetShardID provides a mock function with given fields:
+func (_m *ExecutionManager) GetShardID() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // CreateWorkflowExecution provides a mock function with given fields: request
 func (_m *ExecutionManager) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	ret := _m.Called(request)

@@ -914,6 +914,10 @@ func (d *cassandraStore) Close() {
 	}
 }
 
+func (d *cassandraPersistence) GetShardID() int {
+	return d.shardID
+}
+
 func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	shardInfo := request.ShardInfo
