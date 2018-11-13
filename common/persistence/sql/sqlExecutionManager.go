@@ -21,9 +21,12 @@
 package sql
 
 import (
-	"database/sql"
 	"fmt"
+	"math"
 	"time"
+
+	"database/sql"
+	"encoding/json"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/uber-common/bark"
@@ -476,8 +479,9 @@ LIMIT ?`
 		`
 FROM timer_tasks WHERE
 shard_id = ? AND
-visibility_timestamp >= ? AND
-visibility_timestamp < ?`
+((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) AND
+visibility_timestamp < ?
+ORDER BY visibility_timestamp,task_id LIMIT ?`
 	completeTimerTaskSQLQuery       = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp = ? AND task_id = ?`
 	rangeCompleteTimerTaskSQLQuery  = `DELETE FROM timer_tasks WHERE shard_id = ? AND visibility_timestamp >= ? AND visibility_timestamp < ?`
 	lockAndCheckNextEventIDSQLQuery = `SELECT next_event_id FROM executions WHERE
@@ -1412,16 +1416,56 @@ func (m *sqlExecutionManager) CompleteReplicationTask(request *p.CompleteReplica
 	return nil
 }
 
+type timerTaskPageToken struct {
+	TaskID    int64
+	Timestamp time.Time
+}
+
+func (t *timerTaskPageToken) serialize() ([]byte, error) {
+	return json.Marshal(t)
+}
+
+func (t *timerTaskPageToken) deserialize(payload []byte) error {
+	return json.Unmarshal(payload, t)
+}
+
 func (m *sqlExecutionManager) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse, error) {
+	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTimestamp}
+	if len(request.NextPageToken) > 0 {
+		if err := pageToken.deserialize(request.NextPageToken); err != nil {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("error deserializing timerTaskPageToken: %v", err),
+			}
+		}
+	}
+
 	var resp p.GetTimerIndexTasksResponse
 
 	if err := m.db.Select(&resp.Timers, getTimerTasksSQLQuery,
 		m.shardID,
-		request.MinTimestamp,
-		request.MaxTimestamp); err != nil && err != sql.ErrNoRows {
+		pageToken.Timestamp,
+		pageToken.TaskID,
+		pageToken.Timestamp,
+		request.MaxTimestamp,
+		request.BatchSize+1); err != nil && err != sql.ErrNoRows {
 		return nil, &workflow.InternalServiceError{
 			Message: fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err),
 		}
+	}
+
+	if len(resp.Timers) > request.BatchSize {
+		pageToken = &timerTaskPageToken{
+			TaskID:    resp.Timers[request.BatchSize].TaskID,
+			Timestamp: resp.Timers[request.BatchSize].VisibilityTimestamp,
+		}
+		resp.Timers = resp.Timers[:request.BatchSize]
+		nextToken, err := pageToken.serialize()
+		if err != nil {
+			return nil, &workflow.InternalServiceError{
+				Message: fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err),
+			}
+		}
+		resp.NextPageToken = nextToken
 	}
 
 	return &resp, nil

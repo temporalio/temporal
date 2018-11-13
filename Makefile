@@ -20,7 +20,7 @@ THRIFTRW_SRCS = \
   idl/github.com/uber/cadence/admin.thrift \
 
 PROGS = cadence
-TEST_ARG ?= -race -v -timeout 15m
+TEST_ARG ?= -race -v -timeout 20m
 BUILD := ./build
 TOOLS_CMD_ROOT=./cmd/tools
 INTEG_TEST_ROOT=./host
@@ -97,7 +97,7 @@ test: dep-ensured bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(TEST_DIRS); do \
-		go test -timeout 15m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
+		go test -timeout 20m -race -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
@@ -105,7 +105,7 @@ test_xdc: dep-ensured bins
 	@rm -f test
 	@rm -f test.log
 	@for dir in $(INTEG_TEST_XDC_ROOT); do \
-		go test -timeout 15m -coverprofile=$@ "$$dir" | tee -a test.log; \
+		go test -timeout 20m -coverprofile=$@ "$$dir" | tee -a test.log; \
 	done;
 
 cover_profile: clean bins_nothrift
