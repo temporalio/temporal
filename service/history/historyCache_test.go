@@ -94,7 +94,7 @@ func (s *historyCacheSuite) SetupTest() {
 		shardManager:              &mocks.ShardManager{},
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
-		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
+		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
 	}

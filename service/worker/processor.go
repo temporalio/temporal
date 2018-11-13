@@ -411,13 +411,15 @@ Loop:
 			WorkflowId: attr.WorkflowId,
 			RunId:      attr.RunId,
 		},
-		FirstEventId:      attr.FirstEventId,
-		NextEventId:       attr.NextEventId,
-		Version:           attr.Version,
-		ReplicationInfo:   attr.ReplicationInfo,
-		History:           attr.History,
-		NewRunHistory:     attr.NewRunHistory,
-		ForceBufferEvents: common.BoolPtr(inRetry),
+		FirstEventId:            attr.FirstEventId,
+		NextEventId:             attr.NextEventId,
+		Version:                 attr.Version,
+		ReplicationInfo:         attr.ReplicationInfo,
+		History:                 attr.History,
+		NewRunHistory:           attr.NewRunHistory,
+		ForceBufferEvents:       common.BoolPtr(inRetry),
+		EventStoreVersion:       attr.EventStoreVersion,
+		NewRunEventStoreVersion: attr.NewRunEventStoreVersion,
 	}
 
 RetryLoop:

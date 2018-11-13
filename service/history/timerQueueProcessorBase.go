@@ -565,6 +565,11 @@ func (t *timerQueueProcessorBase) processDeleteHistoryEvent(task *persistence.Ti
 
 	domainID, workflowExecution := t.getDomainIDAndWorkflowExecution(task)
 	op = func() error {
+		if msBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
+			return t.historyService.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+				BranchToken: msBuilder.GetCurrentBranch(),
+			})
+		}
 		return t.historyService.historyMgr.DeleteWorkflowExecutionHistory(
 			&persistence.DeleteWorkflowExecutionHistoryRequest{
 				DomainID:  domainID,

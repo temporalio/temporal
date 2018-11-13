@@ -74,6 +74,8 @@ struct GetMutableStateResponse {
   90: optional string clientImpl
   100: optional bool isWorkflowRunning
   110: optional i32 stickyTaskListScheduleToStartTimeout
+  120: optional i32 eventStoreVersion
+  130: optional binary branchToken
 }
 
 struct ResetStickyTaskListRequest {
@@ -158,6 +160,8 @@ struct RecordDecisionTaskStartedResponse {
   70: optional bool stickyExecutionEnabled
   80: optional shared.TransientDecisionInfo decisionInfo
   90: optional shared.TaskList WorkflowExecutionTaskList
+  100: optional i32 eventStoreVersion
+  110: optional binary branchToken
 }
 
 struct SignalWorkflowExecutionRequest {
@@ -232,6 +236,8 @@ struct ReplicateEventsRequest {
   80: optional shared.History history
   90: optional shared.History newRunHistory
   100: optional bool forceBufferEvents
+  110: optional i32 eventStoreVersion
+  120: optional i32 newRunEventStoreVersion
 }
 
 struct SyncShardStatusRequest {

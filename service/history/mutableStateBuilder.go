@@ -86,7 +86,7 @@ type (
 	}
 )
 
-//var _ mutableState = (mutableStateBuilder)(nil)
+var _ mutableState = (*mutableStateBuilder)(nil)
 
 func newMutableStateBuilder(currentCluster string, config *Config, logger bark.Logger) *mutableStateBuilder {
 	s := &mutableStateBuilder{
@@ -177,8 +177,34 @@ func (e *mutableStateBuilder) Load(state *persistence.WorkflowMutableState) {
 	}
 }
 
+func (e *mutableStateBuilder) GetEventStoreVersion() int32 {
+	return e.GetExecutionInfo().EventStoreVersion
+}
+
+func (e *mutableStateBuilder) GetCurrentBranch() []byte {
+	return e.executionInfo.GetCurrentBranch()
+}
+
+// set eventStoreVersion/treeID/historyBranches
+func (e *mutableStateBuilder) SetHistoryTree(treeID string) error {
+	initialBranchToken, err := persistence.NewHistoryBranchToken(treeID)
+	if err != nil {
+		return err
+	}
+	exeInfo := e.GetExecutionInfo()
+	exeInfo.EventStoreVersion = persistence.EventStoreVersionV2
+	exeInfo.CurrentResetVersion = 0
+	exeInfo.HistoryBranches[exeInfo.CurrentResetVersion] = &persistence.HistoryBranch{
+		BranchToken:      initialBranchToken,
+		NextEventID:      common.FirstEventID,
+		LastFirstEventID: common.EmptyEventID,
+		HistorySize:      int64(0),
+	}
+	return nil
+}
+
 func (e *mutableStateBuilder) IncrementHistorySize(appendSize int) {
-	e.executionInfo.HistorySize += int64(appendSize)
+	e.executionInfo.IncreaseHistorySize(int64(appendSize))
 }
 
 func (e *mutableStateBuilder) GetHistorySize() int64 {
@@ -467,13 +493,18 @@ func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) 
 	e.deleteBufferedReplicationEvent = common.Int64Ptr(firstEventID)
 }
 
-func (e *mutableStateBuilder) CreateReplicationTask() *persistence.HistoryReplicationTask {
-	return &persistence.HistoryReplicationTask{
-		FirstEventID:        e.GetLastFirstEventID(),
-		NextEventID:         e.GetNextEventID(),
-		Version:             e.replicationState.CurrentVersion,
-		LastReplicationInfo: e.replicationState.LastReplicationInfo,
+func (e *mutableStateBuilder) CreateReplicationTask(newRunEventStoreVersion int32, newRunBranchToken []byte) *persistence.HistoryReplicationTask {
+	t := &persistence.HistoryReplicationTask{
+		FirstEventID:            e.GetLastFirstEventID(),
+		NextEventID:             e.GetNextEventID(),
+		Version:                 e.replicationState.CurrentVersion,
+		LastReplicationInfo:     e.replicationState.LastReplicationInfo,
+		EventStoreVersion:       e.GetEventStoreVersion(),
+		BranchToken:             e.GetCurrentBranch(),
+		NewRunEventStoreVersion: newRunEventStoreVersion,
+		NewRunBranchToken:       newRunBranchToken,
 	}
+	return t
 }
 
 func convertUpdateActivityInfos(inputs map[*persistence.ActivityInfo]struct{}) []*persistence.ActivityInfo {
@@ -562,7 +593,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 
 		eventID := e.executionInfo.NextEventID
 		event.EventId = common.Int64Ptr(eventID)
-		e.executionInfo.NextEventID++
+		e.executionInfo.IncreaseNextEventID()
 
 		switch event.GetEventType() {
 		case workflow.EventTypeActivityTaskStarted:
@@ -645,7 +676,7 @@ func (e *mutableStateBuilder) CreateNewHistoryEventWithTimestamp(eventType workf
 		eventID = common.BufferedEventID
 	} else {
 		// only increase NextEventID if event is not buffered
-		e.executionInfo.NextEventID++
+		e.executionInfo.IncreaseNextEventID()
 	}
 
 	ts := common.Int64Ptr(timestamp)
@@ -1112,7 +1143,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(requestID string) {
 	e.deleteSignalRequestedID = requestID
 }
 
-func (e *mutableStateBuilder) AddWorkflowExecutionStartedEventForContinueAsNew(domainID string,
+func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(domainID string,
 	parentExecutionInfo *h.ParentExecutionInfo, execution workflow.WorkflowExecution, previousExecutionState mutableState,
 	attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
@@ -2163,7 +2194,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		newStateBuilder = newMutableStateBuilder(e.currentCluster, e.config, e.logger)
 	}
 	domainID := domainEntry.GetInfo().ID
-	startedEvent := newStateBuilder.AddWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes)
+	startedEvent := newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(domainID, parentInfo, newExecution, e, attributes)
 	if startedEvent == nil {
 		return nil, nil, &workflow.InternalServiceError{Message: "Failed to add workflow execution started event."}
 	}

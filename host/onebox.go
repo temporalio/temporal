@@ -90,6 +90,7 @@ type (
 		metadataMgrV2         persistence.MetadataManager
 		shardMgr              persistence.ShardManager
 		historyMgr            persistence.HistoryManager
+		historyV2Mgr          persistence.HistoryV2Manager
 		taskMgr               persistence.TaskManager
 		visibilityMgr         persistence.VisibilityManager
 		executionMgrFactory   persistence.ExecutionManagerFactory
@@ -108,7 +109,7 @@ type (
 
 // NewCadence returns an instance that hosts full cadence in one process
 func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Client, metadataMgr persistence.MetadataManager,
-	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager,
+	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
 	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
 	logger bark.Logger, clusterNo int, enableWorker bool) Cadence {
@@ -124,6 +125,7 @@ func NewCadence(clusterMetadata cluster.Metadata, messagingClient messaging.Clie
 		visibilityMgr:         visibilityMgr,
 		shardMgr:              shardMgr,
 		historyMgr:            historyMgr,
+		historyV2Mgr:          historyV2Mgr,
 		taskMgr:               taskMgr,
 		executionMgrFactory:   executionMgrFactory,
 		shutdownCh:            make(chan struct{}),
@@ -297,7 +299,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 
 	c.frontEndService = service.New(params)
 	c.frontendHandler = frontend.NewWorkflowHandler(
-		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection()), c.metadataMgr, c.historyMgr, c.visibilityMgr, kafkaProducer)
+		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection()), c.metadataMgr, c.historyMgr, c.historyV2Mgr, c.visibilityMgr, kafkaProducer)
 	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
@@ -332,7 +334,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup) {
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
-			c.visibilityMgr, c.historyMgr, c.executionMgrFactory)
+			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory)
 		handler.Start()
 		c.historyHandlers = append(c.historyHandlers, handler)
 	}

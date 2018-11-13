@@ -201,7 +201,7 @@ func (s *HistoryPerfSuite) TestPerf() {
 		events = make([]*workflow.HistoryEvent, 0, total)
 		for {
 			var events2 []*workflow.HistoryEvent
-			events2, token, err = s.readv2(brs[idx], 1, int64(total+1), 0, pageSize, token)
+			events2, token, err = s.readv2(brs[idx], 1, int64(total+1), pageSize, token)
 			s.Nil(err)
 			events = append(events, events2...)
 			if len(token) == 0 {
@@ -236,15 +236,14 @@ func (s *HistoryPerfSuite) newHistoryBranch(treeID string) ([]byte, error) {
 }
 
 // persistence helper
-func (s *HistoryPerfSuite) readv2(branch []byte, minID, maxID, lastVersion int64, pageSize int, token []byte) ([]*workflow.HistoryEvent, []byte, error) {
+func (s *HistoryPerfSuite) readv2(branch []byte, minID, maxID int64, pageSize int, token []byte) ([]*workflow.HistoryEvent, []byte, error) {
 
 	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
-		BranchToken:      branch,
-		MinEventID:       minID,
-		MaxEventID:       maxID,
-		PageSize:         pageSize,
-		NextPageToken:    token,
-		LastEventVersion: lastVersion,
+		BranchToken:   branch,
+		MinEventID:    minID,
+		MaxEventID:    maxID,
+		PageSize:      pageSize,
+		NextPageToken: token,
 	})
 	if err != nil {
 		return nil, nil, err

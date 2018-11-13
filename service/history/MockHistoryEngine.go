@@ -44,8 +44,8 @@ func (_m *MockHistoryEngine) Stop() {
 }
 
 // StartWorkflowExecution is mock implementation for StartWorkflowExecution of HistoryEngine
-func (_m *MockHistoryEngine) StartWorkflowExecution(request *gohistory.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
-	ret := _m.Called(request)
+func (_m *MockHistoryEngine) StartWorkflowExecution(ctx context.Context, request *gohistory.StartWorkflowExecutionRequest) (*shared.StartWorkflowExecutionResponse, error) {
+	ret := _m.Called(ctx, request)
 
 	var r0 *shared.StartWorkflowExecutionResponse
 	if rf, ok := ret.Get(0).(func(*gohistory.StartWorkflowExecutionRequest) *shared.StartWorkflowExecutionResponse); ok {

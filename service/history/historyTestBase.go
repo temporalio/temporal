@@ -70,6 +70,7 @@ type (
 		shardInfo                 *persistence.ShardInfo
 		transferSequenceNumber    int64
 		historyMgr                persistence.HistoryManager
+		historyV2Mgr              persistence.HistoryV2Manager
 		executionMgr              persistence.ExecutionManager
 		domainCache               cache.DomainCache
 		config                    *Config
@@ -89,7 +90,7 @@ type (
 var _ ShardContext = (*TestShardContext)(nil)
 
 func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumber int64,
-	historyMgr persistence.HistoryManager, executionMgr persistence.ExecutionManager,
+	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, executionMgr persistence.ExecutionManager,
 	metadataMgr persistence.MetadataManager, metadataMgrV2 persistence.MetadataManager, clusterMetadata cluster.Metadata, config *Config,
 	logger bark.Logger) *TestShardContext {
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -118,6 +119,7 @@ func newTestShardContext(shardInfo *persistence.ShardInfo, transferSequenceNumbe
 		shardInfo:                 shardInfo,
 		transferSequenceNumber:    transferSequenceNumber,
 		historyMgr:                historyMgr,
+		historyV2Mgr:              historyV2Mgr,
 		executionMgr:              executionMgr,
 		domainCache:               domainCache,
 		config:                    config,
@@ -146,6 +148,11 @@ func (s *TestShardContext) GetExecutionManager() persistence.ExecutionManager {
 // GetHistoryManager test implementation
 func (s *TestShardContext) GetHistoryManager() persistence.HistoryManager {
 	return s.historyMgr
+}
+
+// GetHistoryV2Manager return historyV2
+func (s *TestShardContext) GetHistoryV2Manager() persistence.HistoryV2Manager {
+	return s.historyV2Mgr
 }
 
 // GetDomainCache test implementation
@@ -398,6 +405,12 @@ func (s *TestShardContext) AppendHistoryEvents(request *persistence.AppendHistor
 	return resp.Size, err
 }
 
+// AppendHistoryV2Events append history V2 events
+func (s *TestShardContext) AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error) {
+	resp, err := s.historyV2Mgr.AppendHistoryNodes(request)
+	return resp.Size, err
+}
+
 // NotifyNewHistoryEvent test implementation
 func (s *TestShardContext) NotifyNewHistoryEvent(event *historyEventNotification) error {
 	return nil
@@ -458,14 +471,21 @@ func (s *TestShardContext) GetCurrentTime(cluster string) time.Time {
 	return time.Now()
 }
 
+// NewDynamicConfigForTest return dc for test
+func NewDynamicConfigForTest() *Config {
+	dc := dynamicconfig.NewNopCollection()
+	config := NewConfig(dc, 1)
+	return config
+}
+
 // SetupWorkflowStoreWithOptions to setup workflow test base
 func (s *TestBase) SetupWorkflowStoreWithOptions(options persistencetests.TestBaseOptions) {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
 	log := bark.NewLoggerFromLogrus(log.New())
-	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
+	config := NewDynamicConfigForTest()
 	clusterMetadata := cluster.GetTestClusterMetadata(options.EnableGlobalDomain, options.IsMasterCluster)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
 		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }
@@ -475,9 +495,9 @@ func (s *TestBase) SetupWorkflowStore() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
 	log := bark.NewLoggerFromLogrus(log.New())
-	config := NewConfig(dynamicconfig.NewNopCollection(), 1)
+	config := NewDynamicConfigForTest()
 	clusterMetadata := cluster.GetTestClusterMetadata(false, false)
-	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
+	s.ShardContext = newTestShardContext(s.ShardInfo, 0, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionManager, s.MetadataManager, s.MetadataManagerV2,
 		clusterMetadata, config, log)
 	s.TestBase.TaskIDGenerator = s.ShardContext
 }

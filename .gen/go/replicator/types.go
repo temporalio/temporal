@@ -625,16 +625,18 @@ func (v *DomainTaskAttributes) GetFailoverVersion() (o int64) {
 }
 
 type HistoryTaskAttributes struct {
-	TargetClusters  []string                            `json:"targetClusters,omitempty"`
-	DomainId        *string                             `json:"domainId,omitempty"`
-	WorkflowId      *string                             `json:"workflowId,omitempty"`
-	RunId           *string                             `json:"runId,omitempty"`
-	FirstEventId    *int64                              `json:"firstEventId,omitempty"`
-	NextEventId     *int64                              `json:"nextEventId,omitempty"`
-	Version         *int64                              `json:"version,omitempty"`
-	ReplicationInfo map[string]*history.ReplicationInfo `json:"replicationInfo,omitempty"`
-	History         *shared.History                     `json:"history,omitempty"`
-	NewRunHistory   *shared.History                     `json:"newRunHistory,omitempty"`
+	TargetClusters          []string                            `json:"targetClusters,omitempty"`
+	DomainId                *string                             `json:"domainId,omitempty"`
+	WorkflowId              *string                             `json:"workflowId,omitempty"`
+	RunId                   *string                             `json:"runId,omitempty"`
+	FirstEventId            *int64                              `json:"firstEventId,omitempty"`
+	NextEventId             *int64                              `json:"nextEventId,omitempty"`
+	Version                 *int64                              `json:"version,omitempty"`
+	ReplicationInfo         map[string]*history.ReplicationInfo `json:"replicationInfo,omitempty"`
+	History                 *shared.History                     `json:"history,omitempty"`
+	NewRunHistory           *shared.History                     `json:"newRunHistory,omitempty"`
+	EventStoreVersion       *int32                              `json:"eventStoreVersion,omitempty"`
+	NewRunEventStoreVersion *int32                              `json:"newRunEventStoreVersion,omitempty"`
 }
 
 type _List_String_ValueList []string
@@ -718,7 +720,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -802,6 +804,22 @@ func (v *HistoryTaskAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.NewRunEventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -980,6 +998,26 @@ func (v *HistoryTaskAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.NewRunEventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -993,7 +1031,7 @@ func (v *HistoryTaskAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [12]string
 	i := 0
 	if v.TargetClusters != nil {
 		fields[i] = fmt.Sprintf("TargetClusters: %v", v.TargetClusters)
@@ -1035,6 +1073,14 @@ func (v *HistoryTaskAttributes) String() string {
 		fields[i] = fmt.Sprintf("NewRunHistory: %v", v.NewRunHistory)
 		i++
 	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("NewRunEventStoreVersion: %v", *(v.NewRunEventStoreVersion))
+		i++
+	}
 
 	return fmt.Sprintf("HistoryTaskAttributes{%v}", strings.Join(fields[:i], ", "))
 }
@@ -1069,6 +1115,16 @@ func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*history.Replication
 		}
 	}
 	return true
+}
+
+func _I32_EqualsPtr(lhs, rhs *int32) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return (x == y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this HistoryTaskAttributes match the
@@ -1109,6 +1165,12 @@ func (v *HistoryTaskAttributes) Equals(rhs *HistoryTaskAttributes) bool {
 		return false
 	}
 	if !((v.NewRunHistory == nil && rhs.NewRunHistory == nil) || (v.NewRunHistory != nil && rhs.NewRunHistory != nil && v.NewRunHistory.Equals(rhs.NewRunHistory))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.NewRunEventStoreVersion, rhs.NewRunEventStoreVersion) {
 		return false
 	}
 
@@ -1172,6 +1234,12 @@ func (v *HistoryTaskAttributes) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.NewRunHistory != nil {
 		err = multierr.Append(err, enc.AddObject("newRunHistory", v.NewRunHistory))
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.NewRunEventStoreVersion != nil {
+		enc.AddInt32("newRunEventStoreVersion", *v.NewRunEventStoreVersion)
 	}
 	return err
 }
@@ -1271,6 +1339,26 @@ func (v *HistoryTaskAttributes) GetHistory() (o *shared.History) {
 func (v *HistoryTaskAttributes) GetNewRunHistory() (o *shared.History) {
 	if v.NewRunHistory != nil {
 		return v.NewRunHistory
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetNewRunEventStoreVersion returns the value of NewRunEventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *HistoryTaskAttributes) GetNewRunEventStoreVersion() (o int32) {
+	if v.NewRunEventStoreVersion != nil {
+		return *v.NewRunEventStoreVersion
 	}
 
 	return
@@ -2114,16 +2202,6 @@ func (v *SyncActicvityTaskAttributes) String() string {
 	}
 
 	return fmt.Sprintf("SyncActicvityTaskAttributes{%v}", strings.Join(fields[:i], ", "))
-}
-
-func _I32_EqualsPtr(lhs, rhs *int32) bool {
-	if lhs != nil && rhs != nil {
-
-		x := *lhs
-		y := *rhs
-		return (x == y)
-	}
-	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this SyncActicvityTaskAttributes match the

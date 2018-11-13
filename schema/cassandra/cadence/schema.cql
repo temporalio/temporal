@@ -17,6 +17,14 @@ CREATE TYPE shard (
   domain_notification_version bigint, -- the global domain change version this shard is aware of
 );
 
+-- History branch information
+CREATE TYPE history_branch_info (
+  branch_token                     blob,
+  next_event_id                    bigint,
+  last_first_event_id              bigint,
+  history_size                     bigint,
+);
+
 --- Workflow execution and mutable state ---
 CREATE TYPE workflow_execution (
   domain_id                        uuid,
@@ -35,8 +43,6 @@ CREATE TYPE workflow_execution (
   execution_context                blob,
   state                            int,  -- enum WorkflowState {Created, Running, Completed}
   close_status                     int,  -- enum WorkflowCloseStatus {None, Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut}
-  last_first_event_id              bigint,
-  next_event_id                    bigint,
   last_processed_event             bigint,
   start_time                       timestamp,
   last_updated_time                timestamp,
@@ -63,7 +69,12 @@ CREATE TYPE workflow_execution (
   expiration_time                  timestamp, -- retry expiration time
   max_attempts                     int,    -- max number of attempts including initial non-retry attempt
   non_retriable_errors             list<text>,
-  history_size                     bigint,
+  event_store_version              int, -- to indicates which version of events persistence is using
+  current_reset_version            int, -- works with eventsV2
+  history_branches                 frozen<map<int, history_branch_info>>, -- map from reset_version to the associated branch infomation
+  history_size                     bigint, --deprecated in eventsV2 in favor of history_branch_info
+  last_first_event_id              bigint, --deprecated in eventsV2 in favor of history_branch_info
+  next_event_id                    bigint, --deprecated in eventsV2 in favor of history_branch_info
 );
 
 -- Replication information for each cluster
@@ -109,6 +120,10 @@ CREATE TYPE replication_task (
   version                    bigint,  -- Used by ReplicationTask to set the failover version of the applied transaction
   last_replication_info      map<text, frozen<replication_info>>, -- Used by replication task to snapshot replication information when the transaction was applied
   scheduled_id               bigint, -- Used by ReplicationTask to sync activity info
+  event_store_version        int, -- indiciates which version of event store to query
+  branch_token               blob, -- if eventV2, then query with this token
+  new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
+  new_run_branch_token               blob, -- if eventV2, then query with this token for new run(continueAsNew)
 );
 
 CREATE TYPE timer_task (

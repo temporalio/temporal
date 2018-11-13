@@ -86,7 +86,6 @@ type (
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
 		AddWorkflowExecutionSignaled(*workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent
 		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) *workflow.HistoryEvent
-		AddWorkflowExecutionStartedEventForContinueAsNew(string, *h.ParentExecutionInfo, workflow.WorkflowExecution, mutableState, *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
 		AddWorkflowExecutionTerminatedEvent(*workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent
 		AfterAddDecisionTaskCompletedEvent(int64)
 		BeforeAddDecisionTaskCompletedEvent()
@@ -97,7 +96,7 @@ type (
 		CreateActivityRetryTimer(*persistence.ActivityInfo, string) persistence.Task
 		CreateNewHistoryEvent(eventType workflow.EventType) *workflow.HistoryEvent
 		CreateNewHistoryEventWithTimestamp(eventType workflow.EventType, timestamp int64) *workflow.HistoryEvent
-		CreateReplicationTask() *persistence.HistoryReplicationTask
+		CreateReplicationTask(int32, []byte) *persistence.HistoryReplicationTask
 		CreateTransientDecisionEvents(di *decisionInfo, identity string) (*workflow.HistoryEvent, *workflow.HistoryEvent)
 		DeleteActivity(int64) error
 		DeleteBufferedReplicationTask(int64)
@@ -119,9 +118,12 @@ type (
 		GetChildExecutionStartedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetCompletionEvent() (*workflow.HistoryEvent, bool)
 		GetContinueAsNew() *persistence.CreateWorkflowExecutionRequest
+		GetCurrentBranch() []byte
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistence.WorkflowExecutionInfo
+		GetEventStoreVersion() int32
 		GetHistoryBuilder() *historyBuilder
+		GetHistorySize() int64
 		GetInFlightDecisionTask() (*decisionInfo, bool)
 		GetLastFirstEventID() int64
 		GetLastUpdatedTimestamp() int64
@@ -145,7 +147,6 @@ type (
 		HasParentExecution() bool
 		HasPendingDecisionTask() bool
 		IncrementHistorySize(int)
-		GetHistorySize() int64
 		IsCancelRequested() (bool, string)
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskListEnabled() bool
@@ -192,6 +193,7 @@ type (
 		ReplicateWorkflowExecutionTimedoutEvent(*workflow.HistoryEvent)
 		ResetSnapshot(string) *persistence.ResetMutableStateRequest
 		SetHistoryBuilder(hBuilder *historyBuilder)
+		SetHistoryTree(treeID string) error
 		SetNewRunSize(size int)
 		UpdateActivity(*persistence.ActivityInfo) error
 		UpdateActivityProgress(ai *persistence.ActivityInfo, request *workflow.RecordActivityTaskHeartbeatRequest)

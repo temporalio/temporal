@@ -48,6 +48,7 @@ type (
 		timerGate               LocalTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		timerQueueAckMgr        timerQueueAckMgr
+		config                  *Config
 	}
 )
 
@@ -98,6 +99,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 			logger,
 		),
 		timerQueueAckMgr: timerQueueAckMgr,
+		config:           shard.GetConfig(),
 	}
 	processor.timerQueueProcessorBase.timerProcessor = processor
 	return processor
@@ -686,7 +688,7 @@ Update_History_Loop:
 		}
 
 		// workflow timeout, but a retry is needed, so we do continue as new to retry
-		startEvent, err := getWorkflowStartedEvent(t.historyService.historyMgr, t.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
+		startEvent, err := getWorkflowStartedEvent(t.historyService.historyMgr, t.historyService.historyV2Mgr, msBuilder.GetEventStoreVersion(), msBuilder.GetCurrentBranch(), t.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
 		if err != nil {
 			return err
 		}
@@ -705,6 +707,7 @@ Update_History_Loop:
 		if err != nil {
 			return err
 		}
+		useEventsV2 := t.config.EnableEventsV2(domainEntry.GetInfo().Name)
 		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes)
 		if err != nil {
 			return err
@@ -726,6 +729,11 @@ Update_History_Loop:
 		}
 
 		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
+		if useEventsV2 {
+			if err = continueAsNewBuilder.SetHistoryTree(continueAsNewBuilder.GetExecutionInfo().RunID); err != nil {
+				return err
+			}
+		}
 		err = context.continueAsNewWorkflowExecution(nil, continueAsNewBuilder, transferTasks, timerTasks, transactionID)
 		t.notifyNewTimers(timersToNotify)
 

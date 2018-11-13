@@ -50,6 +50,7 @@ type (
 		membershipUpdateCh  chan *membership.ChangedEvent
 		shardMgr            persistence.ShardManager
 		historyMgr          persistence.HistoryManager
+		historyV2Mgr        persistence.HistoryV2Manager
 		executionMgrFactory persistence.ExecutionManagerFactory
 		domainCache         cache.DomainCache
 		engineFactory       EngineFactory
@@ -76,6 +77,7 @@ type (
 		service       service.Service
 		shardMgr      persistence.ShardManager
 		historyMgr    persistence.HistoryManager
+		historyV2Mgr  persistence.HistoryV2Manager
 		executionMgr  persistence.ExecutionManager
 		domainCache   cache.DomainCache
 		engineFactory EngineFactory
@@ -94,7 +96,7 @@ const (
 )
 
 func newShardController(svc service.Service, host *membership.HostInfo, resolver membership.ServiceResolver,
-	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, domainCache cache.DomainCache,
+	shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory,
 	config *Config, logger bark.Logger, metricsClient metrics.Client) *shardController {
 	logger = logger.WithFields(bark.Fields{
@@ -107,6 +109,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
 		shardMgr:            shardMgr,
 		historyMgr:          historyMgr,
+		historyV2Mgr:        historyV2Mgr,
 		executionMgrFactory: executionMgrFactory,
 		domainCache:         domainCache,
 		engineFactory:       factory,
@@ -120,7 +123,7 @@ func newShardController(svc service.Service, host *membership.HostInfo, resolver
 }
 
 func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence.ShardManager,
-	historyMgr persistence.HistoryManager, domainCache cache.DomainCache,
+	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, domainCache cache.DomainCache,
 	executionMgrFactory persistence.ExecutionManagerFactory, factory EngineFactory, host *membership.HostInfo,
 	config *Config, logger bark.Logger, metricsClient metrics.Client) (*historyShardsItem, error) {
 
@@ -135,6 +138,7 @@ func newHistoryShardsItem(shardID int, svc service.Service, shardMgr persistence
 		status:        historyShardsItemStatusInitialized,
 		shardMgr:      shardMgr,
 		historyMgr:    historyMgr,
+		historyV2Mgr:  historyV2Mgr,
 		executionMgr:  executionMgr,
 		domainCache:   domainCache,
 		engineFactory: factory,
@@ -238,7 +242,7 @@ func (c *shardController) getOrCreateHistoryShardItem(shardID int) (*historyShar
 	}
 
 	if info.Identity() == c.host.Identity() {
-		shardItem, err := newHistoryShardsItem(shardID, c.service, c.shardMgr, c.historyMgr, c.domainCache,
+		shardItem, err := newHistoryShardsItem(shardID, c.service, c.shardMgr, c.historyMgr, c.historyV2Mgr, c.domainCache,
 			c.executionMgrFactory, c.engineFactory, c.host, c.config, c.logger, c.metricsClient)
 		if err != nil {
 			return nil, err

@@ -478,12 +478,11 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 	token := []byte{}
 	for {
 		resp, err := s.HistoryV2Mgr.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
-			BranchToken:      branch,
-			MinEventID:       minID,
-			MaxEventID:       maxID,
-			PageSize:         randPageSize,
-			NextPageToken:    token,
-			LastEventVersion: int64(0),
+			BranchToken:   branch,
+			MinEventID:    minID,
+			MaxEventID:    maxID,
+			PageSize:      randPageSize,
+			NextPageToken: token,
 		})
 		if err != nil {
 			return nil, err

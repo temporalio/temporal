@@ -165,6 +165,10 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
+		// events V2 related
+		EventStoreVersion   int32
+		CurrentResetVersion int32
+		HistoryBranches     map[int32]*HistoryBranch // map from each resetVersion to the associated branch
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface

@@ -44,7 +44,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -86,7 +85,7 @@ func (s *engine2Suite) SetupSuite() {
 	l := log.New()
 	l.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(l)
-	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
+	s.config = NewDynamicConfigForTest()
 }
 
 func (s *engine2Suite) TearDownSuite() {
@@ -141,6 +140,7 @@ func (s *engine2Suite) SetupTest() {
 		logger:             s.logger,
 		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:    common.NewJSONTaskTokenSerializer(),
+		config:             s.config,
 	}
 	h.txProcessor = newTransferQueueProcessor(mockShard, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(mockShard, h, s.mockMatchingClient, s.logger)
@@ -225,6 +225,7 @@ func (s *engine2Suite) TestRecordDecisionTaskStartedSuccessStickyEnabled() {
 		Name: &executionInfo.TaskList,
 		Kind: common.TaskListKindPtr(workflow.TaskListKindNormal),
 	})
+	expectedResponse.EventStoreVersion = common.Int32Ptr(0)
 
 	response, err := s.historyEngine.RecordDecisionTaskStarted(context.Background(), &request)
 	s.Nil(err)
@@ -1009,7 +1010,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 		nil,
 	)
 
-	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
 			Domain:                              common.StringPtr(domainID),
@@ -1060,7 +1061,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		nil,
 	)
 
-	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
 			Domain:                              common.StringPtr(domainID),
@@ -1111,7 +1112,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		nil,
 	)
 
-	resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 		DomainUUID: common.StringPtr(domainID),
 		StartRequest: &workflow.StartWorkflowExecutionRequest{
 			Domain:                              common.StringPtr(domainID),
@@ -1190,7 +1191,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 		}
 
-		resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+		resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 			DomainUUID: common.StringPtr(domainID),
 			StartRequest: &workflow.StartWorkflowExecutionRequest{
 				Domain:                              common.StringPtr(domainID),
@@ -1287,7 +1288,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				s.mockHistoryMgr.On("DeleteWorkflowExecutionHistory", mock.Anything).Return(nil).Once()
 			}
 
-			resp, err := s.historyEngine.StartWorkflowExecution(&h.StartWorkflowExecutionRequest{
+			resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &h.StartWorkflowExecutionRequest{
 				DomainUUID: common.StringPtr(domainID),
 				StartRequest: &workflow.StartWorkflowExecutionRequest{
 					Domain:                              common.StringPtr(domainID),

@@ -208,7 +208,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 		}
 	}
 
-	token, err := m.pagingTokenSerializer.Deserialize(request.NextPageToken, request.MinEventID-1, request.LastEventVersion)
+	token, err := m.pagingTokenSerializer.Deserialize(request.NextPageToken, request.MinEventID-1, common.EmptyVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +271,8 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 
 	events := make([]*workflow.HistoryEvent, 0, request.PageSize)
 	dataSize := 0
+	// first_event_id of the last batch
+	lastFirstEventID := common.EmptyEventID
 
 	//NOTE: in this method, we need to make sure eventVersion is NOT decreasing(otherwise we skip the events), eventID should be continuous(otherwise return error)
 	logger := m.logger.WithFields(bark.Fields{
@@ -324,11 +326,13 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 		token.LastEventID = *le.EventId
 		events = append(events, es...)
 		dataSize += len(b.Data)
+		lastFirstEventID = *fe.EventId
 	}
 
 	response := &ReadHistoryBranchResponse{
-		History: events,
-		Size:    dataSize,
+		History:          events,
+		Size:             dataSize,
+		LastFirstEventID: lastFirstEventID,
 	}
 
 	if len(token.StoreToken) == 0 {

@@ -1552,6 +1552,8 @@ type PollForDecisionTaskResponse struct {
 	Query                     *shared.WorkflowQuery         `json:"query,omitempty"`
 	DecisionInfo              *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
 	WorkflowExecutionTaskList *shared.TaskList              `json:"WorkflowExecutionTaskList,omitempty"`
+	EventStoreVersion         *int32                        `json:"eventStoreVersion,omitempty"`
+	BranchToken               []byte                        `json:"branchToken,omitempty"`
 }
 
 // ToWire translates a PollForDecisionTaskResponse struct into a Thrift-level intermediate
@@ -1571,7 +1573,7 @@ type PollForDecisionTaskResponse struct {
 //   }
 func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [14]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1671,6 +1673,22 @@ func (v *PollForDecisionTaskResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.BranchToken != nil {
+		w, err = wire.NewValueBinary(v.BranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -1825,6 +1843,24 @@ func (v *PollForDecisionTaskResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				v.BranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1838,7 +1874,7 @@ func (v *PollForDecisionTaskResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [14]string
 	i := 0
 	if v.TaskToken != nil {
 		fields[i] = fmt.Sprintf("TaskToken: %v", v.TaskToken)
@@ -1886,6 +1922,14 @@ func (v *PollForDecisionTaskResponse) String() string {
 	}
 	if v.WorkflowExecutionTaskList != nil {
 		fields[i] = fmt.Sprintf("WorkflowExecutionTaskList: %v", v.WorkflowExecutionTaskList)
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.BranchToken != nil {
+		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
 		i++
 	}
 
@@ -1948,6 +1992,12 @@ func (v *PollForDecisionTaskResponse) Equals(rhs *PollForDecisionTaskResponse) b
 	if !((v.WorkflowExecutionTaskList == nil && rhs.WorkflowExecutionTaskList == nil) || (v.WorkflowExecutionTaskList != nil && rhs.WorkflowExecutionTaskList != nil && v.WorkflowExecutionTaskList.Equals(rhs.WorkflowExecutionTaskList))) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
+		return false
+	}
 
 	return true
 }
@@ -1993,6 +2043,12 @@ func (v *PollForDecisionTaskResponse) MarshalLogObject(enc zapcore.ObjectEncoder
 	}
 	if v.WorkflowExecutionTaskList != nil {
 		err = multierr.Append(err, enc.AddObject("WorkflowExecutionTaskList", v.WorkflowExecutionTaskList))
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.BranchToken != nil {
+		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
 	}
 	return err
 }
@@ -2112,6 +2168,26 @@ func (v *PollForDecisionTaskResponse) GetDecisionInfo() (o *shared.TransientDeci
 func (v *PollForDecisionTaskResponse) GetWorkflowExecutionTaskList() (o *shared.TaskList) {
 	if v.WorkflowExecutionTaskList != nil {
 		return v.WorkflowExecutionTaskList
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *PollForDecisionTaskResponse) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetBranchToken returns the value of BranchToken if it is set or its
+// zero value if it is unset.
+func (v *PollForDecisionTaskResponse) GetBranchToken() (o []byte) {
+	if v.BranchToken != nil {
+		return v.BranchToken
 	}
 
 	return

@@ -44,6 +44,7 @@ type (
 		GetService() service.Service
 		GetExecutionManager() persistence.ExecutionManager
 		GetHistoryManager() persistence.HistoryManager
+		GetHistoryV2Manager() persistence.HistoryV2Manager
 		GetDomainCache() cache.DomainCache
 		GetNextTransferTaskID() (int64, error)
 		GetTransferMaxReadLevel() int64
@@ -70,6 +71,7 @@ type (
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ResetMutableState(request *persistence.ResetMutableStateRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error)
+		AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error)
 		NotifyNewHistoryEvent(event *historyEventNotification) error
 		GetConfig() *Config
 		GetLogger() bark.Logger
@@ -89,6 +91,7 @@ type (
 		rangeID          int64
 		shardManager     persistence.ShardManager
 		historyMgr       persistence.HistoryManager
+		historyV2Mgr     persistence.HistoryV2Manager
 		executionManager persistence.ExecutionManager
 		domainCache      cache.DomainCache
 		closeCh          chan<- int
@@ -131,6 +134,10 @@ func (s *shardContextImpl) GetExecutionManager() persistence.ExecutionManager {
 
 func (s *shardContextImpl) GetHistoryManager() persistence.HistoryManager {
 	return s.historyMgr
+}
+
+func (s *shardContextImpl) GetHistoryV2Manager() persistence.HistoryV2Manager {
+	return s.historyV2Mgr
 }
 
 func (s *shardContextImpl) GetDomainCache() cache.DomainCache {
@@ -583,6 +590,23 @@ Reset_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
+func (s *shardContextImpl) AppendHistoryV2Events(request *persistence.AppendHistoryNodesRequest, domainID string) (int, error) {
+	encoding, err := s.getDefaultEncoding(domainID)
+	if err != nil {
+		return 0, err
+	}
+	request.Encoding = encoding
+	size := 0
+	defer func() {
+		s.metricsClient.RecordTimer(metrics.SessionSizeStatsScope, metrics.HistorySize, time.Duration(size))
+	}()
+	resp, err0 := s.historyV2Mgr.AppendHistoryNodes(request)
+	if resp != nil {
+		size = resp.Size
+	}
+	return size, err0
+}
+
 func (s *shardContextImpl) AppendHistoryEvents(request *persistence.AppendHistoryEventsRequest) (int, error) {
 	encoding, err := s.getDefaultEncoding(request.DomainID)
 	if err != nil {
@@ -941,6 +965,7 @@ func acquireShard(shardItem *historyShardsItem, closeCh chan<- int) (ShardContex
 		service:                   shardItem.service,
 		shardManager:              shardItem.shardMgr,
 		historyMgr:                shardItem.historyMgr,
+		historyV2Mgr:              shardItem.historyV2Mgr,
 		executionManager:          shardItem.executionMgr,
 		domainCache:               shardItem.domainCache,
 		shardInfo:                 updatedShardInfo,

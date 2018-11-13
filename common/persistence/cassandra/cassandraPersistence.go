@@ -92,8 +92,9 @@ const (
 )
 
 const (
-	taskListTaskID = -12345
-	initialRangeID = 1 // Id of the first range of a new task list
+	taskListTaskID      = -12345
+	initialRangeID      = 1 // Id of the first range of a new task list
+	initialResetVersion = 0
 )
 
 const (
@@ -156,7 +157,10 @@ const (
 		`max_interval: ?, ` +
 		`expiration_time: ?, ` +
 		`max_attempts: ?, ` +
-		`non_retriable_errors: ?` +
+		`non_retriable_errors: ?, ` +
+		`event_store_version: ?, ` +
+		`current_reset_version: ?, ` +
+		`history_branches: ? ` +
 		`}`
 
 	templateReplicationStateType = `{` +
@@ -193,7 +197,11 @@ const (
 		`next_event_id: ?,` +
 		`version: ?,` +
 		`last_replication_info: ?, ` +
-		`scheduled_id: ?` +
+		`scheduled_id: ?, ` +
+		`event_store_version: ?, ` +
+		`branch_token: ?, ` +
+		`new_run_event_store_version: ?, ` +
+		`new_run_branch_token: ? ` +
 		`}`
 
 	templateTimerTaskType = `{` +
@@ -1288,6 +1296,16 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 		d.logger.Panic(fmt.Sprintf("Unknown CreateWorkflowMode: %v", request.CreateWorkflowMode))
 	}
 
+	historyBranches := map[int32]map[string]interface{}{}
+	if request.EventStoreVersion == p.EventStoreVersionV2 {
+		firstBranch := map[string]interface{}{}
+		firstBranch["branch_token"] = request.BranchToken
+		firstBranch["next_event_id"] = request.NextEventID
+		firstBranch["last_first_event_id"] = request.EventStoreVersion
+		firstBranch["history_size"] = request.HistorySize
+		historyBranches[initialResetVersion] = firstBranch
+	}
+
 	if request.ReplicationState == nil {
 		// Cross DC feature is currently disabled so we will be creating workflow executions without replication state
 		batch.Query(templateCreateWorkflowExecutionQuery,
@@ -1341,6 +1359,9 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			request.ExpirationTime,
 			request.MaximumAttempts,
 			request.NonRetriableErrors,
+			request.EventStoreVersion,
+			initialResetVersion,
+			historyBranches,
 			request.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
@@ -1401,6 +1422,9 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			request.ExpirationTime,
 			request.MaximumAttempts,
 			request.NonRetriableErrors,
+			request.EventStoreVersion,
+			initialResetVersion,
+			historyBranches,
 			request.ReplicationState.CurrentVersion,
 			request.ReplicationState.StartVersion,
 			request.ReplicationState.LastWriteVersion,
@@ -1515,12 +1539,26 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
 }
 
+func serializeHistoryBranches(bs map[int32]*p.HistoryBranch) map[int32]map[string]interface{} {
+	out := map[int32]map[string]interface{}{}
+	for k, v := range bs {
+		b := map[string]interface{}{}
+		b["branch_token"] = v.BranchToken
+		b["next_event_id"] = v.NextEventID
+		b["last_first_event_id"] = v.LastFirstEventID
+		b["history_size"] = v.HistorySize
+		out[k] = b
+	}
+	return out
+}
+
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 	cqlNowTimestamp := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
 	executionInfo := request.ExecutionInfo
 	replicationState := request.ReplicationState
 
+	historyBranches := serializeHistoryBranches(executionInfo.HistoryBranches)
 	completionData, completionEncoding := p.FromDataBlob(executionInfo.CompletionEvent)
 	if replicationState == nil {
 		// Updates will be called with null ReplicationState while the feature is disabled
@@ -1570,6 +1608,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
+			executionInfo.EventStoreVersion,
+			executionInfo.CurrentResetVersion,
+			historyBranches,
 			executionInfo.NextEventID,
 			d.shardID,
 			rowTypeExecution,
@@ -1631,6 +1672,9 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.ExpirationTime,
 			executionInfo.MaximumAttempts,
 			executionInfo.NonRetriableErrors,
+			executionInfo.EventStoreVersion,
+			executionInfo.CurrentResetVersion,
+			historyBranches,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -1831,6 +1875,7 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		request.PrevRunID,
 	)
 
+	historyBranches := serializeHistoryBranches(executionInfo.HistoryBranches)
 	completionEvent := executionInfo.CompletionEvent
 	var completionEventData []byte
 	var completionEventEncoding common.EncodingType
@@ -1884,6 +1929,9 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		executionInfo.ExpirationTime,
 		executionInfo.MaximumAttempts,
 		executionInfo.NonRetriableErrors,
+		executionInfo.EventStoreVersion,
+		executionInfo.CurrentResetVersion,
+		historyBranches,
 		replicationState.CurrentVersion,
 		replicationState.StartVersion,
 		replicationState.LastWriteVersion,
@@ -2774,14 +2822,20 @@ func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replic
 		version := common.EmptyVersion
 		var lastReplicationInfo map[string]map[string]interface{}
 		activityScheduleID := common.EmptyEventID
-
+		var eventStoreVersion, newRunEventStoreVersion int32
+		var branchToken, newRunBranchToken []byte
 		switch task.GetType() {
 		case p.ReplicationTaskTypeHistory:
-			firstEventID = task.(*p.HistoryReplicationTask).FirstEventID
-			nextEventID = task.(*p.HistoryReplicationTask).NextEventID
+			histTask := task.(*p.HistoryReplicationTask)
+			eventStoreVersion = histTask.EventStoreVersion
+			newRunEventStoreVersion = histTask.NewRunEventStoreVersion
+			branchToken = histTask.BranchToken
+			newRunBranchToken = histTask.NewRunBranchToken
+			firstEventID = histTask.FirstEventID
+			nextEventID = histTask.NextEventID
 			version = task.GetVersion()
 			lastReplicationInfo = make(map[string]map[string]interface{})
-			for k, v := range task.(*p.HistoryReplicationTask).LastReplicationInfo {
+			for k, v := range histTask.LastReplicationInfo {
 				lastReplicationInfo[k] = createReplicationInfoMap(v)
 			}
 		case p.ReplicationTaskTypeSyncActivity:
@@ -2809,6 +2863,10 @@ func (d *cassandraPersistence) createReplicationTasks(batch *gocql.Batch, replic
 			version,
 			lastReplicationInfo,
 			activityScheduleID,
+			eventStoreVersion,
+			branchToken,
+			newRunEventStoreVersion,
+			newRunBranchToken,
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -3477,10 +3535,37 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.ExpirationTime = v.(time.Time)
 		case "non_retriable_errors":
 			info.NonRetriableErrors = v.([]string)
+		case "event_store_version":
+			info.EventStoreVersion = int32(v.(int))
+		case "current_reset_version":
+			info.CurrentResetVersion = int32(v.(int))
+		case "history_branches":
+			info.HistoryBranches = deserializeHistoryBranch(v.(map[int]map[string]interface{}))
 		}
 	}
 	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)
 	return info
+}
+
+func deserializeHistoryBranch(result map[int]map[string]interface{}) map[int32]*p.HistoryBranch {
+	out := map[int32]*p.HistoryBranch{}
+	for idx, bi := range result {
+		b := &p.HistoryBranch{}
+		for f, fv := range bi {
+			switch f {
+			case "branch_token":
+				b.BranchToken = fv.([]byte)
+			case "next_event_id":
+				b.NextEventID = fv.(int64)
+			case "last_first_event_id":
+				b.LastFirstEventID = fv.(int64)
+			case "history_size":
+				b.HistorySize = fv.(int64)
+			}
+		}
+		out[int32(idx)] = b
+	}
+	return out
 }
 
 func createReplicationState(result map[string]interface{}) *p.ReplicationState {
@@ -3578,6 +3663,14 @@ func createReplicationTaskInfo(result map[string]interface{}) *p.ReplicationTask
 			}
 		case "scheduled_id":
 			info.ScheduledID = v.(int64)
+		case "event_store_version":
+			info.EventStoreVersion = int32(v.(int))
+		case "branch_token":
+			info.BranchToken = v.([]byte)
+		case "new_run_event_store_version":
+			info.NewRunEventStoreVersion = int32(v.(int))
+		case "new_run_branch_token":
+			info.NewRunBranchToken = v.([]byte)
 		}
 	}
 

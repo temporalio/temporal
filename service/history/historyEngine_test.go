@@ -36,7 +36,6 @@ import (
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
@@ -89,7 +88,7 @@ func (s *engineSuite) SetupSuite() {
 	}
 
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
+	s.config = NewDynamicConfigForTest()
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -160,6 +159,7 @@ func (s *engineSuite) SetupTest() {
 		metricsClient:        metrics.NewClient(tally.NoopScope, metrics.History),
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		historyEventNotifier: historyEventNotifier,
+		config:               NewDynamicConfigForTest(),
 	}
 	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockMatchingClient, s.logger)

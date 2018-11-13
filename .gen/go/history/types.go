@@ -929,6 +929,8 @@ type GetMutableStateResponse struct {
 	ClientImpl                           *string                   `json:"clientImpl,omitempty"`
 	IsWorkflowRunning                    *bool                     `json:"isWorkflowRunning,omitempty"`
 	StickyTaskListScheduleToStartTimeout *int32                    `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
+	EventStoreVersion                    *int32                    `json:"eventStoreVersion,omitempty"`
+	BranchToken                          []byte                    `json:"branchToken,omitempty"`
 }
 
 // ToWire translates a GetMutableStateResponse struct into a Thrift-level intermediate
@@ -948,7 +950,7 @@ type GetMutableStateResponse struct {
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1040,6 +1042,22 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.BranchToken != nil {
+		w, err = wire.NewValueBinary(v.BranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -1182,6 +1200,24 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 130:
+			if field.Value.Type() == wire.TBinary {
+				v.BranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1195,7 +1231,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [13]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1239,6 +1275,14 @@ func (v *GetMutableStateResponse) String() string {
 	}
 	if v.StickyTaskListScheduleToStartTimeout != nil {
 		fields[i] = fmt.Sprintf("StickyTaskListScheduleToStartTimeout: %v", *(v.StickyTaskListScheduleToStartTimeout))
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.BranchToken != nil {
+		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
 		i++
 	}
 
@@ -1308,6 +1352,12 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !_I32_EqualsPtr(v.StickyTaskListScheduleToStartTimeout, rhs.StickyTaskListScheduleToStartTimeout) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
+		return false
+	}
 
 	return true
 }
@@ -1350,6 +1400,12 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.StickyTaskListScheduleToStartTimeout != nil {
 		enc.AddInt32("stickyTaskListScheduleToStartTimeout", *v.StickyTaskListScheduleToStartTimeout)
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.BranchToken != nil {
+		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
 	}
 	return err
 }
@@ -1459,6 +1515,26 @@ func (v *GetMutableStateResponse) GetIsWorkflowRunning() (o bool) {
 func (v *GetMutableStateResponse) GetStickyTaskListScheduleToStartTimeout() (o int32) {
 	if v.StickyTaskListScheduleToStartTimeout != nil {
 		return *v.StickyTaskListScheduleToStartTimeout
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetBranchToken returns the value of BranchToken if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetBranchToken() (o []byte) {
+	if v.BranchToken != nil {
+		return v.BranchToken
 	}
 
 	return
@@ -3213,6 +3289,8 @@ type RecordDecisionTaskStartedResponse struct {
 	StickyExecutionEnabled    *bool                         `json:"stickyExecutionEnabled,omitempty"`
 	DecisionInfo              *shared.TransientDecisionInfo `json:"decisionInfo,omitempty"`
 	WorkflowExecutionTaskList *shared.TaskList              `json:"WorkflowExecutionTaskList,omitempty"`
+	EventStoreVersion         *int32                        `json:"eventStoreVersion,omitempty"`
+	BranchToken               []byte                        `json:"branchToken,omitempty"`
 }
 
 // ToWire translates a RecordDecisionTaskStartedResponse struct into a Thrift-level intermediate
@@ -3232,7 +3310,7 @@ type RecordDecisionTaskStartedResponse struct {
 //   }
 func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -3308,6 +3386,22 @@ func (v *RecordDecisionTaskStartedResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.BranchToken != nil {
+		w, err = wire.NewValueBinary(v.BranchToken), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -3426,6 +3520,24 @@ func (v *RecordDecisionTaskStartedResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TBinary {
+				v.BranchToken, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -3439,7 +3551,7 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [11]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -3475,6 +3587,14 @@ func (v *RecordDecisionTaskStartedResponse) String() string {
 	}
 	if v.WorkflowExecutionTaskList != nil {
 		fields[i] = fmt.Sprintf("WorkflowExecutionTaskList: %v", v.WorkflowExecutionTaskList)
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.BranchToken != nil {
+		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
 		i++
 	}
 
@@ -3518,6 +3638,12 @@ func (v *RecordDecisionTaskStartedResponse) Equals(rhs *RecordDecisionTaskStarte
 	if !((v.WorkflowExecutionTaskList == nil && rhs.WorkflowExecutionTaskList == nil) || (v.WorkflowExecutionTaskList != nil && rhs.WorkflowExecutionTaskList != nil && v.WorkflowExecutionTaskList.Equals(rhs.WorkflowExecutionTaskList))) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
+		return false
+	}
 
 	return true
 }
@@ -3554,6 +3680,12 @@ func (v *RecordDecisionTaskStartedResponse) MarshalLogObject(enc zapcore.ObjectE
 	}
 	if v.WorkflowExecutionTaskList != nil {
 		err = multierr.Append(err, enc.AddObject("WorkflowExecutionTaskList", v.WorkflowExecutionTaskList))
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.BranchToken != nil {
+		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
 	}
 	return err
 }
@@ -3643,6 +3775,26 @@ func (v *RecordDecisionTaskStartedResponse) GetDecisionInfo() (o *shared.Transie
 func (v *RecordDecisionTaskStartedResponse) GetWorkflowExecutionTaskList() (o *shared.TaskList) {
 	if v.WorkflowExecutionTaskList != nil {
 		return v.WorkflowExecutionTaskList
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *RecordDecisionTaskStartedResponse) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetBranchToken returns the value of BranchToken if it is set or its
+// zero value if it is unset.
+func (v *RecordDecisionTaskStartedResponse) GetBranchToken() (o []byte) {
+	if v.BranchToken != nil {
+		return v.BranchToken
 	}
 
 	return
@@ -3858,16 +4010,18 @@ func (v *RemoveSignalMutableStateRequest) GetRequestId() (o string) {
 }
 
 type ReplicateEventsRequest struct {
-	SourceCluster     *string                     `json:"sourceCluster,omitempty"`
-	DomainUUID        *string                     `json:"domainUUID,omitempty"`
-	WorkflowExecution *shared.WorkflowExecution   `json:"workflowExecution,omitempty"`
-	FirstEventId      *int64                      `json:"firstEventId,omitempty"`
-	NextEventId       *int64                      `json:"nextEventId,omitempty"`
-	Version           *int64                      `json:"version,omitempty"`
-	ReplicationInfo   map[string]*ReplicationInfo `json:"replicationInfo,omitempty"`
-	History           *shared.History             `json:"history,omitempty"`
-	NewRunHistory     *shared.History             `json:"newRunHistory,omitempty"`
-	ForceBufferEvents *bool                       `json:"forceBufferEvents,omitempty"`
+	SourceCluster           *string                     `json:"sourceCluster,omitempty"`
+	DomainUUID              *string                     `json:"domainUUID,omitempty"`
+	WorkflowExecution       *shared.WorkflowExecution   `json:"workflowExecution,omitempty"`
+	FirstEventId            *int64                      `json:"firstEventId,omitempty"`
+	NextEventId             *int64                      `json:"nextEventId,omitempty"`
+	Version                 *int64                      `json:"version,omitempty"`
+	ReplicationInfo         map[string]*ReplicationInfo `json:"replicationInfo,omitempty"`
+	History                 *shared.History             `json:"history,omitempty"`
+	NewRunHistory           *shared.History             `json:"newRunHistory,omitempty"`
+	ForceBufferEvents       *bool                       `json:"forceBufferEvents,omitempty"`
+	EventStoreVersion       *int32                      `json:"eventStoreVersion,omitempty"`
+	NewRunEventStoreVersion *int32                      `json:"newRunEventStoreVersion,omitempty"`
 }
 
 type _Map_String_ReplicationInfo_MapItemList map[string]*ReplicationInfo
@@ -3925,7 +4079,7 @@ func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 //   }
 func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [10]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -4009,6 +4163,22 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.NewRunEventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -4169,6 +4339,26 @@ func (v *ReplicateEventsRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 120:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.NewRunEventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -4182,7 +4372,7 @@ func (v *ReplicateEventsRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [10]string
+	var fields [12]string
 	i := 0
 	if v.SourceCluster != nil {
 		fields[i] = fmt.Sprintf("SourceCluster: %v", *(v.SourceCluster))
@@ -4222,6 +4412,14 @@ func (v *ReplicateEventsRequest) String() string {
 	}
 	if v.ForceBufferEvents != nil {
 		fields[i] = fmt.Sprintf("ForceBufferEvents: %v", *(v.ForceBufferEvents))
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("NewRunEventStoreVersion: %v", *(v.NewRunEventStoreVersion))
 		i++
 	}
 
@@ -4285,6 +4483,12 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	if !_Bool_EqualsPtr(v.ForceBufferEvents, rhs.ForceBufferEvents) {
 		return false
 	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.NewRunEventStoreVersion, rhs.NewRunEventStoreVersion) {
+		return false
+	}
 
 	return true
 }
@@ -4335,6 +4539,12 @@ func (v *ReplicateEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (er
 	}
 	if v.ForceBufferEvents != nil {
 		enc.AddBool("forceBufferEvents", *v.ForceBufferEvents)
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.NewRunEventStoreVersion != nil {
+		enc.AddInt32("newRunEventStoreVersion", *v.NewRunEventStoreVersion)
 	}
 	return err
 }
@@ -4434,6 +4644,26 @@ func (v *ReplicateEventsRequest) GetNewRunHistory() (o *shared.History) {
 func (v *ReplicateEventsRequest) GetForceBufferEvents() (o bool) {
 	if v.ForceBufferEvents != nil {
 		return *v.ForceBufferEvents
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetNewRunEventStoreVersion returns the value of NewRunEventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *ReplicateEventsRequest) GetNewRunEventStoreVersion() (o int32) {
+	if v.NewRunEventStoreVersion != nil {
+		return *v.NewRunEventStoreVersion
 	}
 
 	return

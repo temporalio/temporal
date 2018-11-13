@@ -31,11 +31,14 @@ import (
 )
 
 // TODO remove this table version
-// this is a temp version indicating where is the domain resides
-// either V1 or V2
 const (
+	// this is a temp version indicating where is the domain resides
+	// either V1 or V2
 	DomainTableVersionV1 = 1
 	DomainTableVersionV2 = 2
+
+	// 0/1 or empty are all considered as V1
+	EventStoreVersionV2 = 2
 )
 
 // Domain status
@@ -251,6 +254,18 @@ type (
 		ExpirationTime     time.Time
 		MaximumAttempts    int32
 		NonRetriableErrors []string
+		// events V2 related
+		EventStoreVersion   int32
+		CurrentResetVersion int32
+		HistoryBranches     map[int32]*HistoryBranch // map from each resetVersion to the associated branch, resetVersion increase from 0
+	}
+
+	// HistoryBranch represents a history branch
+	HistoryBranch struct {
+		BranchToken      []byte
+		NextEventID      int64
+		HistorySize      int64
+		LastFirstEventID int64
 	}
 
 	// ReplicationState represents mutable state information for global domains.
@@ -282,16 +297,20 @@ type (
 
 	// ReplicationTaskInfo describes the replication task created for replication of history events
 	ReplicationTaskInfo struct {
-		DomainID            string
-		WorkflowID          string
-		RunID               string
-		TaskID              int64
-		TaskType            int
-		FirstEventID        int64
-		NextEventID         int64
-		Version             int64
-		LastReplicationInfo map[string]*ReplicationInfo
-		ScheduledID         int64
+		DomainID                string
+		WorkflowID              string
+		RunID                   string
+		TaskID                  int64
+		TaskType                int
+		FirstEventID            int64
+		NextEventID             int64
+		Version                 int64
+		LastReplicationInfo     map[string]*ReplicationInfo
+		ScheduledID             int64
+		EventStoreVersion       int32
+		BranchToken             []byte
+		NewRunEventStoreVersion int32
+		NewRunBranchToken       []byte
 	}
 
 	// TimerTaskInfo describes a timer task.
@@ -461,12 +480,16 @@ type (
 
 	// HistoryReplicationTask is the replication task created for shipping history replication events to other clusters
 	HistoryReplicationTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		FirstEventID        int64
-		NextEventID         int64
-		Version             int64
-		LastReplicationInfo map[string]*ReplicationInfo
+		VisibilityTimestamp     time.Time
+		TaskID                  int64
+		FirstEventID            int64
+		NextEventID             int64
+		Version                 int64
+		LastReplicationInfo     map[string]*ReplicationInfo
+		EventStoreVersion       int32
+		BranchToken             []byte
+		NewRunEventStoreVersion int32
+		NewRunBranchToken       []byte
 	}
 
 	// SyncActivityTask is the replication task created for shipping activity info to other clusters
@@ -635,6 +658,10 @@ type (
 		ExpirationTime              time.Time
 		MaximumAttempts             int32
 		NonRetriableErrors          []string
+		// 2 means using eventsV2, empty/0/1 means using events(V1)
+		EventStoreVersion int32
+		// for eventsV2: branchToken from historyPersistence
+		BranchToken []byte
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
@@ -1070,7 +1097,7 @@ type (
 
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
 	AppendHistoryNodesRequest struct {
-		// true if it is the first append request to the branch
+		// true if this is the first append request to the branch
 		IsNewBranch bool
 		// The branch to be appended
 		BranchToken []byte
@@ -1101,9 +1128,6 @@ type (
 		PageSize int
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
-		// Optional parameter for validating event version. The starting version of the events returned need to be greater than it and should never decrease.
-		// Using zero if don't you want to check the version of the first event
-		LastEventVersion int64
 	}
 
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1116,6 +1140,8 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
+		// the first_event_id of last loaded batch
+		LastFirstEventID int64
 	}
 
 	// ForkHistoryBranchRequest is used to fork a history branch
@@ -1239,8 +1265,8 @@ type (
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
-
 		// For Cadence, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
+
 		// AppendHistoryNodes add(or override) a batach of nodes to a history branch
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
@@ -1937,6 +1963,56 @@ func DBTimestampToUnixNano(milliseconds int64) int64 {
 // UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
 func UnixNanoToDBTimestamp(timestamp int64) int64 {
 	return timestamp / (1000 * 1000) // Milliseconds are 10⁻³, nanoseconds are 10⁻⁹, (-9) - (-3) = -6, so divide by 10⁶
+}
+
+// SetHistorySize set the historySize
+func (e *WorkflowExecutionInfo) SetHistorySize(size int64) {
+	e.HistorySize = size
+	if e.EventStoreVersion == EventStoreVersionV2 {
+		e.HistoryBranches[e.CurrentResetVersion].HistorySize = size
+	}
+}
+
+// IncreaseHistorySize increase historySize by delta
+func (e *WorkflowExecutionInfo) IncreaseHistorySize(delta int64) {
+	e.HistorySize += delta
+	if e.EventStoreVersion == EventStoreVersionV2 {
+		e.HistoryBranches[e.CurrentResetVersion].HistorySize += delta
+	}
+}
+
+// SetNextEventID sets the nextEventID
+func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
+	e.NextEventID = id
+	if e.EventStoreVersion == EventStoreVersionV2 {
+		e.HistoryBranches[e.CurrentResetVersion].NextEventID = id
+	}
+}
+
+// IncreaseNextEventID increase the nextEventID by 1
+func (e *WorkflowExecutionInfo) IncreaseNextEventID() {
+	e.NextEventID++
+	if e.EventStoreVersion == EventStoreVersionV2 {
+		e.HistoryBranches[e.CurrentResetVersion].NextEventID++
+	}
+}
+
+// SetLastFirstEventID set the LastFirstEventID
+func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
+	e.LastFirstEventID = id
+	if e.EventStoreVersion == EventStoreVersionV2 {
+		e.HistoryBranches[e.CurrentResetVersion].LastFirstEventID = id
+	}
+}
+
+// GetCurrentBranch return the current branch token
+func (e *WorkflowExecutionInfo) GetCurrentBranch() []byte {
+	idx := e.CurrentResetVersion
+	br, ok := e.HistoryBranches[idx]
+	if ok {
+		return br.BranchToken
+	}
+	return nil
 }
 
 var internalThriftEncoder = codec.NewThriftRWEncoder()

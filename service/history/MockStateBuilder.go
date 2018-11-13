@@ -94,14 +94,14 @@ func (_m *mockStateBuilder) getNewRunTimerTasks() []persistence.Task {
 }
 
 // applyEvents provides a mock function with given fields: domainID, requestID, execution, _a3, newRunHistory
-func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execution shared.WorkflowExecution, _a3 *shared.History,
-	newRunHistory *shared.History) (*shared.HistoryEvent, *decisionInfo, mutableState, error) {
+func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execution shared.WorkflowExecution, _a3 []*shared.HistoryEvent,
+	newRunHistory []*shared.HistoryEvent, eventStoreVersion, newRunEventStoreVersion int32) (*shared.HistoryEvent, *decisionInfo, mutableState, error) {
 
-	ret := _m.Called(domainID, requestID, execution, _a3, newRunHistory)
+	ret := _m.Called(domainID, requestID, execution, _a3, newRunHistory, eventStoreVersion, newRunEventStoreVersion)
 
 	var r0 *shared.HistoryEvent
-	if rf, ok := ret.Get(0).(func(string, string, shared.WorkflowExecution, *shared.History, *shared.History) *shared.HistoryEvent); ok {
-		r0 = rf(domainID, requestID, execution, _a3, newRunHistory)
+	if rf, ok := ret.Get(0).(func(string, string, shared.WorkflowExecution, []*shared.HistoryEvent, []*shared.HistoryEvent, int32, int32) *shared.HistoryEvent); ok {
+		r0 = rf(domainID, requestID, execution, _a3, newRunHistory, eventStoreVersion, newRunEventStoreVersion)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*shared.HistoryEvent)
@@ -109,8 +109,8 @@ func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execu
 	}
 
 	var r1 *decisionInfo
-	if rf, ok := ret.Get(1).(func(string, string, shared.WorkflowExecution, *shared.History, *shared.History) *decisionInfo); ok {
-		r1 = rf(domainID, requestID, execution, _a3, newRunHistory)
+	if rf, ok := ret.Get(1).(func(string, string, shared.WorkflowExecution, []*shared.HistoryEvent, []*shared.HistoryEvent, int32, int32) *decisionInfo); ok {
+		r1 = rf(domainID, requestID, execution, _a3, newRunHistory, eventStoreVersion, newRunEventStoreVersion)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(*decisionInfo)
@@ -118,8 +118,8 @@ func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execu
 	}
 
 	var r2 mutableState
-	if rf, ok := ret.Get(2).(func(string, string, shared.WorkflowExecution, *shared.History, *shared.History) mutableState); ok {
-		r2 = rf(domainID, requestID, execution, _a3, newRunHistory)
+	if rf, ok := ret.Get(2).(func(string, string, shared.WorkflowExecution, []*shared.HistoryEvent, []*shared.HistoryEvent, int32, int32) mutableState); ok {
+		r2 = rf(domainID, requestID, execution, _a3, newRunHistory, eventStoreVersion, newRunEventStoreVersion)
 	} else {
 		if ret.Get(2) != nil {
 			r2 = ret.Get(2).(mutableState)
@@ -127,8 +127,8 @@ func (_m *mockStateBuilder) applyEvents(domainID string, requestID string, execu
 	}
 
 	var r3 error
-	if rf, ok := ret.Get(3).(func(string, string, shared.WorkflowExecution, *shared.History, *shared.History) error); ok {
-		r3 = rf(domainID, requestID, execution, _a3, newRunHistory)
+	if rf, ok := ret.Get(3).(func(string, string, shared.WorkflowExecution, []*shared.HistoryEvent, []*shared.HistoryEvent, int32, int32) error); ok {
+		r3 = rf(domainID, requestID, execution, _a3, newRunHistory, eventStoreVersion, newRunEventStoreVersion)
 	} else {
 		r3 = ret.Error(3)
 	}

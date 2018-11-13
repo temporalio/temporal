@@ -99,7 +99,7 @@ func (s *queueProcessorSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
-		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
+		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
 		metricsClient:             metricsClient,

@@ -21,9 +21,8 @@
 package history
 
 import (
-	"time"
-
 	"github.com/stretchr/testify/mock"
+	"github.com/uber/cadence/common/persistence"
 )
 
 // mockConflictResolver is used as mock implementation for conflictResolver
@@ -34,12 +33,12 @@ type mockConflictResolver struct {
 var _ conflictResolver = (*mockConflictResolver)(nil)
 
 // reset is mock implementation for reset of conflictResolver
-func (_m *mockConflictResolver) reset(prevRunID string, requestID string, replayEventID int64, startTime time.Time) (mutableState, error) {
-	ret := _m.Called(prevRunID, requestID, replayEventID, startTime)
+func (_m *mockConflictResolver) reset(prevRunID string, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo) (mutableState, error) {
+	ret := _m.Called(prevRunID, requestID, replayEventID, info)
 
 	var r0 mutableState
-	if rf, ok := ret.Get(0).(func(string, string, int64, time.Time) mutableState); ok {
-		r0 = rf(prevRunID, requestID, replayEventID, startTime)
+	if rf, ok := ret.Get(0).(func(string, string, int64, *persistence.WorkflowExecutionInfo) mutableState); ok {
+		r0 = rf(prevRunID, requestID, replayEventID, info)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(mutableState)

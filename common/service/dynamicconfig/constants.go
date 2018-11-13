@@ -134,6 +134,7 @@ var keys = map[Key]string{
 	DefaultEventEncoding:                                  "history.defaultEventEncoding",
 	EnableAdminProtection:                                 "history.enableAdminProtection",
 	AdminOperationToken:                                   "history.adminOperationToken",
+	EnableEventsV2:                                        "history.enableEventsV2",
 
 	WorkerPersistenceMaxQPS: "worker.persistenceMaxQPS",
 }
@@ -324,6 +325,8 @@ const (
 	// AdminOperationToken is the token to pass admin checking
 	AdminOperationToken
 
+	// EnableEventsV2 is whether to use eventsV2
+	EnableEventsV2
 	// key for histoworkerry
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB

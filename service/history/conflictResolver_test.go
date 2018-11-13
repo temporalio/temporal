@@ -40,7 +40,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -49,6 +48,7 @@ type (
 		logger              bark.Logger
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryMgr      *mocks.HistoryManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockShardManager    *mocks.ShardManager
 		mockClusterMetadata *mocks.ClusterMetadata
 		mockProducer        *mocks.KafkaProducer
@@ -84,6 +84,7 @@ func (s *conflictResolverSuite) SetupTest() {
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
 	s.mockShardManager = &mocks.ShardManager{}
@@ -103,7 +104,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		historyMgr:                s.mockHistoryMgr,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
-		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
+		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		domainCache:               s.mockDomainCache,
 		metricsClient:             metrics.NewClient(tally.NoopScope, metrics.History),
@@ -113,7 +114,7 @@ func (s *conflictResolverSuite) SetupTest() {
 		RunId:      common.StringPtr(validRunID),
 	}, s.mockShard, s.mockExecutionMgr, s.logger)
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
-	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryMgr, s.logger)
+	s.conflictResolver = newConflictResolver(s.mockShard, s.mockContext, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger)
 }
 
 func (s *conflictResolverSuite) TearDownTest() {
@@ -158,10 +159,9 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		NextPageToken:    pageToken,
 		LastFirstEventID: event1.GetEventId(),
 	}, nil)
-	response, err := s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, nil)
-	history, token, firstEventID := response.History, response.NextPageToken, response.LastFirstEventID
+	history, _, firstEventID, token, err := s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, nil, 0, nil)
 	s.Nil(err)
-	s.Equal(history.Events, []*shared.HistoryEvent{event1, event2})
+	s.Equal(history, []*shared.HistoryEvent{event1, event2})
 	s.Equal(pageToken, token)
 	s.Equal(firstEventID, event1.GetEventId())
 
@@ -177,10 +177,9 @@ func (s *conflictResolverSuite) TestGetHistory() {
 		NextPageToken:    nil,
 		LastFirstEventID: event4.GetEventId(),
 	}, nil)
-	response, err = s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, token)
-	history, token, firstEventID = response.History, response.NextPageToken, response.LastFirstEventID
+	history, _, firstEventID, token, err = s.conflictResolver.getHistory(domainID, execution, common.FirstEventID, nextEventID, token, 0, nil)
 	s.Nil(err)
-	s.Equal(history.Events, []*shared.HistoryEvent{event3, event4, event5})
+	s.Equal(history, []*shared.HistoryEvent{event3, event4, event5})
 	s.Empty(token)
 	s.Equal(firstEventID, event4.GetEventId())
 }
@@ -226,35 +225,37 @@ func (s *conflictResolverSuite) TestReset() {
 
 	s.mockContext.updateCondition = int64(59)
 	createRequestID := uuid.New()
+
+	executionInfo := &persistence.WorkflowExecutionInfo{
+		DomainID:             domainID,
+		WorkflowID:           execution.GetWorkflowId(),
+		RunID:                execution.GetRunId(),
+		TaskList:             event1.WorkflowExecutionStartedEventAttributes.TaskList.GetName(),
+		WorkflowTypeName:     event1.WorkflowExecutionStartedEventAttributes.WorkflowType.GetName(),
+		WorkflowTimeout:      *event1.WorkflowExecutionStartedEventAttributes.ExecutionStartToCloseTimeoutSeconds,
+		DecisionTimeoutValue: *event1.WorkflowExecutionStartedEventAttributes.TaskStartToCloseTimeoutSeconds,
+		State:                persistence.WorkflowStateCreated,
+		CloseStatus:          persistence.WorkflowCloseStatusNone,
+		LastFirstEventID:     event1.GetEventId(),
+		NextEventID:          nextEventID,
+		LastProcessedEvent:   common.EmptyEventID,
+		StartTimestamp:       startTime,
+		LastUpdatedTimestamp: startTime,
+		DecisionVersion:      common.EmptyVersion,
+		DecisionScheduleID:   common.EmptyEventID,
+		DecisionStartedID:    common.EmptyEventID,
+		DecisionRequestID:    emptyUUID,
+		DecisionTimeout:      0,
+		DecisionAttempt:      0,
+		DecisionTimestamp:    0,
+		CreateRequestID:      createRequestID,
+	}
 	// this is only a shallow test, meaning
 	// the mutable state only has the minimal information
 	// so we can test the conflict resolver
 	s.mockExecutionMgr.On("ResetMutableState", &persistence.ResetMutableStateRequest{
-		PrevRunID: prevRunID,
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{
-			DomainID:             domainID,
-			WorkflowID:           execution.GetWorkflowId(),
-			RunID:                execution.GetRunId(),
-			TaskList:             event1.WorkflowExecutionStartedEventAttributes.TaskList.GetName(),
-			WorkflowTypeName:     event1.WorkflowExecutionStartedEventAttributes.WorkflowType.GetName(),
-			WorkflowTimeout:      *event1.WorkflowExecutionStartedEventAttributes.ExecutionStartToCloseTimeoutSeconds,
-			DecisionTimeoutValue: *event1.WorkflowExecutionStartedEventAttributes.TaskStartToCloseTimeoutSeconds,
-			State:                persistence.WorkflowStateCreated,
-			CloseStatus:          persistence.WorkflowCloseStatusNone,
-			LastFirstEventID:     event1.GetEventId(),
-			NextEventID:          nextEventID,
-			LastProcessedEvent:   common.EmptyEventID,
-			StartTimestamp:       startTime,
-			LastUpdatedTimestamp: startTime,
-			DecisionVersion:      common.EmptyVersion,
-			DecisionScheduleID:   common.EmptyEventID,
-			DecisionStartedID:    common.EmptyEventID,
-			DecisionRequestID:    emptyUUID,
-			DecisionTimeout:      0,
-			DecisionAttempt:      0,
-			DecisionTimestamp:    0,
-			CreateRequestID:      createRequestID,
-		},
+		PrevRunID:     prevRunID,
+		ExecutionInfo: executionInfo,
 		ReplicationState: &persistence.ReplicationState{
 			CurrentVersion:   event1.GetVersion(),
 			StartVersion:     event1.GetVersion(),
@@ -299,6 +300,6 @@ func (s *conflictResolverSuite) TestReset() {
 	)
 	s.mockDomainCache.On("GetDomainByID", mock.Anything).Return(cache.NewDomainCacheEntryWithInfo(&persistence.DomainInfo{}), nil)
 
-	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, startTime)
+	_, err := s.conflictResolver.reset(prevRunID, createRequestID, nextEventID-1, executionInfo)
 	s.Nil(err)
 }

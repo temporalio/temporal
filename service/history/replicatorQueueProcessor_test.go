@@ -40,7 +40,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -50,6 +49,7 @@ type (
 		mockShard           ShardContext
 		mockExecutionMgr    *mocks.ExecutionManager
 		mockHistoryMgr      *mocks.HistoryManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
 		mockProducer        *mocks.KafkaProducer
 		mockMetadataMgr     *mocks.MetadataManager
 		mockClusterMetadata *mocks.ClusterMetadata
@@ -76,6 +76,7 @@ func (s *replicatorQueueProcessorSuite) SetupSuite() {
 func (s *replicatorQueueProcessorSuite) TearDownSuite() {
 	s.mockExecutionMgr.AssertExpectations(s.T())
 	s.mockHistoryMgr.AssertExpectations(s.T())
+	s.mockHistoryV2Mgr.AssertExpectations(s.T())
 	s.mockProducer.AssertExpectations(s.T())
 }
 
@@ -87,6 +88,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log2)
 	s.mockExecutionMgr = &mocks.ExecutionManager{}
 	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
 	s.mockProducer = &mocks.KafkaProducer{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockClusterMetadata = &mocks.ClusterMetadata{}
@@ -98,7 +100,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 		transferSequenceNumber:    1,
 		maxTransferSequenceNumber: 100000,
 		closeCh:                   make(chan int, 100),
-		config:                    NewConfig(dynamicconfig.NewNopCollection(), 1),
+		config:                    NewDynamicConfigForTest(),
 		logger:                    s.logger,
 		metricsClient:             metricsClient,
 		domainCache:               cache.NewDomainCache(s.mockMetadataMgr, s.mockClusterMetadata, metricsClient, s.logger),
@@ -110,7 +112,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
-		s.mockShard, historyCache, s.mockProducer, s.mockExecutionMgr, s.mockHistoryMgr, s.logger,
+		s.mockShard, historyCache, s.mockProducer, s.mockExecutionMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.logger,
 	).(*replicatorQueueProcessorImpl)
 }
 

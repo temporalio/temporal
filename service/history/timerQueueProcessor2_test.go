@@ -27,22 +27,20 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	workflow "github.com/uber/cadence/.gen/go/shared"
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/cache"
-	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/metrics"
-	"github.com/uber/cadence/common/mocks"
-	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/common/service/dynamicconfig"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
+	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/mocks"
+	"github.com/uber/cadence/common/persistence"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service"
 )
@@ -83,7 +81,7 @@ func (s *timerQueueProcessor2Suite) SetupSuite() {
 	log2.Level = log.DebugLevel
 	s.logger = bark.NewLoggerFromLogrus(log2)
 
-	s.config = NewConfig(dynamicconfig.NewNopCollection(), 1)
+	s.config = NewDynamicConfigForTest()
 }
 
 func (s *timerQueueProcessor2Suite) SetupTest() {

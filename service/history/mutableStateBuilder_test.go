@@ -21,18 +21,18 @@
 package history
 
 import (
-	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/persistence"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -61,7 +61,7 @@ func (s *mutableStateSuite) TearDownSuite() {
 
 func (s *mutableStateSuite) SetupTest() {
 	s.logger = bark.NewLoggerFromLogrus(log.New())
-	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewConfig(dynamicconfig.NewNopCollection(), 1), s.logger)
+	s.msBuilder = newMutableStateBuilder(cluster.TestCurrentClusterName, NewDynamicConfigForTest(), s.logger)
 }
 
 func (s *mutableStateSuite) TearDownTest() {
