@@ -128,6 +128,7 @@ func (s *server) startService() common.Daemon {
 		params.MessagingClient = nil
 	}
 
+	params.Logger.Info("Starting service " + s.name)
 	var daemon common.Daemon
 
 	switch s.name {

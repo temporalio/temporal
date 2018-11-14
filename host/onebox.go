@@ -33,7 +33,6 @@ import (
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
@@ -256,7 +255,7 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 }
 
 func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
-	return fecli.New(c.frontEndService.GetDispatcher())
+	return New(c.frontEndService.GetDispatcher())
 }
 
 // For integration tests to get hold of FE instance.

@@ -30,7 +30,6 @@ import (
 	"github.com/uber-common/bark"
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-	fecli "github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence/persistence-tests"
@@ -70,7 +69,7 @@ type (
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
-		Engine                              fecli.Client
+		Engine                              Client
 		Domain                              string
 		TaskList                            *workflow.TaskList
 		StickyTaskList                      *workflow.TaskList

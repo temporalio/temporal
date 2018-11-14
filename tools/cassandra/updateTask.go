@@ -71,7 +71,7 @@ const (
 )
 
 var (
-	whitelistedCQLPrefixes = [2]string{"CREATE", "ALTER"}
+	whitelistedCQLPrefixes = [3]string{"CREATE", "ALTER", "INSERT"}
 )
 
 // NewUpdateSchemaTask returns a new instance of UpdateSchemaTask

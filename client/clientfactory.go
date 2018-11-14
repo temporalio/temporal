@@ -21,6 +21,7 @@
 package client
 
 import (
+	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
@@ -32,6 +33,7 @@ import (
 type Factory interface {
 	NewHistoryClient() (history.Client, error)
 	NewMatchingClient() (matching.Client, error)
+	NewFrontendClient() (frontend.Client, error)
 }
 
 type rpcClientFactory struct {
@@ -70,6 +72,17 @@ func (cf *rpcClientFactory) NewMatchingClient() (matching.Client, error) {
 	}
 	if cf.metricsClient != nil {
 		client = matching.NewMetricClient(client, cf.metricsClient)
+	}
+	return client, nil
+}
+
+func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
+	client, err := frontend.NewClient(cf.df, cf.monitor)
+	if err != nil {
+		return nil, err
+	}
+	if cf.metricsClient != nil {
+		client = frontend.NewMetricClient(client, cf.metricsClient)
 	}
 	return client, nil
 }
