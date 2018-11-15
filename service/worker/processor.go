@@ -119,7 +119,7 @@ func (p *replicationTaskProcessor) Start() error {
 	}
 
 	logging.LogReplicationTaskProcessorStartingEvent(p.logger)
-	consumer, err := p.client.NewConsumer(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency)
+	consumer, err := p.client.NewConsumer(p.currentCluster, p.sourceCluster, p.consumerName, p.config.ReplicatorConcurrency())
 	if err != nil {
 		logging.LogReplicationTaskProcessorStartFailedEvent(p.logger, err)
 		return err
@@ -159,7 +159,7 @@ func (p *replicationTaskProcessor) processorPump() {
 	defer p.shutdownWG.Done()
 
 	var workerWG sync.WaitGroup
-	for workerID := 0; workerID < p.config.ReplicatorConcurrency; workerID++ {
+	for workerID := 0; workerID < p.config.ReplicatorConcurrency(); workerID++ {
 		workerWG.Add(1)
 		go p.messageProcessLoop(&workerWG, workerID)
 	}
@@ -200,7 +200,7 @@ func (p *replicationTaskProcessor) processWithRetry(msg messaging.Message, worke
 	})
 
 	forceBuffer := false
-	remainingRetryCount := p.config.ReplicationTaskMaxRetry
+	remainingRetryCount := p.config.ReplicationTaskMaxRetry()
 
 	attempt := 0
 	op := func() error {

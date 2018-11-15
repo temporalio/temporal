@@ -136,7 +136,9 @@ var keys = map[Key]string{
 	AdminOperationToken:                                   "history.adminOperationToken",
 	EnableEventsV2:                                        "history.enableEventsV2",
 
-	WorkerPersistenceMaxQPS: "worker.persistenceMaxQPS",
+	WorkerPersistenceMaxQPS:       "worker.persistenceMaxQPS",
+	WorkerReplicatorConcurrency:   "worker.replicatorConcurrency",
+	WorkerReplicationTaskMaxRetry: "worker.replicationTaskMaxRetry",
 }
 
 const (
@@ -331,6 +333,10 @@ const (
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS
+	// WorkerReplicatorConcurrency is the max concurrenct tasks to be processed at any given time
+	WorkerReplicatorConcurrency
+	// WorkerReplicationTaskMaxRetry is the max retry for any task
+	WorkerReplicationTaskMaxRetry
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

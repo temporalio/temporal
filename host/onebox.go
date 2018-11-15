@@ -21,13 +21,12 @@
 package host
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"reflect"
 	"sync"
 	"time"
-
-	"errors"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
@@ -395,7 +394,7 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
-	workerConfig.ReplicatorConcurrency = 10
+	workerConfig.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
 		workerConfig, c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {

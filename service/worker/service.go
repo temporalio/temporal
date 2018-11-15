@@ -54,9 +54,9 @@ type (
 	Config struct {
 		// Replicator settings
 		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
-		ReplicatorConcurrency      int
+		ReplicatorConcurrency      dynamicconfig.IntPropertyFn
 		ReplicatorBufferRetryCount int
-		ReplicationTaskMaxRetry    int
+		ReplicationTaskMaxRetry    dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -74,9 +74,9 @@ func NewService(params *service.BootstrapParams) common.Daemon {
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
-		ReplicatorConcurrency:      1000,
+		ReplicatorConcurrency:      dc.GetIntProperty(dynamicconfig.WorkerReplicatorConcurrency, 1000),
 		ReplicatorBufferRetryCount: 8,
-		ReplicationTaskMaxRetry:    50,
+		ReplicationTaskMaxRetry:    dc.GetIntProperty(dynamicconfig.WorkerReplicationTaskMaxRetry, 50),
 	}
 }
 
