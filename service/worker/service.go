@@ -28,7 +28,6 @@ import (
 	persistencefactory "github.com/uber/cadence/common/persistence/persistence-factory"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/dynamicconfig"
-	"go.uber.org/cadence/worker"
 )
 
 const (
@@ -94,18 +93,9 @@ func (s *Service) Start() {
 	if s.params.ClusterMetadata.IsGlobalDomainEnabled() {
 		s.startReplicator(params, base, log)
 	}
-
-	frontendClient := s.getFrontendClient(base, log)
-	w := worker.New(frontendClient, SystemWorkflowDomain, SystemTaskList, worker.Options{})
-
-	if err := w.Start(); err != nil {
-		w.Stop()
-		log.Fatalf("failed to start worker: %v", err)
-	}
 	log.Infof("%v started", common.WorkerServiceName)
 
 	<-s.stopC
-	w.Stop()
 	base.Stop()
 }
 
