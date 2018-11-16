@@ -228,7 +228,7 @@ func (s *matchingEngineSuite) PollForDecisionTasksResultTest() {
 	scheduleID := int64(0)
 
 	// History service is using mock
-	s.historyClient.On("RecordDecisionTaskStarted", nil,
+	s.historyClient.On("RecordDecisionTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
@@ -489,7 +489,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted", nil,
+	s.historyClient.On("RecordActivityTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
@@ -599,7 +599,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted", nil,
+	s.historyClient.On("RecordActivityTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
@@ -781,7 +781,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted", nil,
+	s.historyClient.On("RecordActivityTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
@@ -905,7 +905,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeDecisions() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordDecisionTaskStarted", nil,
+	s.historyClient.On("RecordDecisionTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordDecisionTaskStartedRequest")
@@ -1217,7 +1217,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesDecisionsRangeStealing() {
 	startedTasks := make(map[int64]bool)
 
 	// History service is using mock
-	s.historyClient.On("RecordDecisionTaskStarted", nil,
+	s.historyClient.On("RecordDecisionTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordDecisionTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordDecisionTaskStartedRequest) *gohistory.RecordDecisionTaskStartedResponse {
 			if _, ok := startedTasks[*taskRequest.TaskId]; ok {
@@ -1408,7 +1408,7 @@ func (s *matchingEngineSuite) TestTaskListManagerGetTaskBatch() {
 	identity := "nobody"
 
 	// History service is using mock
-	s.historyClient.On("RecordActivityTaskStarted", nil,
+	s.historyClient.On("RecordActivityTaskStarted", mock.Anything,
 		mock.AnythingOfType("*history.RecordActivityTaskStartedRequest")).Return(
 		func(ctx context.Context, taskRequest *gohistory.RecordActivityTaskStartedRequest) *gohistory.RecordActivityTaskStartedResponse {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")

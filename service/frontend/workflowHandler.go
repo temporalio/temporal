@@ -113,10 +113,6 @@ var (
 	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
-const (
-	getHistoryWarnSizeLimit = 500 * 1024 // Warn when size goes over 500KB
-)
-
 // NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, visibilityMgr persistence.VisibilityManager,
@@ -2309,7 +2305,7 @@ func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.
 	if len(historyEvents) > 0 {
 		wh.metricsClient.RecordTimer(scope, metrics.HistorySize, time.Duration(size))
 
-		if size > getHistoryWarnSizeLimit {
+		if size > common.GetHistoryWarnSizeLimit {
 			wh.GetLogger().WithFields(bark.Fields{
 				logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
 				logging.TagWorkflowRunID:       execution.GetRunId(),

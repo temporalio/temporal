@@ -893,11 +893,11 @@ func (c *taskListManagerImpl) signalNewTask() {
 	}
 }
 
-func (c *taskContext) RecordDecisionTaskStartedWithRetry(
+func (c *taskContext) RecordDecisionTaskStartedWithRetry(ctx context.Context,
 	request *h.RecordDecisionTaskStartedRequest) (resp *h.RecordDecisionTaskStartedResponse, err error) {
 	op := func() error {
 		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordDecisionTaskStarted(nil, request)
+		resp, err = c.tlMgr.engine.historyService.RecordDecisionTaskStarted(ctx, request)
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
@@ -910,11 +910,11 @@ func (c *taskContext) RecordDecisionTaskStartedWithRetry(
 	return
 }
 
-func (c *taskContext) RecordActivityTaskStartedWithRetry(
+func (c *taskContext) RecordActivityTaskStartedWithRetry(ctx context.Context,
 	request *h.RecordActivityTaskStartedRequest) (resp *h.RecordActivityTaskStartedResponse, err error) {
 	op := func() error {
 		var err error
-		resp, err = c.tlMgr.engine.historyService.RecordActivityTaskStarted(nil, request)
+		resp, err = c.tlMgr.engine.historyService.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
 	err = backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {

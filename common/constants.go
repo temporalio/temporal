@@ -66,3 +66,8 @@ type (
 
 // MaxTaskTimeout is maximum task timeout allowed. 366 days in seconds
 const MaxTaskTimeout = 31622400
+
+const (
+	// GetHistoryWarnSizeLimit is the threshold for emitting warn log
+	GetHistoryWarnSizeLimit = 500 * 1024 // Warn when size goes over 500KB
+)

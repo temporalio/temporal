@@ -454,6 +454,8 @@ const (
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
 	HistorySyncActivityScope
+	// HistoryDescribeMutableStateScope tracks HistoryActivity API calls received by service
+	HistoryDescribeMutableStateScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -763,6 +765,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReplicateEventsScope:                  {operation: "ReplicateEvents"},
 		HistorySyncShardStatusScope:                  {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                     {operation: "SyncActivity"},
+		HistoryDescribeMutableStateScope:             {operation: "DescribeMutableState"},
 		HistoryShardControllerScope:                  {operation: "ShardController"},
 		TransferQueueProcessorScope:                  {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:            {operation: "TransferActiveQueueProcessor"},

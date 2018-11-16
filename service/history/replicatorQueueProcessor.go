@@ -308,6 +308,7 @@ func (p *replicatorQueueProcessorImpl) getHistory(domainID, workflowID, runID st
 
 	var nextPageToken []byte
 	historyEvents := []*shared.HistoryEvent{}
+	historySize := 0
 	for hasMore := true; hasMore; hasMore = len(nextPageToken) > 0 {
 		if eventStoreVersion == persistence.EventStoreVersionV2 {
 			response, err := p.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
@@ -321,6 +322,9 @@ func (p *replicatorQueueProcessorImpl) getHistory(domainID, workflowID, runID st
 			if err != nil {
 				return nil, err
 			}
+
+			// Keep track of total history size
+			historySize += response.Size
 
 			historyEvents = append(historyEvents, response.History...)
 			nextPageToken = response.NextPageToken
@@ -341,9 +345,23 @@ func (p *replicatorQueueProcessorImpl) getHistory(domainID, workflowID, runID st
 				return nil, err
 			}
 
+			// Keep track of total history size
+			historySize += response.Size
+
 			historyEvents = append(historyEvents, response.History.Events...)
 			nextPageToken = response.NextPageToken
 		}
+	}
+
+	// Emit metric and log for history size
+	p.metricsClient.RecordTimer(metrics.ReplicatorQueueProcessorScope, metrics.HistorySize, time.Duration(historySize))
+	if historySize > common.GetHistoryWarnSizeLimit {
+		p.logger.WithFields(bark.Fields{
+			logging.TagWorkflowExecutionID: workflowID,
+			logging.TagWorkflowRunID:       runID,
+			logging.TagDomainID:            domainID,
+			logging.TagSize:                historySize,
+		}).Warn("GetHistory size threshold breached")
 	}
 
 	executionHistory := &shared.History{}
