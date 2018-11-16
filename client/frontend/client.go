@@ -36,15 +36,21 @@ import (
 
 var _ Client = (*clientImpl)(nil)
 
+const (
+	// DefaultTimeout is the default timeout used to make calls
+	DefaultTimeout = time.Minute * 3
+)
+
 type clientImpl struct {
 	resolver        membership.ServiceResolver
 	thriftCacheLock sync.RWMutex
 	thriftCache     map[string]workflowserviceclient.Interface
 	rpcFactory      common.RPCFactory
+	timeout         time.Duration
 }
 
 // NewClient creates a new frontend service TChannel client
-func NewClient(d common.RPCFactory, monitor membership.Monitor) (Client, error) {
+func NewClient(d common.RPCFactory, monitor membership.Monitor, timeout time.Duration) (Client, error) {
 	sResolver, err := monitor.GetResolver(common.FrontendServiceName)
 	if err != nil {
 		return nil, err
@@ -54,6 +60,7 @@ func NewClient(d common.RPCFactory, monitor membership.Monitor) (Client, error) 
 		rpcFactory:  d,
 		resolver:    sResolver,
 		thriftCache: make(map[string]workflowserviceclient.Interface),
+		timeout:     timeout,
 	}
 	return client, nil
 }
@@ -539,12 +546,10 @@ func (c *clientImpl) UpdateDomain(
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	timeout := time.Minute * 1
 	if parent == nil {
-		return context.WithTimeout(context.Background(), timeout)
+		return context.WithTimeout(context.Background(), c.timeout)
 	}
-	return context.WithTimeout(parent, timeout)
+	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) getRandomHost() (workflowserviceclient.Interface, error) {

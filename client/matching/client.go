@@ -35,24 +35,40 @@ import (
 
 var _ Client = (*clientImpl)(nil)
 
+const (
+	// DefaultTimeout is the default timeout used to make calls
+	DefaultTimeout = time.Minute
+	// DefaultLongPollTimeout is the long poll default timeout used to make calls
+	DefaultLongPollTimeout = time.Minute * 2
+)
+
 type clientImpl struct {
 	resolver        membership.ServiceResolver
 	thriftCacheLock sync.RWMutex
 	thriftCache     map[string]matchingserviceclient.Interface
 	rpcFactory      common.RPCFactory
+	timeout         time.Duration
+	longPollTimeout time.Duration
 }
 
 // NewClient creates a new history service TChannel client
-func NewClient(d common.RPCFactory, monitor membership.Monitor) (Client, error) {
+func NewClient(
+	d common.RPCFactory,
+	monitor membership.Monitor,
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+) (Client, error) {
 	sResolver, err := monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &clientImpl{
-		rpcFactory:  d,
-		resolver:    sResolver,
-		thriftCache: make(map[string]matchingserviceclient.Interface),
+		rpcFactory:      d,
+		resolver:        sResolver,
+		thriftCache:     make(map[string]matchingserviceclient.Interface),
+		timeout:         timeout,
+		longPollTimeout: longPollTimeout,
 	}
 	return client, nil
 }
@@ -166,21 +182,17 @@ func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interf
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	timeout := time.Minute * 1
 	if parent == nil {
-		return context.WithTimeout(context.Background(), timeout)
+		return context.WithTimeout(context.Background(), c.timeout)
 	}
-	return context.WithTimeout(parent, timeout)
+	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	// TODO: make timeout configurable
-	timeout := time.Minute * 2
 	if parent == nil {
-		return context.WithTimeout(context.Background(), timeout)
+		return context.WithTimeout(context.Background(), c.longPollTimeout)
 	}
-	return context.WithTimeout(parent, timeout)
+	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
 func (c *clientImpl) getThriftClient(hostPort string) matchingserviceclient.Interface {
