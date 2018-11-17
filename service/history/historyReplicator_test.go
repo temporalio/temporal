@@ -1816,6 +1816,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_BrandNew() {
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -1938,6 +1939,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_ISE() {
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
@@ -2029,6 +2031,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_SameRunID() {
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
@@ -2126,6 +2129,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
@@ -2225,6 +2229,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -2391,6 +2396,8 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentComplete_In
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
+
 	historySize := 111
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
@@ -2556,6 +2563,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
@@ -2654,6 +2662,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: 0}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)
 	sBuilder.On("getTimerTasks").Return(timerTasks)
@@ -2774,6 +2783,7 @@ func (s *historyReplicatorSuite) TestReplicateWorkflowStarted_CurrentRunning_Inc
 	msBuilder.On("GetCurrentVersion").Return(version)
 	msBuilder.On("GetNextEventID").Return(nextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetCurrentBranch").Return(nil)
 	historySize := 111
 	s.mockHistoryMgr.On("AppendHistoryEvents", mock.Anything).Return(&p.AppendHistoryEventsResponse{Size: historySize}, nil).Once()
 	sBuilder.On("getTransferTasks").Return(transferTasks)

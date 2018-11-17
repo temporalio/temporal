@@ -3167,6 +3167,9 @@ func copyWorkflowExecutionInfo(sourceInfo *p.WorkflowExecutionInfo) *p.WorkflowE
 		DecisionStartedID:    sourceInfo.DecisionStartedID,
 		DecisionRequestID:    sourceInfo.DecisionRequestID,
 		DecisionTimeout:      sourceInfo.DecisionTimeout,
+		EventStoreVersion:    sourceInfo.EventStoreVersion,
+		CurrentResetVersion:  sourceInfo.CurrentResetVersion,
+		HistoryBranches:      sourceInfo.HistoryBranches,
 	}
 }
 

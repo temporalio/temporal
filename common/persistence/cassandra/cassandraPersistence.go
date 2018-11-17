@@ -1301,7 +1301,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 		firstBranch := map[string]interface{}{}
 		firstBranch["branch_token"] = request.BranchToken
 		firstBranch["next_event_id"] = request.NextEventID
-		firstBranch["last_first_event_id"] = request.EventStoreVersion
+		firstBranch["last_first_event_id"] = common.FirstEventID
 		firstBranch["history_size"] = request.HistorySize
 		historyBranches[initialResetVersion] = firstBranch
 	}

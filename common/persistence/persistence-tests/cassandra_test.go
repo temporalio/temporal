@@ -81,3 +81,10 @@ func TestCassandraExecutionManager(t *testing.T) {
 	s.TestBase.Setup()
 	suite.Run(t, s)
 }
+
+func TestCassandraExecutionManagerWithEventsV2(t *testing.T) {
+	s := new(ExecutionManagerSuiteForEventsV2)
+	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
+	s.TestBase.Setup()
+	suite.Run(t, s)
+}

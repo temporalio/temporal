@@ -782,6 +782,8 @@ func (r *historyReplicator) replicateWorkflowStarted(ctx context.Context, contex
 			PreviousRunID:               prevRunID,
 			PreviousLastWriteVersion:    prevLastWriteVersion,
 			ReplicationState:            replicationState,
+			EventStoreVersion:           msBuilder.GetEventStoreVersion(),
+			BranchToken:                 msBuilder.GetCurrentBranch(),
 		}
 		createRequest.CreateWorkflowMode = persistence.CreateWorkflowModeBrandNew
 		if !isBrandNew {
