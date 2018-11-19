@@ -151,14 +151,10 @@ Loop:
 			buffer = append(buffer, data...)
 			data, nextBuffer := splitBuffer(buffer)
 			buffer = nextBuffer
-			messages, skippedGetMsgCount := getMessages(data, skipErrors)
-			tasks, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
-			*skippedCount += skippedGetMsgCount + skippedDeserializeCount
-			for _, t := range tasks {
-				writerCh <- t
-			}
+			parse(data, skipErrors, skippedCount, writerCh)
 		}
 	}
+	parse(buffer, skipErrors, skippedCount, writerCh)
 }
 
 func startWriter(output *os.File, writerCh <-chan *replicator.ReplicationTask, filter filterFn, doneCh chan struct{}) {
@@ -185,6 +181,15 @@ func splitBuffer(buffer []byte) ([]byte, []byte) {
 	}
 	splitIndex := matches[len(matches)-1][0]
 	return buffer[:splitIndex], buffer[splitIndex:]
+}
+
+func parse(bytes []byte, skipErrors bool, skippedCount *int, writerCh chan<- *replicator.ReplicationTask) {
+	messages, skippedGetMsgCount := getMessages(bytes, skipErrors)
+	tasks, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
+	*skippedCount += skippedGetMsgCount + skippedDeserializeCount
+	for _, t := range tasks {
+		writerCh <- t
+	}
 }
 
 func getMessages(data []byte, skipErrors bool) ([][]byte, int) {
