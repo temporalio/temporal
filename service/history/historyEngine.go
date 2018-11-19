@@ -764,24 +764,26 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(ctx context.Context,
 	}
 
 	if len(msBuilder.GetPendingActivityInfos()) > 0 {
-		for _, pi := range msBuilder.GetPendingActivityInfos() {
-			ai := &workflow.PendingActivityInfo{
-				ActivityID: common.StringPtr(pi.ActivityID),
+		for _, ai := range msBuilder.GetPendingActivityInfos() {
+			p := &workflow.PendingActivityInfo{
+				ActivityID: common.StringPtr(ai.ActivityID),
 			}
 			state := workflow.PendingActivityStateScheduled
-			if pi.CancelRequested {
+			if ai.CancelRequested {
 				state = workflow.PendingActivityStateCancelRequested
-			} else if pi.StartedID != common.EmptyEventID {
+			} else if ai.StartedID != common.EmptyEventID {
 				state = workflow.PendingActivityStateStarted
 			}
-			ai.State = &state
-			lastHeartbeatUnixNano := pi.LastHeartBeatUpdatedTime.UnixNano()
+			p.State = &state
+			lastHeartbeatUnixNano := ai.LastHeartBeatUpdatedTime.UnixNano()
 			if lastHeartbeatUnixNano > 0 {
-				ai.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
-				ai.HeartbeatDetails = pi.Details
+				p.LastHeartbeatTimestamp = common.Int64Ptr(lastHeartbeatUnixNano)
+				p.HeartbeatDetails = ai.Details
 			}
-			ai.ActivityType = pi.ScheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
-			result.PendingActivities = append(result.PendingActivities, ai)
+			p.ActivityType = ai.ScheduledEvent.ActivityTaskScheduledEventAttributes.ActivityType
+			p.LastStartedTimestamp = common.Int64Ptr(ai.StartedTime.UnixNano())
+			p.Attempt = common.Int32Ptr(ai.Attempt)
+			result.PendingActivities = append(result.PendingActivities, p)
 		}
 	}
 

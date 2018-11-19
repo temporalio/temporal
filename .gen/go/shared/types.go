@@ -19460,6 +19460,8 @@ type PendingActivityInfo struct {
 	State                  *PendingActivityState `json:"state,omitempty"`
 	HeartbeatDetails       []byte                `json:"heartbeatDetails,omitempty"`
 	LastHeartbeatTimestamp *int64                `json:"lastHeartbeatTimestamp,omitempty"`
+	LastStartedTimestamp   *int64                `json:"lastStartedTimestamp,omitempty"`
+	Attempt                *int32                `json:"attempt,omitempty"`
 }
 
 // ToWire translates a PendingActivityInfo struct into a Thrift-level intermediate
@@ -19479,7 +19481,7 @@ type PendingActivityInfo struct {
 //   }
 func (v *PendingActivityInfo) ToWire() (wire.Value, error) {
 	var (
-		fields [5]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -19523,6 +19525,22 @@ func (v *PendingActivityInfo) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.LastStartedTimestamp != nil {
+		w, err = wire.NewValueI64(*(v.LastStartedTimestamp)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.Attempt != nil {
+		w, err = wire.NewValueI32(*(v.Attempt)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
 		i++
 	}
 
@@ -19603,6 +19621,26 @@ func (v *PendingActivityInfo) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 60:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.LastStartedTimestamp = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.Attempt = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -19616,7 +19654,7 @@ func (v *PendingActivityInfo) String() string {
 		return "<nil>"
 	}
 
-	var fields [5]string
+	var fields [7]string
 	i := 0
 	if v.ActivityID != nil {
 		fields[i] = fmt.Sprintf("ActivityID: %v", *(v.ActivityID))
@@ -19636,6 +19674,14 @@ func (v *PendingActivityInfo) String() string {
 	}
 	if v.LastHeartbeatTimestamp != nil {
 		fields[i] = fmt.Sprintf("LastHeartbeatTimestamp: %v", *(v.LastHeartbeatTimestamp))
+		i++
+	}
+	if v.LastStartedTimestamp != nil {
+		fields[i] = fmt.Sprintf("LastStartedTimestamp: %v", *(v.LastStartedTimestamp))
+		i++
+	}
+	if v.Attempt != nil {
+		fields[i] = fmt.Sprintf("Attempt: %v", *(v.Attempt))
 		i++
 	}
 
@@ -19677,6 +19723,12 @@ func (v *PendingActivityInfo) Equals(rhs *PendingActivityInfo) bool {
 	if !_I64_EqualsPtr(v.LastHeartbeatTimestamp, rhs.LastHeartbeatTimestamp) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.LastStartedTimestamp, rhs.LastStartedTimestamp) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.Attempt, rhs.Attempt) {
+		return false
+	}
 
 	return true
 }
@@ -19701,6 +19753,12 @@ func (v *PendingActivityInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	}
 	if v.LastHeartbeatTimestamp != nil {
 		enc.AddInt64("lastHeartbeatTimestamp", *v.LastHeartbeatTimestamp)
+	}
+	if v.LastStartedTimestamp != nil {
+		enc.AddInt64("lastStartedTimestamp", *v.LastStartedTimestamp)
+	}
+	if v.Attempt != nil {
+		enc.AddInt32("attempt", *v.Attempt)
 	}
 	return err
 }
@@ -19750,6 +19808,26 @@ func (v *PendingActivityInfo) GetHeartbeatDetails() (o []byte) {
 func (v *PendingActivityInfo) GetLastHeartbeatTimestamp() (o int64) {
 	if v.LastHeartbeatTimestamp != nil {
 		return *v.LastHeartbeatTimestamp
+	}
+
+	return
+}
+
+// GetLastStartedTimestamp returns the value of LastStartedTimestamp if it is set or its
+// zero value if it is unset.
+func (v *PendingActivityInfo) GetLastStartedTimestamp() (o int64) {
+	if v.LastStartedTimestamp != nil {
+		return *v.LastStartedTimestamp
+	}
+
+	return
+}
+
+// GetAttempt returns the value of Attempt if it is set or its
+// zero value if it is unset.
+func (v *PendingActivityInfo) GetAttempt() (o int32) {
+	if v.Attempt != nil {
+		return *v.Attempt
 	}
 
 	return

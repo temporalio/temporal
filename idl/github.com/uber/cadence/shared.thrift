@@ -1143,6 +1143,8 @@ struct PendingActivityInfo {
   30: optional PendingActivityState state
   40: optional binary heartbeatDetails
   50: optional i64 (js.type = "Long") lastHeartbeatTimestamp
+  60: optional i64 (js.type = "Long") lastStartedTimestamp
+  70: optional i32 attempt
 }
 
 struct DescribeWorkflowExecutionResponse {
