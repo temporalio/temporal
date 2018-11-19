@@ -38,7 +38,7 @@ type Factory interface {
 
 	NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 	NewMatchingClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
-	NewFrontendClientWithTimeout(timeout time.Duration) (frontend.Client, error)
+	NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
 }
 
 type rpcClientFactory struct {
@@ -68,7 +68,7 @@ func (cf *rpcClientFactory) NewMatchingClient() (matching.Client, error) {
 }
 
 func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
-	return cf.NewFrontendClientWithTimeout(frontend.DefaultTimeout)
+	return cf.NewFrontendClientWithTimeout(frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
@@ -97,8 +97,11 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	return client, nil
 }
 
-func (cf *rpcClientFactory) NewFrontendClientWithTimeout(timeout time.Duration) (frontend.Client, error) {
-	client, err := frontend.NewClient(cf.df, cf.monitor, timeout)
+func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+) (frontend.Client, error) {
+	client, err := frontend.NewClient(cf.df, cf.monitor, timeout, longPollTimeout)
 	if err != nil {
 		return nil, err
 	}

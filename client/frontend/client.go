@@ -38,7 +38,9 @@ var _ Client = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Minute * 3
+	DefaultTimeout = 10 * time.Second
+	// DefaultLongPollTimeout is the long poll default timeout used to make calls
+	DefaultLongPollTimeout = time.Minute * 3
 )
 
 type clientImpl struct {
@@ -47,20 +49,27 @@ type clientImpl struct {
 	thriftCache     map[string]workflowserviceclient.Interface
 	rpcFactory      common.RPCFactory
 	timeout         time.Duration
+	longPollTimeout time.Duration
 }
 
 // NewClient creates a new frontend service TChannel client
-func NewClient(d common.RPCFactory, monitor membership.Monitor, timeout time.Duration) (Client, error) {
+func NewClient(
+	d common.RPCFactory,
+	monitor membership.Monitor,
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+) (Client, error) {
 	sResolver, err := monitor.GetResolver(common.FrontendServiceName)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &clientImpl{
-		rpcFactory:  d,
-		resolver:    sResolver,
-		thriftCache: make(map[string]workflowserviceclient.Interface),
-		timeout:     timeout,
+		rpcFactory:      d,
+		resolver:        sResolver,
+		thriftCache:     make(map[string]workflowserviceclient.Interface),
+		timeout:         timeout,
+		longPollTimeout: longPollTimeout,
 	}
 	return client, nil
 }
@@ -204,7 +213,7 @@ func (c *clientImpl) PollForActivityTask(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.PollForActivityTask(ctx, request, opts...)
 }
@@ -220,7 +229,7 @@ func (c *clientImpl) PollForDecisionTask(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.PollForDecisionTask(ctx, request, opts...)
 }
@@ -550,6 +559,13 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 		return context.WithTimeout(context.Background(), c.timeout)
 	}
 	return context.WithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), c.longPollTimeout)
+	}
+	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
 func (c *clientImpl) getRandomHost() (workflowserviceclient.Interface, error) {
