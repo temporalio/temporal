@@ -27,6 +27,7 @@ import (
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/persistence"
 )
 
@@ -41,6 +42,7 @@ type (
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
 		visibilityMgr          persistence.VisibilityManager
+		visibilityProducer     messaging.Producer
 		matchingClient         matching.Client
 		maxReadAckLevel        maxReadAckLevel
 		updateTransferAckLevel updateTransferAckLevel
@@ -52,7 +54,7 @@ type (
 const defaultDomainName = "defaultDomainName"
 
 func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOptions,
-	visibilityMgr persistence.VisibilityManager, matchingClient matching.Client,
+	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer, matchingClient matching.Client,
 	maxReadAckLevel maxReadAckLevel, updateTransferAckLevel updateTransferAckLevel,
 	transferQueueShutdown transferQueueShutdown, logger bark.Logger) *transferQueueProcessorBase {
 	return &transferQueueProcessorBase{
@@ -60,6 +62,7 @@ func newTransferQueueProcessorBase(shard ShardContext, options *QueueProcessorOp
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
 		visibilityMgr:          visibilityMgr,
+		visibilityProducer:     visibilityProducer,
 		matchingClient:         matchingClient,
 		maxReadAckLevel:        maxReadAckLevel,
 		updateTransferAckLevel: updateTransferAckLevel,
@@ -140,6 +143,7 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	domain := defaultDomainName
 	isSampledEnabled := false
 	wid := execution.GetWorkflowId()
+	rid := execution.GetRunId()
 
 	domainEntry, err := t.shard.GetDomainCache().GetDomainByID(domainID)
 	if err != nil {
@@ -154,6 +158,20 @@ func (t *transferQueueProcessorBase) recordWorkflowStarted(
 	// if sampled for longer retention is enabled, only record those sampled events
 	if isSampledEnabled && !domainEntry.IsSampledForLongerRetention(wid) {
 		return nil
+	}
+
+	// publish to kafka
+	if t.visibilityProducer != nil {
+		msg := &messaging.OpenWorkflowMsg{
+			Domain:     domain,
+			WorkflowID: wid,
+			RunID:      rid,
+			StartTime:  startTimeUnixNano,
+		}
+		err := t.visibilityProducer.Publish(msg)
+		if err != nil {
+			return err
+		}
 	}
 
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{

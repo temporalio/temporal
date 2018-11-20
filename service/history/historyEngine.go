@@ -126,7 +126,7 @@ var (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.VisibilityManager,
-	matching matching.Client, historyClient hc.Client, historyEventNotifier historyEventNotifier, publisher messaging.Producer, config *Config) Engine {
+	matching matching.Client, historyClient hc.Client, historyEventNotifier historyEventNotifier, publisher messaging.Producer, messagingClient messaging.Client, config *Config) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	shardWrapper := &shardContextWrapper{
 		currentClusterName:   currentClusterName,
@@ -154,7 +154,11 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 		historyEventNotifier: historyEventNotifier,
 		config:               config,
 	}
-	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
+	var visibilityProducer messaging.Producer
+	if config.EnableVisibilityToKafka() {
+		visibilityProducer = getVisibilityProducer(messagingClient)
+	}
+	txProcessor := newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, visibilityProducer, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.txProcessor = txProcessor
 	shardWrapper.txProcessor = txProcessor
@@ -3041,4 +3045,15 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 		StartRequestId: common.StringPtr(fmt.Sprintf("%v", createRequestID)),
 		RunId:          common.StringPtr(fmt.Sprintf("%v", runID)),
 	}
+}
+
+func getVisibilityProducer(messagingClient messaging.Client) messaging.Producer {
+	if messagingClient == nil {
+		return nil
+	}
+	visibilityProducer, err := messagingClient.NewProducer(messaging.VisibilityTopicName)
+	if err != nil {
+		panic(err)
+	}
+	return visibilityProducer
 }

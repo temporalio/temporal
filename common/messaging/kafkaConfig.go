@@ -50,16 +50,16 @@ type (
 	}
 )
 
-// Validate will validate config
-func (k *KafkaConfig) Validate() {
+// VisibilityTopicName for visibility data to kafka
+const VisibilityTopicName = "visibility-topic"
+
+// Validate will validate config for kafka
+func (k *KafkaConfig) Validate(checkCluster bool) {
 	if len(k.Clusters) == 0 {
 		panic("Empty Kafka Cluster Config")
 	}
 	if len(k.Topics) == 0 {
 		panic("Empty Topics Config")
-	}
-	if len(k.ClusterToTopic) == 0 {
-		panic("Empty Cluster To Topics Config")
 	}
 
 	validateTopicsFn := func(topic string) {
@@ -74,10 +74,17 @@ func (k *KafkaConfig) Validate() {
 		}
 	}
 
-	for _, topics := range k.ClusterToTopic {
-		validateTopicsFn(topics.Topic)
-		validateTopicsFn(topics.RetryTopic)
-		validateTopicsFn(topics.DLQTopic)
+	if checkCluster {
+		if len(k.ClusterToTopic) == 0 {
+			panic("Empty Cluster To Topics Config")
+		}
+		for _, topics := range k.ClusterToTopic {
+			validateTopicsFn(topics.Topic)
+			validateTopicsFn(topics.RetryTopic)
+			validateTopicsFn(topics.DLQTopic)
+		}
+	} else {
+		validateTopicsFn(VisibilityTopicName)
 	}
 }
 

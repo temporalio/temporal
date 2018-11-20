@@ -175,7 +175,7 @@ func (s *testCluster) createMessagingClient() messaging.Client {
 		Topics:         topics,
 		ClusterToTopic: clusterToTopic,
 	}
-	return messaging.NewKafkaClient(&kafkaConfig, zap.NewNop(), s.logger, tally.NoopScope)
+	return messaging.NewKafkaClient(&kafkaConfig, zap.NewNop(), s.logger, tally.NoopScope, true)
 }
 
 func getTopicList(topicName string) messaging.TopicList {
@@ -254,7 +254,7 @@ func (s *integrationClustersTestSuite) TestDomainFailover() {
 	resp, err := client1.DescribeDomain(createContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for domain cache to pick the chenge
+	// Wait for domain cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.host.GetFrontendClient() // standby

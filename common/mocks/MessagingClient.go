@@ -48,6 +48,11 @@ func (c *MessagingClient) NewConsumer(currentCluster, sourceCluster, consumerNam
 }
 
 // NewProducer generates a dummy implementation of kafka producer
-func (c *MessagingClient) NewProducer(sourceCluster string) (messaging.Producer, error) {
+func (c *MessagingClient) NewProducer(topic string) (messaging.Producer, error) {
+	return c.publisherMock, nil
+}
+
+// NewProducerWithClusterName generates a dummy implementation of kafka producer
+func (c *MessagingClient) NewProducerWithClusterName(sourceCluster string) (messaging.Producer, error) {
 	return c.publisherMock, nil
 }

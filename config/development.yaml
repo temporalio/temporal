@@ -73,3 +73,12 @@ clustersInfo:
   clusterInitialFailoverVersion:
     active: 0
     standby: 1
+
+kafka:
+  clusters:
+    test:
+      brokers:
+        - 127.0.0.1:9092
+  topics:
+    visibility-topic:
+      cluster: test

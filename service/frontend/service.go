@@ -119,7 +119,7 @@ func (s *Service) Start() {
 	// TODO when global domain is enabled, uncomment the line below and remove the line after
 	var kafkaProducer messaging.Producer
 	if base.GetClusterMetadata().IsGlobalDomainEnabled() {
-		kafkaProducer, err = base.GetMessagingClient().NewProducer(base.GetClusterMetadata().GetCurrentClusterName())
+		kafkaProducer, err = base.GetMessagingClient().NewProducerWithClusterName(base.GetClusterMetadata().GetCurrentClusterName())
 		if err != nil {
 			log.Fatalf("Creating kafka producer failed: %v", err)
 		}

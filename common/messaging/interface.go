@@ -20,15 +20,12 @@
 
 package messaging
 
-import (
-	"github.com/uber/cadence/.gen/go/replicator"
-)
-
 type (
 	// Client is the interface used to abstract out interaction with messaging system for replication
 	Client interface {
 		NewConsumer(currentCluster, sourceCluster, consumerName string, concurrency int) (Consumer, error)
-		NewProducer(sourceCluster string) (Producer, error)
+		NewProducer(topic string) (Producer, error)
+		NewProducerWithClusterName(sourceCluster string) (Producer, error)
 	}
 
 	// Consumer is the unified interface for both internal and external kafka clients
@@ -57,8 +54,9 @@ type (
 
 	// Producer is the interface used to send replication tasks to other clusters through replicator
 	Producer interface {
-		Publish(msg *replicator.ReplicationTask) error
-		PublishBatch(msgs []*replicator.ReplicationTask) error
+		//PublishBatch(msgs []*replicator.ReplicationTask) error
+		PublishBatch(msgs []interface{}) error
+		Publish(msgs interface{}) error
 		Close() error
 	}
 )

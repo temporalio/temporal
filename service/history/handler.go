@@ -137,7 +137,7 @@ func (h *Handler) Start() error {
 	// TODO when global domain is enabled, uncomment the line below and remove the line after
 	if h.GetClusterMetadata().IsGlobalDomainEnabled() {
 		var err error
-		h.publisher, err = h.GetMessagingClient().NewProducer(h.GetClusterMetadata().GetCurrentClusterName())
+		h.publisher, err = h.GetMessagingClient().NewProducerWithClusterName(h.GetClusterMetadata().GetCurrentClusterName())
 		if err != nil {
 			h.GetLogger().Fatalf("Creating kafka producer failed: %v", err)
 		}
@@ -172,7 +172,7 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier, h.publisher, h.config)
+	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier, h.publisher, h.GetMessagingClient(), h.config)
 }
 
 // Health is for health check

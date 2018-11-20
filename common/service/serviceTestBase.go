@@ -38,6 +38,7 @@ type (
 		hostInfo          *membership.HostInfo
 		clusterMetadata   cluster.Metadata
 		messagingClient   messaging.Client
+		kafkaClient       messaging.Client
 		clientFactory     client.Factory
 		membershipMonitor membership.Monitor
 

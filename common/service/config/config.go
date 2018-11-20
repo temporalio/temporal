@@ -39,7 +39,7 @@ type (
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
 		Log Logger `yaml:"log"`
-		// ClustersInfo is the config containing all valid clusters and active acluster
+		// ClustersInfo is the config containing all valid clusters and active cluster
 		ClustersInfo ClustersInfo `yaml:"clustersInfo"`
 		// Services is a map of service name to service config items
 		Services map[string]Service `yaml:"services"`

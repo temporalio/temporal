@@ -21,13 +21,13 @@
 package messaging
 
 import (
+	"errors"
 	"github.com/Shopify/sarama"
-
 	"github.com/uber-common/bark"
-	"github.com/uber/cadence/common/codec"
-	"github.com/uber/cadence/common/logging"
-
 	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/common/codec"
+	"github.com/uber/cadence/common/codec/gob"
+	"github.com/uber/cadence/common/logging"
 )
 
 type (
@@ -35,9 +35,12 @@ type (
 		topic      string
 		producer   sarama.SyncProducer
 		msgEncoder codec.BinaryEncoder
+		gobEncoder *gob.Encoder
 		logger     bark.Logger
 	}
 )
+
+var _ Producer = (*kafkaProducer)(nil)
 
 // NewKafkaProducer is used to create the Kafka based producer implementation
 func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger bark.Logger) Producer {
@@ -45,6 +48,7 @@ func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger bark.Lo
 		topic:      topic,
 		producer:   producer,
 		msgEncoder: codec.NewThriftRWEncoder(),
+		gobEncoder: gob.NewGobEncoder(),
 		logger: logger.WithFields(bark.Fields{
 			logging.TagTopicName: topic,
 		}),
@@ -52,29 +56,20 @@ func NewKafkaProducer(topic string, producer sarama.SyncProducer, logger bark.Lo
 }
 
 // Publish is used to send messages to other clusters through Kafka topic
-func (p *kafkaProducer) Publish(task *replicator.ReplicationTask) error {
-	payload, err := p.serializeTask(task)
+func (p *kafkaProducer) Publish(msg interface{}) error {
+	message, err := p.getProducerMessage(msg)
 	if err != nil {
 		return err
 	}
 
-	partitionKey := p.getKey(task)
-
-	msg := &sarama.ProducerMessage{
-		Topic: p.topic,
-		Key:   partitionKey,
-		Value: sarama.ByteEncoder(payload),
-	}
-
-	partition, offset, err := p.producer.SendMessage(msg)
+	partition, offset, err := p.producer.SendMessage(message)
 	if err != nil {
 		p.logger.WithFields(bark.Fields{
 			logging.TagPartition:    partition,
-			logging.TagPartitionKey: partitionKey,
+			logging.TagPartitionKey: message.Key,
 			logging.TagOffset:       offset,
 			logging.TagErr:          err,
 		}).Warn("Failed to publish message to kafka")
-
 		return err
 	}
 
@@ -82,26 +77,21 @@ func (p *kafkaProducer) Publish(task *replicator.ReplicationTask) error {
 }
 
 // PublishBatch is used to send messages to other clusters through Kafka topic
-func (p *kafkaProducer) PublishBatch(tasks []*replicator.ReplicationTask) error {
-	var msgs []*sarama.ProducerMessage
-	for _, task := range tasks {
-		payload, err := p.serializeTask(task)
+func (p *kafkaProducer) PublishBatch(msgs []interface{}) error {
+	var producerMsgs []*sarama.ProducerMessage
+	for _, msg := range msgs {
+		message, err := p.getProducerMessage(msg)
 		if err != nil {
 			return err
 		}
-
-		msgs = append(msgs, &sarama.ProducerMessage{
-			Topic: p.topic,
-			Value: sarama.ByteEncoder(payload),
-		})
+		producerMsgs = append(producerMsgs, message)
 	}
 
-	err := p.producer.SendMessages(msgs)
+	err := p.producer.SendMessages(producerMsgs)
 	if err != nil {
 		p.logger.WithFields(bark.Fields{
 			logging.TagErr: err,
 		}).Warn("Failed to publish batch of messages to kafka")
-
 		return err
 	}
 
@@ -147,4 +137,36 @@ func (p *kafkaProducer) getKey(task *replicator.ReplicationTask) sarama.Encoder 
 	}
 
 	return nil
+}
+
+func (p *kafkaProducer) getProducerMessage(message interface{}) (*sarama.ProducerMessage, error) {
+	switch message.(type) {
+	case *replicator.ReplicationTask:
+		task := message.(*replicator.ReplicationTask)
+		payload, err := p.serializeTask(task)
+		if err != nil {
+			return nil, err
+		}
+		partitionKey := p.getKey(task)
+		msg := &sarama.ProducerMessage{
+			Topic: p.topic,
+			Key:   partitionKey,
+			Value: sarama.ByteEncoder(payload),
+		}
+		return msg, nil
+	case *OpenWorkflowMsg:
+		openRecord := message.(*OpenWorkflowMsg)
+		payload, err := p.gobEncoder.Encode(openRecord)
+		if err != nil {
+			return nil, err
+		}
+		msg := &sarama.ProducerMessage{
+			Topic: VisibilityTopicName,
+			Key:   sarama.StringEncoder(openRecord.WorkflowID),
+			Value: sarama.ByteEncoder(payload),
+		}
+		return msg, nil
+	default:
+		return nil, errors.New("unknown producer message type")
+	}
 }

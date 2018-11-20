@@ -40,6 +40,7 @@ type Config struct {
 	EnableVisibilitySampling    dynamicconfig.BoolPropertyFn
 	VisibilityOpenMaxQPS        dynamicconfig.IntPropertyFnWithDomainFilter
 	VisibilityClosedMaxQPS      dynamicconfig.IntPropertyFnWithDomainFilter
+	EnableVisibilityToKafka     dynamicconfig.BoolPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -129,6 +130,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		EnableVisibilitySampling:                              dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
 		VisibilityOpenMaxQPS:                                  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
 		VisibilityClosedMaxQPS:                                dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
+		EnableVisibilityToKafka:                               dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, dynamicconfig.DefaultEnableVisibilityToKafka),
 		HistoryCacheInitialSize:                               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),

@@ -286,7 +286,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	var kafkaProducer messaging.Producer
 	var err error
 	if c.enableWorker() {
-		kafkaProducer, err = c.messagingClient.NewProducer(topicName[c.clusterNo])
+		kafkaProducer, err = c.messagingClient.NewProducerWithClusterName(topicName[c.clusterNo])
 		if err != nil {
 			c.logger.WithField("error", err).Fatal("Failed to create kafka producer when start frontend")
 		}
