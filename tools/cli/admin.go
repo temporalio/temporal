@@ -108,5 +108,36 @@ func newAdminKafkaCommands() []cli.Command {
 				AdminKafkaParse(c)
 			},
 		},
+		{
+			Name:    "rereplicate",
+			Aliases: []string{"rrp"},
+			Usage:   "Rereplicate replication tasks to topic",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input file to use to read as JSON of ReplicationTask, separated by line",
+				},
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
+				},
+				cli.StringFlag{
+					Name: FlagHostFile,
+					Usage: "Kafka host config file in format of: " + `
+clusters:
+	localKafka:
+		brokers:
+		- 127.0.0.1
+		- 127.0.0.2`,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRereplicate(c)
+			},
+		},
 	}
 }

@@ -23,17 +23,24 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"regexp"
+	"strings"
 
+	"github.com/Shopify/sarama"
+	"github.com/sirupsen/logrus"
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/common/messaging"
 	"github.com/urfave/cli"
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
-
-	"github.com/uber/cadence/.gen/go/replicator"
+	"gopkg.in/yaml.v2"
 )
 
 type filterFn func(*replicator.ReplicationTask) bool
@@ -168,7 +175,11 @@ Loop:
 				break Loop
 			}
 			if filter(task) {
-				output.WriteString(fmt.Sprintf("%v\n", task.String()))
+				jsonStr, err := json.Marshal(task)
+				if err != nil {
+					fmt.Printf("failed to encode into json, err: %v", err)
+				}
+				output.WriteString(fmt.Sprintf("%v\n", string(jsonStr)))
 			}
 		}
 	}
@@ -246,4 +257,112 @@ func decode(message []byte, val *replicator.ReplicationTask) error {
 		return err
 	}
 	return val.FromWire(wireVal)
+}
+
+// ClustersConfig describes the kafka clusters
+type ClustersConfig struct {
+	Clusters map[string]messaging.ClusterConfig
+}
+
+// AdminRereplicate parses will re-publish replication tasks to topic
+func AdminRereplicate(c *cli.Context) {
+	hf := getRequiredOption(c, FlagHostFile)
+	in := getRequiredOption(c, FlagInputFile)
+	cl := getRequiredOption(c, FlagCluster)
+	tp := getRequiredOption(c, FlagTopic)
+
+	// initialize kafka producer
+	brokers, err := loadBrokers(hf, cl)
+	if err != nil {
+		ErrorAndExit("", err)
+	}
+
+	config := sarama.NewConfig()
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Return.Successes = true
+	sproducer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		ErrorAndExit("", err)
+	}
+	logger := bark.NewLoggerFromLogrus(&logrus.Logger{
+		Formatter: new(logrus.JSONFormatter),
+		Level:     logrus.InfoLevel,
+	})
+
+	producer := messaging.NewKafkaProducer(tp, sproducer, logger)
+
+	// parse json input as replicaiton tasks
+	tasks, err := parseReplicationTask(in)
+	if err != nil {
+		ErrorAndExit("", err)
+	}
+
+	// publish to topic
+	for idx, t := range tasks {
+		err := producer.Publish(t)
+		if err != nil {
+			fmt.Printf("cannot publish task %v to topic \n", idx)
+			ErrorAndExit("", err)
+		} else {
+			fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.HistoryTaskAttributes.GetFirstEventId(), t.HistoryTaskAttributes.GetNextEventId())
+		}
+	}
+
+}
+
+func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err error) {
+	file, err := os.Open(in)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	idx := 0
+	for scanner.Scan() {
+		idx++
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 {
+			fmt.Printf("line %v is empty, skipped\n", idx)
+			continue
+		}
+
+		t := &replicator.ReplicationTask{}
+		err := json.Unmarshal([]byte(line), t)
+		if err != nil {
+			fmt.Printf("line %v cannot be deserialized to replicaiton task: %v.\n", idx, line)
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func loadBrokers(hostFile string, cluster string) (brokers []string, err error) {
+	contents, err := ioutil.ReadFile(hostFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kafka cluster info from %v., error: %v", hostFile, err)
+	}
+	clustersConfig := ClustersConfig{}
+	if err := yaml.Unmarshal(contents, &clustersConfig); err != nil {
+		return nil, err
+	}
+	if len(clustersConfig.Clusters) != 0 {
+		config, ok := clustersConfig.Clusters[cluster]
+		if ok {
+			brs := config.Brokers
+			for i, b := range brs {
+				if !strings.Contains(b, ":") {
+					b += ":9092"
+					brs[i] = b
+				}
+			}
+			return brs, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to load broker for cluster %v", cluster)
 }
