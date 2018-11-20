@@ -108,7 +108,6 @@ type (
 
 	currentExecutionRow struct {
 		ShardID    int64
-		RangeID    int64
 		DomainID   string
 		WorkflowID string
 
@@ -237,9 +236,6 @@ initiated_id`
 
 	executionsCancelColumns = `cancel_requested,
 cancel_request_id`
-
-	executionsCancelColumnsTags = `:cancel_requested,
-:cancel_request_id`
 
 	executionsReplicationStateColumns     = `start_version, current_version, last_write_version, last_write_event_id, last_replication_info`
 	executionsReplicationStateColumnsTags = `:start_version, :current_version, :last_write_version, :last_write_event_id, :last_replication_info`
@@ -376,11 +372,9 @@ task_id <= ?
 (:shard_id, :domain_id, :workflow_id, :run_id, :create_request_id, :state, :close_status, :start_version, :last_write_version)`
 
 	getCurrentExecutionSQLQuery = `SELECT
-ce.shard_id, s.range_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
+ce.shard_id, ce.domain_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.close_status, ce.start_version, e.last_write_version
 FROM current_executions ce
-INNER JOIN shards s ON s.shard_id = ce.shard_id
-INNER JOIN executions e ON s.shard_id = e.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id
-                           AND ce.run_id = e.run_id
+INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.domain_id = ce.domain_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.domain_id = ? AND ce.workflow_id = ?
 `
 
@@ -539,12 +533,7 @@ func (m *sqlExecutionManager) createWorkflowExecutionTx(tx *sqlx.Tx, request *p.
 	if row, err = lockCurrentExecutionIfExists(tx, int64(m.shardID), request.DomainID, workflowID); err != nil {
 		return nil, err
 	}
-	if row != nil && request.RangeID != row.RangeID {
-		return nil, &p.ShardOwnershipLostError{
-			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
-				request.RangeID, row.RangeID),
-		}
-	}
+
 	lastWriteVersion := common.EmptyVersion
 
 	if row != nil {
