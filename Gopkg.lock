@@ -686,6 +686,7 @@
   input-imports = [
     "github.com/Shopify/sarama",
     "github.com/apache/thrift/lib/go/thrift",
+    "github.com/bsm/sarama-cluster",
     "github.com/cactus/go-statsd-client/statsd",
     "github.com/davecgh/go-spew/spew",
     "github.com/dgryski/go-farm",
@@ -694,6 +695,7 @@
     "github.com/go-sql-driver/mysql",
     "github.com/gocql/gocql",
     "github.com/golang/mock/gomock",
+    "github.com/google/uuid",
     "github.com/iancoleman/strcase",
     "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",

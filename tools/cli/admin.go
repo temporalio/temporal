@@ -111,15 +111,27 @@ func newAdminKafkaCommands() []cli.Command {
 		{
 			Name:    "rereplicate",
 			Aliases: []string{"rrp"},
-			Usage:   "Rereplicate replication tasks to topic",
+			Usage:   "Rereplicate replication tasks to topic(from input file or DLQ topic)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
 					Usage: "Input file to use to read as JSON of ReplicationTask, separated by line",
 				},
 				cli.StringFlag{
+					Name:  FlagInputTopicWithAlias,
+					Usage: "Input topic to read ReplicationTask",
+				},
+				cli.StringFlag{
+					Name:  FlagInputCluster,
+					Usage: "Name of the Kafka cluster for reading DLQ topic for ReplicationTask",
+				},
+				cli.Int64Flag{
+					Name:  FlagStartOffset,
+					Usage: "Starting offset for reading DLQ topic for ReplicationTask",
+				},
+				cli.StringFlag{
 					Name:  FlagCluster,
-					Usage: "Name of the Kafka cluster",
+					Usage: "Name of the Kafka cluster to publish replicationTasks",
 				},
 				cli.StringFlag{
 					Name:  FlagTopic,

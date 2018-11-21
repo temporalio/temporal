@@ -32,7 +32,11 @@ import (
 	"regexp"
 	"strings"
 
+	"time"
+
 	"github.com/Shopify/sarama"
+	"github.com/bsm/sarama-cluster"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
@@ -266,13 +270,12 @@ type ClustersConfig struct {
 
 // AdminRereplicate parses will re-publish replication tasks to topic
 func AdminRereplicate(c *cli.Context) {
-	hf := getRequiredOption(c, FlagHostFile)
-	in := getRequiredOption(c, FlagInputFile)
-	cl := getRequiredOption(c, FlagCluster)
-	tp := getRequiredOption(c, FlagTopic)
+	hostFile := getRequiredOption(c, FlagHostFile)
+	destCluster := getRequiredOption(c, FlagCluster)
+	destTopic := getRequiredOption(c, FlagTopic)
 
 	// initialize kafka producer
-	brokers, err := loadBrokers(hf, cl)
+	destBrokers, err := loadBrokers(hostFile, destCluster)
 	if err != nil {
 		ErrorAndExit("", err)
 	}
@@ -280,7 +283,7 @@ func AdminRereplicate(c *cli.Context) {
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Return.Successes = true
-	sproducer, err := sarama.NewSyncProducer(brokers, config)
+	sproducer, err := sarama.NewSyncProducer(destBrokers, config)
 	if err != nil {
 		ErrorAndExit("", err)
 	}
@@ -289,25 +292,107 @@ func AdminRereplicate(c *cli.Context) {
 		Level:     logrus.InfoLevel,
 	})
 
-	producer := messaging.NewKafkaProducer(tp, sproducer, logger)
+	producer := messaging.NewKafkaProducer(destTopic, sproducer, logger)
 
-	// parse json input as replicaiton tasks
-	tasks, err := parseReplicationTask(in)
-	if err != nil {
-		ErrorAndExit("", err)
+	var inFile string
+	var tasks []*replicator.ReplicationTask
+	if c.IsSet(FlagInputFile) && (c.IsSet(FlagInputCluster) || c.IsSet(FlagInputTopic) || c.IsSet(FlagStartOffset)) {
+		ErrorAndExit("", fmt.Errorf("ONLY Either from JSON file or from DLQ topic"))
 	}
 
-	// publish to topic
-	for idx, t := range tasks {
-		err := producer.Publish(t)
+	if c.IsSet(FlagInputFile) {
+		inFile = c.String(FlagInputFile)
+		// parse json input as replicaiton tasks
+		tasks, err = parseReplicationTask(inFile)
 		if err != nil {
-			fmt.Printf("cannot publish task %v to topic \n", idx)
 			ErrorAndExit("", err)
-		} else {
-			fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.HistoryTaskAttributes.GetFirstEventId(), t.HistoryTaskAttributes.GetNextEventId())
+		}
+		// publish to topic
+		for idx, t := range tasks {
+			err := producer.Publish(t)
+			if err != nil {
+				fmt.Printf("cannot publish task %v to topic \n", idx)
+				ErrorAndExit("", err)
+			} else {
+				fmt.Printf("replication task sent: %v firstID %v, nextID %v \n", idx, t.HistoryTaskAttributes.GetFirstEventId(), t.HistoryTaskAttributes.GetNextEventId())
+			}
+		}
+	} else {
+		fromTopic := c.String(FlagInputTopic)
+		fromCluster := c.String(FlagInputCluster)
+		startOffset := c.Int64(FlagStartOffset)
+
+		config := cluster.NewConfig()
+		config.Consumer.Return.Errors = true
+		config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+		config.Group.Return.Notifications = true
+		fromBrokers, err := loadBrokers(hostFile, fromCluster)
+		if err != nil {
+			ErrorAndExit("", err)
+		}
+
+		client, err := cluster.NewClient(fromBrokers, config)
+		if err != nil {
+			ErrorAndExit("", err)
+		}
+
+		group := uuid.New().String()
+
+		consumer, err := cluster.NewConsumerFromClient(client, group, []string{fromTopic})
+		if err != nil {
+			ErrorAndExit("", err)
+		}
+
+		for ntf := range consumer.Notifications() {
+			if partitions := ntf.Current[fromTopic]; len(partitions) > 0 && ntf.Type == cluster.RebalanceOK {
+				time.Sleep(time.Second)
+				fmt.Println("Wait for consumer ready...")
+				break
+			}
+		}
+
+		highWaterMarks, ok := consumer.HighWaterMarks()[fromTopic]
+		if !ok {
+			ErrorAndExit("", fmt.Errorf("cannot find high watermark"))
+		}
+		fmt.Printf("Topic high watermark %v.\n", highWaterMarks)
+		for partition, offset := range highWaterMarks {
+			if offset > 0 {
+				fmt.Printf("Partition highwatermark offset %v:%v \n", partition, offset)
+			}
+		}
+
+		for {
+			select {
+			case msg, ok := <-consumer.Messages():
+				if !ok {
+					return
+				}
+				if msg.Offset < startOffset {
+					fmt.Printf("Message [%v],[%v] skipped\n", msg.Partition, msg.Offset)
+
+				} else {
+					var task replicator.ReplicationTask
+					err := decode(msg.Value, &task)
+					if err != nil {
+						ErrorAndExit("failed to deserialize message due to error", err)
+					}
+
+					err = producer.Publish(&task)
+
+					if err != nil {
+						fmt.Printf("[Error] Message [%v],[%v] failed\n", msg.Partition, msg.Offset)
+					} else {
+						fmt.Printf("Message [%v],[%v] succeeded\n", msg.Partition, msg.Offset)
+					}
+				}
+				consumer.MarkOffset(msg, "")
+			case <-time.After(time.Second * 5):
+				fmt.Println("heartbeat: waiting for more messages, Ctrl+C to stop any time...")
+			}
 		}
 	}
-
 }
 
 func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err error) {
