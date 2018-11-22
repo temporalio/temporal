@@ -36,8 +36,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
-	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
 	"github.com/uber/cadence/common/messaging"
@@ -287,10 +285,7 @@ func AdminRereplicate(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("", err)
 	}
-	logger := bark.NewLoggerFromLogrus(&logrus.Logger{
-		Formatter: new(logrus.JSONFormatter),
-		Level:     logrus.InfoLevel,
-	})
+	logger := bark.NewNopLogger()
 
 	producer := messaging.NewKafkaProducer(destTopic, sproducer, logger)
 
@@ -318,50 +313,33 @@ func AdminRereplicate(c *cli.Context) {
 			}
 		}
 	} else {
-		fromTopic := c.String(FlagInputTopic)
-		fromCluster := c.String(FlagInputCluster)
+		fromTopic := getRequiredOption(c, FlagInputTopic)
+		fromCluster := getRequiredOption(c, FlagInputCluster)
 		startOffset := c.Int64(FlagStartOffset)
+		group := getRequiredOption(c, FlagGroup)
 
-		config := cluster.NewConfig()
-		config.Consumer.Return.Errors = true
-		config.Consumer.Offsets.Initial = sarama.OffsetOldest
-
-		config.Group.Return.Notifications = true
 		fromBrokers, err := loadBrokers(hostFile, fromCluster)
 		if err != nil {
 			ErrorAndExit("", err)
 		}
 
-		client, err := cluster.NewClient(fromBrokers, config)
-		if err != nil {
-			ErrorAndExit("", err)
-		}
-
-		group := uuid.New().String()
-
-		consumer, err := cluster.NewConsumerFromClient(client, group, []string{fromTopic})
-		if err != nil {
-			ErrorAndExit("", err)
-		}
-
-		for ntf := range consumer.Notifications() {
-			if partitions := ntf.Current[fromTopic]; len(partitions) > 0 && ntf.Type == cluster.RebalanceOK {
-				time.Sleep(time.Second)
-				fmt.Println("Wait for consumer ready...")
-				break
-			}
-		}
+		consumer := createConsumerAndWaitForReady(fromBrokers, group, fromTopic)
 
 		highWaterMarks, ok := consumer.HighWaterMarks()[fromTopic]
 		if !ok {
 			ErrorAndExit("", fmt.Errorf("cannot find high watermark"))
 		}
 		fmt.Printf("Topic high watermark %v.\n", highWaterMarks)
-		for partition, offset := range highWaterMarks {
-			if offset > 0 {
-				fmt.Printf("Partition highwatermark offset %v:%v \n", partition, offset)
-			}
+		for partition, _ := range highWaterMarks {
+			consumer.MarkPartitionOffset(fromTopic, partition, startOffset, "")
+			fmt.Printf("reset offset %v:%v \n", partition, startOffset)
 		}
+		err = consumer.CommitOffsets()
+		if err != nil {
+			ErrorAndExit("fail to commit offset", err)
+		}
+		// create consumer again to make sure MarkPartitionOffset works
+		consumer = createConsumerAndWaitForReady(fromBrokers, group, fromTopic)
 
 		for {
 			select {
@@ -370,8 +348,9 @@ func AdminRereplicate(c *cli.Context) {
 					return
 				}
 				if msg.Offset < startOffset {
-					fmt.Printf("Message [%v],[%v] skipped\n", msg.Partition, msg.Offset)
-
+					fmt.Printf("Wrong Message [%v],[%v] \n", msg.Partition, msg.Offset)
+					ErrorAndExit("", fmt.Errorf("offset is not correct"))
+					continue
 				} else {
 					var task replicator.ReplicationTask
 					err := decode(msg.Value, &task)
@@ -382,7 +361,7 @@ func AdminRereplicate(c *cli.Context) {
 					err = producer.Publish(&task)
 
 					if err != nil {
-						fmt.Printf("[Error] Message [%v],[%v] failed\n", msg.Partition, msg.Offset)
+						fmt.Printf("[Error] Message [%v],[%v] failed: %v\n", msg.Partition, msg.Offset, err)
 					} else {
 						fmt.Printf("Message [%v],[%v] succeeded\n", msg.Partition, msg.Offset)
 					}
@@ -393,6 +372,32 @@ func AdminRereplicate(c *cli.Context) {
 			}
 		}
 	}
+}
+
+func createConsumerAndWaitForReady(brokers []string, group, fromTopic string) *cluster.Consumer {
+	config := cluster.NewConfig()
+	config.Consumer.Return.Errors = true
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Group.Return.Notifications = true
+
+	client, err := cluster.NewClient(brokers, config)
+	if err != nil {
+		ErrorAndExit("", err)
+	}
+
+	consumer, err := cluster.NewConsumerFromClient(client, group, []string{fromTopic})
+	if err != nil {
+		ErrorAndExit("", err)
+	}
+
+	for ntf := range consumer.Notifications() {
+		time.Sleep(time.Second)
+		if partitions := ntf.Current[fromTopic]; len(partitions) > 0 && ntf.Type == cluster.RebalanceOK {
+			break
+		}
+		fmt.Println("Waiting for consumer ready...")
+	}
+	return consumer
 }
 
 func parseReplicationTask(in string) (tasks []*replicator.ReplicationTask, err error) {

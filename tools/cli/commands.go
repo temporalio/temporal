@@ -86,6 +86,7 @@ const (
 	FlagInputCluster               = "input_cluster"
 	FlagStartOffset                = "start_offset"
 	FlagTopic                      = "topic"
+	FlagGroup                      = "group"
 	FlagReason                     = "reason"
 	FlagReasonWithAlias            = FlagReason + ", re"
 	FlagOpen                       = "open"

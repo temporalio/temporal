@@ -138,6 +138,10 @@ func newAdminKafkaCommands() []cli.Command {
 					Usage: "Topic to publish replication task",
 				},
 				cli.StringFlag{
+					Name:  FlagGroup,
+					Usage: "Group to read DLQ",
+				},
+				cli.StringFlag{
 					Name: FlagHostFile,
 					Usage: "Kafka host config file in format of: " + `
 clusters:
