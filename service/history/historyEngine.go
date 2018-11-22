@@ -34,6 +34,7 @@ import (
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/frontend"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
@@ -44,6 +45,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/service/worker/sysworkflow"
 )
 
 const (
@@ -72,6 +74,7 @@ type (
 		metricsClient        metrics.Client
 		logger               bark.Logger
 		config               *Config
+		initiator            sysworkflow.Initiator
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -125,8 +128,17 @@ var (
 )
 
 // NewEngineWithShardContext creates an instance of history engine
-func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.VisibilityManager,
-	matching matching.Client, historyClient hc.Client, historyEventNotifier historyEventNotifier, publisher messaging.Producer, messagingClient messaging.Client, config *Config) Engine {
+func NewEngineWithShardContext(
+	shard ShardContext,
+	visibilityMgr persistence.VisibilityManager,
+	matching matching.Client,
+	historyClient hc.Client,
+	frontendClient frontend.Client,
+	historyEventNotifier historyEventNotifier,
+	publisher messaging.Producer,
+	messagingClient messaging.Client,
+	config *Config,
+) Engine {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	shardWrapper := &shardContextWrapper{
 		currentClusterName:   currentClusterName,
@@ -152,6 +164,7 @@ func NewEngineWithShardContext(shard ShardContext, visibilityMgr persistence.Vis
 		}),
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
+		initiator:            sysworkflow.NewInitiator(frontendClient, shard.GetConfig().NumSysWorkflows),
 		config:               config,
 	}
 	var visibilityProducer messaging.Producer
@@ -1518,6 +1531,13 @@ Update_History_Loop:
 			}
 			transferTasks = append(transferTasks, tranT)
 			timerTasks = append(timerTasks, timerT)
+
+			request := &sysworkflow.ArchiveRequest{
+				Domain:         domainEntry.GetInfo().Name,
+				UserWorkflowID: workflowExecution.GetWorkflowId(),
+				UserRunID:      workflowExecution.GetRunId(),
+			}
+			e.initiator.Archive(request)
 		}
 
 		// Generate a transaction ID for appending events to history

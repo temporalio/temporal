@@ -118,6 +118,9 @@ type Config struct {
 	EventEncodingType dynamicconfig.StringPropertyFnWithDomainFilter
 	// whether or not using eventsV2
 	EnableEventsV2 dynamicconfig.BoolPropertyFnWithDomainFilter
+
+	EnableArchival  dynamicconfig.BoolPropertyFnWithDomainFilter
+	NumSysWorkflows dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -184,6 +187,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		LongPollExpirationInterval: dc.GetDurationPropertyFilteredByDomain(dynamicconfig.HistoryLongPollExpirationInterval, time.Second*20),
 		EventEncodingType:          dc.GetStringPropertyFnWithDomainFilter(dynamicconfig.DefaultEventEncoding, string(common.EncodingTypeJSON)),
 		EnableEventsV2:             dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableEventsV2, false),
+
+		EnableArchival:  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchival, false),
+		NumSysWorkflows: dc.GetIntProperty(dynamicconfig.NumSystemWorkflows, 1000),
 	}
 }
 

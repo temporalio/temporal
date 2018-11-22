@@ -488,6 +488,7 @@
   digest = "1:fd58696ccbfea94bb5773204f42c11416197587a1d22da198c251bcee859e572"
   name = "go.uber.org/cadence"
   packages = [
+    ".",
     ".gen/go/admin",
     ".gen/go/admin/adminserviceclient",
     ".gen/go/admin/adminservicetest",
@@ -721,6 +722,7 @@
     "github.com/uber/tchannel-go",
     "github.com/urfave/cli",
     "go.uber.org/atomic",
+    "go.uber.org/cadence",
     "go.uber.org/cadence/.gen/go/admin",
     "go.uber.org/cadence/.gen/go/admin/adminserviceclient",
     "go.uber.org/cadence/.gen/go/admin/adminservicetest",

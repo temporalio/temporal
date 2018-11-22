@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package worker
+package replicator
 
 import (
 	"fmt"
@@ -30,6 +30,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 type (
@@ -43,6 +44,14 @@ type (
 		processors       []*replicationTaskProcessor
 		logger           bark.Logger
 		metricsClient    metrics.Client
+	}
+
+	// Config contains all the replication config for worker
+	Config struct {
+		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+		ReplicatorConcurrency      dynamicconfig.IntPropertyFn
+		ReplicatorBufferRetryCount int
+		ReplicationTaskMaxRetry    dynamicconfig.IntPropertyFn
 	}
 )
 

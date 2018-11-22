@@ -1,5 +1,5 @@
-Cadence Worker (In Development)
-===============================
+Cadence Worker
+==============
 
 Cadence Worker is a new role for Cadence service used for hosting any
 components responsible for performing background processing on the Cadence
@@ -52,3 +52,11 @@ Replication task message:
 ```
 {taskType: 0}
 ```
+
+SysWorkflow
+-----------
+
+SysWorker is a background worker responsible for running arbitrary system workflows.
+Initiator is used to send signals of various types to hosted system workflow code. These
+signals are then handled by an activity. The first supported system activity will be archival
+but, these system workflows can be used for any type of system task.

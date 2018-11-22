@@ -33,6 +33,7 @@ import (
 	hist "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceserver"
 	gen "github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/client/frontend"
 	hc "github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
@@ -58,6 +59,7 @@ type (
 		domainCache           cache.DomainCache
 		historyServiceClient  hc.Client
 		matchingServiceClient matching.Client
+		frontendServiceClient frontend.Client
 		hServiceResolver      membership.ServiceResolver
 		controller            *shardController
 		tokenSerializer       common.TaskTokenSerializer
@@ -128,6 +130,13 @@ func (h *Handler) Start() error {
 	h.historyServiceClient = hc.NewRetryableClient(historyServiceClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 
+	frontendServiceClient, err0 := h.Service.GetClientFactory().NewFrontendClient()
+	if err0 != nil {
+		return err0
+	}
+	h.frontendServiceClient = frontend.NewRetryableClient(frontendServiceClient,
+		common.CreateFrontendServiceRetryPolicy(), common.IsWhitelistServiceTransientError)
+
 	hServiceResolver, err1 := h.GetMembershipMonitor().GetResolver(common.HistoryServiceName)
 	if err1 != nil {
 		h.Service.GetLogger().Fatalf("Unable to get history service resolver: ", err1)
@@ -172,7 +181,8 @@ func (h *Handler) Stop() {
 
 // CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
 func (h *Handler) CreateEngine(context ShardContext) Engine {
-	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient, h.historyEventNotifier, h.publisher, h.GetMessagingClient(), h.config)
+	return NewEngineWithShardContext(context, h.visibilityMgr, h.matchingServiceClient, h.historyServiceClient,
+		h.frontendServiceClient, h.historyEventNotifier, h.publisher, h.GetMessagingClient(), h.config)
 }
 
 // Health is for health check

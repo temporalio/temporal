@@ -44,6 +44,7 @@ import (
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"github.com/uber/cadence/service/worker"
+	"github.com/uber/cadence/service/worker/replicator"
 	ringpop "github.com/uber/ringpop-go"
 	"github.com/uber/ringpop-go/discovery/statichosts"
 	"github.com/uber/ringpop-go/swim"
@@ -96,7 +97,7 @@ type (
 		shutdownWG            sync.WaitGroup
 		frontEndService       service.Service
 		clusterNo             int // cluster number
-		replicator            *worker.Replicator
+		replicator            *replicator.Replicator
 		enableWorkerService   bool // tmp flag used to tell if onbox should create worker service
 	}
 
@@ -394,9 +395,9 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
 
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
-	workerConfig.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	c.replicator = worker.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
-		workerConfig, c.messagingClient, c.logger, service.GetMetricsClient())
+	workerConfig.ReplicationCfg.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
+	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
+		workerConfig.ReplicationCfg, c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
 		c.logger.WithField("error", err).Fatal("Fail to start replicator when start worker")

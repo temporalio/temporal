@@ -57,6 +57,7 @@ type (
 		*require.Assertions
 		mockHistoryEngine   *historyEngineImpl
 		mockMatchingClient  *mocks.MatchingClient
+		mockInitiator       *mocks.Initiator
 		mockHistoryClient   *mocks.HistoryClient
 		mockMetadataMgr     *mocks.MetadataManager
 		mockVisibilityMgr   *mocks.VisibilityManager
@@ -101,6 +102,7 @@ func (s *engineSuite) SetupTest() {
 
 	shardID := 0
 	s.mockMatchingClient = &mocks.MatchingClient{}
+	s.mockInitiator = &mocks.Initiator{}
 	s.mockHistoryClient = &mocks.HistoryClient{}
 	s.mockMetadataMgr = &mocks.MetadataManager{}
 	s.mockVisibilityMgr = &mocks.VisibilityManager{}
@@ -149,6 +151,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata.On("GetCurrentClusterName").Return(cluster.TestCurrentClusterName)
 	s.mockClusterMetadata.On("GetAllClusterFailoverVersions").Return(cluster.TestAllClusterFailoverVersions)
 	s.mockClusterMetadata.On("IsGlobalDomainEnabled").Return(false)
+	s.mockInitiator.On("Archive", mock.Anything).Return(nil)
 	h := &historyEngineImpl{
 		currentClusterName:   currentClusterName,
 		shard:                shardContextWrapper,
@@ -160,6 +163,7 @@ func (s *engineSuite) SetupTest() {
 		tokenSerializer:      common.NewJSONTaskTokenSerializer(),
 		historyEventNotifier: historyEventNotifier,
 		config:               NewDynamicConfigForTest(),
+		initiator:            s.mockInitiator,
 	}
 	h.txProcessor = newTransferQueueProcessor(shardContextWrapper, h, s.mockVisibilityMgr, s.mockProducer, s.mockMatchingClient, s.mockHistoryClient, s.logger)
 	h.timerProcessor = newTimerQueueProcessor(shardContextWrapper, h, s.mockMatchingClient, s.logger)
