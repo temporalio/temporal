@@ -2108,7 +2108,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	}
 
 	if prevMutableState != nil {
-		if prevMutableState.GetLastWriteVersion() > msBuilder.GetLastWriteVersion() {
+		if prevMutableState.GetLastWriteVersion() > msBuilder.GetCurrentVersion() {
 			return nil, ce.NewDomainNotActiveError(
 				domainEntry.GetInfo().Name,
 				clusterMetadata.GetCurrentClusterName(),

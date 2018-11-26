@@ -122,14 +122,11 @@ func (s *server) startService() common.Daemon {
 		s.cfg.ClustersInfo.ClusterInitialFailoverVersions,
 	)
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop
-	if params.ClusterMetadata.IsGlobalDomainEnabled() {
-		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, zap.NewNop(), params.Logger, params.MetricScope, true)
-	} else {
-		params.MessagingClient = nil
-	}
 
 	enableVisibilityToKafka := dc.GetBoolProperty(dynamicconfig.EnableVisibilityToKafka, dynamicconfig.DefaultEnableVisibilityToKafka)
-	if enableVisibilityToKafka() {
+	if params.ClusterMetadata.IsGlobalDomainEnabled() {
+		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, zap.NewNop(), params.Logger, params.MetricScope, true)
+	} else if enableVisibilityToKafka() {
 		params.MessagingClient = messaging.NewKafkaClient(&s.cfg.Kafka, zap.NewNop(), params.Logger, params.MetricScope, false)
 	} else {
 		params.MessagingClient = nil
