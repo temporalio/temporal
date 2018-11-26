@@ -103,6 +103,10 @@ func newAdminKafkaCommands() []cli.Command {
 					Name:  FlagSkipErrorModeWithAlias,
 					Usage: "Skip errors in parsing messages",
 				},
+				cli.BoolFlag{
+					Name:  FlagHeadersModeWithAlias,
+					Usage: "Output headers of messages in format: DomainID, WorkflowID, RunID, FirstEventID, NextEventID",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminKafkaParse(c)

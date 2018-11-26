@@ -31,6 +31,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"time"
 
@@ -71,16 +72,18 @@ func AdminKafkaParse(c *cli.Context) {
 	writerCh := make(chan *replicator.ReplicationTask, chanBufferSize)
 	doneCh := make(chan struct{})
 
-	var skippedCount int
+	var skippedCount int32
 	skipErrMode := c.Bool(FlagSkipErrorMode)
+	headerMode := c.Bool(FlagHeadersMode)
+
 	go startReader(inputFile, readerCh)
 	go startParser(readerCh, writerCh, skipErrMode, &skippedCount)
-	go startWriter(outputFile, writerCh, filter, doneCh)
+	go startWriter(outputFile, writerCh, filter, doneCh, skipErrMode, &skippedCount, headerMode)
 
 	<-doneCh
 
 	if skipErrMode {
-		fmt.Printf("%v messages were skipped due to errors in parsing", skippedCount)
+		fmt.Printf("%v messages were skipped due to errors in parsing", atomic.LoadInt32(&skippedCount))
 	}
 }
 
@@ -146,7 +149,7 @@ func startReader(file *os.File, readerCh chan<- []byte) {
 	}
 }
 
-func startParser(readerCh <-chan []byte, writerCh chan<- *replicator.ReplicationTask, skipErrors bool, skippedCount *int) {
+func startParser(readerCh <-chan []byte, writerCh chan<- *replicator.ReplicationTask, skipErrors bool, skippedCount *int32) {
 	defer close(writerCh)
 
 	var buffer []byte
@@ -166,7 +169,16 @@ Loop:
 	parse(buffer, skipErrors, skippedCount, writerCh)
 }
 
-func startWriter(output *os.File, writerCh <-chan *replicator.ReplicationTask, filter filterFn, doneCh chan struct{}) {
+func startWriter(
+	output *os.File,
+	writerCh <-chan *replicator.ReplicationTask,
+	filter filterFn,
+	doneCh chan struct{},
+	skipErrors bool,
+	skippedCount *int32,
+	headerMode bool,
+) {
+
 	defer close(doneCh)
 
 Loop:
@@ -179,9 +191,28 @@ Loop:
 			if filter(task) {
 				jsonStr, err := json.Marshal(task)
 				if err != nil {
-					fmt.Printf("failed to encode into json, err: %v", err)
+					if !skipErrors {
+						ErrorAndExit(malformedMessage, fmt.Errorf("failed to encode into json, err: %v", err))
+					} else {
+						atomic.AddInt32(skippedCount, 1)
+						continue Loop
+					}
 				}
-				output.WriteString(fmt.Sprintf("%v\n", string(jsonStr)))
+
+				var outStr string
+				if !headerMode {
+					outStr = string(jsonStr)
+				} else {
+					outStr = fmt.Sprintf(
+						"%v, %v, %v, %v, %v",
+						*task.HistoryTaskAttributes.DomainId,
+						*task.HistoryTaskAttributes.WorkflowId,
+						*task.HistoryTaskAttributes.RunId,
+						*task.HistoryTaskAttributes.FirstEventId,
+						*task.HistoryTaskAttributes.NextEventId,
+					)
+				}
+				output.WriteString(fmt.Sprintf("%v\n", outStr))
 			}
 		}
 	}
@@ -196,16 +227,16 @@ func splitBuffer(buffer []byte) ([]byte, []byte) {
 	return buffer[:splitIndex], buffer[splitIndex:]
 }
 
-func parse(bytes []byte, skipErrors bool, skippedCount *int, writerCh chan<- *replicator.ReplicationTask) {
+func parse(bytes []byte, skipErrors bool, skippedCount *int32, writerCh chan<- *replicator.ReplicationTask) {
 	messages, skippedGetMsgCount := getMessages(bytes, skipErrors)
 	tasks, skippedDeserializeCount := deserializeMessages(messages, skipErrors)
-	*skippedCount += skippedGetMsgCount + skippedDeserializeCount
+	atomic.AddInt32(skippedCount, skippedGetMsgCount+skippedDeserializeCount)
 	for _, t := range tasks {
 		writerCh <- t
 	}
 }
 
-func getMessages(data []byte, skipErrors bool) ([][]byte, int) {
+func getMessages(data []byte, skipErrors bool) ([][]byte, int32) {
 	str := string(data)
 	messagesWithHeaders := r.Split(str, -1)
 	if len(messagesWithHeaders[0]) != 0 {
@@ -213,7 +244,7 @@ func getMessages(data []byte, skipErrors bool) ([][]byte, int) {
 	}
 	messagesWithHeaders = messagesWithHeaders[1:]
 	var rawMessages [][]byte
-	skipped := 0
+	var skipped int32
 	for _, m := range messagesWithHeaders {
 		if len(m) == 0 {
 			ErrorAndExit(malformedMessage, errors.New("got empty message between valid headers"))
@@ -233,9 +264,9 @@ func getMessages(data []byte, skipErrors bool) ([][]byte, int) {
 	return rawMessages, skipped
 }
 
-func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.ReplicationTask, int) {
+func deserializeMessages(messages [][]byte, skipErrors bool) ([]*replicator.ReplicationTask, int32) {
 	var replicationTasks []*replicator.ReplicationTask
-	skipped := 0
+	var skipped int32
 	for _, m := range messages {
 		var task replicator.ReplicationTask
 		err := decode(m, &task)
@@ -330,7 +361,7 @@ func AdminRereplicate(c *cli.Context) {
 			ErrorAndExit("", fmt.Errorf("cannot find high watermark"))
 		}
 		fmt.Printf("Topic high watermark %v.\n", highWaterMarks)
-		for partition, _ := range highWaterMarks {
+		for partition := range highWaterMarks {
 			consumer.MarkPartitionOffset(fromTopic, partition, startOffset, "")
 			fmt.Printf("reset offset %v:%v \n", partition, startOffset)
 		}

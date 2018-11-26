@@ -137,6 +137,8 @@ const (
 	FlagSecurityTokenWithAlias     = FlagSecurityToken + ", st"
 	FlagSkipErrorMode              = "skip_errors"
 	FlagSkipErrorModeWithAlias     = FlagSkipErrorMode + ", serr"
+	FlagHeadersMode                = "headers"
+	FlagHeadersModeWithAlias       = FlagHeadersMode + ", he"
 )
 
 const (
