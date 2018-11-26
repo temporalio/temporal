@@ -35,11 +35,21 @@ import (
 
 	"time"
 
+	"strconv"
+
+	"runtime"
+
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
+	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/replicator"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
+	"github.com/uber/cadence/common/persistence"
+	"github.com/uber/cadence/common/persistence/cassandra"
+	"github.com/uber/cadence/service/history"
 	"github.com/urfave/cli"
 	"go.uber.org/thriftrw/protocol"
 	"go.uber.org/thriftrw/wire"
@@ -49,10 +59,11 @@ import (
 type filterFn func(*replicator.ReplicationTask) bool
 
 const (
-	bufferSize            = 4096
-	preambleVersion0 byte = 0x59
-	malformedMessage      = "Input was malformed"
-	chanBufferSize        = 10000
+	bufferSize                 = 4096
+	preambleVersion0      byte = 0x59
+	malformedMessage           = "Input was malformed"
+	chanBufferSize             = 10000
+	maxRereplicateEventID      = 999999
 )
 
 var (
@@ -297,8 +308,186 @@ type ClustersConfig struct {
 	Clusters map[string]messaging.ClusterConfig
 }
 
+func doRereplicate(shardID int, domainID, wid, rid string, minID, maxID int64, targets []string, producer messaging.Producer, session *gocql.Session) {
+	if minID <= 0 {
+		minID = 1
+	}
+	if maxID == 0 {
+		maxID = maxRereplicateEventID
+	}
+
+	histV1 := cassandra.NewHistoryPersistenceFromSession(session, bark.NewNopLogger())
+	historyMgr := persistence.NewHistoryManagerImpl(histV1, bark.NewNopLogger())
+
+	histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
+	historyV2Mgr := persistence.NewHistoryV2ManagerImpl(histV2, bark.NewNopLogger())
+
+	exeM := cassandra.NewWorkflowExecutionPersistenceFromSession(session, shardID, bark.NewNopLogger())
+	exeMgr := persistence.NewExecutionManagerImpl(exeM, bark.NewNopLogger())
+
+	for {
+		fmt.Printf("Start rereplicate for wid: %v, rid:%v \n", wid, rid)
+		resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+			DomainID: domainID,
+			Execution: shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(wid),
+				RunId:      common.StringPtr(rid),
+			},
+		})
+		if err != nil {
+			ErrorAndExit("GetWorkflowExecution error", err)
+		}
+
+		currVersion := resp.State.ReplicationState.CurrentVersion
+		repInfo := map[string]*persistence.ReplicationInfo{
+			"": {
+				Version:     currVersion,
+				LastEventID: 0,
+			},
+		}
+
+		exeInfo := resp.State.ExecutionInfo
+		taskTemplate := &persistence.ReplicationTaskInfo{
+			DomainID:            domainID,
+			WorkflowID:          wid,
+			RunID:               rid,
+			Version:             currVersion,
+			LastReplicationInfo: repInfo,
+			EventStoreVersion:   exeInfo.EventStoreVersion,
+			BranchToken:         exeInfo.GetCurrentBranch(),
+		}
+
+		_, historyBatches, err := history.GetAllHistory(historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), true,
+			domainID, wid, rid, minID, maxID, exeInfo.EventStoreVersion, exeInfo.GetCurrentBranch())
+
+		if err != nil {
+			ErrorAndExit("GetAllHistory error", err)
+		}
+
+		continueAsNew := false
+		var newRunID string
+		for _, batch := range historyBatches {
+
+			events := batch.Events
+			firstEvent := events[0]
+			lastEvent := events[len(events)-1]
+			if lastEvent.GetEventType() == shared.EventTypeWorkflowExecutionContinuedAsNew {
+				continueAsNew = true
+				newRunID = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes.GetNewExecutionRunId()
+				resp, err := exeMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+					DomainID: domainID,
+					Execution: shared.WorkflowExecution{
+						WorkflowId: common.StringPtr(wid),
+						RunId:      common.StringPtr(newRunID),
+					},
+				})
+				if err != nil {
+					ErrorAndExit("GetWorkflowExecution error", err)
+				}
+				taskTemplate.NewRunEventStoreVersion = resp.State.ExecutionInfo.EventStoreVersion
+				taskTemplate.NewRunBranchToken = resp.State.ExecutionInfo.GetCurrentBranch()
+			}
+
+			taskTemplate.FirstEventID = firstEvent.GetEventId()
+			taskTemplate.NextEventID = lastEvent.GetEventId() + 1
+			task, err := history.GenerateReplicationTask(targets, taskTemplate, historyMgr, historyV2Mgr, nil, bark.NewNopLogger(), batch)
+			if err != nil {
+				ErrorAndExit("GenerateReplicationTask error", err)
+			}
+			err = producer.Publish(task)
+			if err != nil {
+				ErrorAndExit("Publish task error", err)
+			}
+			fmt.Printf("publish task successfully firstEventID %v, lastEventID %v \n", firstEvent.GetEventId(), lastEvent.GetEventId())
+		}
+
+		fmt.Printf("Done rereplicate for wid: %v, rid:%v \n", wid, rid)
+		runtime.GC()
+		if continueAsNew {
+			rid = newRunID
+			minID = 1
+			maxID = maxRereplicateEventID
+		} else {
+			break
+		}
+	}
+}
+
 // AdminRereplicate parses will re-publish replication tasks to topic
 func AdminRereplicate(c *cli.Context) {
+	numberOfShards := c.Int(FlagNumberOfShards)
+	if numberOfShards <= 0 {
+		ErrorAndExit("numberOfShards is must be > 0", nil)
+		return
+	}
+	target := getRequiredOption(c, FlagTargetCluster)
+	targets := []string{target}
+
+	producer := newKafkaProducer(c)
+	session := connectToCassandra(c)
+
+	if c.IsSet(FlagInputFile) {
+		inFile := c.String(FlagInputFile)
+		// parse domainID,workflowID,runID,minEventID,maxEventID
+		file, err := os.Open(inFile)
+		if err != nil {
+			ErrorAndExit("Open failed", err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		idx := 0
+		for scanner.Scan() {
+			idx++
+			line := strings.TrimSpace(scanner.Text())
+			if len(line) == 0 {
+				fmt.Printf("line %v is empty, skipped\n", idx)
+				continue
+			}
+			cols := strings.Split(line, ",")
+			if len(cols) < 3 {
+				ErrorAndExit("Split failed", fmt.Errorf("line %v has less than 3 cols separated by comma, only %v ", idx, len(cols)))
+			}
+			fmt.Printf("Start processing line %v ...\n", idx)
+			domainID := strings.TrimSpace(cols[0])
+			wid := strings.TrimSpace(cols[1])
+			rid := strings.TrimSpace(cols[2])
+			var minID, maxID int64
+			if len(cols) >= 4 {
+				i, err := strconv.Atoi(strings.TrimSpace(cols[3]))
+				if err != nil {
+					ErrorAndExit(fmt.Sprintf("Atoi failed at lne %v", idx), err)
+				}
+				minID = int64(i)
+			}
+			if len(cols) >= 5 {
+				i, err := strconv.Atoi(strings.TrimSpace(cols[4]))
+				if err != nil {
+					ErrorAndExit(fmt.Sprintf("Atoi failed at lne %v", idx), err)
+				}
+				maxID = int64(i)
+			}
+
+			shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
+			doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+			fmt.Printf("Done processing line %v ...\n", idx)
+		}
+		if err := scanner.Err(); err != nil {
+			ErrorAndExit("scanner failed", err)
+		}
+	} else {
+		domainID := getRequiredOption(c, FlagDomainID)
+		wid := getRequiredOption(c, FlagWorkflowID)
+		rid := getRequiredOption(c, FlagRunID)
+		minID := c.Int64(FlagMinEventID)
+		maxID := c.Int64(FlagMaxEventID)
+
+		shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
+		doRereplicate(shardID, domainID, wid, rid, minID, maxID, targets, producer, session)
+	}
+}
+
+func newKafkaProducer(c *cli.Context) messaging.Producer {
 	hostFile := getRequiredOption(c, FlagHostFile)
 	destCluster := getRequiredOption(c, FlagCluster)
 	destTopic := getRequiredOption(c, FlagTopic)
@@ -319,7 +508,15 @@ func AdminRereplicate(c *cli.Context) {
 	logger := bark.NewNopLogger()
 
 	producer := messaging.NewKafkaProducer(destTopic, sproducer, logger)
+	return producer
+}
 
+// AdminMergeDLQ publish replication tasks from DLQ or JSON file
+func AdminMergeDLQ(c *cli.Context) {
+	hostFile := getRequiredOption(c, FlagHostFile)
+	producer := newKafkaProducer(c)
+
+	var err error
 	var inFile string
 	var tasks []*replicator.ReplicationTask
 	if c.IsSet(FlagInputFile) && (c.IsSet(FlagInputCluster) || c.IsSet(FlagInputTopic) || c.IsSet(FlagStartOffset)) {

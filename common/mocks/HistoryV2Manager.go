@@ -82,6 +82,26 @@ func (_m *HistoryV2Manager) ReadHistoryBranch(request *persistence.ReadHistoryBr
 	return r0, r1
 }
 
+// ReadHistoryBranchByBatch provides a mock function with given fields: request
+func (_m *HistoryV2Manager) ReadHistoryBranchByBatch(request *persistence.ReadHistoryBranchRequest) (*persistence.ReadHistoryBranchByBatchResponse, error) {
+	ret := _m.Called(request)
+	var r0 *persistence.ReadHistoryBranchByBatchResponse
+	if rf, ok := ret.Get(0).(func(*persistence.ReadHistoryBranchRequest) *persistence.ReadHistoryBranchByBatchResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.ReadHistoryBranchByBatchResponse)
+		}
+	}
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.ReadHistoryBranchRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
 // ForkHistoryBranch provides a mock function with given fields: request
 func (_m *HistoryV2Manager) ForkHistoryBranch(request *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 	ret := _m.Called(request)

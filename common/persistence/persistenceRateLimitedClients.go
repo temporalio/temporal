@@ -396,6 +396,15 @@ func (p *historyRateLimitedPersistenceClient) GetWorkflowExecutionHistory(reques
 	return response, err
 }
 
+func (p *historyRateLimitedPersistenceClient) GetWorkflowExecutionHistoryByBatch(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryByBatchResponse, error) {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetWorkflowExecutionHistoryByBatch(request)
+	return response, err
+}
+
 func (p *historyRateLimitedPersistenceClient) DeleteWorkflowExecutionHistory(request *DeleteWorkflowExecutionHistoryRequest) error {
 	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
 		return ErrPersistenceLimitExceeded
@@ -600,6 +609,15 @@ func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranch(request *ReadH
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ReadHistoryBranch(request)
+	return response, err
+}
+
+// ReadHistoryBranchByBatch returns history node data for a branch
+func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+	if ok, _ := p.rateLimiter.TryConsume(1); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.ReadHistoryBranchByBatch(request)
 	return response, err
 }
 

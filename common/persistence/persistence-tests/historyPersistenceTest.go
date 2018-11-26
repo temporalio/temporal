@@ -228,6 +228,50 @@ func (s *HistoryPersistenceSuite) TestAppendAndGet() {
 	}
 }
 
+// TestAppendAndGetByBatch test
+func (s *HistoryPersistenceSuite) TestAppendAndGetByBatch() {
+	domainID := uuid.New()
+	workflowExecution := gen.WorkflowExecution{
+		WorkflowId: common.StringPtr("append-and-get-test"),
+		RunId:      common.StringPtr(uuid.New()),
+	}
+	batches := []*gen.History{
+		newBatchEventForTest([]int64{1, 2}, 0),
+		newBatchEventForTest([]int64{3, 4}, 1),
+		newBatchEventForTest([]int64{5, 6}, 2),
+		newBatchEventForTest([]int64{7, 8}, 3),
+	}
+
+	for i := 0; i < len(batches); i++ {
+
+		events := batches[i].Events
+		err0 := s.AppendHistoryEvents(domainID, workflowExecution, events[0].GetEventId(), common.EmptyVersion, 1, int64(i), batches[i], false)
+		s.Nil(err0)
+
+		nextEventID := events[len(events)-1].GetEventId()
+
+		resp, err1 := s.HistoryMgr.GetWorkflowExecutionHistoryByBatch(&p.GetWorkflowExecutionHistoryRequest{
+			DomainID:      domainID,
+			Execution:     workflowExecution,
+			FirstEventID:  1,
+			NextEventID:   nextEventID,
+			PageSize:      11,
+			NextPageToken: nil,
+		})
+
+		s.Nil(err1)
+		s.Nil(resp.NextPageToken)
+
+		history := resp.History
+		s.Equal((i + 1), len(history))
+
+		for j, h := range history {
+			s.Equal(2, len(h.Events))
+			s.Equal(int64(j*2+1), h.Events[0].GetEventId())
+		}
+	}
+}
+
 // TestOverwriteAndShadowingHistoryEvents test
 func (s *HistoryPersistenceSuite) TestOverwriteAndShadowingHistoryEvents() {
 	domainID := "003de9c6-e41e-42d4-bee9-9e06968e4d0d"

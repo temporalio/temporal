@@ -869,6 +869,11 @@ type (
 	}
 )
 
+//NewWorkflowExecutionPersistenceFromSession returns new ExecutionStore
+func NewWorkflowExecutionPersistenceFromSession(session *gocql.Session, shardID int, logger bark.Logger) p.ExecutionStore {
+	return &cassandraPersistence{cassandraStore: cassandraStore{session: session, logger: logger}, shardID: shardID}
+}
+
 // newShardPersistence is used to create an instance of ShardManager implementation
 func newShardPersistence(cfg config.Cassandra, clusterName string, logger bark.Logger) (p.ShardStore, error) {
 	cluster := NewCassandraCluster(cfg.Hosts, cfg.Port, cfg.User, cfg.Password, cfg.Datacenter)

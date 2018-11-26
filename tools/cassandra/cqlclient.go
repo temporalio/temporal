@@ -106,9 +106,8 @@ const (
 		`WITH replication = { 'class' : 'SimpleStrategy', 'replication_factor' : %v};`
 )
 
-// newCQLClient returns a new instance of CQLClient
-func newCQLClient(hostsCsv string, port int, user, password, keyspace string, timeoutSeconds int) (CQLClient,
-	error) {
+// NewCassandraCluster return gocql clusterConfig
+func NewCassandraCluster(hostsCsv string, port int, user, password, keyspace string, timeoutSeconds int) (*gocql.ClusterConfig, error) {
 	hosts := parseHosts(hostsCsv)
 	if len(hosts) == 0 {
 		return nil, errNoHosts
@@ -128,9 +127,19 @@ func newCQLClient(hostsCsv string, port int, user, password, keyspace string, ti
 	clusterCfg.Timeout = timeout
 	clusterCfg.ProtoVersion = cqlProtoVersion
 	clusterCfg.Consistency = gocql.ParseConsistency(defaultConsistency)
+	return clusterCfg, nil
+}
+
+// newCQLClient returns a new instance of CQLClient
+func newCQLClient(hostsCsv string, port int, user, password, keyspace string, timeoutSeconds int) (CQLClient,
+	error) {
+	var err error
+	clusterCfg, err := NewCassandraCluster(hostsCsv, port, user, password, keyspace, timeoutSeconds)
+	if err != nil {
+		return nil, err
+	}
 	cqlClient := new(cqlClient)
 	cqlClient.clusterConfig = clusterCfg
-	var err error
 	cqlClient.session, err = clusterCfg.CreateSession()
 	if err != nil {
 		return nil, err

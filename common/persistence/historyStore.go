@@ -85,11 +85,33 @@ func (m *historyManagerImpl) AppendHistoryEvents(request *AppendHistoryEventsReq
 		})
 }
 
-// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
-func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {
-	token, err := m.deserializeToken(request)
+// GetWorkflowExecutionHistoryByBatch retrieves the paginated list of history events for given execution
+func (m *historyManagerImpl) GetWorkflowExecutionHistoryByBatch(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryByBatchResponse, error) {
+	resp := &GetWorkflowExecutionHistoryByBatchResponse{}
+	var err error
+	resp.History, _, resp.NextPageToken, resp.LastFirstEventID, resp.Size, err = m.getWorkflowExecutionHistory(request, true)
 	if err != nil {
 		return nil, err
+	}
+	return resp, nil
+}
+
+// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
+func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {
+	resp := &GetWorkflowExecutionHistoryResponse{}
+	var err error
+	_, resp.History, resp.NextPageToken, resp.LastFirstEventID, resp.Size, err = m.getWorkflowExecutionHistory(request, false)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// GetWorkflowExecutionHistory retrieves the paginated list of history events for given execution
+func (m *historyManagerImpl) getWorkflowExecutionHistory(request *GetWorkflowExecutionHistoryRequest, byBatch bool) ([]*workflow.History, *workflow.History, []byte, int64, int, error) {
+	token, err := m.deserializeToken(request)
+	if err != nil {
+		return nil, nil, nil, 0, 0, err
 	}
 
 	// persistence API expects the actual cassandra paging token
@@ -105,17 +127,16 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 	}
 	response, err := m.persistence.GetWorkflowExecutionHistory(newRequest)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 	// we store LastEventBatchVersion in the token. The reason we do it here is for historic reason.
 	token.LastEventBatchVersion = response.LastEventBatchVersion
 	token.Data = response.NextPageToken
 
-	newResponse := &GetWorkflowExecutionHistoryResponse{}
-
 	history := &workflow.History{
 		Events: make([]*workflow.HistoryEvent, 0, request.PageSize),
 	}
+	historyBatches := make([]*workflow.History, 0, request.PageSize)
 
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
@@ -125,7 +146,7 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 		size += len(b.Data)
 		historyBatch, err := m.serializer.DeserializeBatchEvents(b)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, 0, 0, err
 		}
 
 		if len(historyBatch) == 0 || historyBatch[0].GetEventId() > token.LastEventID+1 {
@@ -135,7 +156,7 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 				logging.TagDomainID:            request.DomainID,
 			})
 			logger.Error("Unexpected event batch")
-			return nil, fmt.Errorf("corrupted history event batch")
+			return nil, nil, nil, 0, 0, fmt.Errorf("corrupted history event batch")
 		}
 
 		if historyBatch[0].GetEventId() != token.LastEventID+1 {
@@ -144,19 +165,22 @@ func (m *historyManagerImpl) GetWorkflowExecutionHistory(request *GetWorkflowExe
 		}
 
 		lastFirstEventID = historyBatch[0].GetEventId()
+		if byBatch {
+			batch := workflow.History{
+				Events: historyBatch,
+			}
+			historyBatches = append(historyBatches, &batch)
+		}
 		history.Events = append(history.Events, historyBatch...)
 		token.LastEventID = historyBatch[len(historyBatch)-1].GetEventId()
 	}
 
-	newResponse.Size = size
-	newResponse.LastFirstEventID = lastFirstEventID
-	newResponse.History = history
-	newResponse.NextPageToken, err = m.serializeToken(token, request.NextEventID)
+	nextToken, err := m.serializeToken(token, request.NextEventID)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
-	return newResponse, nil
+	return historyBatches, history, nextToken, lastFirstEventID, size, nil
 }
 
 func (m *historyManagerImpl) deserializeToken(request *GetWorkflowExecutionHistoryRequest) (*historyToken, error) {

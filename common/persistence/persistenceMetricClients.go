@@ -579,6 +579,21 @@ func (p *historyPersistenceClient) GetWorkflowExecutionHistory(
 	return response, err
 }
 
+func (p *historyPersistenceClient) GetWorkflowExecutionHistoryByBatch(
+	request *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryByBatchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetWorkflowExecutionHistoryScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetWorkflowExecutionHistoryByBatch(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetWorkflowExecutionHistoryScope, err)
+	}
+
+	return response, err
+}
+
 func (p *historyPersistenceClient) DeleteWorkflowExecutionHistory(
 	request *DeleteWorkflowExecutionHistoryRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionHistoryScope, metrics.PersistenceRequests)
@@ -939,6 +954,18 @@ func (p *historyV2PersistenceClient) ReadHistoryBranch(request *ReadHistoryBranc
 	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
 	response, err := p.persistence.ReadHistoryBranch(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
+	}
+	return response, err
+}
+
+// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
+func (p *historyV2PersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ReadHistoryBranchByBatch(request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)

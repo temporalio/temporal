@@ -87,6 +87,29 @@ func (_m *HistoryManager) GetWorkflowExecutionHistory(request *persistence.GetWo
 	return r0, r1
 }
 
+// GetWorkflowExecutionHistoryByBatch provides a mock function with given fields: request
+func (_m *HistoryManager) GetWorkflowExecutionHistoryByBatch(request *persistence.GetWorkflowExecutionHistoryRequest) (*persistence.GetWorkflowExecutionHistoryByBatchResponse, error) {
+	ret := _m.Called(request)
+
+	var r0 *persistence.GetWorkflowExecutionHistoryByBatchResponse
+	if rf, ok := ret.Get(0).(func(*persistence.GetWorkflowExecutionHistoryRequest) *persistence.GetWorkflowExecutionHistoryByBatchResponse); ok {
+		r0 = rf(request)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*persistence.GetWorkflowExecutionHistoryByBatchResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*persistence.GetWorkflowExecutionHistoryRequest) error); ok {
+		r1 = rf(request)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DeleteWorkflowExecutionHistory provides a mock function with given fields: request
 func (_m *HistoryManager) DeleteWorkflowExecutionHistory(request *persistence.DeleteWorkflowExecutionHistoryRequest) error {
 	ret := _m.Called(request)

@@ -21,7 +21,11 @@
 package cli
 
 import (
+	"fmt"
+
+	"github.com/gocql/gocql"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/tools/cassandra"
 	"github.com/urfave/cli"
 	"go.uber.org/cadence/.gen/go/admin"
 	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
@@ -61,6 +65,139 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	}
 
 	prettyPrintJSONObject(resp)
+}
+
+// AdminDeleteWorkflow describe a new workflow execution for admin
+func AdminDeleteWorkflow(c *cli.Context) {
+	domainID := getRequiredOption(c, FlagDomainID)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	if !c.IsSet(FlagShardID) {
+		ErrorAndExit("shardID is required", nil)
+	}
+	shardID := c.Int(FlagShardID)
+
+	session := connectToCassandra(c)
+
+	var err error
+	permanentRunID := "30000000-0000-f000-f000-000000000001"
+	selectTmpl := "select execution from executions where shard_id = ? and type = 1 and domain_id = ? and workflow_id = ? and run_id = ? "
+	deleteTmpl := "delete from executions where shard_id = ? and type = 1 and domain_id = ? and workflow_id = ? and run_id = ? "
+
+	query := session.Query(selectTmpl, shardID, domainID, wid, permanentRunID)
+	_, err = readOneRow(query)
+	if err != nil {
+		fmt.Printf("readOneRow for permanentRunID, %v, skip \n", err)
+	} else {
+
+		query := session.Query(deleteTmpl, shardID, domainID, wid, permanentRunID)
+		err := query.Exec()
+		if err != nil {
+			ErrorAndExit("delete row failed", err)
+		}
+		fmt.Println("delete row successfully")
+	}
+
+	query = session.Query(selectTmpl, shardID, domainID, wid, rid)
+	_, err = readOneRow(query)
+	if err != nil {
+		fmt.Printf("readOneRow for rid %v, %v, skip \n", rid, err)
+	} else {
+
+		query := session.Query(deleteTmpl, shardID, domainID, wid, rid)
+		err := query.Exec()
+		if err != nil {
+			ErrorAndExit("delete row failed", err)
+		}
+		fmt.Println("delete row successfully")
+	}
+}
+
+func readOneRow(query *gocql.Query) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+	err := query.MapScan(result)
+	return result, err
+}
+
+func connectToCassandra(c *cli.Context) *gocql.Session {
+	host := getRequiredOption(c, FlagAddress)
+	if !c.IsSet(FlagPort) {
+		ErrorAndExit("port is required", nil)
+	}
+	port := c.Int(FlagPort)
+	user := c.String(FlagUsername)
+	pw := c.String(FlagPassword)
+	ksp := getRequiredOption(c, FlagKeyspace)
+
+	clusterCfg, err := cassandra.NewCassandraCluster(host, port, user, pw, ksp, 10)
+	clusterCfg.SerialConsistency = gocql.LocalSerial
+	clusterCfg.NumConns = 20
+	if err != nil {
+		ErrorAndExit("connect to Cassandra failed", err)
+	}
+	session, err := clusterCfg.CreateSession()
+	if err != nil {
+		ErrorAndExit("connect to Cassandra failed", err)
+	}
+	return session
+}
+
+// AdminGetDomainIDOrName map domain
+func AdminGetDomainIDOrName(c *cli.Context) {
+	domainID := c.String(FlagDomainID)
+	domainName := c.String(FlagDomain)
+	if len(domainID) == 0 && len(domainName) == 0 {
+		ErrorAndExit("Need either domainName or domainID", nil)
+	}
+
+	session := connectToCassandra(c)
+
+	if len(domainID) > 0 {
+		tmpl := "select domain from domains where id = ? "
+		query := session.Query(tmpl, domainID)
+		res, err := readOneRow(query)
+		if err != nil {
+			ErrorAndExit("readOneRow", err)
+		}
+		domain := res["domain"].(map[string]interface{})
+		domainName := domain["name"].(string)
+		fmt.Printf("domainName for domainID %v is %v \n", domainID, domainName)
+	} else {
+		tmpl := "select domain from domains_by_name where name = ?"
+		tmplV2 := "select domain from domains_by_name_v2 where domains_partition=0 and name = ?"
+
+		query := session.Query(tmpl, domainName)
+		res, err := readOneRow(query)
+		if err != nil {
+			fmt.Printf("v1 return error: %v , trying v2...\n", err)
+
+			query := session.Query(tmplV2, domainName)
+			res, err := readOneRow(query)
+			if err != nil {
+				ErrorAndExit("readOneRow for v2", err)
+			}
+			domain := res["domain"].(map[string]interface{})
+			domainID := domain["id"].(gocql.UUID).String()
+			fmt.Printf("domainID for domainName %v is %v \n", domainName, domainID)
+		} else {
+			domain := res["domain"].(map[string]interface{})
+			domainID := domain["id"].(gocql.UUID).String()
+			fmt.Printf("domainID for domainName %v is %v \n", domainName, domainID)
+		}
+	}
+}
+
+// AdminGetShardID get shardID
+func AdminGetShardID(c *cli.Context) {
+	wid := getRequiredOption(c, FlagWorkflowID)
+	numberOfShards := c.Int(FlagNumberOfShards)
+
+	if numberOfShards <= 0 {
+		ErrorAndExit("numberOfShards is required", nil)
+		return
+	}
+	shardID := common.WorkflowIDToHistoryShard(wid, numberOfShards)
+	fmt.Printf("ShardID for workflowID: %v is %v \n", wid, shardID)
 }
 
 // AdminDescribeHistoryHost describes history host

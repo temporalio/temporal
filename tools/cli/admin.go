@@ -42,6 +42,54 @@ func newAdminWorkflowCommands() []cli.Command {
 				AdminDescribeWorkflow(c)
 			},
 		},
+		{
+			Name:    "delete",
+			Aliases: []string{"del"},
+			Usage:   "Delete current workflow execution and the mutableState record",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "DomainID",
+				},
+				cli.IntFlag{
+					Name:  FlagShardID,
+					Usage: "ShardID",
+				},
+
+				// for cassandra connection
+				cli.StringFlag{
+					Name:  FlagAddress,
+					Usage: "cassandra host address",
+				},
+				cli.IntFlag{
+					Name:  FlagPort,
+					Usage: "cassandra port for the host (default is 9042)",
+				},
+				cli.StringFlag{
+					Name:  FlagUsername,
+					Usage: "cassandra username",
+				},
+				cli.StringFlag{
+					Name:  FlagPassword,
+					Usage: "cassandra password",
+				},
+				cli.StringFlag{
+					Name:  FlagKeyspace,
+					Usage: "cassandra keyspace",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminDeleteWorkflow(c)
+			},
+		},
 	}
 }
 
@@ -71,6 +119,69 @@ func newAdminHistoryHostCommands() []cli.Command {
 			},
 			Action: func(c *cli.Context) {
 				AdminDescribeHistoryHost(c)
+			},
+		},
+		{
+			Name:    "getshard",
+			Aliases: []string{"gsh"},
+			Usage:   "Get shardID for a workflowID",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.IntFlag{
+					Name:  FlagNumberOfShards,
+					Usage: "NumberOfShards for the cadence cluster(see config for numHistoryShards)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminGetShardID(c)
+			},
+		},
+	}
+}
+
+func newAdminDomainCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "getdomainidorname",
+			Aliases: []string{"getdn"},
+			Usage:   "Get domainID or domainName",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDomain,
+					Usage: "DomainName",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "Domain ID(uuid)",
+				},
+
+				// for cassandra connection
+				cli.StringFlag{
+					Name:  FlagAddress,
+					Usage: "cassandra host address",
+				},
+				cli.IntFlag{
+					Name:  FlagPort,
+					Usage: "cassandra port for the host (default is 9042)",
+				},
+				cli.StringFlag{
+					Name:  FlagUsername,
+					Usage: "cassandra username",
+				},
+				cli.StringFlag{
+					Name:  FlagPassword,
+					Usage: "cassandra password",
+				},
+				cli.StringFlag{
+					Name:  FlagKeyspace,
+					Usage: "cassandra keyspace",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminGetDomainIDOrName(c)
 			},
 		},
 	}
@@ -113,9 +224,9 @@ func newAdminKafkaCommands() []cli.Command {
 			},
 		},
 		{
-			Name:    "rereplicate",
-			Aliases: []string{"rrp"},
-			Usage:   "Rereplicate replication tasks to topic(from input file or DLQ topic)",
+			Name:    "mergeDLQ",
+			Aliases: []string{"mgdlq"},
+			Usage:   "Merge replication tasks to target topic(from input file or DLQ topic)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
@@ -144,6 +255,94 @@ func newAdminKafkaCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagGroup,
 					Usage: "Group to read DLQ",
+				},
+				cli.StringFlag{
+					Name: FlagHostFile,
+					Usage: "Kafka host config file in format of: " + `
+clusters:
+	localKafka:
+		brokers:
+		- 127.0.0.1
+		- 127.0.0.2`,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminMergeDLQ(c)
+			},
+		},
+		{
+			Name:    "rereplicate",
+			Aliases: []string{"rrp"},
+			Usage:   "Rereplicate replication tasks to target topic from history tables",
+			Flags: []cli.Flag{
+
+				cli.StringFlag{
+					Name:  FlagTargetCluster,
+					Usage: "Name of targetCluster to receive the replication task",
+				},
+				cli.IntFlag{
+					Name:  FlagNumberOfShards,
+					Usage: "NumberOfShards is required to calculate shardID. (see server config for numHistoryShards)",
+				},
+
+				// for multiple workflow
+				cli.StringFlag{
+					Name:  FlagInputFileWithAlias,
+					Usage: "Input file to read multiple workflow line by line. For each line: domainID,workflowID,runID,minEventID,maxEventID (minEventID/maxEventID are optional.)",
+				},
+
+				// for one workflow
+				cli.Int64Flag{
+					Name:  FlagMinEventID,
+					Usage: "MinEventID. Optional, default to all events",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxEventID,
+					Usage: "MaxEventID Optional, default to all events",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "DomainID",
+				},
+
+				// for cassandra connection
+				cli.StringFlag{
+					Name:  FlagAddress,
+					Usage: "cassandra host address",
+				},
+				cli.IntFlag{
+					Name:  FlagPort,
+					Usage: "cassandra port for the host (default is 9042)",
+				},
+				cli.StringFlag{
+					Name:  FlagUsername,
+					Usage: "cassandra username",
+				},
+				cli.StringFlag{
+					Name:  FlagPassword,
+					Usage: "cassandra password",
+				},
+				cli.StringFlag{
+					Name:  FlagKeyspace,
+					Usage: "cassandra keyspace",
+				},
+
+				// kafka
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster to publish replicationTasks",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
 				},
 				cli.StringFlag{
 					Name: FlagHostFile,

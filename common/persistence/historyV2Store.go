@@ -191,26 +191,48 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(request *AppendHistoryNodesReq
 	}, err
 }
 
+// ReadHistoryBranchByBatch returns history node data for a branch by batch
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+	resp := &ReadHistoryBranchByBatchResponse{}
+	var err error
+	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(true, request)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // ReadHistoryBranch returns history node data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
+	resp := &ReadHistoryBranchResponse{}
+	var err error
+	resp.History, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (m *historyV2ManagerImpl) readHistoryBranch(byBatch bool, request *ReadHistoryBranchRequest) ([]*workflow.HistoryEvent, []*workflow.History, []byte, int, int64, error) {
 	var branch workflow.HistoryBranch
 	err := m.thrifteEncoder.Decode(request.BranchToken, &branch)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 	treeID := *branch.TreeID
 	branchID := *branch.BranchID
 
 	if request.PageSize <= 0 || request.MinEventID >= request.MaxEventID {
-		return nil, &InvalidPersistenceRequestError{
+		return nil, nil, nil, 0, 0, &InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("no events can be found for pageSize %v, minEventID %v, maxEventID: %v", request.PageSize, request.MinEventID, request.MaxEventID),
 		}
 	}
 
 	token, err := m.pagingTokenSerializer.Deserialize(request.NextPageToken, request.MinEventID-1, common.EmptyVersion)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	allBRs := branch.Ancestors
@@ -243,7 +265,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, &workflow.InternalServiceError{
+			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("branchRange is corrupted"),
 			}
 		}
@@ -266,10 +288,11 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 
 	resp, err := m.persistence.ReadHistoryBranch(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, 0, 0, err
 	}
 
 	events := make([]*workflow.HistoryEvent, 0, request.PageSize)
+	historyBatches := make([]*workflow.History, 0, request.PageSize)
 	dataSize := 0
 	// first_event_id of the last batch
 	lastFirstEventID := common.EmptyEventID
@@ -283,11 +306,11 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 	for _, b := range resp.History {
 		es, err := m.historySerializer.DeserializeBatchEvents(b)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, 0, 0, err
 		}
 		if len(es) == 0 {
 			logger.Error("Empty events in a batch")
-			return nil, &workflow.InternalServiceError{
+			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, empty events"),
 			}
 		}
@@ -299,7 +322,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 		if *fe.Version != *le.Version || *fe.EventId+int64(el-1) != *le.EventId {
 			// in a single batch, version should be the same, and ID should be continous
 			logger.Errorf("Corrupted event batch, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el)
-			return nil, &workflow.InternalServiceError{
+			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, wrong version and IDs"),
 			}
 		}
@@ -317,45 +340,44 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchReque
 		}
 		if *fe.EventId != token.LastEventID+1 {
 			logger.Errorf("Corrupted incontinouous event batch, %v, %v, %v, %v, %v", *fe.Version, *le.Version, *fe.EventId, *le.EventId, el)
-			return nil, &workflow.InternalServiceError{
+			return nil, nil, nil, 0, 0, &workflow.InternalServiceError{
 				Message: fmt.Sprintf("corrupted history event batch, eventID is not continouous"),
 			}
 		}
 
 		token.LastEventVersion = *fe.Version
 		token.LastEventID = *le.EventId
-		events = append(events, es...)
+		if byBatch {
+			historyBatches = append(historyBatches, &workflow.History{Events: es})
+		} else {
+			events = append(events, es...)
+		}
 		dataSize += len(b.Data)
 		lastFirstEventID = *fe.EventId
 	}
 
-	response := &ReadHistoryBranchResponse{
-		History:          events,
-		Size:             dataSize,
-		LastFirstEventID: lastFirstEventID,
-	}
-
+	var nextToken []byte
 	if len(token.StoreToken) == 0 {
 		if token.CurrentRangeIndex == token.FinalRangeIndex {
 			// this means that we have reached the final page of final branchRange
-			response.NextPageToken = nil
+			nextToken = nil
 		} else {
 			token.CurrentRangeIndex++
 			token.StoreToken = nil
-			response.NextPageToken, err = m.pagingTokenSerializer.Serialize(token)
+			nextToken, err = m.pagingTokenSerializer.Serialize(token)
 			if err != nil {
-				return nil, err
+				return nil, nil, nil, 0, 0, err
 			}
 		}
 	} else {
 		token.StoreToken = resp.NextPageToken
-		response.NextPageToken, err = m.pagingTokenSerializer.Serialize(token)
+		nextToken, err = m.pagingTokenSerializer.Serialize(token)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, 0, 0, err
 		}
 	}
 
-	return response, nil
+	return events, historyBatches, nextToken, dataSize, lastFirstEventID, nil
 }
 
 func (m *historyV2ManagerImpl) Close() {
