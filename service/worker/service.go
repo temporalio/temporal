@@ -99,7 +99,6 @@ func (s *Service) Start() {
 	if s.params.ClusterMetadata.IsGlobalDomainEnabled() {
 		s.startReplicator(params, base, log)
 	}
-	s.startSysWorker(base, log, s.params.MetricScope)
 
 	log.Infof("%v started", common.WorkerServiceName)
 	<-s.stopC

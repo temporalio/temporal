@@ -45,7 +45,6 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
-	"github.com/uber/cadence/service/worker/sysworkflow"
 )
 
 const (
@@ -74,7 +73,6 @@ type (
 		metricsClient        metrics.Client
 		logger               bark.Logger
 		config               *Config
-		initiator            sysworkflow.Initiator
 	}
 
 	// shardContextWrapper wraps ShardContext to notify transferQueueProcessor on new tasks.
@@ -164,7 +162,6 @@ func NewEngineWithShardContext(
 		}),
 		metricsClient:        shard.GetMetricsClient(),
 		historyEventNotifier: historyEventNotifier,
-		initiator:            sysworkflow.NewInitiator(frontendClient, shard.GetConfig().NumSysWorkflows),
 		config:               config,
 	}
 	var visibilityProducer messaging.Producer
@@ -1531,13 +1528,6 @@ Update_History_Loop:
 			}
 			transferTasks = append(transferTasks, tranT)
 			timerTasks = append(timerTasks, timerT)
-
-			request := &sysworkflow.ArchiveRequest{
-				Domain:         domainEntry.GetInfo().Name,
-				UserWorkflowID: workflowExecution.GetWorkflowId(),
-				UserRunID:      workflowExecution.GetRunId(),
-			}
-			e.initiator.Archive(request)
 		}
 
 		// Generate a transaction ID for appending events to history
