@@ -21,9 +21,22 @@
 package frontend
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/shared"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/mocks"
+	cs "github.com/uber/cadence/common/service"
+	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )
 
 func TestMergeDomainData_Overriding(t *testing.T) {
@@ -91,4 +104,85 @@ func TestMergeDomainData_Nil(t *testing.T) {
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
+}
+
+func TestDisableListVisibilityByFilter(t *testing.T) {
+	logger := bark.NewNopLogger()
+	domain := "test-domain"
+	domainID := uuid.New()
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), logger))
+	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByDomain(true)
+
+	mockClusterMetadata := &mocks.ClusterMetadata{}
+	mockProducer := &mocks.KafkaProducer{}
+	mockMetricClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
+	mockMessagingClient := mocks.NewMockMessagingClient(mockProducer, nil)
+	baseService := cs.NewTestService(mockClusterMetadata, mockMessagingClient, mockMetricClient, logger)
+	mockMetadataMgr := &mocks.MetadataManager{}
+	mockHistoryMgr := &mocks.HistoryManager{}
+	mockHistoryV2Mgr := &mocks.HistoryV2Manager{}
+	mockVisibilityMgr := &mocks.VisibilityManager{}
+	wh := NewWorkflowHandler(baseService, config, mockMetadataMgr, mockHistoryMgr, mockHistoryV2Mgr, mockVisibilityMgr, mockProducer)
+	mockDomainCache := &cache.DomainCacheMock{}
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.domainCache = mockDomainCache
+	wh.startWG.Done()
+
+	mockDomainCache.On("GetDomainID", mock.Anything).Return(domainID, nil)
+
+	// test list open by wid
+	listRequest := &shared.ListOpenWorkflowExecutionsRequest{
+		Domain: common.StringPtr(domain),
+		StartTimeFilter: &shared.StartTimeFilter{
+			EarliestTime: common.Int64Ptr(0),
+			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+		},
+		ExecutionFilter: &shared.WorkflowExecutionFilter{
+			WorkflowId: common.StringPtr("wid"),
+		},
+	}
+	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
+	assert.Error(t, err)
+	assert.Equal(t, errNoPermission, err)
+
+	// test list open by workflow type
+	listRequest.ExecutionFilter = nil
+	listRequest.TypeFilter = &shared.WorkflowTypeFilter{
+		Name: common.StringPtr("workflow-type"),
+	}
+	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
+	assert.Error(t, err)
+	assert.Equal(t, errNoPermission, err)
+
+	// test list close by wid
+	listRequest2 := &shared.ListClosedWorkflowExecutionsRequest{
+		Domain: common.StringPtr(domain),
+		StartTimeFilter: &shared.StartTimeFilter{
+			EarliestTime: common.Int64Ptr(0),
+			LatestTime:   common.Int64Ptr(time.Now().UnixNano()),
+		},
+		ExecutionFilter: &shared.WorkflowExecutionFilter{
+			WorkflowId: common.StringPtr("wid"),
+		},
+	}
+	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
+	assert.Error(t, err)
+	assert.Equal(t, errNoPermission, err)
+
+	// test list close by workflow type
+	listRequest2.ExecutionFilter = nil
+	listRequest2.TypeFilter = &shared.WorkflowTypeFilter{
+		Name: common.StringPtr("workflow-type"),
+	}
+	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
+	assert.Error(t, err)
+	assert.Equal(t, errNoPermission, err)
+
+	// test list close by workflow status
+	listRequest2.TypeFilter = nil
+	failedStatus := shared.WorkflowExecutionCloseStatusFailed
+	listRequest2.StatusFilter = &failedStatus
+	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
+	assert.Error(t, err)
+	assert.Equal(t, errNoPermission, err)
 }

@@ -44,8 +44,9 @@ type Config struct {
 	MaxDecisionStartToCloseTimeout dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// security protection settings
-	EnableAdminProtection dynamicconfig.BoolPropertyFn
-	AdminOperationToken   dynamicconfig.StringPropertyFn
+	EnableAdminProtection         dynamicconfig.BoolPropertyFn
+	AdminOperationToken           dynamicconfig.StringPropertyFn
+	DisableListVisibilityByFilter dynamicconfig.BoolPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
@@ -61,6 +62,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		MaxDecisionStartToCloseTimeout: dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaxDecisionStartToCloseTimeout, 600),
 		EnableAdminProtection:          dc.GetBoolProperty(dynamicconfig.EnableAdminProtection, false),
 		AdminOperationToken:            dc.GetStringProperty(dynamicconfig.AdminOperationToken, "CadenceTeamONLY"),
+		DisableListVisibilityByFilter:  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 	}
 }
 

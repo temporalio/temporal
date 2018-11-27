@@ -61,6 +61,7 @@ var keys = map[Key]string{
 	FrontendRPS:                    "frontend.rps",
 	FrontendHistoryMgrNumConns:     "frontend.historyMgrNumConns",
 	MaxDecisionStartToCloseTimeout: "frontend.maxDecisionStartToCloseTimeout",
+	DisableListVisibilityByFilter:  "frontend.disableListVisibilityByFilter",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -167,6 +168,8 @@ const (
 	EnableVisibilitySampling
 	// EnableVisibilityToKafka is key for enable kafka
 	EnableVisibilityToKafka
+	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
+	DisableListVisibilityByFilter
 
 	// key for frontend
 

@@ -1915,17 +1915,25 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context,
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
 	if listRequest.ExecutionFilter != nil {
-		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByWorkflowID(
-			&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
-			})
+		if wh.config.DisableListVisibilityByFilter(domain) {
+			err = errNoPermission
+		} else {
+			persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByWorkflowID(
+				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+					ListWorkflowExecutionsRequest: baseReq,
+					WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
+				})
+		}
 		logging.LogListOpenWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByID)
 	} else if listRequest.TypeFilter != nil {
-		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
-			ListWorkflowExecutionsRequest: baseReq,
-			WorkflowTypeName:              listRequest.TypeFilter.GetName(),
-		})
+		if wh.config.DisableListVisibilityByFilter(domain) {
+			err = errNoPermission
+		} else {
+			persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				WorkflowTypeName:              listRequest.TypeFilter.GetName(),
+			})
+		}
 		logging.LogListOpenWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByType)
 	} else {
 		persistenceResp, err = wh.visibitiltyMgr.ListOpenWorkflowExecutions(&baseReq)
@@ -2010,23 +2018,35 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context,
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
 	if listRequest.ExecutionFilter != nil {
-		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByWorkflowID(
-			&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
-				ListWorkflowExecutionsRequest: baseReq,
-				WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
-			})
+		if wh.config.DisableListVisibilityByFilter(domain) {
+			err = errNoPermission
+		} else {
+			persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByWorkflowID(
+				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+					ListWorkflowExecutionsRequest: baseReq,
+					WorkflowID:                    listRequest.ExecutionFilter.GetWorkflowId(),
+				})
+		}
 		logging.LogListClosedWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByID)
 	} else if listRequest.TypeFilter != nil {
-		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
-			ListWorkflowExecutionsRequest: baseReq,
-			WorkflowTypeName:              listRequest.TypeFilter.GetName(),
-		})
+		if wh.config.DisableListVisibilityByFilter(domain) {
+			err = errNoPermission
+		} else {
+			persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				WorkflowTypeName:              listRequest.TypeFilter.GetName(),
+			})
+		}
 		logging.LogListClosedWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByType)
 	} else if listRequest.StatusFilter != nil {
-		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
-			ListWorkflowExecutionsRequest: baseReq,
-			Status:                        listRequest.GetStatusFilter(),
-		})
+		if wh.config.DisableListVisibilityByFilter(domain) {
+			err = errNoPermission
+		} else {
+			persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				Status:                        listRequest.GetStatusFilter(),
+			})
+		}
 		logging.LogListClosedWorkflowByFilter(wh.GetLogger(), listRequest.GetDomain(), logging.ListWorkflowFilterByStatus)
 	} else {
 		persistenceResp, err = wh.visibitiltyMgr.ListClosedWorkflowExecutions(&baseReq)

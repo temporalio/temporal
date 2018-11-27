@@ -49,6 +49,11 @@ func GetBoolPropertyFn(value bool) func(opts ...FilterOption) bool {
 	return func(...FilterOption) bool { return value }
 }
 
+// GetBoolPropertyFnFilteredByDomain returns value as BoolPropertyFnWithDomainFilters
+func GetBoolPropertyFnFilteredByDomain(value bool) func(domain string) bool {
+	return func(domain string) bool { return value }
+}
+
 // GetDurationPropertyFn returns value as DurationPropertyFn
 func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.Duration {
 	return func(...FilterOption) time.Duration { return value }
