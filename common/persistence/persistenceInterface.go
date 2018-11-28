@@ -167,9 +167,8 @@ type (
 		MaximumAttempts    int32
 		NonRetriableErrors []string
 		// events V2 related
-		EventStoreVersion   int32
-		CurrentResetVersion int32
-		HistoryBranches     map[int32]*HistoryBranch // map from each resetVersion to the associated branch
+		EventStoreVersion int32
+		BranchToken       []byte
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface

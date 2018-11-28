@@ -107,11 +107,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
 	s.Equal(int32(p.EventStoreVersionV2), info0.EventStoreVersion)
-	s.Equal([]byte("branchToken1"), info0.HistoryBranches[0].BranchToken)
-	s.Equal(info0.HistorySize, info0.HistoryBranches[0].HistorySize)
-	s.Equal(info0.LastFirstEventID, info0.HistoryBranches[0].LastFirstEventID)
-	s.Equal(info0.NextEventID, info0.HistoryBranches[0].NextEventID)
-	s.Equal(int64(3), info0.HistoryBranches[0].NextEventID)
+	s.Equal([]byte("branchToken1"), info0.BranchToken)
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
@@ -125,13 +121,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		TaskID:     2,
 		StartedID:  5,
 	}}
-	updatedInfo.CurrentResetVersion = 1
-	updatedInfo.HistoryBranches[1] = &p.HistoryBranch{
-		BranchToken:      []byte("branchToken2"),
-		NextEventID:      updatedInfo.NextEventID,
-		HistorySize:      updatedInfo.HistorySize,
-		LastFirstEventID: updatedInfo.LastFirstEventID,
-	}
+	updatedInfo.BranchToken = []byte("branchToken2")
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
@@ -155,13 +145,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(0, len(state.TimerInfos))
 	info1 := state.ExecutionInfo
 	s.Equal(int32(p.EventStoreVersionV2), info1.EventStoreVersion)
-	s.Equal(int32(1), info1.CurrentResetVersion)
-	currBr := info1.HistoryBranches[1]
-	s.Equal([]byte("branchToken2"), currBr.BranchToken)
-	s.Equal(info1.HistorySize, currBr.HistorySize)
-	s.Equal(info1.LastFirstEventID, currBr.LastFirstEventID)
-	s.Equal(info1.NextEventID, currBr.NextEventID)
-	s.Equal(int64(5), currBr.NextEventID)
+	s.Equal([]byte("branchToken2"), info1.BranchToken)
 }
 
 //TestContinueAsNew test
@@ -248,9 +232,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
 	s.Equal(int64(2), newExecutionInfo.DecisionScheduleID)
 	s.Equal(int32(p.EventStoreVersionV2), newExecutionInfo.EventStoreVersion)
-	s.Equal(int32(0), newExecutionInfo.CurrentResetVersion)
-	s.Equal(newExecutionInfo.NextEventID, newExecutionInfo.HistoryBranches[0].NextEventID)
-	s.Equal([]byte("branchToken1"), newExecutionInfo.HistoryBranches[0].BranchToken)
+	s.Equal([]byte("branchToken1"), newExecutionInfo.BranchToken)
 
 	newRunID, err5 := s.GetCurrentWorkflowRunID(domainID, *workflowExecution.WorkflowId)
 	s.NoError(err5)
@@ -359,8 +341,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int64(0), info0.LastProcessedEvent)
 	s.Equal(int64(2), info0.DecisionScheduleID)
 	s.Equal(int32(p.EventStoreVersionV2), info0.EventStoreVersion)
-	s.Equal(int32(0), info0.CurrentResetVersion)
-	s.Equal(info0.NextEventID, info0.HistoryBranches[0].NextEventID)
 	s.Equal(int64(9), replicationState0.CurrentVersion)
 	s.Equal(int64(8), replicationState0.StartVersion)
 	s.Equal(int64(7), replicationState0.LastWriteVersion)
@@ -383,13 +363,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedInfo.NextEventID = int64(5)
 	updatedInfo.LastProcessedEvent = int64(2)
-	updatedInfo.CurrentResetVersion = 1
-	updatedInfo.HistoryBranches[1] = &p.HistoryBranch{
-		BranchToken:      []byte("branchToken3"),
-		NextEventID:      updatedInfo.NextEventID,
-		HistorySize:      updatedInfo.HistorySize,
-		LastFirstEventID: updatedInfo.LastFirstEventID,
-	}
+	updatedInfo.BranchToken = []byte("branchToken3")
 
 	updatedReplicationState := copyReplicationState(replicationState0)
 	updatedReplicationState.CurrentVersion = int64(10)
@@ -465,9 +439,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowWithReplicationState() {
 	s.Equal(int32(20), info1.WorkflowTimeout)
 	s.Equal(int32(13), info1.DecisionTimeoutValue)
 	s.Equal(int64(5), info1.NextEventID)
-	s.Equal(int32(1), info1.CurrentResetVersion)
-	s.Equal(info1.NextEventID, info1.HistoryBranches[1].NextEventID)
-	s.Equal([]byte("branchToken3"), info1.HistoryBranches[1].BranchToken)
+	s.Equal([]byte("branchToken3"), info1.BranchToken)
 	s.Equal(int64(2), info1.LastProcessedEvent)
 	s.Equal(int64(2), info1.DecisionScheduleID)
 	s.Equal(int64(10), replicationState1.CurrentVersion)

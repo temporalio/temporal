@@ -4728,8 +4728,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistence.WorkflowExecutionInfo) *p
 		DecisionRequestID:            sourceInfo.DecisionRequestID,
 		DecisionTimeout:              sourceInfo.DecisionTimeout,
 		EventStoreVersion:            sourceInfo.EventStoreVersion,
-		CurrentResetVersion:          sourceInfo.CurrentResetVersion,
-		HistoryBranches:              sourceInfo.HistoryBranches,
+		BranchToken:                  sourceInfo.BranchToken,
 	}
 }
 

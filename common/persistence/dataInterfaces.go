@@ -256,17 +256,8 @@ type (
 		MaximumAttempts    int32
 		NonRetriableErrors []string
 		// events V2 related
-		EventStoreVersion   int32
-		CurrentResetVersion int32
-		HistoryBranches     map[int32]*HistoryBranch // map from each resetVersion to the associated branch, resetVersion increase from 0
-	}
-
-	// HistoryBranch represents a history branch
-	HistoryBranch struct {
-		BranchToken      []byte
-		NextEventID      int64
-		HistorySize      int64
-		LastFirstEventID int64
+		EventStoreVersion int32
+		BranchToken       []byte
 	}
 
 	// ReplicationState represents mutable state information for global domains.
@@ -2001,51 +1992,31 @@ func UnixNanoToDBTimestamp(timestamp int64) int64 {
 // SetHistorySize set the historySize
 func (e *WorkflowExecutionInfo) SetHistorySize(size int64) {
 	e.HistorySize = size
-	if e.EventStoreVersion == EventStoreVersionV2 {
-		e.HistoryBranches[e.CurrentResetVersion].HistorySize = size
-	}
 }
 
 // IncreaseHistorySize increase historySize by delta
 func (e *WorkflowExecutionInfo) IncreaseHistorySize(delta int64) {
 	e.HistorySize += delta
-	if e.EventStoreVersion == EventStoreVersionV2 {
-		e.HistoryBranches[e.CurrentResetVersion].HistorySize += delta
-	}
 }
 
 // SetNextEventID sets the nextEventID
 func (e *WorkflowExecutionInfo) SetNextEventID(id int64) {
 	e.NextEventID = id
-	if e.EventStoreVersion == EventStoreVersionV2 {
-		e.HistoryBranches[e.CurrentResetVersion].NextEventID = id
-	}
 }
 
 // IncreaseNextEventID increase the nextEventID by 1
 func (e *WorkflowExecutionInfo) IncreaseNextEventID() {
 	e.NextEventID++
-	if e.EventStoreVersion == EventStoreVersionV2 {
-		e.HistoryBranches[e.CurrentResetVersion].NextEventID++
-	}
 }
 
 // SetLastFirstEventID set the LastFirstEventID
 func (e *WorkflowExecutionInfo) SetLastFirstEventID(id int64) {
 	e.LastFirstEventID = id
-	if e.EventStoreVersion == EventStoreVersionV2 {
-		e.HistoryBranches[e.CurrentResetVersion].LastFirstEventID = id
-	}
 }
 
 // GetCurrentBranch return the current branch token
 func (e *WorkflowExecutionInfo) GetCurrentBranch() []byte {
-	idx := e.CurrentResetVersion
-	br, ok := e.HistoryBranches[idx]
-	if ok {
-		return br.BranchToken
-	}
-	return nil
+	return e.BranchToken
 }
 
 var internalThriftEncoder = codec.NewThriftRWEncoder()

@@ -21,8 +21,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	"github.com/uber-common/bark"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
@@ -106,24 +104,6 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(info *InternalWorkflowEx
 		return nil, err
 	}
 
-	if info.EventStoreVersion == EventStoreVersionV2 {
-		if info.HistorySize != info.HistoryBranches[info.CurrentResetVersion].HistorySize {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("HistorySizes of V1/V2 don't match"),
-			}
-		}
-		if info.LastFirstEventID != info.HistoryBranches[info.CurrentResetVersion].LastFirstEventID {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("LastFirstEventIDs of V1/V2 don't match"),
-			}
-		}
-		if info.NextEventID != info.HistoryBranches[info.CurrentResetVersion].NextEventID {
-			return nil, &workflow.InternalServiceError{
-				Message: fmt.Sprintf("NextEventIDs of V1/V2 don't match"),
-			}
-		}
-	}
-
 	newInfo := &WorkflowExecutionInfo{
 		CompletionEvent: completionEvent,
 
@@ -172,8 +152,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(info *InternalWorkflowEx
 		MaximumAttempts:              info.MaximumAttempts,
 		NonRetriableErrors:           info.NonRetriableErrors,
 		EventStoreVersion:            info.EventStoreVersion,
-		CurrentResetVersion:          info.CurrentResetVersion,
-		HistoryBranches:              info.HistoryBranches,
+		BranchToken:                  info.BranchToken,
 	}
 	return newInfo, nil
 }
@@ -466,24 +445,6 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 		return nil, err
 	}
 
-	if info.EventStoreVersion == EventStoreVersionV2 {
-		if info.HistorySize != info.HistoryBranches[info.CurrentResetVersion].HistorySize {
-			return nil, &workflow.BadRequestError{
-				Message: fmt.Sprintf("HistorySizes of V1/V2 don't match"),
-			}
-		}
-		if info.LastFirstEventID != info.HistoryBranches[info.CurrentResetVersion].LastFirstEventID {
-			return nil, &workflow.BadRequestError{
-				Message: fmt.Sprintf("LastFirstEventIDs of V1/V2 don't match"),
-			}
-		}
-		if info.NextEventID != info.HistoryBranches[info.CurrentResetVersion].NextEventID {
-			return nil, &workflow.BadRequestError{
-				Message: fmt.Sprintf("NextEventIDs of V1/V2 don't match"),
-			}
-		}
-	}
-
 	return &InternalWorkflowExecutionInfo{
 		DomainID:                     info.DomainID,
 		WorkflowID:                   info.WorkflowID,
@@ -531,8 +492,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 		MaximumAttempts:              info.MaximumAttempts,
 		NonRetriableErrors:           info.NonRetriableErrors,
 		EventStoreVersion:            info.EventStoreVersion,
-		CurrentResetVersion:          info.CurrentResetVersion,
-		HistoryBranches:              info.HistoryBranches,
+		BranchToken:                  info.BranchToken,
 	}, nil
 }
 
