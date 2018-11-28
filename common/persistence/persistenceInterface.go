@@ -141,6 +141,7 @@ type (
 		StartTimestamp               time.Time
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
+		SignalCount                  int32
 		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64

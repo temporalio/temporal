@@ -230,6 +230,7 @@ type (
 		StartTimestamp               time.Time
 		LastUpdatedTimestamp         time.Time
 		CreateRequestID              string
+		SignalCount                  int32
 		HistorySize                  int64
 		DecisionVersion              int64
 		DecisionScheduleID           int64
@@ -637,6 +638,7 @@ type (
 		ExecutionContext            []byte
 		NextEventID                 int64
 		LastProcessedEvent          int64
+		SignalCount                 int32
 		HistorySize                 int64
 		TransferTasks               []Task
 		ReplicationTasks            []Task

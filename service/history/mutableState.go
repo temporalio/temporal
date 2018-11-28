@@ -188,6 +188,7 @@ type (
 		ReplicateWorkflowExecutionCompletedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionContinuedAsNewEvent(string, string, *workflow.HistoryEvent, *workflow.HistoryEvent, *decisionInfo, mutableState)
 		ReplicateWorkflowExecutionFailedEvent(*workflow.HistoryEvent)
+		ReplicateWorkflowExecutionSignaled(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionStartedEvent(string, *string, workflow.WorkflowExecution, string, *workflow.WorkflowExecutionStartedEventAttributes)
 		ReplicateWorkflowExecutionTerminatedEvent(*workflow.HistoryEvent)
 		ReplicateWorkflowExecutionTimedoutEvent(*workflow.HistoryEvent)

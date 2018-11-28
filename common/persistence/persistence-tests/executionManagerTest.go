@@ -447,7 +447,33 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 		WorkflowId: common.StringPtr("get-workflow-test"),
 		RunId:      common.StringPtr("918e7b1d-bfa4-4fe0-86cb-604858f90ce4"),
 	}
-	task0, err0 := s.CreateWorkflowExecution(domainID, workflowExecution, "queue1", "wType", 20, 13, nil, 3, 0, 2, nil)
+	task0, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		RequestID:            uuid.New(),
+		DomainID:             domainID,
+		Execution:            workflowExecution,
+		TaskList:             "queue1",
+		WorkflowTypeName:     "wType",
+		WorkflowTimeout:      20,
+		DecisionTimeoutValue: 13,
+		ExecutionContext:     nil,
+		NextEventID:          3,
+		LastProcessedEvent:   0,
+		RangeID:              s.ShardInfo.RangeID,
+		TransferTasks: []p.Task{
+			&p.DecisionTask{
+				TaskID:              s.GetNextSequenceNumber(),
+				DomainID:            domainID,
+				TaskList:            "queue1",
+				ScheduleID:          2,
+				VisibilityTimestamp: time.Now(),
+			},
+		},
+		TimerTasks:                  nil,
+		DecisionScheduleID:          2,
+		DecisionStartedID:           common.EmptyEventID,
+		DecisionStartToCloseTimeout: 1,
+		SignalCount:                 9,
+	})
 	s.NoError(err0)
 	s.NotNil(task0, "Expected non empty task identifier.")
 
@@ -471,6 +497,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(int64(2), info.DecisionScheduleID)
 	s.Equal(common.EmptyEventID, info.DecisionStartedID)
 	s.Equal(int32(1), info.DecisionTimeout)
+	s.Equal(int32(9), info.SignalCount)
 	log.Infof("Workflow execution last updated: %v", info.LastUpdatedTimestamp)
 }
 
@@ -513,6 +540,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Empty(info0.ClientLibraryVersion)
 	s.Empty(info0.ClientFeatureVersion)
 	s.Empty(info0.ClientImpl)
+	s.Equal(int32(0), info0.SignalCount)
 
 	log.Infof("Workflow execution last updated: %v", info0.LastUpdatedTimestamp)
 
@@ -528,6 +556,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo.ClientLibraryVersion = "random client library version"
 	updatedInfo.ClientFeatureVersion = "random client feature version"
 	updatedInfo.ClientImpl = "random client impl"
+	updatedInfo.SignalCount = 9
 	err2 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
@@ -559,10 +588,12 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(updatedInfo.ClientLibraryVersion, info1.ClientLibraryVersion)
 	s.Equal(updatedInfo.ClientFeatureVersion, info1.ClientFeatureVersion)
 	s.Equal(updatedInfo.ClientImpl, info1.ClientImpl)
+	s.Equal(updatedInfo.SignalCount, info1.SignalCount)
 
 	log.Infof("Workflow execution last updated: %v", info1.LastUpdatedTimestamp)
 
-	err4 := s.UpdateWorkflowExecution(updatedInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
+	failedUpdateInfo := copyWorkflowExecutionInfo(updatedInfo)
+	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
 	s.IsType(&p.ConditionFailedError{}, err4)
 	log.Errorf("Conditional update failed with error: %v", err4)
@@ -589,10 +620,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info2.DecisionTimeout)
 	s.Equal(int64(123), info2.DecisionAttempt)
 	s.Equal(int64(321), info2.DecisionTimestamp)
+	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
 
 	log.Infof("Workflow execution last updated: %v", info2.LastUpdatedTimestamp)
 
-	err5 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
 	log.Errorf("Conditional update failed with error: %v", err5)
@@ -619,11 +651,12 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info3.DecisionTimeout)
 	s.Equal(int64(123), info3.DecisionAttempt)
 	s.Equal(int64(321), info3.DecisionTimestamp)
+	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
 
 	log.Infof("Workflow execution last updated: %v", info3.LastUpdatedTimestamp)
 
 	//update with incorrect rangeID and condition(next_event_id)
-	err7 := s.UpdateWorkflowExecutionWithRangeID(updatedInfo, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
+	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "")
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
 	log.Errorf("Conditional update failed with error: %v", err7)
@@ -650,6 +683,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(int32(1), info4.DecisionTimeout)
 	s.Equal(int64(123), info4.DecisionAttempt)
 	s.Equal(int64(321), info4.DecisionTimestamp)
+	s.Equal(updatedInfo.SignalCount, info2.SignalCount)
 
 	log.Infof("Workflow execution last updated: %v", info4.LastUpdatedTimestamp)
 }

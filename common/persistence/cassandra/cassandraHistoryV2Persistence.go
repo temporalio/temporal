@@ -88,7 +88,7 @@ func newHistoryV2Persistence(cfg config.Cassandra, logger bark.Logger) (p.Histor
 func convertCommonErrors(operation string, err error) error {
 	if err == gocql.ErrNotFound {
 		return &workflow.EntityNotExistsError{
-			Message: fmt.Sprintf("%v failed, %v. Error: %v ", operation, err),
+			Message: fmt.Sprintf("%v failed. Error: %v ", operation, err),
 		}
 	} else if isTimeoutError(err) {
 		return &p.TimeoutError{Msg: fmt.Sprintf("%v timed out. Error: %v", operation, err)}

@@ -71,6 +71,7 @@ CREATE TYPE workflow_execution (
   non_retriable_errors             list<text>,
   event_store_version              int, -- to indicates which version of events persistence is using
   current_reset_version            int, -- works with eventsV2
+  signal_count                     int,
   history_branches                 frozen<map<int, history_branch_info>>, -- map from reset_version to the associated branch infomation
   history_size                     bigint, --deprecated in eventsV2 in favor of history_branch_info
   last_first_event_id              bigint, --deprecated in eventsV2 in favor of history_branch_info

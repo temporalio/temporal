@@ -325,7 +325,7 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			// No mutable state action is needed
 
 		case shared.EventTypeWorkflowExecutionSignaled:
-			// No mutable state action is needed
+			b.msBuilder.ReplicateWorkflowExecutionSignaled(event)
 
 		case shared.EventTypeWorkflowExecutionCancelRequested:
 			b.msBuilder.ReplicateWorkflowExecutionCancelRequestedEvent(event)

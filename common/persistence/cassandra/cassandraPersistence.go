@@ -135,6 +135,7 @@ const (
 		`start_time: ?, ` +
 		`last_updated_time: ?, ` +
 		`create_request_id: ?, ` +
+		`signal_count: ?, ` +
 		`history_size: ?, ` +
 		`decision_version: ?, ` +
 		`decision_schedule_id: ?, ` +
@@ -1341,6 +1342,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			cqlNowTimestamp,
 			cqlNowTimestamp,
 			request.RequestID,
+			request.SignalCount,
 			request.HistorySize,
 			request.DecisionVersion,
 			request.DecisionScheduleID,
@@ -1404,6 +1406,7 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			cqlNowTimestamp,
 			cqlNowTimestamp,
 			request.RequestID,
+			request.SignalCount,
 			request.HistorySize,
 			request.DecisionVersion,
 			request.DecisionScheduleID,
@@ -1590,6 +1593,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.StartTimestamp,
 			cqlNowTimestamp,
 			executionInfo.CreateRequestID,
+			executionInfo.SignalCount,
 			executionInfo.HistorySize,
 			executionInfo.DecisionVersion,
 			executionInfo.DecisionScheduleID,
@@ -1654,6 +1658,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.StartTimestamp,
 			cqlNowTimestamp,
 			executionInfo.CreateRequestID,
+			executionInfo.SignalCount,
 			executionInfo.HistorySize,
 			executionInfo.DecisionVersion,
 			executionInfo.DecisionScheduleID,
@@ -1911,6 +1916,7 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		executionInfo.StartTimestamp,
 		cqlNowTimestamp,
 		executionInfo.CreateRequestID,
+		executionInfo.SignalCount,
 		executionInfo.HistorySize,
 		executionInfo.DecisionVersion,
 		executionInfo.DecisionScheduleID,
@@ -3494,6 +3500,8 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.LastUpdatedTimestamp = v.(time.Time)
 		case "create_request_id":
 			info.CreateRequestID = v.(gocql.UUID).String()
+		case "signal_count":
+			info.SignalCount = int32(v.(int))
 		case "history_size":
 			info.HistorySize = v.(int64)
 		case "decision_version":

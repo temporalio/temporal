@@ -2104,6 +2104,11 @@ func (_m *mockMutableState) ReplicateWorkflowExecutionFailedEvent(_a0 *shared.Hi
 	_m.Called(_a0)
 }
 
+// ReplicateWorkflowExecutionSignaled provides a mock function with given fields: _a0
+func (_m *mockMutableState) ReplicateWorkflowExecutionSignaled(_a0 *shared.HistoryEvent) {
+	_m.Called(_a0)
+}
+
 // ReplicateWorkflowExecutionStartedEvent provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
 func (_m *mockMutableState) ReplicateWorkflowExecutionStartedEvent(_a0 string, _a1 *string, _a2 shared.WorkflowExecution, _a3 string, _a4 *shared.WorkflowExecutionStartedEventAttributes) {
 	_m.Called(_a0, _a1, _a2, _a3, _a4)

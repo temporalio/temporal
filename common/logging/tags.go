@@ -72,6 +72,7 @@ const (
 	TagAttemptStart               = "attempt-start"
 	TagAttemptEnd                 = "attempt-end"
 	TagSize                       = "size"
+	TagSignalCount                = "signal-count"
 
 	// workflow logging tag values
 	// TagWorkflowComponent Values

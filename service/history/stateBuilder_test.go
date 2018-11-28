@@ -305,6 +305,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled()
 		WorkflowExecutionSignaledEventAttributes: &shared.WorkflowExecutionSignaledEventAttributes{},
 	}
 	s.mockUpdateVersion(event)
+	s.mockMutableState.On("ReplicateWorkflowExecutionSignaled", event).Once()
 
 	s.stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(event), nil, 0, 0)
 

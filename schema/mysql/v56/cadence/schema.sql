@@ -106,6 +106,7 @@ CREATE TABLE executions(
 	client_library_version VARCHAR(255) NOT NULL, -- 3.
 	client_feature_version VARCHAR(255) NOT NULL, -- 4.
 	client_impl VARCHAR(255) NOT NULL, -- 5.
+	signal_count INT NOT NULL,
 	PRIMARY KEY (shard_id, domain_id, workflow_id, run_id)
 );
 

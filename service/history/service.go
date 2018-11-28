@@ -104,6 +104,7 @@ type Config struct {
 
 	// System Limits
 	MaximumBufferedEventsBatch dynamicconfig.IntPropertyFn
+	MaximumSignalsPerExecution dynamicconfig.IntPropertyFnWithDomainFilter
 
 	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
@@ -180,6 +181,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		ExecutionMgrNumConns:                                  dc.GetIntProperty(dynamicconfig.ExecutionMgrNumConns, 50),
 		HistoryMgrNumConns:                                    dc.GetIntProperty(dynamicconfig.HistoryMgrNumConns, 50),
 		MaximumBufferedEventsBatch:                            dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
+		MaximumSignalsPerExecution:                            dc.GetIntPropertyFilteredByDomain(dynamicconfig.MaximumSignalsPerExecution, 0),
 		ShardUpdateMinInterval:                                dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
 		ShardSyncMinInterval:                                  dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
 
