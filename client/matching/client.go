@@ -22,14 +22,12 @@ package matching
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	m "github.com/uber/cadence/.gen/go/matching"
 	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/membership"
 	"go.uber.org/yarpc"
 )
 
@@ -43,34 +41,22 @@ const (
 )
 
 type clientImpl struct {
-	resolver        membership.ServiceResolver
-	thriftCacheLock sync.RWMutex
-	thriftCache     map[string]matchingserviceclient.Interface
-	rpcFactory      common.RPCFactory
 	timeout         time.Duration
 	longPollTimeout time.Duration
+	clients         common.ClientCache
 }
 
 // NewClient creates a new history service TChannel client
 func NewClient(
-	d common.RPCFactory,
-	monitor membership.Monitor,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (Client, error) {
-	sResolver, err := monitor.GetResolver(common.MatchingServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &clientImpl{
-		rpcFactory:      d,
-		resolver:        sResolver,
-		thriftCache:     make(map[string]matchingserviceclient.Interface),
+	clients common.ClientCache,
+) Client {
+	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
+		clients:         clients,
 	}
-	return client, nil
 }
 
 func (c *clientImpl) AddActivityTask(
@@ -78,7 +64,7 @@ func (c *clientImpl) AddActivityTask(
 	addRequest *m.AddActivityTaskRequest,
 	opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(addRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(addRequest.TaskList.GetName())
 	if err != nil {
 		return err
 	}
@@ -92,7 +78,7 @@ func (c *clientImpl) AddDecisionTask(
 	addRequest *m.AddDecisionTaskRequest,
 	opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(addRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(addRequest.TaskList.GetName())
 	if err != nil {
 		return err
 	}
@@ -106,7 +92,7 @@ func (c *clientImpl) PollForActivityTask(
 	pollRequest *m.PollForActivityTaskRequest,
 	opts ...yarpc.CallOption) (*workflow.PollForActivityTaskResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(pollRequest.PollRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(pollRequest.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +106,7 @@ func (c *clientImpl) PollForDecisionTask(
 	pollRequest *m.PollForDecisionTaskRequest,
 	opts ...yarpc.CallOption) (*m.PollForDecisionTaskResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(pollRequest.PollRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(pollRequest.PollRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +117,7 @@ func (c *clientImpl) PollForDecisionTask(
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWorkflowRequest, opts ...yarpc.CallOption) (*workflow.QueryWorkflowResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(queryRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(queryRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +128,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, queryRequest *m.QueryWor
 
 func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.RespondQueryTaskCompletedRequest, opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(request.TaskList.GetName())
+	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return err
 	}
@@ -153,7 +139,7 @@ func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *m.R
 
 func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *m.CancelOutstandingPollRequest, opts ...yarpc.CallOption) error {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(request.TaskList.GetName())
+	client, err := c.getClientForTasklist(request.TaskList.GetName())
 	if err != nil {
 		return err
 	}
@@ -164,21 +150,13 @@ func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *m.Cance
 
 func (c *clientImpl) DescribeTaskList(ctx context.Context, request *m.DescribeTaskListRequest, opts ...yarpc.CallOption) (*workflow.DescribeTaskListResponse, error) {
 	opts = common.AggregateYarpcOptions(ctx, opts...)
-	client, err := c.getHostForRequest(request.DescRequest.TaskList.GetName())
+	client, err := c.getClientForTasklist(request.DescRequest.TaskList.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DescribeTaskList(ctx, request, opts...)
-}
-
-func (c *clientImpl) getHostForRequest(key string) (matchingserviceclient.Interface, error) {
-	host, err := c.resolver.Lookup(key)
-	if err != nil {
-		return nil, err
-	}
-	return c.getThriftClient(host.GetAddress()), nil
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -195,25 +173,10 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getThriftClient(hostPort string) matchingserviceclient.Interface {
-	c.thriftCacheLock.RLock()
-	client, ok := c.thriftCache[hostPort]
-	c.thriftCacheLock.RUnlock()
-	if ok {
-		return client
+func (c *clientImpl) getClientForTasklist(key string) (matchingserviceclient.Interface, error) {
+	client, err := c.clients.GetClientForKey(key)
+	if err != nil {
+		return nil, err
 	}
-
-	c.thriftCacheLock.Lock()
-	defer c.thriftCacheLock.Unlock()
-
-	// check again if in the cache cause it might have been added
-	// before we acquired the lock
-	client, ok = c.thriftCache[hostPort]
-	if !ok {
-		d := c.rpcFactory.CreateDispatcherForOutbound(
-			"matching-service-client", common.MatchingServiceName, hostPort)
-		client = matchingserviceclient.New(d.ClientConfig(common.MatchingServiceName))
-		c.thriftCache[hostPort] = client
-	}
-	return client
+	return client.(matchingserviceclient.Interface), nil
 }

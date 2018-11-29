@@ -48,6 +48,8 @@ type (
 
 		GetClientFactory() client.Factory
 
+		GetClientBean() client.Bean
+
 		GetDispatcher() *yarpc.Dispatcher
 
 		GetMembershipMonitor() membership.Monitor

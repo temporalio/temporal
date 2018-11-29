@@ -72,7 +72,8 @@ clustersInfo:
   currentClusterName: "active"
   clusterInitialFailoverVersion:
     active: 0
-    standby: 1
+  clusterAddress:
+    active: "127.0.0.1:7933"
 
 kafka:
   clusters:

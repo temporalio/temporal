@@ -23,6 +23,7 @@ package mocks
 import "github.com/uber/cadence/common/persistence"
 import "github.com/stretchr/testify/mock"
 
+// ExecutionManager mock implementation
 type ExecutionManager struct {
 	mock.Mock
 }

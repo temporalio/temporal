@@ -22,14 +22,12 @@ package history
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	h "github.com/uber/cadence/.gen/go/history"
 	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
-	"github.com/uber/cadence/common/membership"
 	"go.uber.org/yarpc"
 )
 
@@ -41,39 +39,31 @@ const (
 )
 
 type clientImpl struct {
-	resolver        membership.ServiceResolver
-	tokenSerializer common.TaskTokenSerializer
 	numberOfShards  int
-	// TODO: consider refactor thriftCache into a separate struct
-	thriftCacheLock sync.RWMutex
-	thriftCache     map[string]historyserviceclient.Interface
-	rpcFactory      common.RPCFactory
+	tokenSerializer common.TaskTokenSerializer
 	timeout         time.Duration
+	clients         common.ClientCache
 }
 
 // NewClient creates a new history service TChannel client
-func NewClient(d common.RPCFactory, monitor membership.Monitor, numberOfShards int, timeout time.Duration) (Client, error) {
-	sResolver, err := monitor.GetResolver(common.HistoryServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &clientImpl{
-		rpcFactory:      d,
-		resolver:        sResolver,
-		tokenSerializer: common.NewJSONTaskTokenSerializer(),
+func NewClient(
+	numberOfShards int,
+	timeout time.Duration,
+	clients common.ClientCache,
+) Client {
+	return &clientImpl{
 		numberOfShards:  numberOfShards,
-		thriftCache:     make(map[string]historyserviceclient.Interface),
+		tokenSerializer: common.NewJSONTaskTokenSerializer(),
 		timeout:         timeout,
+		clients:         clients,
 	}
-	return client, nil
 }
 
 func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *h.StartWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) (*workflow.StartWorkflowExecutionResponse, error) {
-	client, err := c.getHostForRequest(*request.StartRequest.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +87,7 @@ func (c *clientImpl) GetMutableState(
 	ctx context.Context,
 	request *h.GetMutableStateRequest,
 	opts ...yarpc.CallOption) (*h.GetMutableStateResponse, error) {
-	client, err := c.getHostForRequest(*request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -122,25 +112,23 @@ func (c *clientImpl) DescribeHistoryHost(
 	request *workflow.DescribeHistoryHostRequest,
 	opts ...yarpc.CallOption) (*workflow.DescribeHistoryHostResponse, error) {
 
-	var hostAddr string
-	if request.HostAddress != nil {
-		hostAddr = *request.HostAddress
-	} else {
-		var shardID int
-		if request.ShardIdForHost != nil {
-			shardID = int(*request.ShardIdForHost)
-		} else {
-			shardID = common.WorkflowIDToHistoryShard(*request.ExecutionForHost.WorkflowId, c.numberOfShards)
-		}
+	var err error
+	var client historyserviceclient.Interface
 
-		host, err := c.resolver.Lookup(string(shardID))
+	if request.ShardIdForHost != nil {
+		client, err = c.getClientForShardID(int(request.GetShardIdForHost()))
+	} else if request.ExecutionForHost != nil {
+		client, err = c.getClientForWorkflowID(request.ExecutionForHost.GetWorkflowId())
+	} else {
+		ret, err := c.clients.GetClientForClientKey(request.GetHostAddress())
 		if err != nil {
 			return nil, err
 		}
-		hostAddr = host.GetAddress()
+		client = ret.(historyserviceclient.Interface)
 	}
-
-	client := c.getThriftClient(hostAddr)
+	if err != nil {
+		return nil, err
+	}
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	var response *workflow.DescribeHistoryHostResponse
@@ -151,7 +139,7 @@ func (c *clientImpl) DescribeHistoryHost(
 		response, err = client.DescribeHistoryHost(ctx, request, opts...)
 		return err
 	}
-	err := c.executeWithRedirect(ctx, client, op)
+	err = c.executeWithRedirect(ctx, client, op)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +150,7 @@ func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *h.DescribeMutableStateRequest,
 	opts ...yarpc.CallOption) (*h.DescribeMutableStateResponse, error) {
-	client, err := c.getHostForRequest(*request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +174,7 @@ func (c *clientImpl) ResetStickyTaskList(
 	ctx context.Context,
 	request *h.ResetStickyTaskListRequest,
 	opts ...yarpc.CallOption) (*h.ResetStickyTaskListResponse, error) {
-	client, err := c.getHostForRequest(*request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +198,7 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *h.DescribeWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) (*workflow.DescribeWorkflowExecutionResponse, error) {
-	client, err := c.getHostForRequest(*request.Request.Execution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.Request.Execution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +222,7 @@ func (c *clientImpl) RecordDecisionTaskStarted(
 	ctx context.Context,
 	request *h.RecordDecisionTaskStartedRequest,
 	opts ...yarpc.CallOption) (*h.RecordDecisionTaskStartedResponse, error) {
-	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +246,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *h.RecordActivityTaskStartedRequest,
 	opts ...yarpc.CallOption) (*h.RecordActivityTaskStartedResponse, error) {
-	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +274,7 @@ func (c *clientImpl) RespondDecisionTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +298,7 @@ func (c *clientImpl) RespondDecisionTaskFailed(
 	if err != nil {
 		return err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -332,7 +320,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -354,7 +342,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -376,7 +364,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -398,7 +386,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getHostForRequest(taskToken.WorkflowID)
+	client, err := c.getClientForWorkflowID(taskToken.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +410,7 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *h.RequestCancelWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.CancelRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.CancelRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -439,7 +427,7 @@ func (c *clientImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	request *h.SignalWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.SignalRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -458,7 +446,7 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *h.SignalWithStartWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) (*workflow.StartWorkflowExecutionResponse, error) {
-	client, err := c.getHostForRequest(*request.SignalWithStartRequest.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.SignalWithStartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +471,7 @@ func (c *clientImpl) RemoveSignalMutableState(
 	ctx context.Context,
 	request *h.RemoveSignalMutableStateRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -501,7 +489,7 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *h.TerminateWorkflowExecutionRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.TerminateRequest.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.TerminateRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -519,7 +507,7 @@ func (c *clientImpl) ScheduleDecisionTask(
 	ctx context.Context,
 	request *h.ScheduleDecisionTaskRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -537,7 +525,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
 	request *h.RecordChildExecutionCompletedRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(*request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(*request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
@@ -555,7 +543,7 @@ func (c *clientImpl) ReplicateEvents(
 	ctx context.Context,
 	request *h.ReplicateEventsRequest,
 	opts ...yarpc.CallOption) error {
-	client, err := c.getHostForRequest(request.WorkflowExecution.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.WorkflowExecution.GetWorkflowId())
 	if err != nil {
 		return err
 	}
@@ -575,11 +563,10 @@ func (c *clientImpl) SyncShardStatus(
 	opts ...yarpc.CallOption) error {
 
 	// we do not have a workflow ID here, instead, we have something even better
-	host, err := c.resolver.Lookup(string(request.GetShardId()))
+	client, err := c.getClientForShardID(int(request.GetShardId()))
 	if err != nil {
 		return err
 	}
-	client := c.getThriftClient(host.GetAddress())
 
 	opts = common.AggregateYarpcOptions(ctx, opts...)
 	op := func(ctx context.Context, client historyserviceclient.Interface) error {
@@ -596,7 +583,7 @@ func (c *clientImpl) SyncActivity(
 	request *h.SyncActivityRequest,
 	opts ...yarpc.CallOption) error {
 
-	client, err := c.getHostForRequest(request.GetWorkflowId())
+	client, err := c.getClientForWorkflowID(request.GetWorkflowId())
 	if err != nil {
 		return err
 	}
@@ -610,16 +597,6 @@ func (c *clientImpl) SyncActivity(
 	return err
 }
 
-func (c *clientImpl) getHostForRequest(workflowID string) (historyserviceclient.Interface, error) {
-	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
-	host, err := c.resolver.Lookup(string(key))
-	if err != nil {
-		return nil, err
-	}
-
-	return c.getThriftClient(host.GetAddress()), nil
-}
-
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.timeout)
@@ -627,27 +604,17 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) getThriftClient(hostPort string) historyserviceclient.Interface {
-	c.thriftCacheLock.RLock()
-	client, ok := c.thriftCache[hostPort]
-	c.thriftCacheLock.RUnlock()
-	if ok {
-		return client
-	}
+func (c *clientImpl) getClientForWorkflowID(workflowID string) (historyserviceclient.Interface, error) {
+	key := common.WorkflowIDToHistoryShard(workflowID, c.numberOfShards)
+	return c.getClientForShardID(key)
+}
 
-	c.thriftCacheLock.Lock()
-	defer c.thriftCacheLock.Unlock()
-
-	// check again if in the cache cause it might have been added
-	// before we acquired the lock
-	client, ok = c.thriftCache[hostPort]
-	if !ok {
-		d := c.rpcFactory.CreateDispatcherForOutbound(
-			"history-service-client", common.HistoryServiceName, hostPort)
-		client = historyserviceclient.New(d.ClientConfig(common.HistoryServiceName))
-		c.thriftCache[hostPort] = client
+func (c *clientImpl) getClientForShardID(shardID int) (historyserviceclient.Interface, error) {
+	client, err := c.clients.GetClientForKey(string(shardID))
+	if err != nil {
+		return nil, err
 	}
-	return client
+	return client.(historyserviceclient.Interface), nil
 }
 
 func (c *clientImpl) executeWithRedirect(ctx context.Context, client historyserviceclient.Interface,
@@ -666,7 +633,11 @@ redirectLoop:
 		if err != nil {
 			if s, ok := err.(*h.ShardOwnershipLostError); ok {
 				// TODO: consider emitting a metric for number of redirects
-				client = c.getThriftClient(*s.Owner)
+				ret, err := c.clients.GetClientForClientKey(s.GetOwner())
+				if err != nil {
+					return err
+				}
+				client = ret.(historyserviceclient.Interface)
 				continue redirectLoop
 			}
 		}

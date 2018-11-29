@@ -23,6 +23,7 @@ package mocks
 import "github.com/uber/cadence/common/persistence"
 import "github.com/stretchr/testify/mock"
 
+// HistoryV2Manager mock implementation
 type HistoryV2Manager struct {
 	mock.Mock
 }

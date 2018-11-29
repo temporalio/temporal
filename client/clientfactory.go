@@ -21,13 +21,30 @@
 package client
 
 import (
+	"time"
+
+	"go.uber.org/yarpc"
+
+	"github.com/uber/cadence/.gen/go/history/historyserviceclient"
+	"github.com/uber/cadence/.gen/go/matching/matchingserviceclient"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/membership"
 	"github.com/uber/cadence/common/metrics"
-	"time"
+	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+)
+
+const (
+	frontendCaller = "cadence-frontend-client"
+	historyCaller  = "history-service-client"
+	matchingCaller = "matching-service-client"
+	crossDCCaller  = "cadence-xdc-client"
+)
+
+const (
+	clientKeyDispatcher = "client-key-dispatcher"
 )
 
 // Factory can be used to create RPC clients for cadence services
@@ -39,20 +56,22 @@ type Factory interface {
 	NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error)
 	NewMatchingClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (matching.Client, error)
 	NewFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (frontend.Client, error)
+
+	NewFrontendClientWithTimeoutAndDispatcher(timeout time.Duration, longPollTimeout time.Duration, dispatcher *yarpc.Dispatcher) (frontend.Client, error)
 }
 
 type rpcClientFactory struct {
-	df                    common.RPCFactory
+	rpcFactory            common.RPCFactory
 	monitor               membership.Monitor
 	metricsClient         metrics.Client
 	numberOfHistoryShards int
 }
 
 // NewRPCClientFactory creates an instance of client factory that knows how to dispatch RPC calls.
-func NewRPCClientFactory(df common.RPCFactory,
-	monitor membership.Monitor, metricsClient metrics.Client, numberOfHistoryShards int) Factory {
+func NewRPCClientFactory(rpcFactory common.RPCFactory, monitor membership.Monitor,
+	metricsClient metrics.Client, numberOfHistoryShards int) Factory {
 	return &rpcClientFactory{
-		df:                    df,
+		rpcFactory:            rpcFactory,
 		monitor:               monitor,
 		metricsClient:         metricsClient,
 		numberOfHistoryShards: numberOfHistoryShards,
@@ -72,10 +91,25 @@ func (cf *rpcClientFactory) NewFrontendClient() (frontend.Client, error) {
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (history.Client, error) {
-	client, err := history.NewClient(cf.df, cf.monitor, cf.numberOfHistoryShards, timeout)
+	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
 	if err != nil {
 		return nil, err
 	}
+
+	keyResolver := func(key string) (string, error) {
+		host, err := resolver.Lookup(key)
+		if err != nil {
+			return "", err
+		}
+		return host.GetAddress(), nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(historyCaller, common.HistoryServiceName, clientKey)
+		return historyserviceclient.New(dispatcher.ClientConfig(common.HistoryServiceName)), nil
+	}
+
+	client := history.NewClient(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = history.NewMetricClient(client, cf.metricsClient)
 	}
@@ -86,25 +120,76 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matching.Client, error) {
-
-	client, err := matching.NewClient(cf.df, cf.monitor, timeout, longPollTimeout)
+	resolver, err := cf.monitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
 	}
+
+	keyResolver := func(key string) (string, error) {
+		host, err := resolver.Lookup(key)
+		if err != nil {
+			return "", err
+		}
+		return host.GetAddress(), nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(matchingCaller, common.MatchingServiceName, clientKey)
+		return matchingserviceclient.New(dispatcher.ClientConfig(common.MatchingServiceName)), nil
+	}
+
+	client := matching.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = matching.NewMetricClient(client, cf.metricsClient)
 	}
 	return client, nil
+
 }
 
 func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (frontend.Client, error) {
-	client, err := frontend.NewClient(cf.df, cf.monitor, timeout, longPollTimeout)
+
+	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
 	if err != nil {
 		return nil, err
 	}
+
+	keyResolver := func(key string) (string, error) {
+		host, err := resolver.Lookup(key)
+		if err != nil {
+			return "", err
+		}
+		return host.GetAddress(), nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		dispatcher := cf.rpcFactory.CreateDispatcherForOutbound(frontendCaller, common.FrontendServiceName, clientKey)
+		return workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName)), nil
+	}
+
+	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
+	if cf.metricsClient != nil {
+		client = frontend.NewMetricClient(client, cf.metricsClient)
+	}
+	return client, nil
+}
+
+func (cf *rpcClientFactory) NewFrontendClientWithTimeoutAndDispatcher(
+	timeout time.Duration,
+	longPollTimeout time.Duration,
+	dispatcher *yarpc.Dispatcher,
+) (frontend.Client, error) {
+	keyResolver := func(key string) (string, error) {
+		return clientKeyDispatcher, nil
+	}
+
+	clientProvider := func(clientKey string) (interface{}, error) {
+		return workflowserviceclient.New(dispatcher.ClientConfig(common.FrontendServiceName)), nil
+	}
+
+	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClient(client, cf.metricsClient)
 	}
