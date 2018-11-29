@@ -43,9 +43,14 @@ You can also [build and run](docker/README.md) the service using Docker.
 
 Try out the sample recipes [here](https://github.com/samarabbas/cadence-samples) to get started.
 
-### Use CLI  
+### Use CLI
 
 Try out [Cadence command-line tool](tools/cli/README.md) to perform various tasks on Cadence
+
+### Use Cadence Web
+
+Try out [Cadence Web UI](https://github.com/uber/cadence-web) to view your workflows on Cadence.  
+(This is already available at localhost:8080 if you run Cadence with docker compose)
 
 ## Contributing
 We'd love your help in making Cadence great. Please review our [instructions](CONTRIBUTING.md).
