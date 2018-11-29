@@ -25,6 +25,60 @@ import "github.com/urfave/cli"
 func newAdminWorkflowCommands() []cli.Command {
 	return []cli.Command{
 		{
+			Name:    "show",
+			Aliases: []string{"show"},
+			Usage:   "show workflow history from database",
+			Flags: []cli.Flag{
+				// v1 history events
+				cli.StringFlag{
+					Name:  FlagDomainID,
+					Usage: "DomainID",
+				},
+				cli.StringFlag{
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowID",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunID",
+				},
+				// v2 history events
+				cli.StringFlag{
+					Name:  FlagTreeID,
+					Usage: "TreeID",
+				},
+				cli.StringFlag{
+					Name:  FlagBranchID,
+					Usage: "BranchID",
+				},
+
+				// for cassandra connection
+				cli.StringFlag{
+					Name:  FlagAddress,
+					Usage: "cassandra host address",
+				},
+				cli.IntFlag{
+					Name:  FlagPort,
+					Usage: "cassandra port for the host (default is 9042)",
+				},
+				cli.StringFlag{
+					Name:  FlagUsername,
+					Usage: "cassandra username",
+				},
+				cli.StringFlag{
+					Name:  FlagPassword,
+					Usage: "cassandra password",
+				},
+				cli.StringFlag{
+					Name:  FlagKeyspace,
+					Usage: "cassandra keyspace",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminShowWorkflow(c)
+			},
+		},
+		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe internal information of workflow execution",

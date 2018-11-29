@@ -24,12 +24,20 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
+	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/persistence"
+	cassp "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/urfave/cli"
 	"go.uber.org/cadence/.gen/go/admin"
 	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
 	s "go.uber.org/cadence/.gen/go/shared"
+)
+
+const (
+	maxEventID = 9999
 )
 
 func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {
@@ -39,6 +47,69 @@ func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {
 	}
 
 	return client
+}
+
+// AdminShowWorkflow shows history
+func AdminShowWorkflow(c *cli.Context) {
+	domainID := c.String(FlagDomainID)
+	wid := c.String(FlagWorkflowID)
+	rid := c.String(FlagRunID)
+	tid := c.String(FlagTreeID)
+	bid := c.String(FlagBranchID)
+
+	session := connectToCassandra(c)
+	serializer := persistence.NewHistorySerializer()
+	var history []*persistence.DataBlob
+	if len(wid) != 0 {
+		histV1 := cassp.NewHistoryPersistenceFromSession(session, bark.NewNopLogger())
+		resp, err := histV1.GetWorkflowExecutionHistory(&persistence.InternalGetWorkflowExecutionHistoryRequest{
+			DomainID: domainID,
+			Execution: shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(wid),
+				RunId:      common.StringPtr(rid),
+			},
+			FirstEventID: 1,
+			NextEventID:  maxEventID,
+			PageSize:     maxEventID,
+		})
+		if err != nil {
+			ErrorAndExit("GetWorkflowExecutionHistory err", err)
+		}
+
+		history = resp.History
+
+	} else if len(tid) != 0 {
+		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, bark.NewNopLogger())
+
+		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
+			TreeID:    tid,
+			BranchID:  bid,
+			MinNodeID: 1,
+			MaxNodeID: maxEventID,
+			PageSize:  maxEventID,
+		})
+		if err != nil {
+			ErrorAndExit("ReadHistoryBranch err", err)
+		}
+
+		history = resp.History
+	} else {
+		ErrorAndExit("need to specify either WorkflowId/RunID for v1, or TreeID/BranchID for v2", nil)
+	}
+
+	if len(history) == 0 {
+		ErrorAndExit("no events", nil)
+	}
+	for idx, b := range history {
+		fmt.Printf("batch %v, blob len: %v \n", idx, len(b.Data))
+		historyBatch, err := serializer.DeserializeBatchEvents(b)
+		if err != nil {
+			ErrorAndExit("DeserializeBatchEvents err", err)
+		}
+		for _, e := range historyBatch {
+			fmt.Println(e.String())
+		}
+	}
 }
 
 // AdminDescribeWorkflow describe a new workflow execution for admin

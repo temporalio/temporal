@@ -4,6 +4,7 @@
   "Description": "Support history events v2, system workflow domain bootstrap",
   "SchemaUpdateCqlFiles": [
     "events_v2.cql",
+    "signal_count.cql",
     "system_domain_bootstrap.cql"
   ]
 }

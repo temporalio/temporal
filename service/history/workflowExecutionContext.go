@@ -224,7 +224,7 @@ func (c *workflowExecutionContext) updateWorkflowExecutionWithNewRun(transferTas
 	}
 
 	now := time.Now()
-	return c.updateHelperWithNewRun(transferTasks, timerTasks, transactionID, now, c.createReplicationTask, nil, "", newStateBuilder)
+	return c.update(transferTasks, timerTasks, transactionID, now, c.createReplicationTask, nil, "", newStateBuilder)
 }
 
 func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persistence.Task,
@@ -235,10 +235,10 @@ func (c *workflowExecutionContext) updateWorkflowExecution(transferTasks []persi
 func (c *workflowExecutionContext) updateHelper(transferTasks []persistence.Task, timerTasks []persistence.Task,
 	transactionID int64, now time.Time,
 	createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string) (errRet error) {
-	return c.updateHelperWithNewRun(transferTasks, timerTasks, transactionID, now, createReplicationTask, standbyHistoryBuilder, sourceCluster, nil)
+	return c.update(transferTasks, timerTasks, transactionID, now, createReplicationTask, standbyHistoryBuilder, sourceCluster, nil)
 }
 
-func (c *workflowExecutionContext) updateHelperWithNewRun(transferTasks []persistence.Task, timerTasks []persistence.Task,
+func (c *workflowExecutionContext) update(transferTasks []persistence.Task, timerTasks []persistence.Task,
 	transactionID int64, now time.Time,
 	createReplicationTask bool, standbyHistoryBuilder *historyBuilder, sourceCluster string, newStateBuilder mutableState) (errRet error) {
 
@@ -364,6 +364,11 @@ func (c *workflowExecutionContext) updateHelperWithNewRun(transferTasks []persis
 		if c.shard.GetConfig().EnableSyncActivityHeartbeat() {
 			replicationTasks = append(replicationTasks, updates.syncActivityTasks...)
 		}
+	}
+
+	if newStateBuilder != nil && newStateBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
+		continueAsNew.EventStoreVersion = persistence.EventStoreVersionV2
+		continueAsNew.BranchToken = newStateBuilder.GetCurrentBranch()
 	}
 
 	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)

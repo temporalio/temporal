@@ -105,6 +105,8 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 				firstEvent.GetVersion(),
 			)
 
+			resetMutableStateBuilder.executionInfo.EventStoreVersion = info.EventStoreVersion
+			resetMutableStateBuilder.executionInfo.BranchToken = info.BranchToken
 			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 		}
 
