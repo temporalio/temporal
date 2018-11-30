@@ -105,8 +105,7 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 				firstEvent.GetVersion(),
 			)
 
-			resetMutableStateBuilder.executionInfo.EventStoreVersion = info.EventStoreVersion
-			resetMutableStateBuilder.executionInfo.BranchToken = info.BranchToken
+			resetMutableStateBuilder.executionInfo.EventStoreVersion = eventStoreVersion
 			sBuilder = newStateBuilder(r.shard, resetMutableStateBuilder, r.logger)
 		}
 
@@ -120,6 +119,8 @@ func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayE
 		resetMutableStateBuilder.IncrementHistorySize(size)
 	}
 
+	// reset branchToken to the original one(they will be set to a wrong version in applyEvents for startEvent
+	resetMutableStateBuilder.executionInfo.BranchToken = branchToken
 	// Applying events to mutableState does not move the nextEventID.  Explicitly set nextEventID to new value
 	resetMutableStateBuilder.executionInfo.SetNextEventID(replayNextEventID)
 	resetMutableStateBuilder.executionInfo.StartTimestamp = startTime

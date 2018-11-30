@@ -278,6 +278,37 @@ func newAdminKafkaCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "purgeTopic",
+			Aliases: []string{"purge"},
+			Usage:   "purge Kafka topic by consumer group",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Usage: "Name of the Kafka cluster to publish replicationTasks",
+				},
+				cli.StringFlag{
+					Name:  FlagTopic,
+					Usage: "Topic to publish replication task",
+				},
+				cli.StringFlag{
+					Name:  FlagGroup,
+					Usage: "Group to read DLQ",
+				},
+				cli.StringFlag{
+					Name: FlagHostFile,
+					Usage: "Kafka host config file in format of: " + `
+clusters:
+	localKafka:
+		brokers:
+		- 127.0.0.1
+		- 127.0.0.2`,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminPurgeTopic(c)
+			},
+		},
+		{
 			Name:    "mergeDLQ",
 			Aliases: []string{"mgdlq"},
 			Usage:   "Merge replication tasks to target topic(from input file or DLQ topic)",
