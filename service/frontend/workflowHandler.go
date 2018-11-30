@@ -387,8 +387,11 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		return nil, wh.error(errRequestNotSet, scope)
 	}
 
-	if err := wh.checkPermission(updateRequest.SecurityToken, scope); err != nil {
-		return nil, err
+	// don't require permission for failover request
+	if !isFailoverRequest(updateRequest) {
+		if err := wh.checkPermission(updateRequest.SecurityToken, scope); err != nil {
+			return nil, err
+		}
 	}
 
 	clusterMetadata := wh.GetClusterMetadata()
@@ -2604,6 +2607,10 @@ func createServiceBusyError() *gen.ServiceBusyError {
 	err := &gen.ServiceBusyError{}
 	err.Message = "Too many outstanding requests to the cadence service"
 	return err
+}
+
+func isFailoverRequest(updateRequest *gen.UpdateDomainRequest) bool {
+	return updateRequest.ReplicationConfiguration != nil && updateRequest.ReplicationConfiguration.ActiveClusterName != nil
 }
 
 func (wh *WorkflowHandler) validateClusterName(clusterName string) error {
