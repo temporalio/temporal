@@ -296,8 +296,8 @@ func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 	if policy.GetMaximumAttempts() < 0 {
 		return &workflow.BadRequestError{Message: "MaximumAttempts cannot be less than 0 on retry policy."}
 	}
-	if policy.GetExpirationIntervalInSeconds() <= 0 {
-		return &workflow.BadRequestError{Message: "ExpirationIntervalInSeconds must be greater than 0 on retry policy."}
+	if policy.GetExpirationIntervalInSeconds() < 0 {
+		return &workflow.BadRequestError{Message: "ExpirationIntervalInSeconds cannot be less than 0 on retry policy."}
 	}
 	if policy.GetMaximumAttempts() == 0 && policy.GetExpirationIntervalInSeconds() == 0 {
 		return &workflow.BadRequestError{Message: "MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified."}
