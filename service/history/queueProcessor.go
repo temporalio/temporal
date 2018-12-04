@@ -279,7 +279,14 @@ func (p *queueProcessorBase) processTaskAndAck(notificationChan <-chan struct{},
 		scope, err = p.processTaskOnce(notificationChan, task, logger)
 		return p.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
-	retryCondition := func(err error) bool { return true }
+	retryCondition := func(err error) bool {
+		select {
+		case <-p.shutdownCh:
+			return false
+		default:
+			return true
+		}
+	}
 	defer func() { p.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime)) }()
 
 	for {

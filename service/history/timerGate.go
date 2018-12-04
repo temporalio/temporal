@@ -35,13 +35,13 @@ type (
 		// Update update the timer gate, return true if update is a success
 		// success means timer is idle or timer is set with a sooner time to fire
 		Update(nextTime time.Time) bool
+		// Close shutdown the timer
+		Close()
 	}
 
 	// LocalTimerGate interface
 	LocalTimerGate interface {
 		TimerGate
-		// Close shutdown the timer
-		Close()
 	}
 
 	// LocalTimerGateImpl is an timer implementation,
@@ -214,6 +214,11 @@ func (timerGate *RemoteTimerGateImpl) Update(nextTime time.Time) bool {
 		timerGate.nextWakeupTime = nextTime
 	}
 	return true
+}
+
+// Close shutdown the timer
+func (timerGate *RemoteTimerGateImpl) Close() {
+	// no op
 }
 
 // SetCurrentTime set the current time, and additionally fire the fire chan

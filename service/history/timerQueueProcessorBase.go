@@ -65,6 +65,7 @@ type (
 		timerFiredCount  uint64
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
+		timerGate        TimerGate
 		rateLimiter      common.TokenBucket
 		startDelay       dynamicconfig.DurationPropertyFn
 		retryPolicy      backoff.RetryPolicy
@@ -84,7 +85,7 @@ type (
 )
 
 func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *historyEngineImpl,
-	timerQueueAckMgr timerQueueAckMgr, maxPollRPS dynamicconfig.IntPropertyFn,
+	timerQueueAckMgr timerQueueAckMgr, timerGate TimerGate, maxPollRPS dynamicconfig.IntPropertyFn,
 	startDelay dynamicconfig.DurationPropertyFn, logger bark.Logger) *timerQueueProcessorBase {
 	log := logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
@@ -109,6 +110,7 @@ func newTimerQueueProcessorBase(scope int, shard ShardContext, historyService *h
 		logger:                  log,
 		metricsClient:           historyService.metricsClient,
 		timerQueueAckMgr:        timerQueueAckMgr,
+		timerGate:               timerGate,
 		numOfWorker:             numOfWorker,
 		workerNotificationChans: workerNotificationChans,
 		newTimerCh:              make(chan struct{}, 1),
@@ -139,6 +141,7 @@ func (t *timerQueueProcessorBase) Stop() {
 		return
 	}
 
+	t.timerGate.Close()
 	close(t.shutdownCh)
 	t.retryTasks()
 
@@ -280,7 +283,6 @@ func (t *timerQueueProcessorBase) notifyNewTimer(newTime time.Time) {
 }
 
 func (t *timerQueueProcessorBase) internalProcessor() error {
-	timerGate := t.timerProcessor.getTimerGate()
 	jitter := backoff.NewJitter()
 	pollTimer := time.NewTimer(jitter.JitDuration(
 		t.config.TimerProcessorMaxPollInterval(),
@@ -311,13 +313,13 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			// use a separate gorouting since the caller hold the shutdownWG
 			go t.Stop()
 			return nil
-		case <-timerGate.FireChan():
+		case <-t.timerGate.FireChan():
 			lookAheadTimer, err := t.readAndFanoutTimerTasks()
 			if err != nil {
 				return err
 			}
 			if lookAheadTimer != nil {
-				timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+				t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
 			}
 		case <-pollTimer.C:
 			pollTimer.Reset(jitter.JitDuration(
@@ -330,7 +332,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					timerGate.Update(lookAheadTimer.VisibilityTimestamp)
+					t.timerGate.Update(lookAheadTimer.VisibilityTimestamp)
 				}
 			}
 		case <-updateAckTimer.C:
@@ -346,7 +348,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			t.newTimeLock.Unlock()
 			// New Timer has arrived.
 			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
-			timerGate.Update(newTime)
+			t.timerGate.Update(newTime)
 		}
 	}
 }
@@ -401,7 +403,14 @@ func (t *timerQueueProcessorBase) processTaskAndAck(notificationChan <-chan stru
 		scope, err = t.processTaskOnce(notificationChan, task, logger)
 		return t.handleTaskError(scope, startTime, notificationChan, err, logger)
 	}
-	retryCondition := func(err error) bool { return true }
+	retryCondition := func(err error) bool {
+		select {
+		case <-t.shutdownCh:
+			return false
+		default:
+			return true
+		}
+	}
 	defer func() { t.metricsClient.RecordTimer(scope, metrics.TaskLatency, time.Since(startTime)) }()
 
 	for {

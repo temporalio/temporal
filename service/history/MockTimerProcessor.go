@@ -57,18 +57,3 @@ func (_m *MockTimerProcessor) process(task *persistence.TimerTaskInfo) (int, err
 
 	return r0, r1
 }
-
-// getTimerGate is mock implementation for getTimerGate of timerProcessor
-func (_m *MockTimerProcessor) getTimerGate() TimerGate {
-	ret := _m.Called()
-
-	var r0 TimerGate
-	if rf, ok := ret.Get(0).(func() TimerGate); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(TimerGate)
-		}
-	}
-	return r0
-}

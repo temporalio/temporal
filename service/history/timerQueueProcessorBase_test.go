@@ -118,6 +118,7 @@ func (s *timerQueueProcessorBaseSuite) SetupTest() {
 			metricsClient: metricsClient,
 		},
 		s.mockQueueAckMgr,
+		NewLocalTimerGate(),
 		dynamicconfig.GetIntPropertyFn(10),
 		dynamicconfig.GetDurationPropertyFn(0*time.Second),
 		s.logger,

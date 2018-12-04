@@ -45,7 +45,6 @@ type (
 		metricsClient           metrics.Client
 		currentClusterName      string
 		matchingClient          matching.Client
-		timerGate               LocalTimerGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		timerQueueAckMgr        timerQueueAckMgr
 		config                  *Config
@@ -78,6 +77,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		currentClusterName,
 	)
 
+	timerGate := NewLocalTimerGate()
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		historyService:     historyService,
@@ -88,12 +88,12 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		matchingClient:     matchingClient,
 		metricsClient:      historyService.metricsClient,
 		currentClusterName: currentClusterName,
-		timerGate:          NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(
 			metrics.TimerActiveQueueProcessorScope,
 			shard,
 			historyService,
 			timerQueueAckMgr,
+			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
@@ -149,6 +149,7 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		logger,
 	)
 
+	timerGate := NewLocalTimerGate()
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		historyService:     historyService,
@@ -159,12 +160,12 @@ func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyE
 		metricsClient:      historyService.metricsClient,
 		matchingClient:     matchingClient,
 		currentClusterName: currentClusterName,
-		timerGate:          NewLocalTimerGate(),
 		timerQueueProcessorBase: newTimerQueueProcessorBase(
 			metrics.TimerActiveQueueProcessorScope,
 			shard,
 			historyService,
 			timerQueueAckMgr,
+			timerGate,
 			shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 			shard.GetConfig().TimerProcessorFailoverStartDelay,
 			logger,
@@ -180,16 +181,11 @@ func (t *timerQueueActiveProcessorImpl) Start() {
 }
 
 func (t *timerQueueActiveProcessorImpl) Stop() {
-	t.timerGate.Close()
 	t.timerQueueProcessorBase.Stop()
 }
 
 func (t *timerQueueActiveProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
-}
-
-func (t *timerQueueActiveProcessorImpl) getTimerGate() TimerGate {
-	return t.timerGate
 }
 
 // NotifyNewTimers - Notify the processor about the new active timer events arrival.

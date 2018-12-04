@@ -128,7 +128,6 @@ type (
 	timerProcessor interface {
 		notifyNewTimers(timerTask []persistence.Task)
 		process(task *persistence.TimerTaskInfo) (int, error)
-		getTimerGate() TimerGate
 	}
 
 	timerQueueAckMgr interface {

@@ -90,6 +90,7 @@ func newTimerQueueStandbyProcessor(shard ShardContext, historyService *historyEn
 			shard,
 			historyService,
 			timerQueueAckMgr,
+			timerGate,
 			shard.GetConfig().TimerProcessorMaxPollRPS,
 			shard.GetConfig().TimerProcessorStartDelay,
 			logger,
@@ -110,10 +111,6 @@ func (t *timerQueueStandbyProcessorImpl) Stop() {
 
 func (t *timerQueueStandbyProcessorImpl) getTimerFiredCount() uint64 {
 	return t.timerQueueProcessorBase.getTimerFiredCount()
-}
-
-func (t *timerQueueStandbyProcessorImpl) getTimerGate() TimerGate {
-	return t.timerGate
 }
 
 func (t *timerQueueStandbyProcessorImpl) setCurrentTime(currentTime time.Time) {
