@@ -872,9 +872,8 @@ const (
 	CadenceClientFailures
 	CadenceClientLatency
 
-	DomainCacheTotalCallbacksLatency
-	DomainCacheBeforeCallbackLatency
-	DomainCacheAfterCallbackLatency
+	DomainCachePrepareCallbacksLatency
+	DomainCacheCallbacksLatency
 
 	HistorySize
 
@@ -1050,9 +1049,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceClientRequests:                               {metricName: "cadence.client.requests", metricType: Counter},
 		CadenceClientFailures:                               {metricName: "cadence.client.errors", metricType: Counter},
 		CadenceClientLatency:                                {metricName: "cadence.client.latency", metricType: Timer},
-		DomainCacheTotalCallbacksLatency:                    {metricName: "domain-cache.total-callbacks.latency", metricType: Timer},
-		DomainCacheBeforeCallbackLatency:                    {metricName: "domain-cache.before-callbacks.latency", metricType: Timer},
-		DomainCacheAfterCallbackLatency:                     {metricName: "domain-cache.after-callbacks.latency", metricType: Timer},
+		DomainCachePrepareCallbacksLatency:                  {metricName: "domain-cache.prepare-callbacks.latency", metricType: Timer},
+		DomainCacheCallbacksLatency:                         {metricName: "domain-cache.callbacks.latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history-size", metricType: Timer},
 	},
 	Frontend: {},

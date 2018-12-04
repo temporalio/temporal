@@ -112,8 +112,10 @@ type (
 
 	transferQueueProcessor interface {
 		common.Daemon
-		FailoverDomain(domainID string)
+		FailoverDomain(domainIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
+		LockTaskPrrocessing()
+		UnlockTaskPrrocessing()
 	}
 
 	// TODO the timer queue processor and the one below, timer processor
@@ -121,8 +123,10 @@ type (
 	// convention, or at least come with a better name for this case.
 	timerQueueProcessor interface {
 		common.Daemon
-		FailoverDomain(domainID string)
+		FailoverDomain(domainIDs map[string]struct{})
 		NotifyNewTimers(clusterName string, currentTime time.Time, timerTask []persistence.Task)
+		LockTaskPrrocessing()
+		UnlockTaskPrrocessing()
 	}
 
 	timerProcessor interface {

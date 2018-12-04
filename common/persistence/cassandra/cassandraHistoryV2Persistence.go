@@ -22,7 +22,6 @@ package cassandra
 
 import (
 	"fmt"
-
 	"sort"
 
 	"github.com/gocql/gocql"

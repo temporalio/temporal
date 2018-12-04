@@ -54,7 +54,7 @@ var (
 
 func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
-	matchingClient matching.Client, logger bark.Logger) *transferQueueStandbyProcessorImpl {
+	matchingClient matching.Client, taskAllocator taskAllocator, logger bark.Logger) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -73,7 +73,7 @@ func newTransferQueueStandbyProcessor(clusterName string, shard ShardContext, hi
 	})
 
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		return verifyStandbyTask(shard, logger, clusterName, task.DomainID, task)
+		return taskAllocator.verifyStandbyTask(clusterName, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()

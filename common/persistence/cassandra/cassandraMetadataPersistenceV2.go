@@ -25,7 +25,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
-
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	p "github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/service/config"
@@ -317,6 +316,9 @@ func (m *cassandraMetadataPersistenceV2) GetDomain(request *p.GetDomainRequest) 
 		return nil, handleError(request.Name, request.ID, err)
 	}
 
+	if info.Data == nil {
+		info.Data = map[string]string{}
+	}
 	replicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, replicationConfig.ActiveClusterName)
 	replicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 	replicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, replicationConfig.Clusters)
@@ -364,6 +366,9 @@ func (m *cassandraMetadataPersistenceV2) ListDomains(request *p.ListDomainsReque
 	) {
 		if name != domainMetadataRecordName {
 			// do not inlcude the metadata record
+			if domain.Info.Data == nil {
+				domain.Info.Data = map[string]string{}
+			}
 			domain.ReplicationConfig.ActiveClusterName = p.GetOrUseDefaultActiveCluster(m.currentClusterName, domain.ReplicationConfig.ActiveClusterName)
 			domain.ReplicationConfig.Clusters = p.DeserializeClusterConfigs(replicationClusters)
 			domain.ReplicationConfig.Clusters = p.GetOrUseDefaultClusters(m.currentClusterName, domain.ReplicationConfig.Clusters)

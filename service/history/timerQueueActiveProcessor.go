@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	m "github.com/uber/cadence/.gen/go/matching"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -51,7 +52,8 @@ type (
 	}
 )
 
-func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client, logger bark.Logger) *timerQueueActiveProcessorImpl {
+func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, matchingClient matching.Client,
+	taskAllocator taskAllocator, logger bark.Logger) *timerQueueActiveProcessorImpl {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
@@ -63,7 +65,7 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 		logging.TagWorkflowCluster: currentClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
-		return verifyActiveTask(shard, logger, timer.DomainID, timer)
+		return taskAllocator.verifyActiveTask(timer.DomainID, timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -105,37 +107,39 @@ func newTimerQueueActiveProcessor(shard ShardContext, historyService *historyEng
 	return processor
 }
 
-func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainID string, standbyClusterName string,
-	minLevel time.Time, maxLevel time.Time, matchingClient matching.Client, logger bark.Logger) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
+func newTimerQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl, domainIDs map[string]struct{}, standbyClusterName string,
+	minLevel time.Time, maxLevel time.Time, matchingClient matching.Client, taskAllocator taskAllocator, logger bark.Logger) (func(ackLevel TimerSequenceID) error, *timerQueueActiveProcessorImpl) {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing domain failover
 		return shard.GetCurrentTime(currentClusterName)
 	}
 	failoverStartTime := time.Now()
+	failoverUUID := uuid.New()
+
 	updateShardAckLevel := func(ackLevel TimerSequenceID) error {
 		return shard.UpdateTimerFailoverLevel(
-			domainID,
+			failoverUUID,
 			persistence.TimerFailoverLevel{
 				StartTime:    failoverStartTime,
 				MinLevel:     minLevel,
 				CurrentLevel: ackLevel.VisibilityTimestamp,
 				MaxLevel:     maxLevel,
-				DomainIDs:    []string{domainID},
+				DomainIDs:    domainIDs,
 			},
 		)
 	}
 	timerAckMgrShutdown := func() error {
-		return shard.DeleteTimerFailoverLevel(domainID)
+		return shard.DeleteTimerFailoverLevel(failoverUUID)
 	}
 
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
-		logging.TagDomainID:        domainID,
+		logging.TagDomainID:        domainIDs,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	timerTaskFilter := func(timer *persistence.TimerTaskInfo) (bool, error) {
-		return verifyFailoverActiveTask(logger, domainID, timer.DomainID, timer)
+		return taskAllocator.verifyFailoverActiveTask(domainIDs, timer.DomainID, timer)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

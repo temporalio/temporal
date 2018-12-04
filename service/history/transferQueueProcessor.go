@@ -46,6 +46,7 @@ type (
 		isGlobalDomainEnabled bool
 		currentClusterName    string
 		shard                 ShardContext
+		taskAllocator         taskAllocator
 		config                *Config
 		metricsClient         metrics.Client
 		historyService        *historyEngineImpl
@@ -70,11 +71,12 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 		logging.TagWorkflowComponent: logging.TagValueTransferQueueComponent,
 	})
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	taskAllocator := newTaskAllocator(shard)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != currentClusterName {
 			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
-				clusterName, shard, historyService, visibilityMgr, visibilityProducer, matchingClient, logger,
+				clusterName, shard, historyService, visibilityMgr, visibilityProducer, matchingClient, taskAllocator, logger,
 			)
 		}
 	}
@@ -83,6 +85,7 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 		isGlobalDomainEnabled: shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
 		currentClusterName:    currentClusterName,
 		shard:                 shard,
+		taskAllocator:         taskAllocator,
 		config:                shard.GetConfig(),
 		metricsClient:         historyService.metricsClient,
 		historyService:        historyService,
@@ -93,7 +96,7 @@ func newTransferQueueProcessor(shard ShardContext, historyService *historyEngine
 		ackLevel:              shard.GetTransferAckLevel(),
 		logger:                logger,
 		shutdownChan:          make(chan struct{}),
-		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, visibilityProducer, matchingClient, historyClient, logger),
+		activeTaskProcessor:   newTransferQueueActiveProcessor(shard, historyService, visibilityMgr, visibilityProducer, matchingClient, historyClient, taskAllocator, logger),
 		standbyTaskProcessors: standbyTaskProcessors,
 	}
 }
@@ -146,7 +149,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(clusterName string, transferT
 	standbyTaskProcessor.retryTasks()
 }
 
-func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
+func (t *transferQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
@@ -159,10 +162,10 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 
 	// the ack manager is exclusive, so add 1
 	maxLevel := t.activeTaskProcessor.getQueueReadLevel() + 1
-	t.logger.Infof("Transfer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
+	t.logger.Infof("Transfer Failover Triggered: %v, min level: %v, max level: %v.\n", domainIDs, minLevel, maxLevel)
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard, t.historyService, t.visibilityMgr, t.visibilityProducer, t.matchingClient, t.historyClient,
-		domainID, standbyClusterName, minLevel, maxLevel, t.logger,
+		domainIDs, standbyClusterName, minLevel, maxLevel, t.taskAllocator, t.logger,
 	)
 
 	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -171,6 +174,14 @@ func (t *transferQueueProcessorImpl) FailoverDomain(domainID string) {
 
 	failoverTaskProcessor.Start()
 	updateShardAckLevel(minLevel)
+}
+
+func (t *transferQueueProcessorImpl) LockTaskPrrocessing() {
+	t.taskAllocator.lock()
+}
+
+func (t *transferQueueProcessorImpl) UnlockTaskPrrocessing() {
+	t.taskAllocator.unlock()
 }
 
 func (t *transferQueueProcessorImpl) completeTransferLoop() {

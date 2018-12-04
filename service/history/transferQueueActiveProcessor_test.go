@@ -29,7 +29,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/.gen/go/history"
@@ -154,7 +153,7 @@ func (s *transferQueueActiveProcessorSuite) SetupTest() {
 		timerProcessor:     s.mockTimerQueueProcessor,
 	}
 	s.mockHistoryEngine = h
-	s.transferQueueActiveProcessor = newTransferQueueActiveProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockProducer, s.mockMatchingClient, s.mockHistoryClient, s.logger)
+	s.transferQueueActiveProcessor = newTransferQueueActiveProcessor(s.mockShard, h, s.mockVisibilityMgr, s.mockProducer, s.mockMatchingClient, s.mockHistoryClient, newTaskAllocator(s.mockShard), s.logger)
 	s.mockQueueAckMgr = &MockQueueAckMgr{}
 	s.transferQueueActiveProcessor.queueAckMgr = s.mockQueueAckMgr
 	s.transferQueueActiveProcessor.queueProcessorBase.ackMgr = s.mockQueueAckMgr

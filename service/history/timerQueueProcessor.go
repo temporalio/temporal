@@ -46,6 +46,7 @@ type (
 		isGlobalDomainEnabled  bool
 		currentClusterName     string
 		shard                  ShardContext
+		taskAllocator          taskAllocator
 		config                 *Config
 		metricsClient          metrics.Client
 		historyService         *historyEngineImpl
@@ -65,10 +66,11 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowComponent: logging.TagValueTimerQueueComponent,
 	})
+	taskAllocator := newTaskAllocator(shard)
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
 	for clusterName := range shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
 		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
-			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(shard, historyService, clusterName, logger)
+			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(shard, historyService, clusterName, taskAllocator, logger)
 		}
 	}
 
@@ -76,6 +78,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		isGlobalDomainEnabled:  shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled(),
 		currentClusterName:     currentClusterName,
 		shard:                  shard,
+		taskAllocator:          taskAllocator,
 		config:                 shard.GetConfig(),
 		metricsClient:          historyService.metricsClient,
 		historyService:         historyService,
@@ -83,7 +86,7 @@ func newTimerQueueProcessor(shard ShardContext, historyService *historyEngineImp
 		logger:                 logger,
 		matchingClient:         matchingClient,
 		shutdownChan:           make(chan struct{}),
-		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, logger),
+		activeTimerProcessor:   newTimerQueueActiveProcessor(shard, historyService, matchingClient, taskAllocator, logger),
 		standbyTimerProcessors: standbyTimerProcessors,
 	}
 }
@@ -131,7 +134,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(clusterName string, currentTim
 	standbyTimerProcessor.retryTasks()
 }
 
-func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
+func (t *timerQueueProcessorImpl) FailoverDomain(domainIDs map[string]struct{}) {
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
 	for cluster := range t.shard.GetService().GetClusterMetadata().GetAllClusterFailoverVersions() {
@@ -143,10 +146,10 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 	}
 	// the ack manager is exclusive, so just add a cassandra min precision
 	maxLevel := t.activeTimerProcessor.timerQueueAckMgr.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
-	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainID, minLevel, maxLevel)
+	t.logger.Infof("Timer Failover Triggered: %v, min level: %v, max level: %v.\n", domainIDs, minLevel, maxLevel)
 	// we should consider make the failover idempotent
-	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainID,
-		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.logger)
+	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(t.shard, t.historyService, domainIDs,
+		standbyClusterName, minLevel, maxLevel, t.matchingClient, t.taskAllocator, t.logger)
 
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 		standbyTimerProcessor.retryTasks()
@@ -154,6 +157,14 @@ func (t *timerQueueProcessorImpl) FailoverDomain(domainID string) {
 
 	failoverTimerProcessor.Start()
 	updateShardAckLevel(TimerSequenceID{VisibilityTimestamp: minLevel})
+}
+
+func (t *timerQueueProcessorImpl) LockTaskPrrocessing() {
+	t.taskAllocator.lock()
+}
+
+func (t *timerQueueProcessorImpl) UnlockTaskPrrocessing() {
+	t.taskAllocator.unlock()
 }
 
 func (t *timerQueueProcessorImpl) getTimerFiredCount(clusterName string) uint64 {

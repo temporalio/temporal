@@ -26,9 +26,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
-
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
@@ -605,7 +604,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 				persistence.TimerFailoverLevel{
 					MinLevel:  ackLevel.VisibilityTimestamp,
 					MaxLevel:  ackLevel.VisibilityTimestamp,
-					DomainIDs: []string{s.domainID},
+					DomainIDs: map[string]struct{}{s.domainID: struct{}{}},
 				},
 			)
 		},

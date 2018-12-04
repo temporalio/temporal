@@ -131,23 +131,10 @@ func (_m *DomainCacheMock) GetDomainID(name string) (string, error) {
 	return r0, r1
 }
 
-// GetDomainNotificationVersion provides a mock function with given fields:
-func (_m *DomainCacheMock) GetDomainNotificationVersion() int64 {
-	ret := _m.Called()
-
-	var r0 int64
-	if rf, ok := ret.Get(0).(func() int64); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int64)
-	}
-
-	return r0
-}
-
-// RegisterDomainChangeCallback provides a mock function with given fields: shard, initialNotificationVersion, beforeCallback, afterCallback
-func (_m *DomainCacheMock) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, beforeCallback CallbackFn, afterCallback CallbackFn) {
-	_m.Called(shard, initialNotificationVersion, beforeCallback, afterCallback)
+// RegisterDomainChangeCallback provides a mock function with given fields: shard, initialNotificationVersion, prepareCallbackFn, callback
+func (_m *DomainCacheMock) RegisterDomainChangeCallback(shard int, initialNotificationVersion int64,
+	prepareCallbackFn PrepareCallbackFn, callback CallbackFn) {
+	_m.Called(shard, initialNotificationVersion, prepareCallbackFn, callback)
 }
 
 // Start provides a mock function with given fields:

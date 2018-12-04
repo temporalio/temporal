@@ -27,65 +27,6 @@ import (
 	"github.com/uber/cadence/common/persistence"
 )
 
-// verifyActiveTask, will return true if task activeness check is successful
-func verifyActiveTask(shard ShardContext, logger bark.Logger, taskDomainID string, task interface{}) (bool, error) {
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(taskDomainID)
-	if err != nil {
-		// it is possible that the domain is deleted
-		// we should treat that domain as active
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-			logger.Warnf("Cannot find domainID: %v, err: %v.", taskDomainID)
-			return false, err
-		}
-		logger.Warnf("Cannot find domainID: %v, default to process task: %v.", taskDomainID, task)
-		return true, nil
-	}
-	if domainEntry.IsGlobalDomain() && currentClusterName != domainEntry.GetReplicationConfig().ActiveClusterName {
-		// timer task does not belong to cluster name
-		logger.Debugf("DomainID: %v is not active, skip task: %v.", taskDomainID, task)
-		return false, nil
-	}
-	logger.Debugf("DomainID: %v is active, process task: %v.", taskDomainID, task)
-	return true, nil
-}
-
-// verifyFailoverActiveTask, will return true if task activeness check is successful
-func verifyFailoverActiveTask(logger bark.Logger, targetDomainID string, taskDomainID string, task interface{}) (bool, error) {
-	if targetDomainID == taskDomainID {
-		logger.Debugf("Failover DomainID: %v is active, process task: %v.", taskDomainID, task)
-		return true, nil
-	}
-	logger.Debugf("Failover DomainID: %v is not active, skip task: %v.", taskDomainID, task)
-	return false, nil
-}
-
-// verifyStandbyTask, will return true if task standbyness check is successful
-func verifyStandbyTask(shard ShardContext, logger bark.Logger, standbyCluster string, taskDomainID string, task interface{}) (bool, error) {
-	domainEntry, err := shard.GetDomainCache().GetDomainByID(taskDomainID)
-	if err != nil {
-		// it is possible that the domain is deleted
-		// we should treat that domain as not active
-		if _, ok := err.(*workflow.EntityNotExistsError); !ok {
-			logger.Warnf("Cannot find domainID: %v, err: %v.", taskDomainID)
-			return false, err
-		}
-		logger.Warnf("Cannot find domainID: %v, default to not process task: %v.", taskDomainID, task)
-		return false, nil
-	}
-	if !domainEntry.IsGlobalDomain() {
-		// non global domain, timer task does not belong here
-		logger.Debugf("DomainID: %v is not global, skip task: %v.", taskDomainID, task)
-		return false, nil
-	} else if domainEntry.IsGlobalDomain() && domainEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
-		// timer task does not belong here
-		logger.Debugf("DomainID: %v is not standby, skip task: %v.", taskDomainID, task)
-		return false, nil
-	}
-	logger.Debugf("DomainID: %v is standby, process task: %v.", taskDomainID, task)
-	return true, nil
-}
-
 // verifyTaskVersion, will return true if failover version check is successful
 func verifyTaskVersion(shard ShardContext, logger bark.Logger, domainID string, version int64, taskVersion int64, task interface{}) (bool, error) {
 	if !shard.GetService().GetClusterMetadata().IsGlobalDomainEnabled() {

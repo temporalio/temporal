@@ -24,14 +24,14 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/uber-go/tally"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
+	"github.com/uber-go/tally"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/mocks"
@@ -84,7 +84,7 @@ func (s *domainCacheSuite) TearDownTest() {
 func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion := int64(0)
 	domainRecord1 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -100,7 +100,7 @@ func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion++
 
 	domainRecord2 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 2},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -116,7 +116,7 @@ func (s *domainCacheSuite) TestListDomain() {
 	domainNotificationVersion++
 
 	domainRecord3 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "yet another random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "yet another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 3},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -155,32 +155,35 @@ func (s *domainCacheSuite) TestListDomain() {
 	// load domains
 	s.domainCache.Start()
 	defer s.domainCache.Stop()
-	s.Equal(domainNotificationVersion, s.domainCache.GetDomainNotificationVersion())
 
 	entryByName1, err := s.domainCache.GetDomain(domainRecord1.Info.Name)
 	s.Nil(err)
-	s.Equal(entry1, entryByName1)
+	s.Equal(entry1, s.clearExpiry(entryByName1))
 	entryByID1, err := s.domainCache.GetDomainByID(domainRecord1.Info.ID)
 	s.Nil(err)
-	s.Equal(entry1, entryByID1)
+	s.Equal(entry1, s.clearExpiry(entryByID1))
 
 	entryByName2, err := s.domainCache.GetDomain(domainRecord2.Info.Name)
 	s.Nil(err)
-	s.Equal(entry2, entryByName2)
+	s.Equal(entry2, s.clearExpiry(entryByName2))
 	entryByID2, err := s.domainCache.GetDomainByID(domainRecord2.Info.ID)
 	s.Nil(err)
-	s.Equal(entry2, entryByID2)
+	s.Equal(entry2, s.clearExpiry(entryByID2))
 
+	allDomains := s.domainCache.GetAllDomain()
+	for _, domain := range allDomains {
+		s.clearExpiry(domain)
+	}
 	s.Equal(map[string]*DomainCacheEntry{
 		entry1.GetInfo().ID: entry1,
 		entry2.GetInfo().ID: entry2,
-	}, s.domainCache.GetAllDomain())
+	}, allDomains)
 }
 
 func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -197,16 +200,16 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByName() {
 
 	entryByName, err := s.domainCache.GetDomain(domainRecord.Info.Name)
 	s.Nil(err)
-	s.Equal(entry, entryByName)
+	s.Equal(entry, s.clearExpiry(entryByName))
 	entryByName, err = s.domainCache.GetDomain(domainRecord.Info.Name)
 	s.Nil(err)
-	s.Equal(entry, entryByName)
+	s.Equal(entry, s.clearExpiry(entryByName))
 }
 
 func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecord := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -223,16 +226,16 @@ func (s *domainCacheSuite) TestGetDomain_NonLoaded_GetByID() {
 
 	entryByID, err := s.domainCache.GetDomainByID(domainRecord.Info.ID)
 	s.Nil(err)
-	s.Equal(entry, entryByID)
+	s.Equal(entry, s.clearExpiry(entryByID))
 	entryByID, err = s.domainCache.GetDomainByID(domainRecord.Info.ID)
 	s.Nil(err)
-	s.Equal(entry, entryByID)
+	s.Equal(entry, s.clearExpiry(entryByID))
 }
 
 func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 	domainNotificationVersion := int64(0)
 	domainRecord1 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -250,7 +253,7 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 	domainNotificationVersion++
 
 	domainRecord2 := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 2},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -279,34 +282,38 @@ func (s *domainCacheSuite) TestRegisterCallback_CatchUp() {
 
 	// load domains
 	s.Nil(s.domainCache.refreshDomains())
-	s.Equal(domainNotificationVersion, s.domainCache.GetDomainNotificationVersion())
 
-	entriesNotificationBefore := []*DomainCacheEntry{}
-	entriesNotificationAfter := []*DomainCacheEntry{}
+	prepareCallbacckInvoked := false
+	entriesNotification := []*DomainCacheEntry{}
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(0)
 	s.domainCache.RegisterDomainChangeCallback(
 		0,
 		currentDomainNotificationVersion,
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			s.Nil(prevDomain)
-			entriesNotificationBefore = append(entriesNotificationBefore, nextDomain)
+		func() {
+			prepareCallbacckInvoked = true
 		},
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			s.Nil(prevDomain)
-			entriesNotificationAfter = append(entriesNotificationAfter, nextDomain)
+		func(prevDomains []*DomainCacheEntry, nextDomains []*DomainCacheEntry) {
+			s.Equal(len(prevDomains), len(nextDomains))
+			for index := range prevDomains {
+				s.Nil(prevDomains[index])
+			}
+			entriesNotification = nextDomains
 		},
 	)
 
 	// the order matters here, should be ordered by notification version
-	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotificationBefore)
-	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotificationAfter)
+	s.True(prepareCallbacckInvoked)
+	for _, domain := range entriesNotification {
+		s.clearExpiry(domain)
+	}
+	s.Equal([]*DomainCacheEntry{entry1, entry2}, entriesNotification)
 }
 
 func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	domainNotificationVersion := int64(0)
 	domainRecord1Old := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -324,7 +331,7 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	domainNotificationVersion++
 
 	domainRecord2Old := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "another random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 2},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -353,7 +360,6 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 
 	// load domains
 	s.Nil(s.domainCache.refreshDomains())
-	s.Equal(domainNotificationVersion, s.domainCache.GetDomainNotificationVersion())
 
 	domainRecord2New := &persistence.GetDomainResponse{
 		Info:   &*domainRecord2Old.Info,
@@ -374,7 +380,7 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	domainNotificationVersion++
 
 	domainRecord1New := &persistence.GetDomainResponse{ // only the description changed
-		Info:   &persistence.DomainInfo{ID: domainRecord1Old.Info.ID, Name: domainRecord1Old.Info.Name, Description: "updated description"},
+		Info:   &persistence.DomainInfo{ID: domainRecord1Old.Info.ID, Name: domainRecord1Old.Info.Name, Description: "updated description", Data: make(map[string]string)},
 		Config: &*domainRecord2Old.Config,
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -391,28 +397,25 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	entry1New := s.buildEntryFromRecord(domainRecord1New)
 	domainNotificationVersion++
 
-	entriesOldBefore := []*DomainCacheEntry{}
-	entriesNewBefore := []*DomainCacheEntry{}
-	entriesOldAfter := []*DomainCacheEntry{}
-	entriesNewAfter := []*DomainCacheEntry{}
+	prepareCallbacckInvoked := false
+	entriesOld := []*DomainCacheEntry{}
+	entriesNew := []*DomainCacheEntry{}
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(9999999)
 	s.domainCache.RegisterDomainChangeCallback(
 		0,
 		currentDomainNotificationVersion,
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			entriesOldBefore = append(entriesOldBefore, prevDomain)
-			entriesNewBefore = append(entriesNewBefore, nextDomain)
+		func() {
+			prepareCallbacckInvoked = true
 		},
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			entriesOldAfter = append(entriesOldAfter, prevDomain)
-			entriesNewAfter = append(entriesNewAfter, nextDomain)
+		func(prevDomains []*DomainCacheEntry, nextDomains []*DomainCacheEntry) {
+			entriesOld = prevDomains
+			entriesNew = nextDomains
 		},
 	)
-	s.Empty(entriesOldBefore)
-	s.Empty(entriesNewBefore)
-	s.Empty(entriesOldAfter)
-	s.Empty(entriesNewAfter)
+	s.False(prepareCallbacckInvoked)
+	s.Empty(entriesOld)
+	s.Empty(entriesNew)
 
 	s.metadataMgr.On("GetMetadata").Return(&persistence.GetMetadataResponse{NotificationVersion: domainNotificationVersion}, nil).Once()
 	s.metadataMgr.On("ListDomains", &persistence.ListDomainsRequest{
@@ -428,16 +431,21 @@ func (s *domainCacheSuite) TestUpdateCache_ListTrigger() {
 	// the record 1 got updated later, thus a higher notification version.
 	// making sure notifying from lower to higher version helps the shard to keep track the
 	// domain change events
-	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOldBefore)
-	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNewBefore)
-	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOldAfter)
-	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNewAfter)
+	s.True(prepareCallbacckInvoked)
+	for _, domain := range entriesOld {
+		s.clearExpiry(domain)
+	}
+	for _, domain := range entriesNew {
+		s.clearExpiry(domain)
+	}
+	s.Equal([]*DomainCacheEntry{entry2Old, entry1Old}, entriesOld)
+	s.Equal([]*DomainCacheEntry{entry2New, entry1New}, entriesNew)
 }
 
 func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	domainRecordOld := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: uuid.New(), Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -468,39 +476,36 @@ func (s *domainCacheSuite) TestUpdateCache_GetNotTrigger() {
 	s.metadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: entryOld.info.ID}).Return(domainRecordOld, nil).Once()
 	entry, err := s.domainCache.GetDomainByID(entryOld.info.ID)
 	s.Nil(err)
-	s.Equal(entryOld, entry)
+	s.Equal(entryOld, s.clearExpiry(entry))
 
-	callbackBeforeInvoked := false
-	callbackAfterInvoked := false
+	prepareCallbackInvoked := false
+	callbackInvoked := false
 	// we are not testing catching up, so make this really large
 	currentDomainNotificationVersion := int64(9999999)
 	s.domainCache.RegisterDomainChangeCallback(
 		0,
 		currentDomainNotificationVersion,
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			s.Equal(entryOld, prevDomain)
-			s.Equal(entryNew, nextDomain)
-			callbackBeforeInvoked = true
+		func() {
+			prepareCallbackInvoked = true
 		},
-		func(prevDomain *DomainCacheEntry, nextDomain *DomainCacheEntry) {
-			s.Equal(entryOld, prevDomain)
-			s.Equal(entryNew, nextDomain)
-			callbackAfterInvoked = true
+		func(prevDomains []*DomainCacheEntry, nextDomains []*DomainCacheEntry) {
+			callbackInvoked = true
 		},
 	)
 
-	entry, err = s.domainCache.updateIDToDomainCache(domainRecordNew.Info.ID, entryNew)
+	prevEntry, nextEntry, err := s.domainCache.updateIDToDomainCache(s.domainCache.cacheByID.Load().(Cache), domainRecordNew.Info.ID, entryNew)
 	s.Nil(err)
-	s.Equal(entryNew, entry)
-	s.False(callbackBeforeInvoked)
-	s.False(callbackAfterInvoked)
+	s.Nil(prevEntry)
+	s.Equal(entryNew, s.clearExpiry(nextEntry))
+	s.False(prepareCallbackInvoked)
+	s.False(callbackInvoked)
 }
 
 func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {
 	s.clusterMetadata.On("IsGlobalDomainEnabled").Return(true)
 	id := uuid.New()
 	domainRecordOld := &persistence.GetDomainResponse{
-		Info:   &persistence.DomainInfo{ID: id, Name: "some random domain name"},
+		Info:   &persistence.DomainInfo{ID: id, Name: "some random domain name", Data: make(map[string]string)},
 		Config: &persistence.DomainConfig{Retention: 1},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -529,7 +534,7 @@ func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {
 		// make the config version the same so we can easily compare those
 		entryNew.configVersion = 0
 		entryNew.failoverVersion = 0
-		s.Equal(entryOld, entryNew)
+		s.Equal(entryOld, s.clearExpiry(entryNew))
 		waitGroup.Done()
 	}
 
@@ -539,7 +544,7 @@ func (s *domainCacheSuite) TestGetUpdateCache_ConcurrentAccess() {
 		s.Nil(err)
 		entryNew.configVersion = entryNew.configVersion + 1
 		entryNew.failoverVersion = entryNew.failoverVersion + 1
-		s.domainCache.updateIDToDomainCache(id, entryNew)
+		s.domainCache.updateIDToDomainCache(s.domainCache.cacheNameToID.Load().(Cache), id, entryNew)
 		waitGroup.Done()
 	}
 
@@ -571,6 +576,11 @@ func (s *domainCacheSuite) buildEntryFromRecord(record *persistence.GetDomainRes
 	newEntry.failoverNotificationVersion = record.FailoverNotificationVersion
 	newEntry.notificationVersion = record.NotificationVersion
 	return newEntry
+}
+
+func (s *domainCacheSuite) clearExpiry(entry *DomainCacheEntry) *DomainCacheEntry {
+	entry.expiry = time.Time{}
+	return entry
 }
 
 func Test_GetRetentionDays(t *testing.T) {

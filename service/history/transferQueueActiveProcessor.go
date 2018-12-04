@@ -23,6 +23,7 @@ package history
 import (
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -57,7 +58,7 @@ type (
 )
 
 func newTransferQueueActiveProcessor(shard ShardContext, historyService *historyEngineImpl, visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
-	matchingClient matching.Client, historyClient history.Client, logger bark.Logger) *transferQueueActiveProcessorImpl {
+	matchingClient matching.Client, historyClient history.Client, taskAllocator taskAllocator, logger bark.Logger) *transferQueueActiveProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorStartDelay,
@@ -76,7 +77,7 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 		logging.TagWorkflowCluster: currentClusterName,
 	})
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		return verifyActiveTask(shard, logger, task.DomainID, task)
+		return taskAllocator.verifyActiveTask(task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -114,8 +115,8 @@ func newTransferQueueActiveProcessor(shard ShardContext, historyService *history
 
 func newTransferQueueFailoverProcessor(shard ShardContext, historyService *historyEngineImpl,
 	visibilityMgr persistence.VisibilityManager, visibilityProducer messaging.Producer,
-	matchingClient matching.Client, historyClient history.Client, domainID string, standbyClusterName string,
-	minLevel int64, maxLevel int64, logger bark.Logger) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
+	matchingClient matching.Client, historyClient history.Client, domainIDs map[string]struct{}, standbyClusterName string,
+	minLevel int64, maxLevel int64, taskAllocator taskAllocator, logger bark.Logger) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		StartDelay:                         config.TransferProcessorFailoverStartDelay,
@@ -130,13 +131,14 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	failoverUUID := uuid.New()
 	logger = logger.WithFields(bark.Fields{
 		logging.TagWorkflowCluster: currentClusterName,
-		logging.TagDomainID:        domainID,
+		logging.TagDomainID:        domainIDs,
 		logging.TagFailover:        "from: " + standbyClusterName,
 	})
 	transferTaskFilter := func(task *persistence.TransferTaskInfo) (bool, error) {
-		return verifyFailoverActiveTask(logger, domainID, task.DomainID, task)
+		return taskAllocator.verifyFailoverActiveTask(domainIDs, task.DomainID, task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
@@ -144,18 +146,18 @@ func newTransferQueueFailoverProcessor(shard ShardContext, historyService *histo
 	failoverStartTime := time.Now()
 	updateTransferAckLevel := func(ackLevel int64) error {
 		return shard.UpdateTransferFailoverLevel(
-			domainID,
+			failoverUUID,
 			persistence.TransferFailoverLevel{
 				StartTime:    failoverStartTime,
 				MinLevel:     minLevel,
 				CurrentLevel: ackLevel,
 				MaxLevel:     maxLevel,
-				DomainIDs:    []string{domainID},
+				DomainIDs:    domainIDs,
 			},
 		)
 	}
 	transferQueueShutdown := func() error {
-		return shard.DeleteTransferFailoverLevel(domainID)
+		return shard.DeleteTransferFailoverLevel(failoverUUID)
 	}
 
 	processor := &transferQueueActiveProcessorImpl{

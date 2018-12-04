@@ -41,11 +41,21 @@ func (_m *MockTransferQueueProcessor) Stop() {
 }
 
 // FailoverDomain is mock implementation for FailoverDomain of Processor
-func (_m *MockTransferQueueProcessor) FailoverDomain(domainID string) {
-	_m.Called(domainID)
+func (_m *MockTransferQueueProcessor) FailoverDomain(domainIDs map[string]struct{}) {
+	_m.Called(domainIDs)
 }
 
 // NotifyNewTask is mock implementation for NotifyNewTask of Processor
 func (_m *MockTransferQueueProcessor) NotifyNewTask(clusterName string, transferTask []persistence.Task) {
 	_m.Called(clusterName, transferTask)
+}
+
+// LockTaskPrrocessing is mock implementation for LockTaskPrrocessing of Processor
+func (_m *MockTransferQueueProcessor) LockTaskPrrocessing() {
+	_m.Called()
+}
+
+// UnlockTaskPrrocessing is mock implementation for UnlockTaskPrrocessing of Processor
+func (_m *MockTransferQueueProcessor) UnlockTaskPrrocessing() {
+	_m.Called()
 }

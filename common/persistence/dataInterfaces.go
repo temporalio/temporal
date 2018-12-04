@@ -195,7 +195,7 @@ type (
 		MinLevel     int64
 		CurrentLevel int64
 		MaxLevel     int64
-		DomainIDs    []string
+		DomainIDs    map[string]struct{}
 	}
 
 	// TimerFailoverLevel contains domain IDs and corresponding start / end level
@@ -204,7 +204,7 @@ type (
 		MinLevel     time.Time
 		CurrentLevel time.Time
 		MaxLevel     time.Time
-		DomainIDs    []string
+		DomainIDs    map[string]struct{}
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution

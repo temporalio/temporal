@@ -22,13 +22,10 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
-
-	"encoding/json"
-
-	"go.uber.org/yarpc"
 
 	"github.com/pborman/uuid"
 	"github.com/uber-common/bark"
@@ -45,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/persistence"
+	"go.uber.org/yarpc"
 )
 
 const (
@@ -65,6 +63,7 @@ type (
 		executionManager     persistence.ExecutionManager
 		txProcessor          transferQueueProcessor
 		timerProcessor       timerQueueProcessor
+		taskAllocator        taskAllocator
 		replicator           *historyReplicator
 		replicatorProcessor  queueProcessor
 		historyEventNotifier historyEventNotifier
@@ -220,9 +219,8 @@ func (e *historyEngineImpl) Stop() {
 
 func (e *historyEngineImpl) registerDomainFailoverCallback() {
 
-	failoverPredicate := func(nextDomain *cache.DomainCacheEntry, action func()) {
+	failoverPredicate := func(shardNotificationVersion int64, nextDomain *cache.DomainCacheEntry, action func()) {
 		domainFailoverNotificationVersion := nextDomain.GetFailoverNotificationVersion()
-		shardNotificationVersion := e.shard.GetDomainNotificationVersion()
 		domainActiveCluster := nextDomain.GetReplicationConfig().ActiveClusterName
 
 		if nextDomain.IsGlobalDomain() &&
@@ -235,27 +233,37 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 	// first set the failover callback
 	e.shard.GetDomainCache().RegisterDomainChangeCallback(
 		e.shard.GetShardID(),
-		e.shard.GetDomainCache().GetDomainNotificationVersion(),
-		// before the domain change, this will be invoked when (most of time) domain cache is locked
-		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
-			e.logger.Infof("Domain Change Event: Shard: %v, Domain: %v, ID: %v, Failover Notification Version: %v, Active Cluster: %v, Shard Domain Notification Version: %v\n",
-				e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID,
-				nextDomain.GetFailoverNotificationVersion(), nextDomain.GetReplicationConfig().ActiveClusterName, e.shard.GetDomainNotificationVersion())
-
-			failoverPredicate(nextDomain, func() {
-				e.logger.Infof("Domain Failover Start: Shard: %v, Domain: %v, ID: %v\n",
-					e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID)
-
-				domainID := nextDomain.GetInfo().ID
-				e.txProcessor.FailoverDomain(domainID)
-				e.timerProcessor.FailoverDomain(domainID)
-			})
+		e.shard.GetDomainNotificationVersion(),
+		func() {
+			e.txProcessor.LockTaskPrrocessing()
+			e.timerProcessor.LockTaskPrrocessing()
 		},
-		// after the domain change, this will be invoked when domain cache is NOT locked
-		func(prevDomain *cache.DomainCacheEntry, nextDomain *cache.DomainCacheEntry) {
-			failoverPredicate(nextDomain, func() {
-				e.logger.Infof("Domain Failover Notify Active: Shard: %v, Domain: %v, ID: %v\n",
-					e.shard.GetShardID(), nextDomain.GetInfo().Name, nextDomain.GetInfo().ID)
+		func(prevDomains []*cache.DomainCacheEntry, nextDomains []*cache.DomainCacheEntry) {
+			defer func() {
+				e.txProcessor.UnlockTaskPrrocessing()
+				e.timerProcessor.UnlockTaskPrrocessing()
+			}()
+
+			if len(nextDomains) == 0 {
+				return
+			}
+
+			shardNotificationVersion := e.shard.GetDomainNotificationVersion()
+			failoverDomainIDs := map[string]struct{}{}
+
+			for _, nextDomain := range nextDomains {
+				failoverPredicate(shardNotificationVersion, nextDomain, func() {
+					failoverDomainIDs[nextDomain.GetInfo().ID] = struct{}{}
+				})
+			}
+
+			if len(failoverDomainIDs) > 0 {
+				e.logger.WithFields(bark.Fields{
+					logging.TagDomainID: failoverDomainIDs,
+				}).Infof("Domain Failover Start.")
+
+				e.txProcessor.FailoverDomain(failoverDomainIDs)
+				e.timerProcessor.FailoverDomain(failoverDomainIDs)
 
 				now := e.shard.GetTimeSource().Now()
 				// the fake tasks will not be actually used, we just need to make sure
@@ -264,8 +272,8 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, now, fakeDecisionTimeoutTask)
-			})
-			e.shard.UpdateDomainNotificationVersion(nextDomain.GetNotificationVersion() + 1)
+			}
+			e.shard.UpdateDomainNotificationVersion(nextDomains[len(nextDomains)-1].GetNotificationVersion() + 1)
 		},
 	)
 }
