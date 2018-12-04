@@ -366,11 +366,6 @@ func (c *workflowExecutionContext) update(transferTasks []persistence.Task, time
 		}
 	}
 
-	if newStateBuilder != nil && newStateBuilder.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-		continueAsNew.EventStoreVersion = persistence.EventStoreVersionV2
-		continueAsNew.BranchToken = newStateBuilder.GetCurrentBranch()
-	}
-
 	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	// Update history size on mutableState before calling UpdateWorkflowExecution

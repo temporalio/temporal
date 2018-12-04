@@ -101,6 +101,22 @@ test: dep-ensured bins
 	done;
 
 # need to run xdc tests with race detector off because of ringpop bug causing data race issue
+test_eventsV2: dep-ensured bins
+	@rm -f test_eventsV2
+	@rm -f test_eventsV2.log
+	@echo Running integration test
+	@for dir in $(INTEG_TEST_ROOT); do \
+    		go test -timeout 20m -coverprofile=$@ "$$dir" -v -eventsV2=true | tee -a test_eventsV2.log; \
+    done;
+
+test_eventsV2_xdc: dep-ensured bins
+	@rm -f test_eventsV2_xdc
+	@rm -f test_eventsV2_xdc.log
+	@echo Running integration test for cross dc:
+	@for dir in $(INTEG_TEST_XDC_ROOT); do \
+		go test -timeout 20m -coverprofile=$@ "$$dir" -v -eventsV2xdc=true | tee -a test_eventsV2_xdc.log; \
+	done;
+
 test_xdc: dep-ensured bins
 	@rm -f test
 	@rm -f test.log

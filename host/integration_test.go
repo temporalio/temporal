@@ -48,6 +48,20 @@ import (
 	"github.com/uber/cadence/service/matching"
 )
 
+type (
+	integrationSuite struct {
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
+		suite.Suite
+		IntegrationBase
+		domainName        string
+		domainID          string
+		foreignDomainName string
+		enableEventsV2    bool
+	}
+)
+
 func (s *IntegrationBase) setupShards() {
 	// shard 0 is always created, we create additional shards if needed
 	for shardID := 1; shardID < testNumberOfHistoryShards; shardID++ {
@@ -60,8 +74,19 @@ func (s *IntegrationBase) setupShards() {
 
 func TestIntegrationSuite(t *testing.T) {
 	flag.Parse()
-	if *integration {
+	if *integration && !*testEventsV2 {
 		s := new(integrationSuite)
+		suite.Run(t, s)
+	} else {
+		t.Skip()
+	}
+}
+
+func TestIntegrationSuiteEventsV2(t *testing.T) {
+	flag.Parse()
+	if *integration && *testEventsV2 {
+		s := new(integrationSuite)
+		s.enableEventsV2 = true
 		suite.Run(t, s)
 	} else {
 		t.Skip()
@@ -112,7 +137,7 @@ func (s *integrationSuite) setupSuite(enableGlobalDomain bool, isMasterCluster b
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
 	s.host = NewCadence(s.ClusterMetadata, client.NewIPYarpcDispatcherProvider(), s.mockMessagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false, s.enableEventsV2)
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()
@@ -4370,9 +4395,11 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	events := s.getHistory(s.domainName, workflowExecution)
 	var lastEvent *workflow.HistoryEvent
 	var lastDecisionStartedEvent *workflow.HistoryEvent
-	for _, e := range events {
+	lastIdx := 0
+	for i, e := range events {
 		if e.GetEventType() == workflow.EventTypeDecisionTaskStarted {
 			lastDecisionStartedEvent = e
+			lastIdx = i
 		}
 		lastEvent = e
 	}
@@ -4383,13 +4410,11 @@ func (s *integrationSuite) TestDecisionTaskFailed() {
 	s.Equal(lastDecisionTimestamp, lastDecisionStartedEvent.GetTimestamp())
 	s.True(time.Duration(lastEvent.GetTimestamp()-lastDecisionTimestamp) >= time.Second)
 
-	partialHistory, err := s.getHistoryFrom(s.domainID, *workflowExecution, lastDecisionStartedEvent.GetEventId()+1,
-		lastEvent.GetEventId()+1)
-	s.Nil(err)
-	s.Equal(2, len(partialHistory))
-	decisionCompletedEvent := partialHistory[0]
+	s.Equal(2, len(events)-lastIdx-1)
+	decisionCompletedEvent := events[lastIdx+1]
+	workflowCompletedEvent := events[lastIdx+2]
 	s.Equal(workflow.EventTypeDecisionTaskCompleted, decisionCompletedEvent.GetEventType())
-	s.Equal(lastDecisionStartedEvent.GetEventId()+1, decisionCompletedEvent.GetEventId())
+	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, workflowCompletedEvent.GetEventType())
 }
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
@@ -6697,24 +6722,6 @@ func (s *integrationSuite) getHistory(domain string, execution *workflow.Workflo
 	}
 
 	return events
-}
-
-func (s *integrationSuite) getHistoryFrom(domainID string, execution workflow.WorkflowExecution,
-	firstEventID, nextEventID int64) ([]*workflow.HistoryEvent, error) {
-
-	getRequest := &persistence.GetWorkflowExecutionHistoryRequest{
-		DomainID:     domainID,
-		Execution:    execution,
-		FirstEventID: firstEventID,
-		NextEventID:  nextEventID,
-		PageSize:     100,
-	}
-	resp, err := s.HistoryMgr.GetWorkflowExecutionHistory(getRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.History.Events, nil
 }
 
 func (s *integrationSuite) sendSignal(domainName string, execution *workflow.WorkflowExecution, signalName string,

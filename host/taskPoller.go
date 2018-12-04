@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/uber-common/bark"
 	wsc "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	workflow "github.com/uber/cadence/.gen/go/shared"
@@ -45,17 +44,6 @@ type (
 		activityID string, input []byte, takeToken []byte) ([]byte, bool, error)
 
 	queryHandler func(task *workflow.PollForDecisionTaskResponse) ([]byte, error)
-
-	integrationSuite struct {
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
-		*require.Assertions
-		suite.Suite
-		IntegrationBase
-		domainName        string
-		domainID          string
-		foreignDomainName string
-	}
 
 	// IntegrationBase is a base struct for integration tests
 	IntegrationBase struct {

@@ -58,8 +58,9 @@ const rpAppNamePrefix string = "cadence"
 const maxRpJoinTimeout = 30 * time.Second
 
 var (
-	integration = flag.Bool("integration", true, "run integration tests")
-	topicName   = []string{"active", "standby"}
+	integration  = flag.Bool("integration", true, "run integration tests")
+	testEventsV2 = flag.Bool("eventsV2", false, "run integration tests with eventsV2")
+	topicName    = []string{"active", "standby"}
 )
 
 const (
@@ -101,6 +102,7 @@ type (
 		clusterNo             int // cluster number
 		replicator            *replicator.Replicator
 		enableWorkerService   bool // tmp flag used to tell if onbox should create worker service
+		enableEventsV2        bool
 	}
 
 	ringpopFactoryImpl struct {
@@ -113,7 +115,7 @@ func NewCadence(clusterMetadata cluster.Metadata, dispatcherProvider client.Disp
 	metadataMgrV2 persistence.MetadataManager, shardMgr persistence.ShardManager, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	executionMgrFactory persistence.ExecutionManagerFactory, taskMgr persistence.TaskManager,
 	visibilityMgr persistence.VisibilityManager, numberOfHistoryShards, numberOfHistoryHosts int,
-	logger bark.Logger, clusterNo int, enableWorker bool) Cadence {
+	logger bark.Logger, clusterNo int, enableWorker, enableEventsV2 bool) Cadence {
 
 	return &cadenceImpl{
 		numberOfHistoryShards: numberOfHistoryShards,
@@ -133,6 +135,7 @@ func NewCadence(clusterMetadata cluster.Metadata, dispatcherProvider client.Disp
 		shutdownCh:            make(chan struct{}),
 		clusterNo:             clusterNo,
 		enableWorkerService:   enableWorker,
+		enableEventsV2:        enableEventsV2,
 	}
 }
 
@@ -151,7 +154,7 @@ func (c *cadenceImpl) Start() error {
 
 	var startWG sync.WaitGroup
 	startWG.Add(2)
-	go c.startHistory(rpHosts, &startWG)
+	go c.startHistory(rpHosts, &startWG, c.enableEventsV2)
 	go c.startMatching(rpHosts, &startWG)
 	startWG.Wait()
 
@@ -312,7 +315,7 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	c.shutdownWG.Done()
 }
 
-func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup) {
+func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup, enableEventsV2 bool) {
 
 	pprofPorts := c.HistoryPProfPort()
 	for i, hostport := range c.HistoryServiceAddress() {
@@ -337,6 +340,7 @@ func (c *cadenceImpl) startHistory(rpHosts []string, startWG *sync.WaitGroup) {
 		historyConfig := history.NewConfig(dynamicconfig.NewNopCollection(), c.numberOfHistoryShards)
 		historyConfig.HistoryMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
 		historyConfig.ExecutionMgrNumConns = dynamicconfig.GetIntPropertyFn(c.numberOfHistoryShards)
+		historyConfig.EnableEventsV2 = dynamicconfig.GetBoolPropertyFnFilteredByDomain(enableEventsV2)
 		handler := history.NewHandler(service, historyConfig, c.shardMgr, c.metadataMgr,
 			c.visibilityMgr, c.historyMgr, c.historyV2Mgr, c.executionMgrFactory)
 		handler.Start()

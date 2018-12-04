@@ -321,6 +321,8 @@ pollLoop:
 				WorkflowType:              mutableStateResp.WorkflowType,
 				StickyExecutionEnabled:    common.BoolPtr(isStickyEnabled),
 				WorkflowExecutionTaskList: mutableStateResp.TaskList,
+				EventStoreVersion:         mutableStateResp.EventStoreVersion,
+				BranchToken:               mutableStateResp.BranchToken,
 			}
 			tCtx.completeTask(nil)
 			return e.createPollForDecisionTaskResponse(tCtx, resp), nil

@@ -81,6 +81,8 @@ type (
 		IsWorkflowRunning bool
 		PersistenceToken  []byte
 		TransientDecision *gen.TransientDecisionInfo
+		UseEventsV2       bool
+		BranchToken       []byte
 	}
 )
 
@@ -793,10 +795,7 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, nil
 	}
 
-	useEventsV2 := false
-	if matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-		useEventsV2 = true
-	}
+	useEventsV2 := matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2
 	resp, err := wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, useEventsV2, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope)
@@ -1279,10 +1278,7 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
-		useEventsV2 := false
-		if matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			useEventsV2 = true
-		}
+		useEventsV2 := matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2
 		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, useEventsV2, matchingResp.GetBranchToken())
 		if err != nil {
 			return nil, wh.error(err, scope)
@@ -1535,8 +1531,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 
 	// process the token for paging
 	queryNextEventID := common.EndEventID
-	useEventsV2 := false
-	var branchToken []byte
 	if getRequest.NextPageToken != nil {
 		token, err = deserializeHistoryToken(getRequest.NextPageToken)
 		if err != nil {
@@ -1553,7 +1547,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			if !isCloseEventOnly {
 				queryNextEventID = token.NextEventID
 			}
-			useEventsV2, branchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
+			token.UseEventsV2, token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
@@ -1566,7 +1560,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		useEventsV2, branchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
+		token.UseEventsV2, token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1585,7 +1579,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			history, _, err = wh.getHistory(scope, domainID, *execution, lastFirstEventID, nextEventID,
-				getRequest.GetMaximumPageSize(), nil, token.TransientDecision, useEventsV2, branchToken)
+				getRequest.GetMaximumPageSize(), nil, token.TransientDecision, token.UseEventsV2, token.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
@@ -1609,7 +1603,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		} else {
 			history, token.PersistenceToken, err =
 				wh.getHistory(scope, domainID, *execution, token.FirstEventID, token.NextEventID,
-					getRequest.GetMaximumPageSize(), token.PersistenceToken, token.TransientDecision, useEventsV2, branchToken)
+					getRequest.GetMaximumPageSize(), token.PersistenceToken, token.TransientDecision, token.UseEventsV2, token.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}

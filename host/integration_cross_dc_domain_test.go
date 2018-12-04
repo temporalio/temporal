@@ -48,13 +48,25 @@ type (
 		*require.Assertions
 		suite.Suite
 		IntegrationBase
+		enableEventsV2 bool
 	}
 )
 
 func TestIntegrationCrossDCSuite(t *testing.T) {
 	flag.Parse()
-	if *integration {
+	if *integration && !*testEventsV2 {
 		s := new(integrationCrossDCSuite)
+		suite.Run(t, s)
+	} else {
+		t.Skip()
+	}
+}
+
+func TestIntegrationCrossDCSuiteEventsV2(t *testing.T) {
+	flag.Parse()
+	if *integration && *testEventsV2 {
+		s := new(integrationCrossDCSuite)
+		s.enableEventsV2 = true
 		suite.Run(t, s)
 	} else {
 		t.Skip()
@@ -102,7 +114,7 @@ func (s *integrationCrossDCSuite) setupTest(enableGlobalDomain bool, isMasterClu
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
 	s.host = NewCadence(s.ClusterMetadata, client.NewIPYarpcDispatcherProvider(), s.mockMessagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false, s.enableEventsV2)
 
 	s.host.Start()
 

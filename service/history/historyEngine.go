@@ -1208,7 +1208,7 @@ Update_History_Loop:
 						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
 					}
 
-					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes); err != nil {
+					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, useEventsV2); err != nil {
 						return nil, err
 					}
 				}
@@ -1426,7 +1426,7 @@ Update_History_Loop:
 					parentDomainName = parentDomainEntry.GetInfo().Name
 				}
 
-				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, parentDomainName, attributes)
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, parentDomainName, attributes, useEventsV2)
 				if err != nil {
 					return nil, err
 				}
@@ -1551,11 +1551,6 @@ Update_History_Loop:
 		var updateErr error
 		if continueAsNewBuilder != nil {
 			continueAsNewTimerTasks = msBuilder.GetContinueAsNew().TimerTasks
-			if useEventsV2 {
-				if updateErr = continueAsNewBuilder.SetHistoryTree(continueAsNewBuilder.GetExecutionInfo().RunID); updateErr != nil {
-					return nil, updateErr
-				}
-			}
 			updateErr = context.continueAsNewWorkflowExecution(request.ExecutionContext, continueAsNewBuilder,
 				transferTasks, timerTasks, transactionID)
 		} else {

@@ -64,19 +64,38 @@ type (
 		*require.Assertions
 		suite.Suite
 		IntegrationBase
-		domainName string
-		domainID   string
-		wfService  workflowserviceclient.Interface
-		wfClient   client.Client
-		worker     cworker.Worker
-		taskList   string
+		domainName     string
+		domainID       string
+		wfService      workflowserviceclient.Interface
+		wfClient       client.Client
+		worker         cworker.Worker
+		taskList       string
+		enableEventsV2 bool
 	}
 )
 
+func init() {
+	workflow.Register(testDataConverterWorkflow)
+	activity.Register(testActivity)
+	workflow.Register(testParentWorkflow)
+	workflow.Register(testChildWorkflow)
+}
+
 func TestClientIntegrationSuite(t *testing.T) {
 	flag.Parse()
-	if *integration {
+	if *integration && !*testEventsV2 {
 		s := new(clientIntegrationSuite)
+		suite.Run(t, s)
+	} else {
+		t.Skip()
+	}
+}
+
+func TestClientIntegrationSuiteEventsV2(t *testing.T) {
+	flag.Parse()
+	if *integration && *testEventsV2 {
+		s := new(clientIntegrationSuite)
+		s.enableEventsV2 = true
 		suite.Run(t, s)
 	} else {
 		t.Skip()
@@ -170,7 +189,7 @@ func (s *clientIntegrationSuite) setupSuite(enableGlobalDomain bool, isMasterClu
 	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
 
 	s.host = NewCadence(s.ClusterMetadata, server.NewIPYarpcDispatcherProvider(), s.mockMessagingClient, s.MetadataProxy, s.MetadataManagerV2, s.ShardMgr, s.HistoryMgr, s.HistoryV2Mgr, s.ExecutionMgrFactory, s.TaskMgr,
-		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false)
+		s.VisibilityMgr, testNumberOfHistoryShards, testNumberOfHistoryHosts, s.logger, 0, false, s.enableEventsV2)
 	s.host.Start()
 
 	s.engine = s.host.GetFrontendClient()
@@ -190,11 +209,6 @@ func (s *clientIntegrationSuite) setupSuite(enableGlobalDomain bool, isMasterClu
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{},
 	})
-
-	workflow.Register(testDataConverterWorkflow)
-	activity.Register(testActivity)
-	workflow.Register(testParentWorkflow)
-	workflow.Register(testChildWorkflow)
 }
 
 // testDataConverter implements encoded.DataConverter using gob

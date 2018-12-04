@@ -477,7 +477,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			Attempt:         newRunDecisionAttempt,
 		},
 		mock.Anything,
-	).Once()
+		false,
+	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 
 	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}

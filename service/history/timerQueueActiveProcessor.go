@@ -708,7 +708,7 @@ Update_History_Loop:
 			return err
 		}
 		useEventsV2 := t.config.EnableEventsV2(domainEntry.GetInfo().Name)
-		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes)
+		_, continueAsNewBuilder, err := msBuilder.AddContinueAsNewEvent(common.EmptyEventID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, useEventsV2)
 		if err != nil {
 			return err
 		}
@@ -729,11 +729,6 @@ Update_History_Loop:
 		}
 
 		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
-		if useEventsV2 {
-			if err = continueAsNewBuilder.SetHistoryTree(continueAsNewBuilder.GetExecutionInfo().RunID); err != nil {
-				return err
-			}
-		}
 		err = context.continueAsNewWorkflowExecution(nil, continueAsNewBuilder, transferTasks, timerTasks, transactionID)
 		t.notifyNewTimers(timersToNotify)
 
