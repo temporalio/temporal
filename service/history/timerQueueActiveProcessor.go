@@ -357,6 +357,16 @@ Update_History_Loop:
 
 				if td.Attempt < ai.Attempt {
 					// retry could update ai.Attempt, and we should ignore further timeouts for previous attempt
+					t.logger.WithFields(bark.Fields{
+						logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
+						logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
+						logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
+						logging.TagScheduleID:          ai.ScheduleID,
+						logging.TagAttempt:             ai.Attempt,
+						logging.TagVersion:             ai.Version,
+						logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
+						logging.TagTimeoutType:         timeoutType,
+					}).Info("Retry attempt mismatch, skip activity timeout processing")
 					continue
 				}
 
@@ -368,8 +378,16 @@ Update_History_Loop:
 						timerTasks = append(timerTasks, retryTask)
 						updateState = true
 
-						t.logger.Debugf("Ignore ActivityTimeout (%v) as retry is needed. New attempt: %v, retry backoff duration: %v.",
-							timeoutType, ai.Attempt, retryTask.(*persistence.ActivityRetryTimerTask).VisibilityTimestamp.Sub(time.Now()))
+						t.logger.WithFields(bark.Fields{
+							logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
+							logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
+							logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
+							logging.TagScheduleID:          ai.ScheduleID,
+							logging.TagAttempt:             ai.Attempt,
+							logging.TagVersion:             ai.Version,
+							logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
+							logging.TagTimeoutType:         timeoutType,
+						}).Info("Ignore activity timeout due to retry")
 
 						continue
 					}
@@ -430,8 +448,19 @@ Update_History_Loop:
 					msBuilder.UpdateActivity(ai)
 					updateState = true
 
-					t.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
-						time.Now(), td.TimeoutSec, at.VisibilityTimestamp, td.TimeoutType.String(), at.EventID)
+					// Emit log if timer is created within a second
+					if t.now().Add(time.Second).After(td.TimerSequenceID.VisibilityTimestamp) {
+						t.logger.WithFields(bark.Fields{
+							logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
+							logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
+							logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
+							logging.TagScheduleID:          ai.ScheduleID,
+							logging.TagAttempt:             ai.Attempt,
+							logging.TagVersion:             ai.Version,
+							logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
+							logging.TagTimeoutType:         td.TimeoutType,
+						}).Info("Next timer is created to fire within one second")
+					}
 				}
 
 				// Done!
@@ -587,6 +616,16 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persiste
 		scheduledID := task.EventID
 		ai, running := msBuilder.GetActivityInfo(scheduledID)
 		if !running || task.ScheduleAttempt < int64(ai.Attempt) {
+			t.logger.WithFields(bark.Fields{
+				logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
+				logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
+				logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
+				logging.TagScheduleID:          ai.ScheduleID,
+				logging.TagAttempt:             ai.Attempt,
+				logging.TagScheduleAttempt:     task.ScheduleAttempt,
+				logging.TagVersion:             ai.Version,
+				logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
+			}).Info("Duplicate activity retry timer task")
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)

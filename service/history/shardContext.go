@@ -845,15 +845,17 @@ func (s *shardContextImpl) allocateTimerIDsLocked(timerTasks []persistence.Task,
 		if task.GetVersion() != common.EmptyVersion {
 			cluster = clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
 		}
-		if ts.Before(s.timerMaxReadLevelMap[cluster]) {
+		readCursorTS := s.timerMaxReadLevelMap[cluster]
+		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.WithFields(bark.Fields{
 				logging.TagWorkflowEventID:     logging.ShardAllocateTimerBeforeRead,
 				logging.TagDomainID:            domainID,
 				logging.TagWorkflowExecutionID: workflowID,
-			}).Warnf("%v: New timer generated is less than read level. timestamp: %v, timerMaxReadLevel: %v",
-				time.Now(), ts, s.timerMaxReadLevelMap[cluster])
+				logging.TagTimestamp:           ts,
+				logging.TagCursorTimestamp:     readCursorTS,
+			}).Warn("New timer generated is less than read level")
 			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[cluster].Add(time.Millisecond))
 		}
 
