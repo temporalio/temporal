@@ -616,16 +616,18 @@ func (t *timerQueueActiveProcessorImpl) processActivityRetryTimer(task *persiste
 		scheduledID := task.EventID
 		ai, running := msBuilder.GetActivityInfo(scheduledID)
 		if !running || task.ScheduleAttempt < int64(ai.Attempt) {
-			t.logger.WithFields(bark.Fields{
-				logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
-				logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
-				logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
-				logging.TagScheduleID:          ai.ScheduleID,
-				logging.TagAttempt:             ai.Attempt,
-				logging.TagScheduleAttempt:     task.ScheduleAttempt,
-				logging.TagVersion:             ai.Version,
-				logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
-			}).Info("Duplicate activity retry timer task")
+			if running && ai != nil {
+				t.logger.WithFields(bark.Fields{
+					logging.TagDomainID:            msBuilder.GetExecutionInfo().DomainID,
+					logging.TagWorkflowExecutionID: msBuilder.GetExecutionInfo().WorkflowID,
+					logging.TagWorkflowRunID:       msBuilder.GetExecutionInfo().RunID,
+					logging.TagScheduleID:          scheduledID,
+					logging.TagAttempt:             ai.Attempt,
+					logging.TagScheduleAttempt:     task.ScheduleAttempt,
+					logging.TagVersion:             ai.Version,
+					logging.TagTimerTaskStatus:     ai.TimerTaskStatus,
+				}).Info("Duplicate activity retry timer task")
+			}
 			return nil
 		}
 		ok, err := verifyTaskVersion(t.shard, t.logger, task.DomainID, ai.Version, task.Version, task)
