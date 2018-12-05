@@ -43,7 +43,7 @@ const (
 func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {
 	client, err := cBuilder.BuildAdminServiceClient(c)
 	if err != nil {
-		ExitIfError(err)
+		ErrorAndExit("Failed to initialize admin service client.", err)
 	}
 
 	return client

@@ -91,6 +91,17 @@ func (s *cliAppSuite) TearDownTest() {
 	s.mockCtrl.Finish() // assert mock’s expectations
 }
 
+func (s *cliAppSuite) RunErrorExitCode(arguments []string) int {
+	oldOsExit := osExit
+	defer func() { osExit = oldOsExit }()
+	var errorCode int
+	osExit = func(code int) {
+		errorCode = code
+	}
+	s.app.Run(arguments)
+	return errorCode
+}
+
 func (s *cliAppSuite) TestAppCommands() {
 	for _, test := range commands {
 		cmd := s.app.Command(test)
@@ -106,14 +117,14 @@ func (s *cliAppSuite) TestDomainRegister() {
 
 func (s *cliAppSuite) TestDomainRegister_DomainExist() {
 	s.service.EXPECT().RegisterDomain(gomock.Any(), gomock.Any(), callOptions...).Return(&shared.DomainAlreadyExistsError{})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "register"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainRegister_Failed() {
 	s.service.EXPECT().RegisterDomain(gomock.Any(), gomock.Any(), callOptions...).Return(&shared.BadRequestError{"fake error"})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "register"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "register"})
+	s.Equal(1, errorCode)
 }
 
 var describeDomainResponse = &shared.DescribeDomainResponse{
@@ -153,22 +164,22 @@ func (s *cliAppSuite) TestDomainUpdate_DomainNotExist() {
 	resp := describeDomainResponse
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
 	s.service.EXPECT().UpdateDomain(gomock.Any(), gomock.Any(), callOptions...).Return(nil, &shared.EntityNotExistsError{})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainUpdate_ActiveClusterFlagNotSet_DomainNotExist() {
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(nil, &shared.EntityNotExistsError{})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainUpdate_Failed() {
 	resp := describeDomainResponse
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, nil)
 	s.service.EXPECT().UpdateDomain(gomock.Any(), gomock.Any(), callOptions...).Return(nil, &shared.BadRequestError{"faked error"})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "update"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "update"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainDescribe() {
@@ -181,15 +192,15 @@ func (s *cliAppSuite) TestDomainDescribe() {
 func (s *cliAppSuite) TestDomainDescribe_DomainNotExist() {
 	resp := describeDomainResponse
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, &shared.EntityNotExistsError{})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "describe"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDomainDescribe_Failed() {
 	resp := describeDomainResponse
 	s.service.EXPECT().DescribeDomain(gomock.Any(), gomock.Any(), callOptions...).Return(resp, &shared.BadRequestError{"faked error"})
-	err := s.app.Run([]string{"", "--do", domainName, "domain", "describe"})
-	s.Nil(err)
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "domain", "describe"})
+	s.Equal(1, errorCode)
 }
 
 var (
@@ -253,6 +264,14 @@ func (s *cliAppSuite) TestStartWorkflow() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestStartWorkflow_Failed() {
+	resp := &shared.StartWorkflowExecutionResponse{RunId: common.StringPtr(uuid.New())}
+	s.service.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, &shared.BadRequestError{"faked error"})
+	// start with wid
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	s.Equal(1, errorCode)
+}
+
 func (s *cliAppSuite) TestRunWorkflow() {
 	resp := &shared.StartWorkflowExecutionResponse{RunId: common.StringPtr(uuid.New())}
 	history := getWorkflowExecutionHistoryResponse
@@ -266,10 +285,26 @@ func (s *cliAppSuite) TestRunWorkflow() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestRunWorkflow_Failed() {
+	resp := &shared.StartWorkflowExecutionResponse{RunId: common.StringPtr(uuid.New())}
+	history := getWorkflowExecutionHistoryResponse
+	s.service.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, &shared.BadRequestError{"faked error"})
+	s.service.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), callOptions...).Return(history, nil)
+	// start with wid
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	s.Equal(1, errorCode)
+}
+
 func (s *cliAppSuite) TestTerminateWorkflow() {
 	s.service.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any(), callOptions...).Return(nil)
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
 	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestTerminateWorkflow_Failed() {
+	s.service.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any(), callOptions...).Return(&shared.BadRequestError{"faked error"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "terminate", "-w", "wid"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestCancelWorkflow() {
@@ -278,10 +313,22 @@ func (s *cliAppSuite) TestCancelWorkflow() {
 	s.Nil(err)
 }
 
+func (s *cliAppSuite) TestCancelWorkflow_Failed() {
+	s.service.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any(), callOptions...).Return(&shared.BadRequestError{"faked error"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "cancel", "-w", "wid"})
+	s.Equal(1, errorCode)
+}
+
 func (s *cliAppSuite) TestSignalWorkflow() {
 	s.service.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
 	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestSignalWorkflow_Failed() {
+	s.service.EXPECT().SignalWorkflowExecution(gomock.Any(), gomock.Any()).Return(&shared.BadRequestError{"faked error"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "signal", "-w", "wid", "-n", "signal-name"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestQueryWorkflow() {
@@ -300,6 +347,15 @@ func (s *cliAppSuite) TestQueryWorkflowUsingStackTrace() {
 	s.service.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--do", domainName, "workflow", "stack", "-w", "wid"})
 	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestQueryWorkflow_Failed() {
+	resp := &shared.QueryWorkflowResponse{
+		QueryResult: []byte("query-result"),
+	}
+	s.service.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, &shared.BadRequestError{"faked error"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "workflow", "query", "-w", "wid", "-qt", "query-type-test"})
+	s.Equal(1, errorCode)
 }
 
 var (
@@ -415,6 +471,12 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow() {
 	s.adminService.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil)
 	err := s.app.Run([]string{"", "--do", domainName, "admin", "wf", "describe", "-w", "test-wf-id"})
 	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
+	s.adminService.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &shared.BadRequestError{"faked error"})
+	errorCode := s.RunErrorExitCode([]string{"", "--do", domainName, "admin", "wf", "describe", "-w", "test-wf-id"})
+	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestDescribeTaskList() {
