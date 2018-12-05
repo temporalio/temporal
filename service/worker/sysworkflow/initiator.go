@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/common/archival"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"go.uber.org/cadence/client"
 	"math/rand"
@@ -33,7 +34,7 @@ type (
 
 	// Initiator is used to trigger system tasks
 	Initiator interface {
-		Archive(request *ArchiveRequest) error
+		Archive(request *archival.PutRequest) error
 	}
 
 	initiator struct {
@@ -44,14 +45,7 @@ type (
 	// Signal is the data sent to system tasks
 	Signal struct {
 		RequestType    RequestType
-		ArchiveRequest *ArchiveRequest
-	}
-
-	// ArchiveRequest signal used for archival task
-	ArchiveRequest struct {
-		Domain         string
-		UserWorkflowID string
-		UserRunID      string
+		ArchiveRequest *archival.PutRequest
 	}
 )
 
@@ -64,8 +58,8 @@ func NewInitiator(frontendClient frontend.Client, numSWFn dynamicconfig.IntPrope
 }
 
 // Archive starts an archival task
-func (i *initiator) Archive(request *ArchiveRequest) error {
-	if request.Domain == Domain {
+func (i *initiator) Archive(request *archival.PutRequest) error {
+	if request.DomainName == Domain {
 		return nil
 	}
 	workflowID := fmt.Sprintf("%v-%v", WorkflowIDPrefix, rand.Intn(i.numSWFn()))

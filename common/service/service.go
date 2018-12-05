@@ -21,6 +21,7 @@
 package service
 
 import (
+	"github.com/uber/cadence/common/archival"
 	"math/rand"
 	"os"
 	"time"
@@ -64,6 +65,7 @@ type (
 		MessagingClient    messaging.Client
 		DynamicConfig      dynamicconfig.Client
 		DispatcherProvider client.DispatcherProvider
+		ArchivalClient     archival.Client
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop

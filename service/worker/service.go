@@ -146,7 +146,7 @@ func (s *Service) startSysWorker(base service.Service, log bark.Logger, scope ta
 		common.IsWhitelistServiceTransientError)
 
 	s.waitForFrontendStart(frontendClient, log)
-	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope)
+	sysWorker := sysworkflow.NewSysWorker(frontendClient, scope, s.params.ArchivalClient)
 	if err := sysWorker.Start(); err != nil {
 		sysWorker.Stop()
 		log.Fatalf("failed to start sysworker: %v", err)

@@ -21,6 +21,7 @@
 package main
 
 import (
+	"github.com/uber/cadence/common/archival"
 	"log"
 	"time"
 
@@ -109,6 +110,8 @@ func (s *server) startService() common.Daemon {
 
 	params.DynamicConfig = dynamicconfig.NewNopClient()
 	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
+
+	params.ArchivalClient = archival.NewNopClient()
 
 	svcCfg := s.cfg.Services[s.name]
 	params.MetricScope = svcCfg.Metrics.NewScope()

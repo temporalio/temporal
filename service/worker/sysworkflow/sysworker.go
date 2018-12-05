@@ -21,8 +21,10 @@
 package sysworkflow
 
 import (
+	"context"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/common/archival"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/worker"
 	"go.uber.org/cadence/workflow"
@@ -44,11 +46,14 @@ func init() {
 }
 
 // NewSysWorker returns a new SysWorker
-func NewSysWorker(frontendClient frontend.Client, scope tally.Scope) *SysWorker {
+func NewSysWorker(frontendClient frontend.Client, scope tally.Scope, archivalClient archival.Client) *SysWorker {
 	logger, _ := zap.NewProduction()
+	actCtx := context.WithValue(context.Background(), archivalClientKey, archivalClient)
+	actCtx = context.WithValue(context.Background(), frontendClientKey, frontendClient)
 	wo := worker.Options{
-		Logger:       logger,
-		MetricsScope: scope.SubScope(SystemWorkflowScope),
+		Logger:                    logger,
+		MetricsScope:              scope.SubScope(SystemWorkflowScope),
+		BackgroundActivityContext: actCtx,
 	}
 	return &SysWorker{
 		// TODO: after we do task list fan out workers should listen on all task lists

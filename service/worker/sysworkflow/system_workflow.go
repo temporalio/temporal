@@ -23,8 +23,12 @@ package sysworkflow
 import (
 	"context"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/client/frontend"
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archival"
 	"github.com/uber/cadence/common/logging"
 	"go.uber.org/cadence"
+	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/workflow"
 	"go.uber.org/zap"
@@ -91,8 +95,7 @@ func selectSystemTask(scope tally.Scope, signal Signal, ctx workflow.Context, lo
 		if err := workflow.ExecuteActivity(
 			actCtx,
 			ArchivalActivityFnName,
-			signal.ArchiveRequest.UserWorkflowID,
-			signal.ArchiveRequest.UserRunID,
+			*signal.ArchiveRequest,
 		).Get(ctx, nil); err != nil {
 			scope.Counter(ArchivalFailureErr)
 			logger.Error("failed to execute archival activity", zap.Error(err))
@@ -104,11 +107,28 @@ func selectSystemTask(scope tally.Scope, signal Signal, ctx workflow.Context, lo
 }
 
 // ArchivalActivity is the archival activity code
-func ArchivalActivity(ctx context.Context, userWorkflowID string, userRunID string) error {
+func ArchivalActivity(
+	ctx context.Context,
+	request archival.PutRequest,
+) error {
+	userWorkflowID := request.WorkflowID
+	userRunID := request.RunID
+
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting archival",
 		zap.String(logging.TagUserWorkflowID, userWorkflowID),
 		zap.String(logging.TagUserRunID, userRunID))
+
+	// TODO: do not actually access history until timer to purge history is moved here
+	//his, err := history(ctx, domainName, userWorkflowID, userRunID)
+	//if err != nil {
+	//	logger.Error("failed to get history")
+	//	return err
+	//}
+
+	archivalClient := ctx.Value(archivalClientKey).(archival.Client)
+	err := archivalClient.PutWorkflow(ctx, &request)
+	logger.Info("called archive", zap.Error(err))
 
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
@@ -125,4 +145,43 @@ func ArchivalActivity(ctx context.Context, userWorkflowID string, userRunID stri
 		zap.String(logging.TagUserWorkflowID, userWorkflowID),
 		zap.String(logging.TagUserRunID, userRunID))
 	return nil
+}
+
+func history(
+	ctx context.Context,
+	domainName string,
+	workflowID string,
+	runID string,
+) (*shared.History, error) {
+
+	frontendClient := ctx.Value(frontendClientKey).(frontend.Client)
+	execution := &shared.WorkflowExecution{
+		WorkflowId: common.StringPtr(workflowID),
+		RunId:      common.StringPtr(runID),
+	}
+	historyResponse, err := frontendClient.GetWorkflowExecutionHistory(ctx, &shared.GetWorkflowExecutionHistoryRequest{
+		Domain:    common.StringPtr(domainName),
+		Execution: execution,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	events := historyResponse.History.Events
+	for historyResponse.NextPageToken != nil {
+		historyResponse, err = frontendClient.GetWorkflowExecutionHistory(ctx, &shared.GetWorkflowExecutionHistoryRequest{
+			Domain:        common.StringPtr(domainName),
+			Execution:     execution,
+			NextPageToken: historyResponse.NextPageToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, historyResponse.History.Events...)
+	}
+
+	return &shared.History{
+		Events: events,
+	}, nil
 }

@@ -24,9 +24,6 @@ import (
 	"time"
 )
 
-// RequestType is the type for signals that can be sent to system workflows
-type RequestType int
-
 const (
 	// Domain is the cadence system workflows domain
 	Domain = "cadence-system"
@@ -72,7 +69,19 @@ const (
 
 	// DecisionTaskStartToCloseTimeout is the time for decision to finish
 	DecisionTaskStartToCloseTimeout = time.Minute
+)
 
+// RequestType is the type for signals that can be sent to system workflows
+type RequestType int
+
+const (
 	// ArchivalRequest is the archive signal identifier
-	ArchivalRequest = iota
+	ArchivalRequest RequestType = iota
+)
+
+type contextKey int
+
+const (
+	archivalClientKey contextKey = iota
+	frontendClientKey
 )
