@@ -1403,6 +1403,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 
 	// these does not matter, but will be used by ms builder change notification
 	msBuilder.On("GetLastFirstEventID").Return(currentNextEventID - 4)
+	msBuilder.On("GetPreviousStartedEventID").Return(currentNextEventID - 4)
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
 
 	s.mockExecutionMgr.On("UpdateWorkflowExecution", mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
@@ -1585,6 +1586,7 @@ func (s *historyReplicatorSuite) TestApplyOtherEvents_IncomingGreaterThanCurrent
 	msBuilder.On("GetLastWriteVersion").Return(currentVersion)
 	msBuilder.On("GetNextEventID").Return(currentNextEventID)
 	msBuilder.On("GetEventStoreVersion").Return(int32(0))
+	msBuilder.On("GetPreviousStartedEventID").Return(currentNextEventID - 4)
 	msBuilder.On("GetReplicationState").Return(replicationState)
 	msBuilder.On("BufferReplicationTask", request).Return(nil).Once()
 	msBuilder.On("IncrementHistorySize", mock.Anything).Return().Once()

@@ -921,6 +921,7 @@ type GetMutableStateResponse struct {
 	Execution                            *shared.WorkflowExecution `json:"execution,omitempty"`
 	WorkflowType                         *shared.WorkflowType      `json:"workflowType,omitempty"`
 	NextEventId                          *int64                    `json:"NextEventId,omitempty"`
+	PreviousStartedEventId               *int64                    `json:"PreviousStartedEventId,omitempty"`
 	LastFirstEventId                     *int64                    `json:"LastFirstEventId,omitempty"`
 	TaskList                             *shared.TaskList          `json:"taskList,omitempty"`
 	StickyTaskList                       *shared.TaskList          `json:"stickyTaskList,omitempty"`
@@ -950,7 +951,7 @@ type GetMutableStateResponse struct {
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [13]wire.Field
+		fields [14]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -978,6 +979,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.PreviousStartedEventId != nil {
+		w, err = wire.NewValueI64(*(v.PreviousStartedEventId)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 35, Value: w}
 		i++
 	}
 	if v.LastFirstEventId != nil {
@@ -1124,6 +1133,16 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 35:
+			if field.Value.Type() == wire.TI64 {
+				var x int64
+				x, err = field.Value.GetI64(), error(nil)
+				v.PreviousStartedEventId = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		case 40:
 			if field.Value.Type() == wire.TI64 {
 				var x int64
@@ -1231,7 +1250,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [13]string
+	var fields [14]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1243,6 +1262,10 @@ func (v *GetMutableStateResponse) String() string {
 	}
 	if v.NextEventId != nil {
 		fields[i] = fmt.Sprintf("NextEventId: %v", *(v.NextEventId))
+		i++
+	}
+	if v.PreviousStartedEventId != nil {
+		fields[i] = fmt.Sprintf("PreviousStartedEventId: %v", *(v.PreviousStartedEventId))
 		i++
 	}
 	if v.LastFirstEventId != nil {
@@ -1328,6 +1351,9 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !_I64_EqualsPtr(v.NextEventId, rhs.NextEventId) {
 		return false
 	}
+	if !_I64_EqualsPtr(v.PreviousStartedEventId, rhs.PreviousStartedEventId) {
+		return false
+	}
 	if !_I64_EqualsPtr(v.LastFirstEventId, rhs.LastFirstEventId) {
 		return false
 	}
@@ -1376,6 +1402,9 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.NextEventId != nil {
 		enc.AddInt64("NextEventId", *v.NextEventId)
+	}
+	if v.PreviousStartedEventId != nil {
+		enc.AddInt64("PreviousStartedEventId", *v.PreviousStartedEventId)
 	}
 	if v.LastFirstEventId != nil {
 		enc.AddInt64("LastFirstEventId", *v.LastFirstEventId)
@@ -1435,6 +1464,16 @@ func (v *GetMutableStateResponse) GetWorkflowType() (o *shared.WorkflowType) {
 func (v *GetMutableStateResponse) GetNextEventId() (o int64) {
 	if v.NextEventId != nil {
 		return *v.NextEventId
+	}
+
+	return
+}
+
+// GetPreviousStartedEventId returns the value of PreviousStartedEventId if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetPreviousStartedEventId() (o int64) {
+	if v.PreviousStartedEventId != nil {
+		return *v.PreviousStartedEventId
 	}
 
 	return

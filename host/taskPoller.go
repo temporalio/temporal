@@ -204,7 +204,7 @@ Loop:
 				lastDecisionScheduleEvent = e
 			}
 		}
-		if lastDecisionScheduleEvent != nil {
+		if lastDecisionScheduleEvent != nil && decisionAttempt > 0 {
 			require.Equal(p.T, decisionAttempt, lastDecisionScheduleEvent.DecisionTaskScheduledEventAttributes.GetAttempt())
 		}
 

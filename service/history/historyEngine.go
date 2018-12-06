@@ -628,6 +628,7 @@ func (e *historyEngineImpl) GetMutableState(ctx context.Context,
 				response.LastFirstEventId = common.Int64Ptr(event.lastFirstEventID)
 				response.NextEventId = common.Int64Ptr(event.nextEventID)
 				response.IsWorkflowRunning = common.BoolPtr(event.isWorkflowRunning)
+				response.PreviousStartedEventId = common.Int64Ptr(event.previousStartedEventID)
 				if expectedNextEventID < response.GetNextEventId() || !response.GetIsWorkflowRunning() {
 					return response, nil
 				}
@@ -663,6 +664,7 @@ func (e *historyEngineImpl) getMutableState(ctx context.Context,
 		WorkflowType:                         &workflow.WorkflowType{Name: common.StringPtr(executionInfo.WorkflowTypeName)},
 		LastFirstEventId:                     common.Int64Ptr(msBuilder.GetLastFirstEventID()),
 		NextEventId:                          common.Int64Ptr(msBuilder.GetNextEventID()),
+		PreviousStartedEventId:               common.Int64Ptr(msBuilder.GetPreviousStartedEventID()),
 		TaskList:                             &workflow.TaskList{Name: common.StringPtr(executionInfo.TaskList)},
 		StickyTaskList:                       &workflow.TaskList{Name: common.StringPtr(executionInfo.StickyTaskList)},
 		ClientLibraryVersion:                 common.StringPtr(executionInfo.ClientLibraryVersion),

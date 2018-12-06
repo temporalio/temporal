@@ -1416,6 +1416,20 @@ func (_m *mockMutableState) GetNextEventID() int64 {
 	return r0
 }
 
+// GetPreviousStartedEventID returns last started decision task event ID
+func (_m *mockMutableState) GetPreviousStartedEventID() int64 {
+	ret := _m.Called()
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	return r0
+}
+
 // GetPendingActivityInfos provides a mock function with given fields:
 func (_m *mockMutableState) GetPendingActivityInfos() map[int64]*persistence.ActivityInfo {
 	ret := _m.Called()

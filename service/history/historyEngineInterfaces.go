@@ -39,10 +39,11 @@ type (
 
 	historyEventNotification struct {
 		workflowIdentifier
-		lastFirstEventID  int64
-		nextEventID       int64
-		isWorkflowRunning bool
-		timestamp         time.Time
+		lastFirstEventID       int64
+		nextEventID            int64
+		previousStartedEventID int64
+		isWorkflowRunning      bool
+		timestamp              time.Time
 	}
 
 	// Engine represents an interface for managing workflow execution history.

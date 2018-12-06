@@ -66,6 +66,7 @@ struct GetMutableStateResponse {
   10: optional shared.WorkflowExecution execution
   20: optional shared.WorkflowType workflowType
   30: optional i64 (js.type = "Long") NextEventId
+  35: optional i64 (js.type = "Long") PreviousStartedEventId
   40: optional i64 (js.type = "Long") LastFirstEventId
   50: optional shared.TaskList taskList
   60: optional shared.TaskList stickyTaskList

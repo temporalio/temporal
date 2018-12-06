@@ -129,6 +129,7 @@ type (
 		GetLastUpdatedTimestamp() int64
 		GetLastWriteVersion() int64
 		GetNextEventID() int64
+		GetPreviousStartedEventID() int64
 		GetPendingDecision(int64) (*decisionInfo, bool)
 		GetPendingActivityInfos() map[int64]*persistence.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistence.TimerInfo

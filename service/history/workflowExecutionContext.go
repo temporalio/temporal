@@ -421,6 +421,7 @@ func (c *workflowExecutionContext) update(transferTasks []persistence.Task, time
 		&c.workflowExecution,
 		c.msBuilder.GetLastFirstEventID(),
 		c.msBuilder.GetNextEventID(),
+		c.msBuilder.GetPreviousStartedEventID(),
 		c.msBuilder.IsWorkflowExecutionRunning(),
 	))
 

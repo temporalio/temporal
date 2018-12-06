@@ -1102,6 +1102,11 @@ func (e *mutableStateBuilder) GetNextEventID() int64 {
 	return e.executionInfo.NextEventID
 }
 
+// GetPreviousStartedEventID returns last started decision task event ID
+func (e *mutableStateBuilder) GetPreviousStartedEventID() int64 {
+	return e.executionInfo.LastProcessedEvent
+}
+
 func (e *mutableStateBuilder) IsWorkflowExecutionRunning() bool {
 	return e.executionInfo.State != persistence.WorkflowStateCompleted
 }
