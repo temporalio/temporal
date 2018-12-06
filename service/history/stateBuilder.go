@@ -436,9 +436,8 @@ func (b *stateBuilderImpl) applyEvents(domainID, requestID string, execution sha
 			}
 			b.newRunTimerTasks = append(b.newRunTimerTasks, b.scheduleWorkflowTimerTask(event, newRunStateBuilder))
 
-			useEventsV2 := newRunEventStoreVersion == persistence.EventStoreVersionV2
 			err := b.msBuilder.ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName, domainID, event,
-				startedEvent, di, newRunStateBuilder, useEventsV2)
+				startedEvent, di, newRunStateBuilder, newRunEventStoreVersion)
 			if err != nil {
 				return nil, nil, nil, err
 			}

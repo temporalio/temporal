@@ -2160,7 +2160,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow
 }
 
 func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,
-	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, useEventsV2 bool) (*workflow.HistoryEvent, mutableState,
+	parentDomainName string, attributes *workflow.ContinueAsNewWorkflowExecutionDecisionAttributes, eventStoreVersion int32) (*workflow.HistoryEvent, mutableState,
 	error) {
 
 	newRunID := uuid.New()
@@ -2208,7 +2208,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 		}
 	}
 
-	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, useEventsV2)
+	err := e.ReplicateWorkflowExecutionContinuedAsNewEvent("", domainID, continueAsNewEvent, startedEvent, di, newStateBuilder, eventStoreVersion)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2217,7 +2217,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sourceClusterName string, domainID string,
 	continueAsNewEvent *workflow.HistoryEvent, startedEvent *workflow.HistoryEvent, di *decisionInfo,
-	newStateBuilder mutableState, useEventsV2 bool) error {
+	newStateBuilder mutableState, eventStoreVersion int32) error {
 	continueAsNewAttributes := continueAsNewEvent.WorkflowExecutionContinuedAsNewEventAttributes
 	startedAttributes := startedEvent.WorkflowExecutionStartedEventAttributes
 	newRunID := continueAsNewAttributes.GetNewExecutionRunId()
@@ -2227,7 +2227,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		RunId:      common.StringPtr(newRunID),
 	}
 
-	if useEventsV2 {
+	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		if err := newStateBuilder.SetHistoryTree(newRunID); err != nil {
 			return err
 		}

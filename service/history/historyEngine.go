@@ -475,8 +475,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx context.Context, startReq
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
 	msBuilder := e.createMutableState(clusterMetadata, domainEntry)
-	useEventsV2 := e.config.EnableEventsV2(request.GetDomain())
-	if useEventsV2 {
+	var eventStoreVersion int32
+	if e.config.EnableEventsV2(request.GetDomain()) {
+		eventStoreVersion = persistence.EventStoreVersionV2
+	}
+	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		// NOTE: except for fork(reset), we use runID as treeID for simplicity
 		if retError = msBuilder.SetHistoryTree(*execution.RunId); retError != nil {
 			return
@@ -513,7 +516,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(ctx context.Context, startReq
 	// delete the history if this API call is not successful, otherwise the history events will be zombie data
 	defer func() {
 		if needDeleteHistory {
-			e.deleteEvents(domainID, execution, useEventsV2, msBuilder.GetCurrentBranch())
+			e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
 		}
 	}()
 
@@ -1018,7 +1021,10 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, re
 	}
 	domainID := domainEntry.GetInfo().ID
 
-	useEventsV2 := e.config.EnableEventsV2(domainEntry.GetInfo().Name)
+	var eventStoreVersion int32
+	if e.config.EnableEventsV2(domainEntry.GetInfo().Name) {
+		eventStoreVersion = persistence.EventStoreVersionV2
+	}
 	request := req.CompleteRequest
 	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
@@ -1208,7 +1214,7 @@ Update_History_Loop:
 						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
 					}
 
-					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, useEventsV2); err != nil {
+					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
 						return nil, err
 					}
 				}
@@ -1426,7 +1432,7 @@ Update_History_Loop:
 					parentDomainName = parentDomainEntry.GetInfo().Name
 				}
 
-				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, parentDomainName, attributes, useEventsV2)
+				_, newStateBuilder, err := msBuilder.AddContinueAsNewEvent(completedID, domainEntry, parentDomainName, attributes, eventStoreVersion)
 				if err != nil {
 					return nil, err
 				}
@@ -2117,8 +2123,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
 	msBuilder := e.createMutableState(clusterMetadata, domainEntry)
-	useEventsV2 := e.config.EnableEventsV2(request.GetDomain())
-	if useEventsV2 {
+	var eventStoreVersion int32
+	if e.config.EnableEventsV2(request.GetDomain()) {
+		eventStoreVersion = persistence.EventStoreVersionV2
+	}
+	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		if retError = msBuilder.SetHistoryTree(*execution.RunId); retError != nil {
 			return
 		}
@@ -2180,7 +2189,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	// delete the history if this API call is not successful, otherwise the history events will be zombie data
 	defer func() {
 		if needDeleteHistory {
-			e.deleteEvents(domainID, execution, useEventsV2, msBuilder.GetCurrentBranch())
+			e.deleteEvents(domainID, execution, eventStoreVersion, msBuilder.GetCurrentBranch())
 		}
 	}()
 
@@ -2541,12 +2550,12 @@ func (e *historyEngineImpl) createRecordDecisionTaskStartedResponse(domainID str
 	return response
 }
 
-func (e *historyEngineImpl) deleteEvents(domainID string, execution workflow.WorkflowExecution, useEventsV2 bool, branchToken []byte) {
+func (e *historyEngineImpl) deleteEvents(domainID string, execution workflow.WorkflowExecution, eventStoreVersion int32, branchToken []byte) {
 	// We created the history events but failed to create workflow execution, so cleanup the history which could cause
 	// us to leak history events which are never cleaned up. Cleaning up the events is absolutely safe here as they
 	// are always created for a unique run_id which is not visible beyond this call yet.
 	// TODO: Handle error on deletion of execution history
-	if useEventsV2 {
+	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		e.historyV2Mgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 		})

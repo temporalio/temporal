@@ -81,7 +81,7 @@ type (
 		IsWorkflowRunning bool
 		PersistenceToken  []byte
 		TransientDecision *gen.TransientDecisionInfo
-		UseEventsV2       bool
+		EventStoreVersion int32
 		BranchToken       []byte
 	}
 )
@@ -795,8 +795,8 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 		return nil, nil
 	}
 
-	useEventsV2 := matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2
-	resp, err := wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, useEventsV2, matchingResp.GetBranchToken())
+	eventStoreVersion := matchingResp.GetEventStoreVersion()
+	resp, err := wh.createPollForDecisionTaskResponse(ctx, scope, domainID, matchingResp, eventStoreVersion, matchingResp.GetBranchToken())
 	if err != nil {
 		return nil, wh.error(err, scope)
 	}
@@ -1278,8 +1278,8 @@ func (wh *WorkflowHandler) RespondDecisionTaskCompleted(
 		}
 		matchingResp := common.CreateMatchingPollForDecisionTaskResponse(histResp.StartedResponse, workflowExecution, token)
 
-		useEventsV2 := matchingResp.GetEventStoreVersion() == persistence.EventStoreVersionV2
-		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, useEventsV2, matchingResp.GetBranchToken())
+		eventStoreVersion := matchingResp.GetEventStoreVersion()
+		newDecisionTask, err := wh.createPollForDecisionTaskResponse(ctx, scope, taskToken.DomainID, matchingResp, eventStoreVersion, matchingResp.GetBranchToken())
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1501,7 +1501,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	// 3. the next event ID
 	// 4. whether the workflow is closed
 	// 5. error if any
-	queryHistory := func(domainUUID string, execution *gen.WorkflowExecution, expectedNextEventID int64) (bool, []byte, string, int64, int64, bool, error) {
+	queryHistory := func(domainUUID string, execution *gen.WorkflowExecution, expectedNextEventID int64) (int32, []byte, string, int64, int64, bool, error) {
 		response, err := wh.history.GetMutableState(ctx, &h.GetMutableStateRequest{
 			DomainUUID:          common.StringPtr(domainUUID),
 			Execution:           execution,
@@ -1509,14 +1509,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		})
 
 		if err != nil {
-			return false, nil, "", 0, 0, false, err
+			return 0, nil, "", 0, 0, false, err
 		}
 
-		useEventsV2 := false
-		if response.GetEventStoreVersion() == persistence.EventStoreVersionV2 {
-			useEventsV2 = true
-		}
-		return useEventsV2, response.BranchToken, response.Execution.GetRunId(), response.GetLastFirstEventId(), response.GetNextEventId(), response.GetIsWorkflowRunning(), nil
+		return response.GetEventStoreVersion(), response.BranchToken, response.Execution.GetRunId(), response.GetLastFirstEventId(), response.GetNextEventId(), response.GetIsWorkflowRunning(), nil
 	}
 
 	isLongPoll := getRequest.GetWaitForNewEvent()
@@ -1547,7 +1543,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 			if !isCloseEventOnly {
 				queryNextEventID = token.NextEventID
 			}
-			token.UseEventsV2, token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
+			token.EventStoreVersion, token.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
@@ -1560,7 +1556,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		token.UseEventsV2, token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
+		token.EventStoreVersion, token.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err = queryHistory(domainID, execution, queryNextEventID)
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -1579,7 +1575,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			history, _, err = wh.getHistory(scope, domainID, *execution, lastFirstEventID, nextEventID,
-				getRequest.GetMaximumPageSize(), nil, token.TransientDecision, token.UseEventsV2, token.BranchToken)
+				getRequest.GetMaximumPageSize(), nil, token.TransientDecision, token.EventStoreVersion, token.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
@@ -1603,7 +1599,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		} else {
 			history, token.PersistenceToken, err =
 				wh.getHistory(scope, domainID, *execution, token.FirstEventID, token.NextEventID,
-					getRequest.GetMaximumPageSize(), token.PersistenceToken, token.TransientDecision, token.UseEventsV2, token.BranchToken)
+					getRequest.GetMaximumPageSize(), token.PersistenceToken, token.TransientDecision, token.EventStoreVersion, token.BranchToken)
 			if err != nil {
 				return nil, wh.error(err, scope)
 			}
@@ -2282,11 +2278,11 @@ func (wh *WorkflowHandler) DescribeTaskList(ctx context.Context, request *gen.De
 
 func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.WorkflowExecution,
 	firstEventID, nextEventID int64, pageSize int32, nextPageToken []byte,
-	transientDecision *gen.TransientDecisionInfo, useEventsV2 bool, branchToken []byte) (*gen.History, []byte, error) {
+	transientDecision *gen.TransientDecisionInfo, eventStoreVersion int32, branchToken []byte) (*gen.History, []byte, error) {
 
 	historyEvents := []*gen.HistoryEvent{}
 	var size int
-	if useEventsV2 {
+	if eventStoreVersion == persistence.EventStoreVersionV2 {
 		response, err := wh.historyV2Mgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
@@ -2494,7 +2490,7 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 }
 
 func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context, scope int, domainID string,
-	matchingResp *m.PollForDecisionTaskResponse, useEventsV2 bool, branchToken []byte) (*gen.PollForDecisionTaskResponse, error) {
+	matchingResp *m.PollForDecisionTaskResponse, eventStoreVersion int32, branchToken []byte) (*gen.PollForDecisionTaskResponse, error) {
 
 	if matchingResp.WorkflowExecution == nil {
 		// this will happen if there is no decision task to be send to worker / caller
@@ -2538,7 +2534,7 @@ func (wh *WorkflowHandler) createPollForDecisionTaskResponse(ctx context.Context
 			nextEventID,
 			int32(wh.config.HistoryMaxPageSize(domain.GetInfo().Name)),
 			nil,
-			matchingResp.DecisionInfo, useEventsV2, branchToken)
+			matchingResp.DecisionInfo, eventStoreVersion, branchToken)
 		if err != nil {
 			return nil, err
 		}

@@ -477,7 +477,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 			Attempt:         newRunDecisionAttempt,
 		},
 		mock.Anything,
-		false,
+		int32(0),
 	).Return(nil)
 	s.mockUpdateVersion(continueAsNewEvent)
 
