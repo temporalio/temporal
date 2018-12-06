@@ -70,4 +70,6 @@ const MaxTaskTimeout = 31622400
 const (
 	// GetHistoryWarnSizeLimit is the threshold for emitting warn log
 	GetHistoryWarnSizeLimit = 500 * 1024 // Warn when size goes over 500KB
+	// GetHistoryMaxPageSize is the max page size for get history
+	GetHistoryMaxPageSize = 1000
 )

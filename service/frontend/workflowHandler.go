@@ -1495,6 +1495,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(
 		return nil, wh.error(err, scope)
 	}
 
+	// force limit page size if exceed
+	if getRequest.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+		wh.GetLogger().WithFields(bark.Fields{
+			logging.TagWorkflowExecutionID: getRequest.Execution.GetWorkflowId(),
+			logging.TagWorkflowRunID:       getRequest.Execution.GetRunId(),
+			logging.TagDomainID:            domainID,
+			logging.TagSize:                getRequest.GetMaximumPageSize(),
+		}).Warn("GetHistory page size is larger than threshold")
+
+		getRequest.MaximumPageSize = common.Int32Ptr(common.GetHistoryMaxPageSize)
+	}
+
 	// this function return the following 5 things,
 	// 1. the workflow run ID
 	// 2. the last first event ID (the event ID of the last batch of events in the history)
