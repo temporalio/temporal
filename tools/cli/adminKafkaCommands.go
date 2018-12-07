@@ -100,6 +100,11 @@ func AdminKafkaParse(c *cli.Context) {
 
 func buildFilterFn(workflowID, runID string) filterFn {
 	return func(task *replicator.ReplicationTask) bool {
+		if len(workflowID) != 0 || len(runID) != 0 {
+			if task.GetHistoryTaskAttributes() == nil {
+				return false
+			}
+		}
 		if len(workflowID) != 0 && *task.HistoryTaskAttributes.WorkflowId != workflowID {
 			return false
 		}

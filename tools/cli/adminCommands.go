@@ -23,6 +23,8 @@ package cli
 import (
 	"fmt"
 
+	"encoding/json"
+
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/.gen/go/shared"
@@ -63,7 +65,8 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(wid) != 0 {
 		histV1 := cassp.NewHistoryPersistenceFromSession(session, bark.NewNopLogger())
 		resp, err := histV1.GetWorkflowExecutionHistory(&persistence.InternalGetWorkflowExecutionHistoryRequest{
-			DomainID: domainID,
+			LastEventBatchVersion: common.EmptyVersion,
+			DomainID:              domainID,
 			Execution: shared.WorkflowExecution{
 				WorkflowId: common.StringPtr(wid),
 				RunId:      common.StringPtr(rid),
@@ -100,16 +103,23 @@ func AdminShowWorkflow(c *cli.Context) {
 	if len(history) == 0 {
 		ErrorAndExit("no events", nil)
 	}
+	totalSize := 0
 	for idx, b := range history {
-		fmt.Printf("batch %v, blob len: %v \n", idx, len(b.Data))
+		totalSize += len(b.Data)
+		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeBatchEvents(b)
 		if err != nil {
 			ErrorAndExit("DeserializeBatchEvents err", err)
 		}
 		for _, e := range historyBatch {
-			fmt.Println(e.String())
+			jsonstr, err := json.Marshal(e)
+			if err != nil {
+				ErrorAndExit("json.Marshal err", err)
+			}
+			fmt.Println(string(jsonstr))
 		}
 	}
+	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
 }
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
