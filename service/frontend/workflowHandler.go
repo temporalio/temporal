@@ -87,23 +87,27 @@ type (
 )
 
 var (
-	errDomainNotSet               = &gen.BadRequestError{Message: "Domain not set on request."}
-	errTaskTokenNotSet            = &gen.BadRequestError{Message: "Task token not set on request."}
-	errInvalidTaskToken           = &gen.BadRequestError{Message: "Invalid TaskToken."}
-	errInvalidRequestType         = &gen.BadRequestError{Message: "Invalid request type."}
-	errTaskListNotSet             = &gen.BadRequestError{Message: "TaskList is not set on request."}
-	errTaskListTypeNotSet         = &gen.BadRequestError{Message: "TaskListType is not set on request."}
-	errExecutionNotSet            = &gen.BadRequestError{Message: "Execution is not set on request."}
-	errWorkflowIDNotSet           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
-	errRunIDNotSet                = &gen.BadRequestError{Message: "RunId is not set on request."}
-	errActivityIDNotSet           = &gen.BadRequestError{Message: "ActivityID is not set on request."}
-	errInvalidRunID               = &gen.BadRequestError{Message: "Invalid RunId."}
-	errInvalidNextPageToken       = &gen.BadRequestError{Message: "Invalid NextPageToken."}
-	errNextPageTokenRunIDMismatch = &gen.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
-	errQueryNotSet                = &gen.BadRequestError{Message: "WorkflowQuery is not set on request."}
-	errQueryTypeNotSet            = &gen.BadRequestError{Message: "QueryType is not set on request."}
-	errRequestNotSet              = &gen.BadRequestError{Message: "Request is nil."}
-	errNoPermission               = &gen.BadRequestError{Message: "No permission to do this operation."}
+	errDomainNotSet                               = &gen.BadRequestError{Message: "Domain not set on request."}
+	errTaskTokenNotSet                            = &gen.BadRequestError{Message: "Task token not set on request."}
+	errInvalidTaskToken                           = &gen.BadRequestError{Message: "Invalid TaskToken."}
+	errInvalidRequestType                         = &gen.BadRequestError{Message: "Invalid request type."}
+	errTaskListNotSet                             = &gen.BadRequestError{Message: "TaskList is not set on request."}
+	errTaskListTypeNotSet                         = &gen.BadRequestError{Message: "TaskListType is not set on request."}
+	errExecutionNotSet                            = &gen.BadRequestError{Message: "Execution is not set on request."}
+	errWorkflowIDNotSet                           = &gen.BadRequestError{Message: "WorkflowId is not set on request."}
+	errRunIDNotSet                                = &gen.BadRequestError{Message: "RunId is not set on request."}
+	errActivityIDNotSet                           = &gen.BadRequestError{Message: "ActivityID is not set on request."}
+	errInvalidRunID                               = &gen.BadRequestError{Message: "Invalid RunId."}
+	errInvalidNextPageToken                       = &gen.BadRequestError{Message: "Invalid NextPageToken."}
+	errNextPageTokenRunIDMismatch                 = &gen.BadRequestError{Message: "RunID in the request does not match the NextPageToken."}
+	errQueryNotSet                                = &gen.BadRequestError{Message: "WorkflowQuery is not set on request."}
+	errQueryTypeNotSet                            = &gen.BadRequestError{Message: "QueryType is not set on request."}
+	errRequestNotSet                              = &gen.BadRequestError{Message: "Request is nil."}
+	errNoPermission                               = &gen.BadRequestError{Message: "No permission to do this operation."}
+	errRequestIdNotSet                            = &gen.BadRequestError{Message: "RequestId is not set on request."}
+	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
+	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
+	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
 	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
@@ -1389,7 +1393,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	if startRequest.GetWorkflowId() == "" {
-		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowId is not set on request."}, scope)
+		return nil, wh.error(errWorkflowIDNotSet, scope)
 	}
 
 	if err := common.ValidateRetryPolicy(startRequest.RetryPolicy); err != nil {
@@ -1401,7 +1405,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		startRequest.GetWorkflowId())
 
 	if startRequest.WorkflowType == nil || startRequest.WorkflowType.GetName() == "" {
-		return nil, wh.error(&gen.BadRequestError{Message: "WorkflowType is not set on request."}, scope)
+		return nil, wh.error(errWorkflowTypeNotSet, scope)
 	}
 
 	if err := wh.validateTaskList(startRequest.TaskList, scope); err != nil {
@@ -1409,13 +1413,15 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	if startRequest.GetExecutionStartToCloseTimeoutSeconds() <= 0 {
-		return nil, wh.error(&gen.BadRequestError{
-			Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}, scope)
+		return nil, wh.error(errInvalidExecutionStartToCloseTimeoutSeconds, scope)
 	}
 
 	if startRequest.GetTaskStartToCloseTimeoutSeconds() <= 0 {
-		return nil, wh.error(&gen.BadRequestError{
-			Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}, scope)
+		return nil, wh.error(errInvalidTaskStartToCloseTimeoutSeconds, scope)
+	}
+
+	if startRequest.GetRequestId() == "" {
+		return nil, wh.error(errRequestIdNotSet, scope)
 	}
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))

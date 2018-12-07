@@ -22,6 +22,10 @@ package frontend
 
 import (
 	"context"
+	"github.com/stretchr/testify/suite"
+	"github.com/uber/cadence/common/messaging"
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -39,7 +43,53 @@ import (
 	dc "github.com/uber/cadence/common/service/dynamicconfig"
 )
 
-func TestMergeDomainData_Overriding(t *testing.T) {
+type (
+	workflowHandlerSuite struct {
+		suite.Suite
+		logger              bark.Logger
+		mockClusterMetadata *mocks.ClusterMetadata
+		mockProducer        *mocks.KafkaProducer
+		mockMetricClient    metrics.Client
+		mockMessagingClient messaging.Client
+		mockMetadataMgr     *mocks.MetadataManager
+		mockHistoryMgr      *mocks.HistoryManager
+		mockHistoryV2Mgr    *mocks.HistoryV2Manager
+		mockVisibilityMgr   *mocks.VisibilityManager
+		mockDomainCache     *cache.DomainCacheMock
+		mockService         cs.Service
+	}
+)
+
+func TestWorkflowHandlerSuite(t *testing.T) {
+	s := new(workflowHandlerSuite)
+	suite.Run(t, s)
+}
+
+func (s *workflowHandlerSuite) SetupSuite() {
+	if testing.Verbose() {
+		log.SetOutput(os.Stdout)
+	}
+
+}
+
+func (s *workflowHandlerSuite) TearDownSuite() {
+
+}
+
+func (s *workflowHandlerSuite) SetupTest() {
+	s.logger = bark.NewNopLogger()
+	s.mockClusterMetadata = &mocks.ClusterMetadata{}
+	s.mockProducer = &mocks.KafkaProducer{}
+	s.mockMetricClient = metrics.NewClient(tally.NoopScope, metrics.Frontend)
+	s.mockMessagingClient = mocks.NewMockMessagingClient(s.mockProducer, nil)
+	s.mockMetadataMgr = &mocks.MetadataManager{}
+	s.mockHistoryMgr = &mocks.HistoryManager{}
+	s.mockHistoryV2Mgr = &mocks.HistoryV2Manager{}
+	s.mockVisibilityMgr = &mocks.VisibilityManager{}
+	s.mockService = cs.NewTestService(s.mockClusterMetadata, s.mockMessagingClient, s.mockMetricClient, s.logger)
+}
+
+func (s *workflowHandlerSuite) TestMergeDomainData_Overriding() {
 	wh := &WorkflowHandler{}
 	out := wh.mergeDomainData(
 		map[string]string{
@@ -50,12 +100,12 @@ func TestMergeDomainData_Overriding(t *testing.T) {
 		},
 	)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(s.T(), map[string]string{
 		"k0": "v2",
 	}, out)
 }
 
-func TestMergeDomainData_Adding(t *testing.T) {
+func (s *workflowHandlerSuite) TestMergeDomainData_Adding() {
 	wh := &WorkflowHandler{}
 	out := wh.mergeDomainData(
 		map[string]string{
@@ -66,13 +116,13 @@ func TestMergeDomainData_Adding(t *testing.T) {
 		},
 	)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(s.T(), map[string]string{
 		"k0": "v0",
 		"k1": "v2",
 	}, out)
 }
 
-func TestMergeDomainData_Merging(t *testing.T) {
+func (s *workflowHandlerSuite) TestMergeDomainData_Merging() {
 	wh := &WorkflowHandler{}
 	out := wh.mergeDomainData(
 		map[string]string{
@@ -84,13 +134,13 @@ func TestMergeDomainData_Merging(t *testing.T) {
 		},
 	)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(s.T(), map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
 }
 
-func TestMergeDomainData_Nil(t *testing.T) {
+func (s *workflowHandlerSuite) TestMergeDomainData_Nil() {
 	wh := &WorkflowHandler{}
 	out := wh.mergeDomainData(
 		nil,
@@ -100,29 +150,19 @@ func TestMergeDomainData_Nil(t *testing.T) {
 		},
 	)
 
-	assert.Equal(t, map[string]string{
+	assert.Equal(s.T(), map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
 }
 
-func TestDisableListVisibilityByFilter(t *testing.T) {
-	logger := bark.NewNopLogger()
+func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	domain := "test-domain"
 	domainID := uuid.New()
-	config := NewConfig(dc.NewCollection(dc.NewNopClient(), logger))
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
 	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByDomain(true)
 
-	mockClusterMetadata := &mocks.ClusterMetadata{}
-	mockProducer := &mocks.KafkaProducer{}
-	mockMetricClient := metrics.NewClient(tally.NoopScope, metrics.Frontend)
-	mockMessagingClient := mocks.NewMockMessagingClient(mockProducer, nil)
-	baseService := cs.NewTestService(mockClusterMetadata, mockMessagingClient, mockMetricClient, logger)
-	mockMetadataMgr := &mocks.MetadataManager{}
-	mockHistoryMgr := &mocks.HistoryManager{}
-	mockHistoryV2Mgr := &mocks.HistoryV2Manager{}
-	mockVisibilityMgr := &mocks.VisibilityManager{}
-	wh := NewWorkflowHandler(baseService, config, mockMetadataMgr, mockHistoryMgr, mockHistoryV2Mgr, mockVisibilityMgr, mockProducer)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
 	mockDomainCache := &cache.DomainCacheMock{}
 	wh.metricsClient = wh.Service.GetMetricsClient()
 	wh.domainCache = mockDomainCache
@@ -142,8 +182,8 @@ func TestDisableListVisibilityByFilter(t *testing.T) {
 		},
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
-	assert.Error(t, err)
-	assert.Equal(t, errNoPermission, err)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errNoPermission, err)
 
 	// test list open by workflow type
 	listRequest.ExecutionFilter = nil
@@ -151,8 +191,8 @@ func TestDisableListVisibilityByFilter(t *testing.T) {
 		Name: common.StringPtr("workflow-type"),
 	}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
-	assert.Error(t, err)
-	assert.Equal(t, errNoPermission, err)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errNoPermission, err)
 
 	// test list close by wid
 	listRequest2 := &shared.ListClosedWorkflowExecutionsRequest{
@@ -166,8 +206,8 @@ func TestDisableListVisibilityByFilter(t *testing.T) {
 		},
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
-	assert.Error(t, err)
-	assert.Equal(t, errNoPermission, err)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errNoPermission, err)
 
 	// test list close by workflow type
 	listRequest2.ExecutionFilter = nil
@@ -175,14 +215,247 @@ func TestDisableListVisibilityByFilter(t *testing.T) {
 		Name: common.StringPtr("workflow-type"),
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
-	assert.Error(t, err)
-	assert.Equal(t, errNoPermission, err)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errNoPermission, err)
 
 	// test list close by workflow status
 	listRequest2.TypeFilter = nil
 	failedStatus := shared.WorkflowExecutionCloseStatusFailed
 	listRequest2.StatusFilter = &failedStatus
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
-	assert.Error(t, err)
-	assert.Equal(t, errNoPermission, err)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errNoPermission, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain:     common.StringPtr("test-domain"),
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errRequestIdNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	_, err := wh.StartWorkflowExecution(context.Background(), nil)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errRequestNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_DomainNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errDomainNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain: common.StringPtr("test-domain"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errWorkflowIDNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain:     common.StringPtr("test-domain"),
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr(""),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errWorkflowTypeNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskListNotSet() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain:     common.StringPtr("test-domain"),
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr(""),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errTaskListNotSet, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionStartToCloseTimeout() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain:     common.StringPtr("test-domain"),
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(0),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errInvalidExecutionStartToCloseTimeoutSeconds, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskStartToCloseTimeout() {
+	config := NewConfig(dc.NewCollection(dc.NewNopClient(), s.logger))
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := NewWorkflowHandler(s.mockService, config, s.mockMetadataMgr, s.mockHistoryMgr, s.mockHistoryV2Mgr, s.mockVisibilityMgr, s.mockProducer)
+	wh.metricsClient = wh.Service.GetMetricsClient()
+	wh.startWG.Done()
+
+	startWorkflowExecutionRequest := &shared.StartWorkflowExecutionRequest{
+		Domain:     common.StringPtr("test-domain"),
+		WorkflowId: common.StringPtr("workflow-id"),
+		WorkflowType: &shared.WorkflowType{
+			Name: common.StringPtr("workflow-type"),
+		},
+		TaskList: &shared.TaskList{
+			Name: common.StringPtr("task-list"),
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(1),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(0),
+		RetryPolicy: &shared.RetryPolicy{
+			InitialIntervalInSeconds:    common.Int32Ptr(1),
+			BackoffCoefficient:          common.Float64Ptr(2),
+			MaximumIntervalInSeconds:    common.Int32Ptr(2),
+			MaximumAttempts:             common.Int32Ptr(1),
+			ExpirationIntervalInSeconds: common.Int32Ptr(1),
+		},
+		RequestId: common.StringPtr(uuid.New()),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	assert.Error(s.T(), err)
+	assert.Equal(s.T(), errInvalidTaskStartToCloseTimeoutSeconds, err)
 }
