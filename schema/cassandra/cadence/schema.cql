@@ -253,6 +253,8 @@ CREATE TYPE buffered_replication_task_info (
   version         bigint,
   history         frozen<serialized_event_batch>,
   new_run_history frozen<serialized_event_batch>,
+  event_store_version                int, -- indiciates which version of event store to query
+  new_run_event_store_version        int, -- indiciates which version of event store to query for new run(continueAsNew)
 );
 
 -- for history v2 events

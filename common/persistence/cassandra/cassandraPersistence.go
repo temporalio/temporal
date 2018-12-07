@@ -285,6 +285,8 @@ const (
 		`first_event_id: ?, ` +
 		`next_event_id: ?, ` +
 		`version: ?, ` +
+		`event_store_version: ?, ` +
+		`new_run_event_store_version: ?, ` +
 		`history: ` + templateSerializedEventBatch + `, ` +
 		`new_run_history: ` + templateSerializedEventBatch + ` ` +
 		`}`
@@ -293,6 +295,7 @@ const (
 		`first_event_id: ?, ` +
 		`next_event_id: ?, ` +
 		`version: ?, ` +
+		`event_store_version: ?, ` +
 		`history: ` + templateSerializedEventBatch + ` ` +
 		`}`
 
@@ -3326,6 +3329,8 @@ func (d *cassandraPersistence) updateBufferedReplicationTasks(batch *gocql.Batch
 				newBufferedReplicationTask.FirstEventID,
 				newBufferedReplicationTask.NextEventID,
 				newBufferedReplicationTask.Version,
+				newBufferedReplicationTask.EventStoreVersion,
+				newBufferedReplicationTask.NewRunEventStoreVersion,
 				newBufferedReplicationTask.History.Encoding,
 				int64(0),
 				newBufferedReplicationTask.History.Data,
@@ -3346,6 +3351,7 @@ func (d *cassandraPersistence) updateBufferedReplicationTasks(batch *gocql.Batch
 				newBufferedReplicationTask.FirstEventID,
 				newBufferedReplicationTask.NextEventID,
 				newBufferedReplicationTask.Version,
+				newBufferedReplicationTask.EventStoreVersion,
 				newBufferedReplicationTask.History.Encoding,
 				int64(0),
 				newBufferedReplicationTask.History.Data,
@@ -3802,6 +3808,10 @@ func createBufferedReplicationTaskInfo(result map[string]interface{}) *p.Interna
 			info.NextEventID = v.(int64)
 		case "version":
 			info.Version = v.(int64)
+		case "event_store_version":
+			info.EventStoreVersion = int32(v.(int))
+		case "new_run_event_store_version":
+			info.NewRunEventStoreVersion = int32(v.(int))
 		case "history":
 			h := v.(map[string]interface{})
 			info.History = createHistoryEventBatchBlob(h)

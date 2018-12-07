@@ -657,6 +657,185 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCancelRequ
 	s.Empty(s.stateBuilder.newRunTransferTasks)
 }
 
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedAsNew_EventsV2() {
+
+	sourceCluster := "some random source cluster"
+	version := int64(1)
+	requestID := uuid.New()
+	domainName := "some random domain name"
+	domainID := validDomainID
+	execution := shared.WorkflowExecution{
+		WorkflowId: common.StringPtr("some random workflow ID"),
+		RunId:      common.StringPtr(validRunID),
+	}
+	parentName := "some random parent domain names"
+	parentDomainID := uuid.New()
+	parentWorkflowID := "some random parent workflow ID"
+	parentRunID := uuid.New()
+	parentInitiatedEventID := int64(144)
+	retentionDays := int32(1)
+
+	msBuilder := newMutableStateBuilderWithReplicationState(
+		"currentCluster",
+		s.mockShard.GetConfig(),
+		s.logger,
+		version,
+	)
+
+	stateBuilder := newStateBuilder(s.mockShard, msBuilder, s.logger)
+
+	now := time.Now()
+	tasklist := "some random tasklist"
+	workflowType := "some random workflow type"
+	workflowTimeoutSecond := int32(110)
+	decisionTimeoutSecond := int32(11)
+	newRunID := uuid.New()
+
+	continueAsNewEvenType := shared.EventTypeWorkflowExecutionContinuedAsNew
+	continueAsNewEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(130),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: &continueAsNewEvenType,
+		WorkflowExecutionContinuedAsNewEventAttributes: &shared.WorkflowExecutionContinuedAsNewEventAttributes{
+			NewExecutionRunId: common.StringPtr(newRunID),
+		},
+	}
+
+	newRunStartedEvenType := shared.EventTypeWorkflowExecutionStarted
+	newRunStartedEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(1),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: &newRunStartedEvenType,
+		WorkflowExecutionStartedEventAttributes: &shared.WorkflowExecutionStartedEventAttributes{
+			ParentWorkflowDomain: common.StringPtr(parentName),
+			ParentWorkflowExecution: &shared.WorkflowExecution{
+				WorkflowId: common.StringPtr(parentWorkflowID),
+				RunId:      common.StringPtr(parentRunID),
+			},
+			ParentInitiatedEventId:              common.Int64Ptr(parentInitiatedEventID),
+			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(workflowTimeoutSecond),
+			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeoutSecond),
+			TaskList:                            &shared.TaskList{Name: common.StringPtr(tasklist)},
+			WorkflowType:                        &shared.WorkflowType{Name: common.StringPtr(workflowType)},
+		},
+	}
+
+	newRunDecisionEvenType := shared.EventTypeDecisionTaskScheduled
+	newRunDecisionAttempt := int64(123)
+	newRunDecisionEvent := &shared.HistoryEvent{
+		Version:   common.Int64Ptr(version),
+		EventId:   common.Int64Ptr(2),
+		Timestamp: common.Int64Ptr(now.UnixNano()),
+		EventType: &newRunDecisionEvenType,
+		DecisionTaskScheduledEventAttributes: &shared.DecisionTaskScheduledEventAttributes{
+			TaskList:                   &shared.TaskList{Name: common.StringPtr(tasklist)},
+			StartToCloseTimeoutSeconds: common.Int32Ptr(decisionTimeoutSecond),
+			Attempt:                    common.Int64Ptr(newRunDecisionAttempt),
+		},
+	}
+
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{ID: domainID}).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: domainID, Name: domainName},
+			Config: &persistence.DomainConfig{Retention: retentionDays},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			IsGlobalDomain: true,
+			TableVersion:   persistence.DomainTableVersionV1,
+		}, nil,
+	).Once()
+	s.mockMetadataMgr.On("GetDomain", &persistence.GetDomainRequest{Name: parentName}).Return(
+		&persistence.GetDomainResponse{
+			Info:   &persistence.DomainInfo{ID: parentDomainID, Name: parentName},
+			Config: &persistence.DomainConfig{Retention: 1},
+			ReplicationConfig: &persistence.DomainReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []*persistence.ClusterReplicationConfig{
+					&persistence.ClusterReplicationConfig{ClusterName: cluster.TestCurrentClusterName},
+				},
+			},
+			IsGlobalDomain: true,
+			TableVersion:   persistence.DomainTableVersionV1,
+		}, nil,
+	).Once()
+	s.mockClusterMetadata.On("ClusterNameForFailoverVersion", continueAsNewEvent.GetVersion()).Return(sourceCluster).Once()
+	s.mockMutableState.On("ReplicateWorkflowExecutionContinuedAsNewEvent",
+		sourceCluster,
+		domainID,
+		continueAsNewEvent,
+		newRunStartedEvent,
+		&decisionInfo{
+			Version:         newRunDecisionEvent.GetVersion(),
+			ScheduleID:      newRunDecisionEvent.GetEventId(),
+			StartedID:       common.EmptyEventID,
+			RequestID:       emptyUUID,
+			DecisionTimeout: decisionTimeoutSecond,
+			TaskList:        tasklist,
+			Attempt:         newRunDecisionAttempt,
+		},
+		mock.Anything,
+		int32(persistence.EventStoreVersionV2),
+	).Return(nil)
+	s.mockUpdateVersion(continueAsNewEvent)
+
+	newRunHistory := &shared.History{Events: []*shared.HistoryEvent{newRunStartedEvent, newRunDecisionEvent}}
+	_, _, newRunStateBuilder, err := stateBuilder.applyEvents(domainID, requestID, execution, s.toHistory(continueAsNewEvent), newRunHistory.Events, 0, persistence.EventStoreVersionV2)
+	s.Nil(err)
+	expectedNewRunStateBuilder := newMutableStateBuilderWithReplicationState(
+		s.mockClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetConfig(),
+		s.logger,
+		newRunStartedEvent.GetVersion(),
+	)
+	expectedNewRunStateBuilder.ReplicateWorkflowExecutionStartedEvent(
+		domainID,
+		common.StringPtr(parentDomainID),
+		shared.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      common.StringPtr(newRunID),
+		},
+		newRunStateBuilder.GetExecutionInfo().CreateRequestID,
+		newRunStartedEvent.WorkflowExecutionStartedEventAttributes,
+	)
+	expectedNewRunStateBuilder.ReplicateDecisionTaskScheduledEvent(
+		newRunDecisionEvent.GetVersion(),
+		newRunDecisionEvent.GetEventId(),
+		tasklist,
+		decisionTimeoutSecond,
+		newRunDecisionAttempt,
+	)
+	expectedNewRunStateBuilder.GetExecutionInfo().LastFirstEventID = newRunStartedEvent.GetEventId()
+	expectedNewRunStateBuilder.GetExecutionInfo().NextEventID = newRunDecisionEvent.GetEventId() + 1
+	expectedNewRunStateBuilder.GetExecutionInfo().EventStoreVersion = persistence.EventStoreVersionV2
+	expectedNewRunStateBuilder.GetExecutionInfo().BranchToken = newRunStateBuilder.GetCurrentBranch()
+	expectedNewRunStateBuilder.SetHistoryBuilder(newHistoryBuilderFromEvents(newRunHistory.Events, s.logger))
+	expectedNewRunStateBuilder.UpdateReplicationStateLastEventID(sourceCluster, newRunStartedEvent.GetVersion(), newRunDecisionEvent.GetEventId())
+	s.Equal(expectedNewRunStateBuilder, newRunStateBuilder)
+	s.Equal(int32(persistence.EventStoreVersionV2), newRunStateBuilder.GetEventStoreVersion())
+
+	s.Equal([]persistence.Task{&persistence.CloseExecutionTask{}}, stateBuilder.transferTasks)
+	s.Equal(1, len(stateBuilder.timerTasks))
+	timerTask, ok := stateBuilder.timerTasks[0].(*persistence.DeleteHistoryEventTask)
+	s.True(ok)
+	s.True(timerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(retentionDays) * time.Hour * 24)))
+
+	s.Equal(1, len(stateBuilder.newRunTimerTasks))
+	newRunTimerTask, ok := stateBuilder.newRunTimerTasks[0].(*persistence.WorkflowTimeoutTask)
+	s.True(ok)
+	s.True(newRunTimerTask.VisibilityTimestamp.Equal(now.Add(time.Duration(workflowTimeoutSecond) * time.Second)))
+	s.Equal([]persistence.Task{&persistence.DecisionTask{
+		DomainID:   domainID,
+		TaskList:   tasklist,
+		ScheduleID: newRunDecisionEvent.GetEventId(),
+	}}, stateBuilder.newRunTransferTasks)
+}
+
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 	version := int64(1)
 	requestID := uuid.New()

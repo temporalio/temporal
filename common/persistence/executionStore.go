@@ -169,9 +169,11 @@ func (m *executionManagerImpl) DeserializeBufferedReplicationTasks(tasks map[int
 			return nil, err
 		}
 		b := &BufferedReplicationTask{
-			FirstEventID: v.FirstEventID,
-			NextEventID:  v.NextEventID,
-			Version:      v.Version,
+			FirstEventID:            v.FirstEventID,
+			NextEventID:             v.NextEventID,
+			Version:                 v.Version,
+			EventStoreVersion:       v.EventStoreVersion,
+			NewRunEventStoreVersion: v.NewRunEventStoreVersion,
 
 			History:       history,
 			NewRunHistory: newHistory,
@@ -348,9 +350,11 @@ func (m *executionManagerImpl) SerializeNewBufferedReplicationTask(task *Buffere
 	}
 
 	return &InternalBufferedReplicationTask{
-		FirstEventID: task.FirstEventID,
-		NextEventID:  task.NextEventID,
-		Version:      task.Version,
+		FirstEventID:            task.FirstEventID,
+		NextEventID:             task.NextEventID,
+		Version:                 task.Version,
+		EventStoreVersion:       task.EventStoreVersion,
+		NewRunEventStoreVersion: task.NewRunEventStoreVersion,
 
 		History:       history,
 		NewRunHistory: newHistory,

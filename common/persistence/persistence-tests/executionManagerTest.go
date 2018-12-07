@@ -1864,6 +1864,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(int64(5), bufferedTask.FirstEventID)
 	s.Equal(int64(7), bufferedTask.NextEventID)
 	s.Equal(int64(11), bufferedTask.Version)
+	s.Equal(int32(0), bufferedTask.EventStoreVersion)
+	s.Equal(int32(0), bufferedTask.NewRunEventStoreVersion)
 
 	bufferedEvents := bufferedTask.History
 	s.Equal(2, len(bufferedEvents))
@@ -1946,6 +1948,8 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateBufferedReplicationTasks
 	s.Equal(int64(10), bufferedTask.FirstEventID)
 	s.Equal(int64(12), bufferedTask.NextEventID)
 	s.Equal(int64(12), bufferedTask.Version)
+	s.Equal(int32(0), bufferedTask.EventStoreVersion)
+	s.Equal(int32(0), bufferedTask.NewRunEventStoreVersion)
 
 	bufferedEvents = bufferedTask.History
 	s.Equal(2, len(bufferedEvents))

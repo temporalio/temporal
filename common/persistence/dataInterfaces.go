@@ -586,11 +586,13 @@ type (
 
 	// BufferedReplicationTask has details to handle out of order receive of history events
 	BufferedReplicationTask struct {
-		FirstEventID  int64
-		NextEventID   int64
-		Version       int64
-		History       []*workflow.HistoryEvent
-		NewRunHistory []*workflow.HistoryEvent
+		FirstEventID            int64
+		NextEventID             int64
+		Version                 int64
+		History                 []*workflow.HistoryEvent
+		NewRunHistory           []*workflow.HistoryEvent
+		EventStoreVersion       int32
+		NewRunEventStoreVersion int32
 	}
 
 	// CreateShardRequest is used to create a shard in executions table

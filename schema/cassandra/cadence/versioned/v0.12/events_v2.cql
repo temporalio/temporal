@@ -33,3 +33,5 @@ ALTER TYPE replication_task ADD  event_store_version             int;
 ALTER TYPE replication_task ADD  branch_token                    blob;
 ALTER TYPE replication_task ADD  new_run_event_store_version     int;
 ALTER TYPE replication_task ADD  new_run_branch_token            blob;
+ALTER TYPE buffered_replication_task_info ADD  event_store_version     int;
+ALTER TYPE buffered_replication_task_info ADD  new_run_event_store_version     int;
