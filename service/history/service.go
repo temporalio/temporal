@@ -122,6 +122,9 @@ type Config struct {
 
 	EnableArchival  dynamicconfig.BoolPropertyFnWithDomainFilter
 	NumSysWorkflows dynamicconfig.IntPropertyFn
+
+	BlobSizeLimitError dynamicconfig.IntPropertyFnWithDomainFilter
+	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
@@ -192,6 +195,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 
 		EnableArchival:  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchival, false),
 		NumSysWorkflows: dc.GetIntProperty(dynamicconfig.NumSystemWorkflows, 1000),
+
+		BlobSizeLimitError: dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 	}
 }
 

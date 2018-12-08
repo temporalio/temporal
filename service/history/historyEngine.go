@@ -46,8 +46,6 @@ import (
 )
 
 const (
-	signalInputWarnSizeLimit                 = 256 * 1024
-	signalInputErrSizeLimit                  = 2 * 1024 * 1024
 	conditionalRetryCount                    = 5
 	activityCancelationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancelationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
@@ -1014,6 +1012,39 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(ctx context.Context,
 	return response, err
 }
 
+type decisionBlobSizeChecker struct {
+	sizeLimitWarn  int
+	sizeLimitError int
+	domainID       string
+	workflowID     string
+	runID          string
+	metricsClient  metrics.Client
+	logger         bark.Logger
+	msBuilder      mutableState
+	completedID    int64
+}
+
+func (c *decisionBlobSizeChecker) failWorkflowIfBlobSizeExceedsLimit(blob []byte, message string) (bool, error) {
+
+	err := common.CheckEventBlobSizeLimit(len(blob), c.sizeLimitWarn, c.sizeLimitError,
+		c.domainID, c.workflowID, c.runID, c.metricsClient, metrics.HistoryRespondDecisionTaskCompletedScope, c.logger)
+
+	if err == nil {
+		return false, nil
+	}
+
+	attributes := &workflow.FailWorkflowExecutionDecisionAttributes{
+		Reason:  common.StringPtr(common.FailureReasonDecisionBlobSizeExceedsLimit),
+		Details: []byte(message),
+	}
+
+	if evt := c.msBuilder.AddFailWorkflowEvent(c.completedID, attributes); evt == nil {
+		return false, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
+	}
+
+	return true, nil
+}
+
 // RespondDecisionTaskCompleted completes a decision task
 func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, req *h.RespondDecisionTaskCompletedRequest) (response *h.RespondDecisionTaskCompletedResponse, retError error) {
 
@@ -1048,6 +1079,19 @@ func (e *historyEngineImpl) RespondDecisionTaskCompleted(ctx context.Context, re
 		return nil, err0
 	}
 	defer func() { release(retError) }()
+
+	sizeLimitError := e.config.BlobSizeLimitError(domainEntry.GetInfo().Name)
+	sizeLimitWarn := e.config.BlobSizeLimitWarn(domainEntry.GetInfo().Name)
+
+	sizeChecker := &decisionBlobSizeChecker{
+		sizeLimitWarn:  sizeLimitWarn,
+		sizeLimitError: sizeLimitError,
+		domainID:       domainID,
+		workflowID:     token.WorkflowID,
+		runID:          token.RunID,
+		metricsClient:  e.metricsClient,
+		logger:         e.logger,
+	}
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -1087,6 +1131,7 @@ Update_History_Loop:
 
 		failDecision := false
 		var failCause workflow.DecisionTaskFailedCause
+		var failMessage string
 		var err error
 		completedID := *completedEvent.EventId
 		hasUnhandledEvents := msBuilder.HasBufferedEvents()
@@ -1110,6 +1155,9 @@ Update_History_Loop:
 		executionInfo.ClientFeatureVersion = clientFeatureVersion
 		executionInfo.ClientImpl = clientImpl
 
+		sizeChecker.completedID = completedID
+		sizeChecker.msBuilder = msBuilder
+
 	Process_Decision_Loop:
 		for _, d := range request.Decisions {
 			switch *d.DecisionType {
@@ -1131,6 +1179,15 @@ Update_History_Loop:
 				if err = validateActivityScheduleAttributes(attributes, executionInfo.WorkflowTimeout); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadScheduleActivityAttributes
+					failMessage = err.Error()
+					break Process_Decision_Loop
+				}
+
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "ScheduleActivityTaskDecisionAttributes.Input exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
 					break Process_Decision_Loop
 				}
 
@@ -1162,8 +1219,17 @@ Update_History_Loop:
 				if err = validateCompleteWorkflowExecutionAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadCompleteWorkflowExecutionAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Result, "CompleteWorkflowExecutionDecisionAttributes.Result exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
+					break Process_Decision_Loop
+				}
+
 				if e := msBuilder.AddCompletedWorkflowEvent(completedID, attributes); e == nil {
 					return nil, &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
 				}
@@ -1189,6 +1255,15 @@ Update_History_Loop:
 				if err = validateFailWorkflowExecutionAttributes(failedAttributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadFailWorkflowExecutionAttributes
+					failMessage = err.Error()
+					break Process_Decision_Loop
+				}
+
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(failedAttributes.Details, "FailWorkflowExecutionDecisionAttributes.Details exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
 					break Process_Decision_Loop
 				}
 
@@ -1244,6 +1319,7 @@ Update_History_Loop:
 				if err = validateCancelWorkflowExecutionAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadCancelWorkflowExecutionAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
 				msBuilder.AddWorkflowExecutionCanceledEvent(completedID, attributes)
@@ -1256,6 +1332,7 @@ Update_History_Loop:
 				if err = validateTimerScheduleAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadStartTimerAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
 				_, ti := msBuilder.AddTimerStartedEvent(completedID, attributes)
@@ -1273,6 +1350,7 @@ Update_History_Loop:
 				if err = validateActivityCancelAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadRequestCancelActivityAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
 				activityID := *attributes.ActivityId
@@ -1297,6 +1375,7 @@ Update_History_Loop:
 				if err = validateTimerCancelAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadCancelTimerAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
 				if msBuilder.AddTimerCanceledEvent(completedID, attributes, common.StringDefault(request.Identity)) == nil {
@@ -1315,8 +1394,17 @@ Update_History_Loop:
 				if err = validateRecordMarkerAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadRecordMarkerAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Details, "RecordMarkerDecisionAttributes.Details exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
+					break Process_Decision_Loop
+				}
+
 				msBuilder.AddRecordMarkerEvent(completedID, attributes)
 
 			case workflow.DecisionTypeRequestCancelExternalWorkflowExecution:
@@ -1326,6 +1414,7 @@ Update_History_Loop:
 				if err = validateCancelExternalWorkflowExecutionAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadRequestCancelExternalWorkflowExecutionAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
 
@@ -1364,12 +1453,14 @@ Update_History_Loop:
 				if err = validateSignalExternalWorkflowExecutionAttributes(attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadSignalWorkflowExecutionAttributes
+					failMessage = err.Error()
 					break Process_Decision_Loop
 				}
-				if err = validateSignalInput(domainID, &workflowExecution, attributes.Input, e.metricsClient,
-					metrics.HistoryRespondDecisionTaskCompletedScope, e.logger); err != nil {
-					failDecision = true
-					failCause = workflow.DecisionTaskFailedCauseBadSignalInputSize
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "SignalExternalWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
 					break Process_Decision_Loop
 				}
 
@@ -1420,6 +1511,14 @@ Update_History_Loop:
 				if err = validateContinueAsNewWorkflowExecutionAttributes(executionInfo, attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadContinueAsNewAttributes
+					failMessage = err.Error()
+					break Process_Decision_Loop
+				}
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "ContinueAsNewWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
 					break Process_Decision_Loop
 				}
 
@@ -1450,6 +1549,14 @@ Update_History_Loop:
 				if err = validateStartChildExecutionAttributes(executionInfo, attributes); err != nil {
 					failDecision = true
 					failCause = workflow.DecisionTaskFailedCauseBadStartChildExecutionAttributes
+					failMessage = err.Error()
+					break Process_Decision_Loop
+				}
+				failWorkflow, err := sizeChecker.failWorkflowIfBlobSizeExceedsLimit(attributes.Input, "StartChildWorkflowExecutionDecisionAttributes.Input exceeds size limit.")
+				if err != nil {
+					return nil, err
+				}
+				if failWorkflow {
 					break Process_Decision_Loop
 				}
 
@@ -1484,7 +1591,7 @@ Update_History_Loop:
 			e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope, metrics.FailedDecisionsCounter)
 			logging.LogDecisionFailedEvent(e.logger, domainID, token.WorkflowID, token.RunID, failCause)
 			var err1 error
-			msBuilder, err1 = e.failDecision(context, scheduleID, startedID, failCause, request)
+			msBuilder, err1 = e.failDecision(context, scheduleID, startedID, failCause, []byte(failMessage), request)
 			if err1 != nil {
 				return nil, err1
 			}
@@ -1684,7 +1791,6 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(ctx context.Context, re
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskCompleted event to history."}
 			}
-
 			return nil, nil
 		})
 }
@@ -1742,6 +1848,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(ctx context.Context, req *
 				// need retry
 				postActions.timerTasks = append(postActions.timerTasks, retryTask)
 			} else {
+				// no more retry, and we want to record the failure event
 				if msBuilder.AddActivityTaskFailedEvent(scheduleID, ai.StartedID, request) == nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, &workflow.InternalServiceError{Message: "Unable to add ActivityTaskFailed event to history."}
@@ -1956,11 +2063,6 @@ func (e *historyEngineImpl) SignalWorkflowExecution(ctx context.Context, signalR
 		RunId:      request.WorkflowExecution.RunId,
 	}
 
-	if err := validateSignalInput(domainID, &execution, request.GetInput(), e.metricsClient,
-		metrics.HistorySignalWorkflowExecutionScope, e.logger); err != nil {
-		return err
-	}
-
 	return e.updateWorkflowExecution(ctx, domainID, execution, false, true,
 		func(msBuilder mutableState, tBuilder *timerBuilder) ([]persistence.Task, error) {
 			if !msBuilder.IsWorkflowExecutionRunning() {
@@ -2016,11 +2118,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(ctx context.Context
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := workflow.WorkflowExecution{
 		WorkflowId: sRequest.WorkflowId,
-	}
-
-	if retError = validateSignalInput(domainID, &execution, sRequest.GetSignalInput(), e.metricsClient,
-		metrics.HistorySignalWithStartWorkflowExecutionScope, e.logger); retError != nil {
-		return
 	}
 
 	var prevMutableState mutableState
@@ -2570,7 +2667,7 @@ func (e *historyEngineImpl) deleteEvents(domainID string, execution workflow.Wor
 }
 
 func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, scheduleID, startedID int64,
-	cause workflow.DecisionTaskFailedCause, request *workflow.RespondDecisionTaskCompletedRequest) (mutableState,
+	cause workflow.DecisionTaskFailedCause, details []byte, request *workflow.RespondDecisionTaskCompletedRequest) (mutableState,
 	error) {
 	// Clear any updates we have accumulated so far
 	context.clear()
@@ -2581,7 +2678,7 @@ func (e *historyEngineImpl) failDecision(context *workflowExecutionContext, sche
 		return nil, err
 	}
 
-	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, nil, request.GetIdentity())
+	msBuilder.AddDecisionTaskFailedEvent(scheduleID, startedID, cause, details, request.GetIdentity())
 
 	// Return new builder back to the caller for further updates
 	return msBuilder, nil
@@ -2742,6 +2839,7 @@ func validateRecordMarkerAttributes(attributes *workflow.RecordMarkerDecisionAtt
 	if attributes.MarkerName == nil || *attributes.MarkerName == "" {
 		return &workflow.BadRequestError{Message: "MarkerName is not set on decision."}
 	}
+
 	return nil
 }
 
@@ -2794,8 +2892,8 @@ func validateSignalExternalWorkflowExecutionAttributes(attributes *workflow.Sign
 	if attributes.Execution.WorkflowId == nil {
 		return &workflow.BadRequestError{Message: "WorkflowId is not set on decision."}
 	}
-	runID := attributes.Execution.GetRunId()
-	if runID != "" && uuid.Parse(runID) == nil {
+	targetRunID := attributes.Execution.GetRunId()
+	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
 		return &workflow.BadRequestError{Message: "Invalid RunId set on decision."}
 	}
 	if attributes.SignalName == nil {
@@ -2888,29 +2986,6 @@ func validateStartWorkflowExecutionRequest(request *workflow.StartWorkflowExecut
 		return &workflow.BadRequestError{Message: "Missing Tasklist."}
 	}
 	return common.ValidateRetryPolicy(request.RetryPolicy)
-}
-
-func validateSignalInput(domainID string, execution *workflow.WorkflowExecution, signalInput []byte, metricsClient metrics.Client, scope int, logger bark.Logger) error {
-	size := len(signalInput)
-	metricsClient.RecordTimer(
-		scope,
-		metrics.SignalSizeTimer,
-		time.Duration(size),
-	)
-
-	if size > signalInputWarnSizeLimit {
-		logger.WithFields(bark.Fields{
-			logging.TagDomainID:            domainID,
-			logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
-			logging.TagWorkflowRunID:       execution.GetRunId(),
-			logging.TagSize:                size,
-		}).Warn("Large signal size encountered.")
-
-		if size > signalInputErrSizeLimit {
-			return ErrSignalOverSize
-		}
-	}
-	return nil
 }
 
 func validateDomainUUID(domainUUID *string) (string, error) {

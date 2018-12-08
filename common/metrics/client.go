@@ -23,8 +23,6 @@ package metrics
 import (
 	"time"
 
-	"github.com/uber/cadence/common"
-
 	"github.com/uber-go/tally"
 )
 
@@ -61,7 +59,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
 		}
-		common.MergeDictoRight(def.tags, scopeTags)
+		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
 	}
 
@@ -69,7 +67,7 @@ func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
 		}
-		common.MergeDictoRight(def.tags, scopeTags)
+		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
 		metricsClient.childScopes[idx] = newScope(scope.Tagged(scopeTags), metricsMap)
 	}
@@ -128,4 +126,10 @@ func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
 	}
 
 	return defs
+}
+
+func mergeMapToRight(src map[string]string, dest map[string]string) {
+	for k, v := range src {
+		dest[k] = v
+	}
 }

@@ -53,6 +53,10 @@ var keys = map[Key]string{
 	EnableVisibilitySampling: "system.enableVisibilitySampling",
 	EnableVisibilityToKafka:  "system.enableVisibilityToKafka",
 
+	// size limit
+	BlobSizeLimitError: "limit.blobSize.error",
+	BlobSizeLimitWarn:  "limit.blobSize.warn",
+
 	// frontend settings
 	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
 	FrontendVisibilityMaxPageSize:  "frontend.visibilityMaxPageSize",
@@ -171,6 +175,11 @@ const (
 	EnableVisibilityToKafka
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
+
+	// BlobSizeLimitError is the per event blob size limit
+	BlobSizeLimitError
+	// BlobSizeLimitWarn is the per event blob size limit for warning
+	BlobSizeLimitWarn
 
 	// key for frontend
 

@@ -93,6 +93,14 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 		return common.NoRetryBackoff
 	}
 
+	// make sure we don't retry size exceeded error reasons. Note that FailureReasonFailureDetailsExceedsLimit is retryable.
+	if errReason == common.FailureReasonCancelDetailsExceedsLimit ||
+		errReason == common.FailureReasonCompleteResultExceedsLimit ||
+		errReason == common.FailureReasonHeartbeatExceedsLimit ||
+		errReason == common.FailureReasonDecisionBlobSizeExceedsLimit {
+		return common.NoRetryBackoff
+	}
+
 	// check if error is non-retriable
 	for _, er := range nonRetriableErrors {
 		if er == errReason {

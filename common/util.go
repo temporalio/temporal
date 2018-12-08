@@ -22,6 +22,8 @@ package common
 
 import (
 	"encoding/json"
+	"github.com/uber/cadence/common/logging"
+	"github.com/uber/cadence/common/metrics"
 	"sync"
 	"time"
 
@@ -55,22 +57,23 @@ const (
 	matchingServiceOperationInitialInterval    = 1000 * time.Millisecond
 	matchingServiceOperationMaxInterval        = 10 * time.Second
 	matchingServiceOperationExpirationInterval = 30 * time.Second
+
+	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
+	FailureReasonCompleteResultExceedsLimit = "COMPLETE_RESULT_EXCEEDS_LIMIT"
+	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
+	FailureReasonFailureDetailsExceedsLimit = "FAILURE_DETAILS_EXCEEDS_LIMIT"
+	// FailureReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
+	FailureReasonCancelDetailsExceedsLimit = "CANCEL_DETAILS_EXCEEDS_LIMIT"
+	//FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
+	FailureReasonHeartbeatExceedsLimit = "HEARTBEAT_EXCEEDS_LIMIT"
+	// FailureReasonDecisionBlobSizeExceedsLimit is the failureReason for decision blob exceeds size limit
+	FailureReasonDecisionBlobSizeExceedsLimit = "DECISION_BLOB_SIZE_EXCEEDS_LIMIT"
 )
 
-// MergeDictoRight copies the contents of src to dest
-func MergeDictoRight(src map[string]string, dest map[string]string) {
-	for k, v := range src {
-		dest[k] = v
-	}
-}
-
-// MergeDicts creates a union of the two dicts
-func MergeDicts(dic1 map[string]string, dic2 map[string]string) (resultDict map[string]string) {
-	resultDict = make(map[string]string)
-	MergeDictoRight(dic1, resultDict)
-	MergeDictoRight(dic2, resultDict)
-	return
-}
+var (
+	// ErrBlobSizeExceedsLimit is error for event blob size exceeds limit
+	ErrBlobSizeExceedsLimit = &workflow.BadRequestError{Message: "Blob data size exceeds limit."}
+)
 
 // AwaitWaitGroup calls Wait on the given wait
 // Returns true if the Wait() call succeeded before the timeout
@@ -317,4 +320,30 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 		histRequest.ExpirationTimestamp = Int64Ptr(deadline.Round(time.Millisecond).UnixNano())
 	}
 	return histRequest
+}
+
+func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, metricsClient metrics.Client, scope int, logger bark.Logger) error {
+	if metricsClient != nil {
+		metricsClient.RecordTimer(
+			scope,
+			metrics.EventBlobSize,
+			time.Duration(actualSize),
+		)
+	}
+
+	if actualSize > warnLimit {
+		if logger != nil {
+			logger.WithFields(bark.Fields{
+				logging.TagDomainID:            domainID,
+				logging.TagWorkflowExecutionID: workflowID,
+				logging.TagWorkflowRunID:       runID,
+				logging.TagSize:                actualSize,
+			}).Warn("Blob size exceeds limit.")
+		}
+
+		if actualSize > errorLimit {
+			return ErrBlobSizeExceedsLimit
+		}
+	}
+	return nil
 }
