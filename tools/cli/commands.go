@@ -40,7 +40,6 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/urfave/cli"
 
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	s "go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/client"
 )
@@ -171,49 +170,36 @@ const (
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
 )
 
-// For color output to terminal
 var (
+	cFactory ClientFactory
+
 	colorRed     = color.New(color.FgRed).SprintFunc()
 	colorMagenta = color.New(color.FgMagenta).SprintFunc()
 	colorGreen   = color.New(color.FgGreen).SprintFunc()
 
-	tableHeaderBlue = tablewriter.Colors{tablewriter.FgHiBlueColor}
+	tableHeaderBlue         = tablewriter.Colors{tablewriter.FgHiBlueColor}
+	optionErr               = "there is something wrong with your command options"
+	osExit                  = os.Exit
+	workflowClosedStatusMap = map[string]s.WorkflowExecutionCloseStatus{
+		"completed":      s.WorkflowExecutionCloseStatusCompleted,
+		"failed":         s.WorkflowExecutionCloseStatusFailed,
+		"canceled":       s.WorkflowExecutionCloseStatusCanceled,
+		"terminated":     s.WorkflowExecutionCloseStatusTerminated,
+		"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
+		"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
+		// below are some alias
+		"c":         s.WorkflowExecutionCloseStatusCompleted,
+		"complete":  s.WorkflowExecutionCloseStatusCompleted,
+		"f":         s.WorkflowExecutionCloseStatusFailed,
+		"fail":      s.WorkflowExecutionCloseStatusFailed,
+		"cancel":    s.WorkflowExecutionCloseStatusCanceled,
+		"terminate": s.WorkflowExecutionCloseStatusTerminated,
+		"term":      s.WorkflowExecutionCloseStatusTerminated,
+		"continue":  s.WorkflowExecutionCloseStatusContinuedAsNew,
+		"cont":      s.WorkflowExecutionCloseStatusContinuedAsNew,
+		"timeout":   s.WorkflowExecutionCloseStatusTimedOut,
+	}
 )
-
-var optionErr = "there is something wrong with your command options"
-
-var workflowClosedStatusMap = map[string]s.WorkflowExecutionCloseStatus{
-	"completed":      s.WorkflowExecutionCloseStatusCompleted,
-	"failed":         s.WorkflowExecutionCloseStatusFailed,
-	"canceled":       s.WorkflowExecutionCloseStatusCanceled,
-	"terminated":     s.WorkflowExecutionCloseStatusTerminated,
-	"continuedasnew": s.WorkflowExecutionCloseStatusContinuedAsNew,
-	"timedout":       s.WorkflowExecutionCloseStatusTimedOut,
-	// below are some alias
-	"c":         s.WorkflowExecutionCloseStatusCompleted,
-	"complete":  s.WorkflowExecutionCloseStatusCompleted,
-	"f":         s.WorkflowExecutionCloseStatusFailed,
-	"fail":      s.WorkflowExecutionCloseStatusFailed,
-	"cancel":    s.WorkflowExecutionCloseStatusCanceled,
-	"terminate": s.WorkflowExecutionCloseStatusTerminated,
-	"term":      s.WorkflowExecutionCloseStatusTerminated,
-	"continue":  s.WorkflowExecutionCloseStatusContinuedAsNew,
-	"cont":      s.WorkflowExecutionCloseStatusContinuedAsNew,
-	"timeout":   s.WorkflowExecutionCloseStatusTimedOut,
-}
-
-// cBuilder is used to create cadence clients
-// To provide customized builder, call SetBuilder() before call NewCliApp()
-var cBuilder WorkflowClientBuilderInterface
-
-// osExit is used when CLI hits an error and exit
-// The purpose of this is to test CLI exit scenario
-var osExit = os.Exit
-
-// SetBuilder can be used to inject customized builder of cadence clients
-func SetBuilder(builder WorkflowClientBuilderInterface) {
-	cBuilder = builder
-}
 
 // ErrorAndExit print easy to understand error msg first then error detail in a new line
 func ErrorAndExit(msg string, err error) {
@@ -533,8 +519,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 
 // StartWorkflow starts a new workflow execution
 func StartWorkflow(c *cli.Context) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getWorkflowServiceClient(c)
+	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	tasklist := getRequiredOption(c, FlagTaskList)
@@ -579,8 +564,7 @@ func StartWorkflow(c *cli.Context) {
 
 // RunWorkflow starts a new workflow execution and print workflow progress and result
 func RunWorkflow(c *cli.Context) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getWorkflowServiceClient(c)
+	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	tasklist := getRequiredOption(c, FlagTaskList)
@@ -745,8 +729,7 @@ func CancelWorkflow(c *cli.Context) {
 
 // SignalWorkflow signals a workflow execution
 func SignalWorkflow(c *cli.Context) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getWorkflowServiceClient(c)
+	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -789,8 +772,7 @@ func QueryWorkflowUsingStackTrace(c *cli.Context) {
 }
 
 func queryWorkflowHelper(c *cli.Context, queryType string) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getWorkflowServiceClient(c)
+	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -1164,41 +1146,12 @@ func ObserveHistoryWithID(c *cli.Context) {
 }
 
 func getDomainClient(c *cli.Context) client.DomainClient {
-	service, err := cBuilder.BuildServiceClient(c)
-	if err != nil {
-		ErrorAndExit("Failed to initialize service client.", err)
-	}
-
-	domainClient, err := client.NewDomainClient(service, &client.Options{}), nil
-	if err != nil {
-		ErrorAndExit("Failed to initialize domain client.", err)
-	}
-	return domainClient
+	return client.NewDomainClient(cFactory.ClientFrontendClient(c), &client.Options{})
 }
 
 func getWorkflowClient(c *cli.Context) client.Client {
 	domain := getRequiredGlobalOption(c, FlagDomain)
-
-	service, err := cBuilder.BuildServiceClient(c)
-	if err != nil {
-		ErrorAndExit("Failed to initialize service client.", err)
-	}
-
-	wfClient, err := client.NewClient(service, domain, &client.Options{}), nil
-	if err != nil {
-		ErrorAndExit("Failed to initialize workflow client.", err)
-	}
-
-	return wfClient
-}
-
-func getWorkflowServiceClient(c *cli.Context) workflowserviceclient.Interface {
-	client, err := cBuilder.BuildServiceClient(c)
-	if err != nil {
-		ErrorAndExit("Failed to initialize service client.", err)
-	}
-
-	return client
+	return client.NewClient(cFactory.ClientFrontendClient(c), domain, &client.Options{})
 }
 
 func getRequiredOption(c *cli.Context, optionName string) string {

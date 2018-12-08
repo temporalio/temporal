@@ -516,6 +516,7 @@ func newKafkaProducer(c *cli.Context) messaging.Producer {
 	return producer
 }
 
+// AdminPurgeTopic is used to purge kafka topic
 func AdminPurgeTopic(c *cli.Context) {
 	hostFile := getRequiredOption(c, FlagHostFile)
 	topic := getRequiredOption(c, FlagTopic)

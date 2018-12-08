@@ -21,35 +21,20 @@
 package cli
 
 import (
-	"fmt"
-
 	"encoding/json"
-
+	"fmt"
 	"github.com/gocql/gocql"
 	"github.com/uber-common/bark"
+	"github.com/uber/cadence/.gen/go/admin"
 	"github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/persistence"
 	cassp "github.com/uber/cadence/common/persistence/cassandra"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/urfave/cli"
-	"go.uber.org/cadence/.gen/go/admin"
-	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
-	s "go.uber.org/cadence/.gen/go/shared"
 )
 
-const (
-	maxEventID = 9999
-)
-
-func getAdminServiceClient(c *cli.Context) adminserviceclient.Interface {
-	client, err := cBuilder.BuildAdminServiceClient(c)
-	if err != nil {
-		ErrorAndExit("Failed to initialize admin service client.", err)
-	}
-
-	return client
-}
+const maxEventID = 9999
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) {
@@ -124,8 +109,7 @@ func AdminShowWorkflow(c *cli.Context) {
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
 func AdminDescribeWorkflow(c *cli.Context) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getAdminServiceClient(c)
+	adminClient := cFactory.ServerAdminClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
 	wid := getRequiredOption(c, FlagWorkflowID)
@@ -134,9 +118,9 @@ func AdminDescribeWorkflow(c *cli.Context) {
 	ctx, cancel := newContext()
 	defer cancel()
 
-	resp, err := serviceClient.DescribeWorkflowExecution(ctx, &admin.DescribeWorkflowExecutionRequest{
+	resp, err := adminClient.DescribeWorkflowExecution(ctx, &admin.DescribeWorkflowExecutionRequest{
 		Domain: common.StringPtr(domain),
-		Execution: &s.WorkflowExecution{
+		Execution: &shared.WorkflowExecution{
 			WorkflowId: common.StringPtr(wid),
 			RunId:      common.StringPtr(rid),
 		},
@@ -283,8 +267,7 @@ func AdminGetShardID(c *cli.Context) {
 
 // AdminDescribeHistoryHost describes history host
 func AdminDescribeHistoryHost(c *cli.Context) {
-	// using service client instead of cadence.Client because we need to directly pass the json blob as input.
-	serviceClient := getAdminServiceClient(c)
+	adminClient := cFactory.ServerAdminClient(c)
 
 	wid := c.String(FlagWorkflowID)
 	sid := c.Int(FlagShardID)
@@ -299,9 +282,9 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	ctx, cancel := newContext()
 	defer cancel()
 
-	req := &s.DescribeHistoryHostRequest{}
+	req := &shared.DescribeHistoryHostRequest{}
 	if len(wid) > 0 {
-		req.ExecutionForHost = &s.WorkflowExecution{WorkflowId: common.StringPtr(wid)}
+		req.ExecutionForHost = &shared.WorkflowExecution{WorkflowId: common.StringPtr(wid)}
 	}
 	if c.IsSet(FlagShardID) {
 		req.ShardIdForHost = common.Int32Ptr(int32(sid))
@@ -310,7 +293,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 		req.HostAddress = common.StringPtr(addr)
 	}
 
-	resp, err := serviceClient.DescribeHistoryHost(ctx, req)
+	resp, err := adminClient.DescribeHistoryHost(ctx, req)
 	if err != nil {
 		ErrorAndExit("Describe history host failed", err)
 	}

@@ -489,9 +489,6 @@
   name = "go.uber.org/cadence"
   packages = [
     ".",
-    ".gen/go/admin",
-    ".gen/go/admin/adminserviceclient",
-    ".gen/go/admin/adminservicetest",
     ".gen/go/cadence",
     ".gen/go/cadence/workflowserviceclient",
     ".gen/go/cadence/workflowservicetest",
@@ -722,9 +719,6 @@
     "github.com/urfave/cli",
     "go.uber.org/atomic",
     "go.uber.org/cadence",
-    "go.uber.org/cadence/.gen/go/admin",
-    "go.uber.org/cadence/.gen/go/admin/adminserviceclient",
-    "go.uber.org/cadence/.gen/go/admin/adminservicetest",
     "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient",
     "go.uber.org/cadence/.gen/go/cadence/workflowservicetest",
     "go.uber.org/cadence/.gen/go/shared",

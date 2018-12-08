@@ -21,112 +21,87 @@
 package cli
 
 import (
-	"errors"
-
+	serverAdmin "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
+	serverFrontend "github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/urfave/cli"
-	"go.uber.org/cadence/.gen/go/admin/adminserviceclient"
-	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	clientFrontend "go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 	"go.uber.org/zap"
 )
 
 const (
-	_cadenceClientName      = "cadence-client"
-	_cadenceFrontendService = "cadence-frontend"
+	cadenceClientName      = "cadence-client"
+	cadenceFrontendService = "cadence-frontend"
 )
 
-// WorkflowClientBuilderInterface is an interface to build client to cadence service.
-// User can customize builder by implementing this interface, and call SetBulder after initialize cli.
-// (See cadence/cmd/tools/cli/main.go for example)
-// The customized builder may have more processing on Env, Address and other info.
-type WorkflowClientBuilderInterface interface {
-	BuildServiceClient(c *cli.Context) (workflowserviceclient.Interface, error)
-	BuildAdminServiceClient(c *cli.Context) (adminserviceclient.Interface, error)
+// ClientFactory is used to construct rpc clients
+type ClientFactory interface {
+	ClientFrontendClient(c *cli.Context) clientFrontend.Interface
+	ServerFrontendClient(c *cli.Context) serverFrontend.Interface
+	ServerAdminClient(c *cli.Context) serverAdmin.Interface
 }
 
-// WorkflowClientBuilder build client to cadence service
-type WorkflowClientBuilder struct {
+type clientFactory struct {
 	hostPort   string
 	dispatcher *yarpc.Dispatcher
 	logger     *zap.Logger
 }
 
-// NewBuilder creates a new WorkflowClientBuilder
-func NewBuilder() *WorkflowClientBuilder {
+// NewClientFactory creates a new ClientFactory
+func NewClientFactory() ClientFactory {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
 
-	return &WorkflowClientBuilder{
+	return &clientFactory{
 		logger: logger,
 	}
 }
 
-// BuildServiceClient builds a rpc service client to cadence service
-func (b *WorkflowClientBuilder) BuildServiceClient(c *cli.Context) (workflowserviceclient.Interface, error) {
-	b.hostPort = localHostPort
-	if addr := c.GlobalString(FlagAddress); addr != "" {
-		b.hostPort = addr
-	}
-
-	if err := b.build(); err != nil {
-		return nil, err
-	}
-
-	if b.dispatcher == nil {
-		b.logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
-	}
-
-	return workflowserviceclient.New(b.dispatcher.ClientConfig(_cadenceFrontendService)), nil
+// ClientFrontendClient builds a frontend client
+func (b *clientFactory) ClientFrontendClient(c *cli.Context) clientFrontend.Interface {
+	b.ensureDispatcher(c)
+	return clientFrontend.New(b.dispatcher.ClientConfig(cadenceFrontendService))
 }
 
-// BuildAdminServiceClient builds a rpc service client to cadence admin service
-func (b *WorkflowClientBuilder) BuildAdminServiceClient(c *cli.Context) (adminserviceclient.Interface, error) {
-	b.hostPort = localHostPort
-	if addr := c.GlobalString(FlagAddress); addr != "" {
-		b.hostPort = addr
-	}
-
-	if err := b.build(); err != nil {
-		return nil, err
-	}
-
-	if b.dispatcher == nil {
-		b.logger.Fatal("No RPC dispatcher provided to create a connection to Cadence Service")
-	}
-
-	return adminserviceclient.New(b.dispatcher.ClientConfig(_cadenceFrontendService)), nil
+// ServerFrontendClient builds a frontend client (based on server side thrift interface)
+func (b *clientFactory) ServerFrontendClient(c *cli.Context) serverFrontend.Interface {
+	b.ensureDispatcher(c)
+	return serverFrontend.New(b.dispatcher.ClientConfig(cadenceFrontendService))
 }
 
-func (b *WorkflowClientBuilder) build() error {
+// ServerAdminClient builds an admin client (based on server side thrift interface)
+func (b *clientFactory) ServerAdminClient(c *cli.Context) serverAdmin.Interface {
+	b.ensureDispatcher(c)
+	return serverAdmin.New(b.dispatcher.ClientConfig(cadenceFrontendService))
+}
+
+func (b *clientFactory) ensureDispatcher(c *cli.Context) {
 	if b.dispatcher != nil {
-		return nil
+		return
 	}
 
-	if len(b.hostPort) == 0 {
-		return errors.New("HostPort is empty")
+	b.hostPort = localHostPort
+	if addr := c.GlobalString(FlagAddress); addr != "" {
+		b.hostPort = addr
 	}
 
-	ch, err := tchannel.NewChannelTransport(
-		tchannel.ServiceName(_cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
+	ch, err := tchannel.NewChannelTransport(tchannel.ServiceName(cadenceClientName), tchannel.ListenAddr("127.0.0.1:0"))
 	if err != nil {
 		b.logger.Fatal("Failed to create transport channel", zap.Error(err))
 	}
 
 	b.dispatcher = yarpc.NewDispatcher(yarpc.Config{
-		Name: _cadenceClientName,
+		Name: cadenceClientName,
 		Outbounds: yarpc.Outbounds{
-			_cadenceFrontendService: {Unary: ch.NewSingleOutbound(b.hostPort)},
+			cadenceFrontendService: {Unary: ch.NewSingleOutbound(b.hostPort)},
 		},
 	})
 
-	if b.dispatcher != nil {
-		if err := b.dispatcher.Start(); err != nil {
-			b.logger.Fatal("Failed to create outbound transport channel: %v", zap.Error(err))
-		}
+	if err := b.dispatcher.Start(); err != nil {
+		b.dispatcher.Stop()
+		b.logger.Fatal("Failed to create outbound transport channel: %v", zap.Error(err))
 	}
-
-	return nil
 }
