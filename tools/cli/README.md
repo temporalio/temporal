@@ -79,6 +79,20 @@ and it takes a string as input, so there is the `-i '"cadence"'`. Single quote `
 Workflow `start` command is similar to `run` command and takes same flag options. But it just start the workflow and immediately return workflow_id and run_id.  
 User need to run `show` to view workflow history/progress.  
 
+**Re-use the same workflow id when starting/running workflow**
+
+Use option `--workflowidreusepolicy` or `--wrp` to configure workflow id re-use policy.  
+**Option 0 AllowDuplicateFailedOnly:** Allow start a workflow execution using the same workflow ID when workflow not running, and the last execution close state is in *[terminated, cancelled, timeouted, failed]*.  
+**Option 1 AllowDuplicate:** Allow start a workflow execution using the same workflow ID when workflow not running.  
+**Option 2 RejectDuplicate:** Do not allow start a workflow execution using the same workflow ID at all.  
+```
+# use AllowDuplicateFailedOnly option to start a workflow
+./cadence workflow start --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"' --wid "<duplicated workflow id>" --wrp 0
+
+# use AllowDuplicate option to run a workflow
+./cadence workflow run --tl helloWorldGroup --wt main.Workflow --et 60 -i '"cadence"' --wid "<duplicated workflow id>" --wrp 1
+```
+
 - Show workflow history
 ```
 ./cadence workflow show -w 3ea6b242-b23c-4279-bb13-f215661b4717 -r 866ae14c-88cf-4f1e-980f-571e031d71b0

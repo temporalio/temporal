@@ -269,10 +269,10 @@ func (s *cliAppSuite) TestStartWorkflow() {
 	resp := &shared.StartWorkflowExecutionResponse{RunId: common.StringPtr(uuid.New())}
 	s.clientFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
 	// start with wid
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
 	// start without wid
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60"})
+	err = s.app.Run([]string{"", "--do", domainName, "workflow", "start", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
 }
 
@@ -290,10 +290,10 @@ func (s *cliAppSuite) TestRunWorkflow() {
 	s.clientFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
 	s.clientFrontendClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), callOptions...).Return(history, nil).Times(2)
 	// start with wid
-	err := s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
+	err := s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "wrp", "2"})
 	s.Nil(err)
 	// start without wid
-	err = s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60"})
+	err = s.app.Run([]string{"", "--do", domainName, "workflow", "run", "-tl", "testTaskList", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
 	s.Nil(err)
 }
 
@@ -561,4 +561,31 @@ func (s *cliAppSuite) TestAnyToString() {
 func (s *cliAppSuite) TestIsAttributeName() {
 	s.True(isAttributeName("WorkflowExecutionStartedEventAttributes"))
 	s.False(isAttributeName("workflowExecutionStartedEventAttributes"))
+}
+
+func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
+	res := getWorkflowIdReusePolicy(2)
+	s.Equal(res.String(), shared.WorkflowIdReusePolicyRejectDuplicate.String())
+}
+
+func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
+	oldOsExit := osExit
+	defer func() { osExit = oldOsExit }()
+	var errorCode int
+	osExit = func(code int) {
+		errorCode = code
+	}
+	getWorkflowIdReusePolicy(2147483647)
+	s.Equal(1, errorCode)
+}
+
+func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
+	oldOsExit := osExit
+	defer func() { osExit = oldOsExit }()
+	var errorCode int
+	osExit = func(code int) {
+		errorCode = code
+	}
+	getWorkflowIdReusePolicy(-1)
+	s.Equal(1, errorCode)
 }

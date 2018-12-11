@@ -75,6 +75,8 @@ const (
 	FlagTaskListWithAlias          = FlagTaskList + ", tl"
 	FlagTaskListType               = "tasklisttype"
 	FlagTaskListTypeWithAlias      = FlagTaskListType + ", tlt"
+	FlagWorkflowIdReusePolicy      = "workflowidreusepolicy"
+	FlagWorkflowIdReusePolicyAlias = FlagWorkflowIdReusePolicy + ", wrp"
 	FlagWorkflowType               = "workflow_type"
 	FlagWorkflowTypeWithAlias      = FlagWorkflowType + ", wt"
 	FlagWorkflowStatus             = "status"
@@ -165,6 +167,7 @@ const (
 	defaultContextTimeoutForLongPoll = 2 * time.Minute
 	defaultDecisionTimeoutInSeconds  = 10
 	defaultPageSizeForList           = 500
+	defaultWorkflowIdReusePolicy     = s.WorkflowIdReusePolicyAllowDuplicateFailedOnly
 
 	workflowStatusNotSet = -1
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
@@ -522,7 +525,7 @@ func StartWorkflow(c *cli.Context) {
 	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	tasklist := getRequiredOption(c, FlagTaskList)
+	taskList := getRequiredOption(c, FlagTaskList)
 	workflowType := getRequiredOption(c, FlagWorkflowType)
 	et := c.Int(FlagExecutionTimeout)
 	if et == 0 {
@@ -532,6 +535,10 @@ func StartWorkflow(c *cli.Context) {
 	wid := c.String(FlagWorkflowID)
 	if len(wid) == 0 {
 		wid = uuid.New()
+	}
+	reusePolicy := defaultWorkflowIdReusePolicy.Ptr()
+	if c.IsSet(FlagWorkflowIdReusePolicy) {
+		reusePolicy = getWorkflowIdReusePolicy(c.Int(FlagWorkflowIdReusePolicy))
 	}
 
 	input := processJSONInput(c)
@@ -547,12 +554,13 @@ func StartWorkflow(c *cli.Context) {
 			Name: common.StringPtr(workflowType),
 		},
 		TaskList: &s.TaskList{
-			Name: common.StringPtr(tasklist),
+			Name: common.StringPtr(taskList),
 		},
 		Input:                               []byte(input),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32(et)),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),
+		WorkflowIdReusePolicy:               reusePolicy,
 	})
 
 	if err != nil {
@@ -567,7 +575,7 @@ func RunWorkflow(c *cli.Context) {
 	serviceClient := cFactory.ClientFrontendClient(c)
 
 	domain := getRequiredGlobalOption(c, FlagDomain)
-	tasklist := getRequiredOption(c, FlagTaskList)
+	taskList := getRequiredOption(c, FlagTaskList)
 	workflowType := getRequiredOption(c, FlagWorkflowType)
 	et := c.Int(FlagExecutionTimeout)
 	if et == 0 {
@@ -577,6 +585,10 @@ func RunWorkflow(c *cli.Context) {
 	wid := c.String(FlagWorkflowID)
 	if len(wid) == 0 {
 		wid = uuid.New()
+	}
+	reusePolicy := defaultWorkflowIdReusePolicy.Ptr()
+	if c.IsSet(FlagWorkflowIdReusePolicy) {
+		reusePolicy = getWorkflowIdReusePolicy(c.Int(FlagWorkflowIdReusePolicy))
 	}
 
 	input := processJSONInput(c)
@@ -596,12 +608,13 @@ func RunWorkflow(c *cli.Context) {
 			Name: common.StringPtr(workflowType),
 		},
 		TaskList: &s.TaskList{
-			Name: common.StringPtr(tasklist),
+			Name: common.StringPtr(taskList),
 		},
 		Input:                               []byte(input),
 		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32(et)),
 		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(int32(dt)),
 		Identity:                            common.StringPtr(getCliIdentity()),
+		WorkflowIdReusePolicy:               reusePolicy,
 	})
 
 	if err != nil {
@@ -616,7 +629,7 @@ func RunWorkflow(c *cli.Context) {
 		{"Run Id", resp.GetRunId()},
 		{"Type", workflowType},
 		{"Domain", domain},
-		{"Task List", tasklist},
+		{"Task List", taskList},
 		{"Args", truncate(input)}, // in case of large input
 	}
 	table.SetBorder(false)
@@ -1335,4 +1348,13 @@ func getWorkflowStatus(statusStr string) s.WorkflowExecutionCloseStatus {
 	ErrorAndExit(optionErr, errors.New("option status is not one of allowed values "+
 		"[completed, failed, canceled, terminated, continueasnew, timedout]"))
 	return 0
+}
+
+func getWorkflowIdReusePolicy(value int) *s.WorkflowIdReusePolicy {
+	if value >= 0 && value <= len(s.WorkflowIdReusePolicy_Values()) {
+		return s.WorkflowIdReusePolicy(value).Ptr()
+	}
+	// At this point, the policy should return if the value is valid
+	ErrorAndExit(fmt.Sprintf("Option %v value is not in supported range.", FlagWorkflowIdReusePolicy), nil)
+	return nil
 }
