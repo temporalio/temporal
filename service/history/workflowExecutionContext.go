@@ -295,6 +295,14 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	// Take a snapshot of all updates we have accumulated for this execution
 	updates, err := c.msBuilder.CloseUpdateSession()
 	if err != nil {
+		if err == ErrBufferedEventsLimitExceeded {
+			if err1 := c.failInflightDecision(); err1 != nil {
+				return err1
+			}
+
+			// Buffered events are flushed, we want upper layer to retry
+			return ErrConflict
+		}
 		return err
 	}
 
@@ -708,6 +716,38 @@ func (c *workflowExecutionContextImpl) scheduleNewDecision(transferTasks []persi
 	}
 
 	return transferTasks, timerTasks, nil
+}
+
+func (c *workflowExecutionContextImpl) failInflightDecision() error {
+	c.clear()
+
+	// Reload workflow execution so we can apply the decision task failure event
+	msBuilder, err1 := c.loadWorkflowExecution()
+	if err1 != nil {
+		return err1
+	}
+
+	if di, ok := msBuilder.GetInFlightDecisionTask(); ok {
+		msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
+			workflow.DecisionTaskFailedCauseForceCloseDecision, nil, identityHistoryService)
+
+		var transT, timerT []persistence.Task
+		transT, timerT, err1 = c.scheduleNewDecision(transT, timerT)
+		if err1 != nil {
+			return err1
+		}
+
+		// Generate a transaction ID for appending events to history
+		transactionID, err1 := c.shard.GetNextTransferTaskID()
+		if err1 != nil {
+			return err1
+		}
+		err1 = c.updateWorkflowExecution(transT, timerT, transactionID)
+		if err1 != nil {
+			return err1
+		}
+	}
+	return nil
 }
 
 func (c *workflowExecutionContextImpl) emitWorkflowExecutionStats(stats *persistence.MutableStateStats, executionInfoHistorySize int64) {

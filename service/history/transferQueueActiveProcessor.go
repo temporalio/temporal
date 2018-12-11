@@ -1010,41 +1010,6 @@ Update_History_Loop:
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
-
-			// Check if the processing is blocked due to limit exceeded error and fail any outstanding decision to
-			// unblock processing
-			if err == ErrBufferedEventsLimitExceeded {
-				context.clear()
-
-				var err1 error
-				// Reload workflow execution so we can apply the decision task failure event
-				msBuilder, err1 = context.loadWorkflowExecution()
-				if err1 != nil {
-					return err1
-				}
-
-				if di, ok := msBuilder.GetInFlightDecisionTask(); ok {
-					msBuilder.AddDecisionTaskFailedEvent(di.ScheduleID, di.StartedID,
-						workflow.DecisionTaskFailedCauseForceCloseDecision, nil, identityHistoryService)
-
-					var transT, timerT []persistence.Task
-					transT, timerT, err1 = context.scheduleNewDecision(transT, timerT)
-					if err1 != nil {
-						return err1
-					}
-
-					// Generate a transaction ID for appending events to history
-					transactionID, err1 := t.historyService.shard.GetNextTransferTaskID()
-					if err1 != nil {
-						return err1
-					}
-					err1 = context.updateWorkflowExecution(transT, timerT, transactionID)
-					if err1 != nil {
-						return err1
-					}
-				}
-			}
-
 			return err
 		}
 

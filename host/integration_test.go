@@ -44,7 +44,6 @@ import (
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/persistence/persistence-tests"
-	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 )
 
@@ -72,7 +71,7 @@ func (s *IntegrationBase) setupShards() {
 	}
 }
 
-func TestIntegrationSuite(t *testing.T) {
+func TestRateLimitBufferedEventsTestIntegrationSuite(t *testing.T) {
 	flag.Parse()
 	if *integration && !*testEventsV2 {
 		s := new(integrationSuite)
@@ -2058,16 +2057,12 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 				s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
 			}
 
-			// Rate limitted signals
-			for i := 0; i < 10; i++ {
-				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.LittleEndian, i)
-				signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
-				s.NotNil(signalErr)
-				s.Equal(history.ErrBufferedEventsLimitExceeded, signalErr)
-			}
+			buf := new(bytes.Buffer)
+			binary.Write(buf, binary.LittleEndian, 101)
+			signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
+			s.Nil(signalErr)
 
-			// First decision is empty
+			// this decision will be ignored as he decision task is already failed
 			return nil, []*workflow.Decision{}, nil
 		}
 
@@ -2091,10 +2086,10 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		T:               s.T(),
 	}
 
-	// Make first decision to schedule activity
+	// first decision to send 101 signals, the last signal will force fail decision and flush buffered events.
 	_, err := poller.PollAndProcessDecisionTask(false, false)
 	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
-	s.Nil(err)
+	s.EqualError(err, "EntityNotExistsError{Message: Decision task not found.}")
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTask(true, false)
@@ -2104,7 +2099,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	s.True(workflowComplete)
-	s.Equal(100, signalCount)
+	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
 
 func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
@@ -6471,32 +6466,27 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	s.Nil(err)
 
 	// Send one signal to create a new decision
-	for i := 0; i < 1; i++ {
-		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.LittleEndian, i)
-		s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
-	}
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, 0)
+	s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
 
 	// Drop decision to cause all events to be buffered from now on
 	_, err = poller.PollAndProcessDecisionTask(false, true)
 	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
 	s.Nil(err)
 
-	// Buffered Signals
+	// Buffered 100 Signals
 	for i := 1; i < 101; i++ {
 		buf := new(bytes.Buffer)
 		binary.Write(buf, binary.LittleEndian, i)
 		s.Nil(s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity))
 	}
 
-	// Rate limitted signals
-	for i := 0; i < 10; i++ {
-		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.LittleEndian, i)
-		signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
-		s.NotNil(signalErr)
-		s.Equal(history.ErrBufferedEventsLimitExceeded, signalErr)
-	}
+	// 101 signal, which will fail the decision
+	buf = new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, 101)
+	signalErr := s.sendSignal(s.domainName, workflowExecution, "SignalName", buf.Bytes(), identity)
+	s.Nil(signalErr)
 
 	// Process signal in decider
 	_, err = poller.PollAndProcessDecisionTaskWithAttempt(true, false, false, false, 0)
@@ -6506,7 +6496,7 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	s.printWorkflowHistory(s.domainName, workflowExecution)
 
 	s.True(workflowComplete)
-	s.Equal(101, signalCount)
+	s.Equal(102, signalCount)
 }
 
 func (s *integrationSuite) TestStickyTimeout_NonTransientDecision() {
