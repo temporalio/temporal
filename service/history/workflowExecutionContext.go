@@ -340,12 +340,12 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		}
 	}
 
-	historySize := 0
+	newHistorySize := 0
 	// always standby history first
 	if hasNewStandbyHistoryEvents {
 		firstEvent := standbyHistoryBuilder.GetFirstEvent()
 		// Note: standby events has no transient decision events
-		historySize, err = c.appendHistoryEvents(standbyHistoryBuilder, standbyHistoryBuilder.history, transactionID)
+		newHistorySize, err = c.appendHistoryEvents(standbyHistoryBuilder, standbyHistoryBuilder.history, transactionID)
 		if err != nil {
 			return err
 		}
@@ -358,7 +358,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		firstEvent := activeHistoryBuilder.GetFirstEvent()
 		// Transient decision events need to be written as a separate batch
 		if activeHistoryBuilder.HasTransientEvents() {
-			historySize, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.transientHistory, transactionID)
+			newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.transientHistory, transactionID)
 			if err != nil {
 				return err
 			}
@@ -371,8 +371,72 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 		}
 
 		executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
-		historySize += size
-	}
+		newHistorySize += size
+
+		// enforce history size/count limit (only on active side)
+		config := c.shard.GetConfig()
+		sizeLimitWarn := config.HistorySizeLimitWarn(executionInfo.DomainID)
+		countLimitWarn := config.HistoryCountLimitWarn(executionInfo.DomainID)
+		historyCount := int(c.msBuilder.GetNextEventID()) - 1
+		historySize := int(c.msBuilder.GetHistorySize()) + newHistorySize
+		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistorySize, time.Duration(historySize))
+		c.metricsClient.RecordTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.HistoryCount, time.Duration(historyCount))
+		if historySize > sizeLimitWarn || historyCount > countLimitWarn {
+			// emit warning
+			c.logger.WithFields(bark.Fields{
+				logging.TagDomainID:            executionInfo.DomainID,
+				logging.TagWorkflowExecutionID: executionInfo.WorkflowID,
+				logging.TagWorkflowRunID:       executionInfo.RunID,
+				logging.TagHistorySize:         historySize,
+				logging.TagEventCount:          historyCount,
+			}).Warn("history size exceeds limit.")
+
+			sizeLimitError := config.HistorySizeLimitError(executionInfo.DomainID)
+			countLimitError := config.HistoryCountLimitError(executionInfo.DomainID)
+			if (historySize > sizeLimitError || historyCount > countLimitError) && c.msBuilder.IsWorkflowExecutionRunning() {
+				// hard terminate workflow if it is still running
+				c.clear()                            // discard pending changes
+				_, err1 := c.loadWorkflowExecution() // reload mutable state
+				if err1 != nil {
+					return err1
+				}
+
+				c.msBuilder.AddWorkflowExecutionTerminatedEvent(&workflow.TerminateWorkflowExecutionRequest{
+					Reason:   common.StringPtr(common.TerminateReasonSizeExceedsLimit),
+					Identity: common.StringPtr("cadence-history-server"),
+				})
+
+				updates, err = c.msBuilder.CloseUpdateSession()
+				if err != nil {
+					return err
+				}
+
+				executionInfo = c.msBuilder.GetExecutionInfo()
+				activeHistoryBuilder = updates.newEventsBuilder
+				newStateBuilder = nil // since we terminate current workflow execution, so ignore new executions
+
+				if crossDCEnabled {
+					c.msBuilder.UpdateReplicationStateLastEventID(
+						c.clusterMetadata.GetCurrentClusterName(),
+						c.msBuilder.GetCurrentVersion(),
+						executionInfo.NextEventID-1,
+					)
+				}
+
+				firstEvent = activeHistoryBuilder.GetFirstEvent()
+				terminateTransactionID, err1 := c.shard.GetNextTransferTaskID()
+				if err1 != nil {
+					return err1
+				}
+				newHistorySize, err = c.appendHistoryEvents(activeHistoryBuilder, activeHistoryBuilder.history, terminateTransactionID)
+				if err != nil {
+					return err
+				}
+				executionInfo.SetLastFirstEventID(firstEvent.GetEventId())
+			} // end of hard terminate workflow
+		} // end of enforce history size/count limit
+
+	} // end of update history events for active builder
 
 	continueAsNew := updates.continueAsNew
 	finishExecution := false
@@ -412,7 +476,7 @@ func (c *workflowExecutionContextImpl) update(transferTasks []persistence.Task, 
 	setTaskInfo(c.msBuilder.GetCurrentVersion(), now, transferTasks, timerTasks)
 
 	// Update history size on mutableState before calling UpdateWorkflowExecution
-	c.msBuilder.IncrementHistorySize(historySize)
+	c.msBuilder.IncrementHistorySize(newHistorySize)
 
 	var resp *persistence.UpdateWorkflowExecutionResponse
 	var err1 error

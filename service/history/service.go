@@ -123,8 +123,12 @@ type Config struct {
 	EnableArchival  dynamicconfig.BoolPropertyFnWithDomainFilter
 	NumSysWorkflows dynamicconfig.IntPropertyFn
 
-	BlobSizeLimitError dynamicconfig.IntPropertyFnWithDomainFilter
-	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
+	BlobSizeLimitError     dynamicconfig.IntPropertyFnWithDomainFilter
+	BlobSizeLimitWarn      dynamicconfig.IntPropertyFnWithDomainFilter
+	HistorySizeLimitError  dynamicconfig.IntPropertyFnWithDomainFilter
+	HistorySizeLimitWarn   dynamicconfig.IntPropertyFnWithDomainFilter
+	HistoryCountLimitError dynamicconfig.IntPropertyFnWithDomainFilter
+	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithDomainFilter
 }
 
 // NewConfig returns new service config with default values
@@ -196,8 +200,12 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int) *Config {
 		EnableArchival:  dc.GetBoolPropertyFnWithDomainFilter(dynamicconfig.EnableArchival, false),
 		NumSysWorkflows: dc.GetIntProperty(dynamicconfig.NumSystemWorkflows, 1000),
 
-		BlobSizeLimitError: dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitWarn, 256*1024),
+		BlobSizeLimitError:     dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:      dc.GetIntPropertyFilteredByDomain(dynamicconfig.BlobSizeLimitError, 256*1024),
+		HistorySizeLimitError:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistorySizeLimitError, 200*1024*1024),
+		HistorySizeLimitWarn:   dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistorySizeLimitWarn, 50*1024*1024),
+		HistoryCountLimitError: dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitError, 200*1024),
+		HistoryCountLimitWarn:  dc.GetIntPropertyFilteredByDomain(dynamicconfig.HistoryCountLimitWarn, 50*1024),
 	}
 }
 

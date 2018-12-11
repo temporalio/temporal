@@ -876,6 +876,7 @@ const (
 	DomainCacheCallbacksLatency
 
 	HistorySize
+	HistoryCount
 	EventBlobSize
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
@@ -1052,6 +1053,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DomainCachePrepareCallbacksLatency:                  {metricName: "domain-cache.prepare-callbacks.latency", metricType: Timer},
 		DomainCacheCallbacksLatency:                         {metricName: "domain-cache.callbacks.latency", metricType: Timer},
 		HistorySize:                                         {metricName: "history-size", metricType: Timer},
+		HistoryCount:                                        {metricName: "history-count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event-blob-size", metricType: Timer},
 	},
 	Frontend: {},

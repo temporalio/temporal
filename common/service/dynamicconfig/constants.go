@@ -54,8 +54,12 @@ var keys = map[Key]string{
 	EnableVisibilityToKafka:  "system.enableVisibilityToKafka",
 
 	// size limit
-	BlobSizeLimitError: "limit.blobSize.error",
-	BlobSizeLimitWarn:  "limit.blobSize.warn",
+	BlobSizeLimitError:     "limit.blobSize.error",
+	BlobSizeLimitWarn:      "limit.blobSize.warn",
+	HistorySizeLimitError:  "limit.historySize.error",
+	HistorySizeLimitWarn:   "limit.historySize.warn",
+	HistoryCountLimitError: "limit.historyCount.error",
+	HistoryCountLimitWarn:  "limit.historyCount.warn",
 
 	// frontend settings
 	FrontendPersistenceMaxQPS:      "frontend.persistenceMaxQPS",
@@ -180,6 +184,14 @@ const (
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
 	BlobSizeLimitWarn
+	// HistorySizeLimitError is the per workflow execution history size limit
+	HistorySizeLimitError
+	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
+	HistorySizeLimitWarn
+	// HistoryCountLimitError is the per workflow execution history event count limit
+	HistoryCountLimitError
+	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
+	HistoryCountLimitWarn
 
 	// key for frontend
 
