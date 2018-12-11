@@ -118,11 +118,11 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	mockMS1 := &mockMutableState{}
 	context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, execution1)
 	s.Nil(err)
-	context.msBuilder = mockMS1
+	context.(*workflowExecutionContextImpl).msBuilder = mockMS1
 	release(nil)
 	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution1)
 	s.Nil(err)
-	s.Equal(mockMS1, context.msBuilder)
+	s.Equal(mockMS1, context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
 
 	execution2 := workflow.WorkflowExecution{
@@ -131,7 +131,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	}
 	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, execution2)
 	s.Nil(err)
-	s.NotEqual(mockMS1, context.msBuilder)
+	s.NotEqual(mockMS1, context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
 }
 
@@ -183,21 +183,21 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake msBuilder
-	context.msBuilder = &mutableStateBuilder{}
+	context.(*workflowExecutionContextImpl).msBuilder = &mutableStateBuilder{}
 	release(nil)
 
 	// since last time, the release function receive a nil error
 	// the ms builder will not be cleared
 	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, we)
 	s.Nil(err)
-	s.NotNil(context.msBuilder)
+	s.NotNil(context.(*workflowExecutionContextImpl).msBuilder)
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
 	// the ms builder will be cleared
 	context, release, err = s.cache.getOrCreateWorkflowExecution(domainID, we)
 	s.Nil(err)
-	s.Nil(context.msBuilder)
+	s.Nil(context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
 }
 
@@ -218,10 +218,10 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 		context, release, err := s.cache.getOrCreateWorkflowExecution(domainID, we)
 		s.Nil(err)
 		// since each time the builder is reset to nil
-		s.Nil(context.msBuilder)
+		s.Nil(context.(*workflowExecutionContextImpl).msBuilder)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake msBuilder
-		context.msBuilder = &mutableStateBuilder{}
+		context.(*workflowExecutionContextImpl).msBuilder = &mutableStateBuilder{}
 		release(errors.New("some random error message"))
 		waitGroup.Done()
 	}
@@ -237,6 +237,6 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake msBuilder
-	s.Nil(context.msBuilder)
+	s.Nil(context.(*workflowExecutionContextImpl).msBuilder)
 	release(nil)
 }

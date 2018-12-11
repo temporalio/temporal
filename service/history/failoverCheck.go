@@ -52,13 +52,11 @@ func verifyTaskVersion(shard ShardContext, logger bark.Logger, domainID string, 
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTransferTask(context *workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
+func loadMutableStateForTransferTask(context workflowExecutionContext, transferTask *persistence.TransferTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			logger.Debugf("Cannot find execution: domainID: %v, workflowID: %v, runID: %v when processing transfer taskID: %v, eventID: %v",
-				context.domainID, context.workflowExecution.GetWorkflowId(), context.workflowExecution.GetRunId(), transferTask.TaskID, transferTask.ScheduleID)
 			return nil, nil
 		}
 		return nil, err
@@ -92,13 +90,11 @@ func loadMutableStateForTransferTask(context *workflowExecutionContext, transfer
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
-func loadMutableStateForTimerTask(context *workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
+func loadMutableStateForTimerTask(context workflowExecutionContext, timerTask *persistence.TimerTaskInfo, metricsClient metrics.Client, logger bark.Logger) (mutableState, error) {
 	msBuilder, err := context.loadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*workflow.EntityNotExistsError); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			logger.Debugf("Cannot find execution: domainID: %v, workflowID: %v, runID: %v when processing timer timestamp %v, taskID: %v, eventID: %v",
-				context.domainID, context.workflowExecution.GetWorkflowId(), context.workflowExecution.GetRunId(), timerTask.VisibilityTimestamp, timerTask.TaskID, timerTask.EventID)
 			return nil, nil
 		}
 		return nil, err

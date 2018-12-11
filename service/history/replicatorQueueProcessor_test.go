@@ -172,7 +172,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		},
 	)
 	msBuilder := &mockMutableState{}
-	context.msBuilder = msBuilder
+	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
 	release(nil)
 	msBuilder.On("GetReplicationState").Return(&persistence.ReplicationState{
 		CurrentVersion:   version,
@@ -213,7 +213,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		},
 	)
 	msBuilder := &mockMutableState{}
-	context.msBuilder = msBuilder
+	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
 	release(nil)
 
 	msBuilder.On("IsWorkflowExecutionRunning").Return(true)
@@ -273,7 +273,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		},
 	)
 	msBuilder := &mockMutableState{}
-	context.msBuilder = msBuilder
+	context.(*workflowExecutionContextImpl).msBuilder = msBuilder
 	release(nil)
 
 	activityVersion := int64(333)

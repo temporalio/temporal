@@ -56,7 +56,7 @@ type (
 		mockMessagingClient messaging.Client
 		mockService         service.Service
 		mockShard           *shardContextImpl
-		mockContext         *workflowExecutionContext
+		mockContext         *workflowExecutionContextImpl
 		mockDomainCache     *cache.DomainCacheMock
 
 		conflictResolver *conflictResolverImpl

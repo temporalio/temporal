@@ -363,8 +363,8 @@ func (b *historyBuilder) AddMarkerRecordedEvent(decisionCompletedEventID int64,
 }
 
 func (b *historyBuilder) AddWorkflowExecutionSignaledEvent(
-	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
-	event := b.newWorkflowExecutionSignaledEvent(request)
+	signalName string, input []byte, identity string) *workflow.HistoryEvent {
+	event := b.newWorkflowExecutionSignaledEvent(signalName, input, identity)
 
 	return b.addEventToHistory(event)
 }
@@ -646,12 +646,12 @@ func (b *historyBuilder) newTimeoutWorkflowExecutionEvent() *workflow.HistoryEve
 }
 
 func (b *historyBuilder) newWorkflowExecutionSignaledEvent(
-	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
+	signalName string, input []byte, identity string) *workflow.HistoryEvent {
 	historyEvent := b.msBuilder.CreateNewHistoryEvent(workflow.EventTypeWorkflowExecutionSignaled)
 	attributes := &workflow.WorkflowExecutionSignaledEventAttributes{}
-	attributes.SignalName = common.StringPtr(common.StringDefault(request.SignalName))
-	attributes.Input = request.Input
-	attributes.Identity = common.StringPtr(common.StringDefault(request.Identity))
+	attributes.SignalName = common.StringPtr(signalName)
+	attributes.Input = input
+	attributes.Identity = common.StringPtr(identity)
 	historyEvent.WorkflowExecutionSignaledEventAttributes = attributes
 
 	return historyEvent

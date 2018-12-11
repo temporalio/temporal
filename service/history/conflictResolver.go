@@ -37,14 +37,14 @@ type (
 	conflictResolverImpl struct {
 		shard           ShardContext
 		clusterMetadata cluster.Metadata
-		context         *workflowExecutionContext
+		context         workflowExecutionContext
 		historyMgr      persistence.HistoryManager
 		historyV2Mgr    persistence.HistoryV2Manager
 		logger          bark.Logger
 	}
 )
 
-func newConflictResolver(shard ShardContext, context *workflowExecutionContext, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
+func newConflictResolver(shard ShardContext, context workflowExecutionContext, historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager,
 	logger bark.Logger) *conflictResolverImpl {
 
 	return &conflictResolverImpl{
@@ -58,8 +58,8 @@ func newConflictResolver(shard ShardContext, context *workflowExecutionContext, 
 }
 
 func (r *conflictResolverImpl) reset(prevRunID string, requestID string, replayEventID int64, info *persistence.WorkflowExecutionInfo) (mutableState, error) {
-	domainID := r.context.domainID
-	execution := r.context.workflowExecution
+	domainID := r.context.getDomainID()
+	execution := *r.context.getExecution()
 	startTime := info.StartTimestamp
 	eventStoreVersion := info.EventStoreVersion
 	branchToken := info.GetCurrentBranch()

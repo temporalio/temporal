@@ -25,7 +25,6 @@ import (
 
 	h "github.com/uber/cadence/.gen/go/history"
 	workflow "github.com/uber/cadence/.gen/go/shared"
-
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/persistence"
 )
@@ -84,7 +83,7 @@ type (
 		AddTimerStartedEvent(int64, *workflow.StartTimerDecisionAttributes) (*workflow.HistoryEvent, *persistence.TimerInfo)
 		AddWorkflowExecutionCancelRequestedEvent(string, *h.RequestCancelWorkflowExecutionRequest) *workflow.HistoryEvent
 		AddWorkflowExecutionCanceledEvent(int64, *workflow.CancelWorkflowExecutionDecisionAttributes) *workflow.HistoryEvent
-		AddWorkflowExecutionSignaled(*workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent
+		AddWorkflowExecutionSignaled(signalName string, input []byte, identity string) *workflow.HistoryEvent
 		AddWorkflowExecutionStartedEvent(workflow.WorkflowExecution, *h.StartWorkflowExecutionRequest) *workflow.HistoryEvent
 		AddWorkflowExecutionTerminatedEvent(*workflow.TerminateWorkflowExecutionRequest) *workflow.HistoryEvent
 		AfterAddDecisionTaskCompletedEvent(int64)
@@ -112,7 +111,7 @@ type (
 		GetActivityInfo(int64) (*persistence.ActivityInfo, bool)
 		GetActivityScheduledEvent(int64) (*workflow.HistoryEvent, bool)
 		GetActivityStartedEvent(int64) (*workflow.HistoryEvent, bool)
-		GetBufferedReplicationTask(int64) (*persistence.BufferedReplicationTask, bool)
+		GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask
 		GetChildExecutionInfo(int64) (*persistence.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(int64) (*workflow.HistoryEvent, bool)
 		GetChildExecutionStartedEvent(int64) (*workflow.HistoryEvent, bool)

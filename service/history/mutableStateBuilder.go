@@ -478,10 +478,8 @@ func (e *mutableStateBuilder) BufferReplicationTask(
 	return nil
 }
 
-func (e *mutableStateBuilder) GetBufferedReplicationTask(firstEventID int64) (*persistence.BufferedReplicationTask,
-	bool) {
-	bt, ok := e.bufferedReplicationTasks[firstEventID]
-	return bt, ok
+func (e *mutableStateBuilder) GetAllBufferedReplicationTasks() map[int64]*persistence.BufferedReplicationTask {
+	return e.bufferedReplicationTasks
 }
 
 func (e *mutableStateBuilder) DeleteBufferedReplicationTask(firstEventID int64) {
@@ -2149,21 +2147,21 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionTerminatedEvent(event *w
 }
 
 func (e *mutableStateBuilder) AddWorkflowExecutionSignaled(
-	request *workflow.SignalWorkflowExecutionRequest) *workflow.HistoryEvent {
+	signalName string, input []byte, identity string) *workflow.HistoryEvent {
 	if e.executionInfo.State == persistence.WorkflowStateCompleted {
 		logging.LogInvalidHistoryActionEvent(e.logger, logging.TagValueActionWorkflowSignaled, e.GetNextEventID(), fmt.Sprintf(
 			"{State: %v}", e.executionInfo.State))
 		return nil
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionSignaledEvent(request)
+	event := e.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity)
 	e.ReplicateWorkflowExecutionSignaled(event)
 	return event
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowExecutionSignaled(event *workflow.HistoryEvent) {
 	// Increment signal count in mutable state for this workflow execution
-	e.executionInfo.SignalCount += 1
+	e.executionInfo.SignalCount++
 }
 
 func (e *mutableStateBuilder) AddContinueAsNewEvent(decisionCompletedEventID int64, domainEntry *cache.DomainCacheEntry,

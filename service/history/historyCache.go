@@ -75,7 +75,7 @@ func newHistoryCache(shard ShardContext) *historyCache {
 }
 
 func (c *historyCache) getOrCreateWorkflowExecution(domainID string,
-	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+	execution workflow.WorkflowExecution) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 	return c.getOrCreateWorkflowExecutionWithTimeout(context.Background(), domainID, execution)
 }
 
@@ -104,7 +104,7 @@ func (c *historyCache) validateWorkflowExecutionInfo(domainID string, execution 
 
 // For analyzing mutableState, we have to try get workflowExecutionContext from cache and also load from database
 func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
-	execution workflow.WorkflowExecution) (*workflowExecutionContext, *workflowExecutionContext,
+	execution workflow.WorkflowExecution) (workflowExecutionContext, workflowExecutionContext,
 	releaseWorkflowExecutionFunc, bool, error) {
 	c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheRequests)
 	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheLatency)
@@ -116,11 +116,11 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 	}
 
 	key := newWorkflowIdentifier(domainID, &execution)
-	contextFromCache, cacheHit := c.Get(key).(*workflowExecutionContext)
+	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
 	releaseFunc := func(error) {}
 	// If cache hit, we need to lock the cache to prevent race condition
 	if cacheHit {
-		if err := contextFromCache.locker.Lock(ctx); err != nil {
+		if err := contextFromCache.lock(ctx); err != nil {
 			// ctx is done before lock can be acquired
 			c.Release(key)
 			c.metricsClient.IncCounter(metrics.HistoryCacheGetAndCreateScope, metrics.HistoryCacheFailures)
@@ -138,7 +138,7 @@ func (c *historyCache) getAndCreateWorkflowExecutionWithTimeout(ctx context.Cont
 }
 
 func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Context, domainID string,
-	execution workflow.WorkflowExecution) (*workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
+	execution workflow.WorkflowExecution) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 	c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheRequests)
 	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheLatency)
 	defer sw.Stop()
@@ -154,7 +154,7 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 	}
 
 	key := newWorkflowIdentifier(domainID, &execution)
-	workflowCtx, cacheHit := c.Get(key).(*workflowExecutionContext)
+	workflowCtx, cacheHit := c.Get(key).(workflowExecutionContext)
 	if !cacheHit {
 		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
@@ -164,14 +164,14 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 			c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheFailures)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(*workflowExecutionContext)
+		workflowCtx = elem.(workflowExecutionContext)
 	}
 
 	// This will create a closure on every request.
 	// Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, cacheNotReleased, workflowCtx)
 
-	if err := workflowCtx.locker.Lock(ctx); err != nil {
+	if err := workflowCtx.lock(ctx); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
 		c.metricsClient.IncCounter(metrics.HistoryCacheGetOrCreateScope, metrics.HistoryCacheFailures)
@@ -181,14 +181,14 @@ func (c *historyCache) getOrCreateWorkflowExecutionWithTimeout(ctx context.Conte
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *historyCache) makeReleaseFunc(key workflowIdentifier, status int32, context *workflowExecutionContext) func(error) {
+func (c *historyCache) makeReleaseFunc(key workflowIdentifier, status int32, context workflowExecutionContext) func(error) {
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if err != nil {
 				// TODO see issue #668, there are certain type or errors which can bypass the clear
 				context.clear()
 			}
-			context.locker.Unlock()
+			context.unlock()
 			c.Release(key)
 		}
 	}
