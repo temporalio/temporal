@@ -21,6 +21,7 @@
 package history
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -112,5 +113,5 @@ func getBackoffInterval(currAttempt, maxAttempts, initInterval, maxInterval int3
 }
 
 func getTimeoutErrorReason(timeoutType shared.TimeoutType) string {
-	return "cadenceInternal:Timeout"
+	return fmt.Sprintf("cadenceInternal:Timeout %v", timeoutType)
 }

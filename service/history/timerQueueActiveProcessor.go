@@ -686,7 +686,8 @@ Update_History_Loop:
 			}
 		}
 
-		retryBackoffInterval := msBuilder.GetRetryBackoffDuration(getTimeoutErrorReason(workflow.TimeoutTypeStartToClose))
+		timeoutReason := getTimeoutErrorReason(workflow.TimeoutTypeStartToClose)
+		retryBackoffInterval := msBuilder.GetRetryBackoffDuration(timeoutReason)
 		if retryBackoffInterval == common.NoRetryBackoff {
 			if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
 				// If we failed to add the event that means the workflow is already completed.
@@ -720,6 +721,8 @@ Update_History_Loop:
 			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
+			Initiator:                           workflow.ContinueAsNewInitiatorRetryPolicy.Ptr(),
+			FailureReason:                       common.StringPtr(timeoutReason),
 		}
 		domainEntry, err := getActiveDomainEntryFromShard(t.shard, &domainID)
 		if err != nil {

@@ -1289,6 +1289,9 @@ Update_History_Loop:
 						ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 						TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
 						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
+						Initiator:                           workflow.ContinueAsNewInitiatorRetryPolicy.Ptr(),
+						FailureReason:                       failedAttributes.Reason,
+						FailureDetails:                      failedAttributes.Details,
 					}
 
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
