@@ -265,6 +265,9 @@ func (tb *timerBuilder) GetActivityTimerTaskIfNeeded(msBuilder mutableState) per
 		ai := tb.pendingActivityTimers[td.ActivityID]
 		at := timerTask.(*persistence.ActivityTimeoutTask)
 		ai.TimerTaskStatus = ai.TimerTaskStatus | getActivityTimerStatus(w.TimeoutType(at.TimeoutType))
+		if w.TimeoutType(at.TimeoutType) == w.TimeoutTypeHeartbeat {
+			ai.LastHeartbeatTimeoutVisibility = td.TimerSequenceID.VisibilityTimestamp.Unix()
+		}
 		msBuilder.UpdateActivity(ai)
 
 		tb.logger.Debugf("%s: Adding Activity Timeout: with timeout: %v sec, ExpiryTime: %s, TimeoutType: %v, EventID: %v",
@@ -281,6 +284,7 @@ func (tb *timerBuilder) loadUserTimers(msBuilder mutableState) {
 		seqNum := tb.localSeqNumGen.NextSeq()
 		td := &timerDetails{
 			TimerSequenceID: TimerSequenceID{VisibilityTimestamp: v.ExpiryTime, TaskID: seqNum},
+			EventID:         v.StartedID,
 			TimerID:         v.TimerID,
 			TaskCreated:     v.TaskID == TimerTaskStatusCreated}
 		tb.userTimers = append(tb.userTimers, td)

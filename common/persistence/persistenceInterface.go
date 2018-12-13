@@ -218,7 +218,7 @@ type (
 		MaximumAttempts    int32
 		NonRetriableErrors []string
 		// Not written to database - This is used only for deduping heartbeat timer creation
-		LastTimeoutVisibility int64
+		LastHeartbeatTimeoutVisibility int64
 	}
 
 	// InternalChildExecutionInfo has details for pending child executions  for Persistence Interface
