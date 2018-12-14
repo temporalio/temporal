@@ -564,7 +564,7 @@ func (s *cliAppSuite) TestIsAttributeName() {
 }
 
 func (s *cliAppSuite) TestGetWorkflowIdReusePolicy() {
-	res := getWorkflowIdReusePolicy(2)
+	res := getWorkflowIDReusePolicy(2)
 	s.Equal(res.String(), shared.WorkflowIdReusePolicyRejectDuplicate.String())
 }
 
@@ -575,7 +575,7 @@ func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_ExceedRange() {
 	osExit = func(code int) {
 		errorCode = code
 	}
-	getWorkflowIdReusePolicy(2147483647)
+	getWorkflowIDReusePolicy(2147483647)
 	s.Equal(1, errorCode)
 }
 
@@ -586,6 +586,6 @@ func (s *cliAppSuite) TestGetWorkflowIdReusePolicy_Failed_Negative() {
 	osExit = func(code int) {
 		errorCode = code
 	}
-	getWorkflowIdReusePolicy(-1)
+	getWorkflowIDReusePolicy(-1)
 	s.Equal(1, errorCode)
 }

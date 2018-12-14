@@ -104,7 +104,7 @@ var (
 	errQueryTypeNotSet                            = &gen.BadRequestError{Message: "QueryType is not set on request."}
 	errRequestNotSet                              = &gen.BadRequestError{Message: "Request is nil."}
 	errNoPermission                               = &gen.BadRequestError{Message: "No permission to do this operation."}
-	errRequestIdNotSet                            = &gen.BadRequestError{Message: "RequestId is not set on request."}
+	errRequestIDNotSet                            = &gen.BadRequestError{Message: "RequestId is not set on request."}
 	errWorkflowTypeNotSet                         = &gen.BadRequestError{Message: "WorkflowType is not set on request."}
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
@@ -1638,7 +1638,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	}
 
 	if startRequest.GetRequestId() == "" {
-		return nil, wh.error(errRequestIdNotSet, scope)
+		return nil, wh.error(errRequestIDNotSet, scope)
 	}
 
 	maxDecisionTimeout := int32(wh.config.MaxDecisionStartToCloseTimeout(startRequest.GetDomain()))

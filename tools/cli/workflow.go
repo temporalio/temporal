@@ -135,7 +135,7 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "Decision task start to close timeout in seconds",
 				},
 				cli.IntFlag{
-					Name: FlagWorkflowIdReusePolicyAlias,
+					Name: FlagWorkflowIDReusePolicyAlias,
 					Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
 						"Available options: 0: AllowDuplicateFailedOnly, 1: AllowDuplicate, 2: RejectDuplicate",
 				},
@@ -183,7 +183,7 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "Optional timeout for start command context in seconds, default value is 120",
 				},
 				cli.IntFlag{
-					Name: FlagWorkflowIdReusePolicyAlias,
+					Name: FlagWorkflowIDReusePolicyAlias,
 					Usage: "Optional input to configure if the same workflow ID is allow to use for new workflow execution. " +
 						"Available options: 0: AllowDuplicateFailedOnly, 1: AllowDuplicate, 2: RejectDuplicate",
 				},

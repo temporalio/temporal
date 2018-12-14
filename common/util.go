@@ -324,6 +324,8 @@ func CreateHistoryStartWorkflowRequest(domainID string, startRequest *workflow.S
 	return histRequest
 }
 
+// CheckEventBlobSizeLimit checks if a blob data exceeds limits. It logs a warning if it exceeds warnLimit,
+// and return ErrBlobSizeExceedsLimit if it exceeds errorLimit.
 func CheckEventBlobSizeLimit(actualSize, warnLimit, errorLimit int, domainID, workflowID, runID string, metricsClient metrics.Client, scope int, logger bark.Logger) error {
 	if metricsClient != nil {
 		metricsClient.RecordTimer(

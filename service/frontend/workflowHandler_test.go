@@ -255,7 +255,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	assert.Error(s.T(), err)
-	assert.Equal(s.T(), errRequestIdNotSet, err)
+	assert.Equal(s.T(), errRequestIDNotSet, err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
