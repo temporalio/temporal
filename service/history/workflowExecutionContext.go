@@ -88,8 +88,9 @@ var (
 func newWorkflowExecutionContext(domainID string, execution workflow.WorkflowExecution, shard ShardContext,
 	executionManager persistence.ExecutionManager, logger bark.Logger) *workflowExecutionContextImpl {
 	lg := logger.WithFields(bark.Fields{
-		logging.TagWorkflowExecutionID: *execution.WorkflowId,
-		logging.TagWorkflowRunID:       *execution.RunId,
+		logging.TagDomainID:            domainID,
+		logging.TagWorkflowExecutionID: execution.GetWorkflowId(),
+		logging.TagWorkflowRunID:       execution.GetRunId(),
 	})
 
 	return &workflowExecutionContextImpl{
