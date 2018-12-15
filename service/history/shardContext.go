@@ -488,6 +488,11 @@ func (s *shardContextImpl) UpdateWorkflowExecution(request *persistence.UpdateWo
 			task.SetTaskID(id)
 			transferMaxReadLevel = id
 		}
+
+		err = s.allocateTimerIDsLocked(request.ContinueAsNew.TimerTasks, request.ExecutionInfo.DomainID, request.ExecutionInfo.WorkflowID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
