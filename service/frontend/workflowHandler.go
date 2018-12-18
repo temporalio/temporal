@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/uber/cadence/common/blobstore"
 	"sync"
 	"time"
 
@@ -71,6 +72,7 @@ type (
 		rateLimiter       common.TokenBucket
 		config            *Config
 		domainReplicator  DomainReplicator
+		blobstoreClient   blobstore.Client
 		service.Service
 	}
 
@@ -122,7 +124,7 @@ var (
 // NewWorkflowHandler creates a thrift handler for the cadence service
 func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persistence.MetadataManager,
 	historyMgr persistence.HistoryManager, historyV2Mgr persistence.HistoryV2Manager, visibilityMgr persistence.VisibilityManager,
-	kafkaProducer messaging.Producer) *WorkflowHandler {
+	kafkaProducer messaging.Producer, blobstoreClient blobstore.Client) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		Service:          sVice,
 		config:           config,
@@ -134,6 +136,7 @@ func NewWorkflowHandler(sVice service.Service, config *Config, metadataMgr persi
 		domainCache:      cache.NewDomainCache(metadataMgr, sVice.GetClusterMetadata(), sVice.GetMetricsClient(), sVice.GetLogger()),
 		rateLimiter:      common.NewTokenBucket(config.RPS(), common.NewRealTimeSource()),
 		domainReplicator: NewDomainReplicator(kafkaProducer, sVice.GetLogger()),
+		blobstoreClient:  blobstoreClient,
 	}
 	// prevent us from trying to serve requests before handler's Start() is complete
 	handler.startWG.Add(1)

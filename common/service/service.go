@@ -22,6 +22,7 @@ package service
 
 import (
 	"github.com/uber/cadence/common/archival"
+	"github.com/uber/cadence/common/blobstore"
 	"math/rand"
 	"os"
 	"time"
@@ -66,6 +67,7 @@ type (
 		DynamicConfig      dynamicconfig.Client
 		DispatcherProvider client.DispatcherProvider
 		ArchivalClient     archival.Client
+		BlobstoreClient    blobstore.Client
 	}
 
 	// RingpopFactory provides a bootstrapped ringpop
