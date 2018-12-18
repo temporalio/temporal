@@ -47,7 +47,7 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 	"github.com/uber/cadence/host"
@@ -518,6 +518,142 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		time.Sleep(1 * time.Second)
 	}
 	s.Nil(err)
+}
+
+func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
+	domainName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
+	client1 := s.cluster1.host.GetFrontendClient() // active
+	regReq := &workflow.RegisterDomainRequest{
+		Name:                                   common.StringPtr(domainName),
+		Clusters:                               clusterReplicationConfig,
+		ActiveClusterName:                      common.StringPtr(clusterName[0]),
+		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(1),
+	}
+	err := client1.RegisterDomain(createContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflow.DescribeDomainRequest{
+		Name: common.StringPtr(domainName),
+	}
+	resp, err := client1.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+	// Wait for domain cache to pick the chenge
+	time.Sleep(cache.DomainCacheRefreshInterval)
+
+	client2 := s.cluster2.host.GetFrontendClient() // standby
+	resp2, err := client2.DescribeDomain(createContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp2)
+	s.Equal(resp, resp2)
+
+	// start a workflow
+	id := "integration-start-workflow-failover-ID-reuse-policy-test"
+	wt := "integration-start-workflow-failover-ID-reuse-policy-test-type"
+	tl := "integration-start-workflow-failover-ID-reuse-policy-test-tasklist"
+	identity := "worker1"
+	workflowType := &workflow.WorkflowType{Name: common.StringPtr(wt)}
+	taskList := &workflow.TaskList{Name: common.StringPtr(tl)}
+	startReq := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		WorkflowIdReusePolicy:               workflow.WorkflowIdReusePolicyAllowDuplicate.Ptr(),
+	}
+	we, err := client1.StartWorkflowExecution(createContext(), startReq)
+	s.Nil(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Infof("StartWorkflowExecution in cluster 1: response: %v \n", we.GetRunId())
+
+	workflowCompleteTimes := 0
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+
+		workflowCompleteTimes++
+		return nil, []*workflow.Decision{{
+			DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+			CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+				Result: []byte("Done."),
+			},
+		}}, nil
+	}
+
+	poller := host.TaskPoller{
+		Engine:          client1,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	poller2 := host.TaskPoller{
+		Engine:          client2,
+		Domain:          domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		ActivityHandler: nil,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	// make some progress in cluster 1
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask: %v", err)
+	s.Nil(err)
+	s.Equal(1, workflowCompleteTimes)
+
+	// update domain to fail over
+	updateReq := &workflow.UpdateDomainRequest{
+		Name: common.StringPtr(domainName),
+		ReplicationConfiguration: &workflow.DomainReplicationConfiguration{
+			ActiveClusterName: common.StringPtr(clusterName[1]),
+		},
+	}
+	updateResp, err := client1.UpdateDomain(createContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.Equal(clusterName[1], updateResp.ReplicationConfiguration.GetActiveClusterName())
+	s.Equal(int64(1), updateResp.GetFailoverVersion())
+
+	// wait till failover completed
+	time.Sleep(cacheRefreshInterval)
+
+	// start the workflow in cluster 2 with ID reuse policy being allow if last run fails
+	startReq.RequestId = common.StringPtr(uuid.New())
+	startReq.WorkflowIdReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicateFailedOnly.Ptr()
+	we, err = client2.StartWorkflowExecution(createContext(), startReq)
+	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err)
+	s.Nil(we)
+
+	// start the workflow in cluster 2 with ID reuse policy being reject ID reuse
+	startReq.RequestId = common.StringPtr(uuid.New())
+	startReq.WorkflowIdReusePolicy = workflow.WorkflowIdReusePolicyRejectDuplicate.Ptr()
+	we, err = client2.StartWorkflowExecution(createContext(), startReq)
+	s.IsType(&workflow.WorkflowExecutionAlreadyStartedError{}, err)
+	s.Nil(we)
+
+	// start the workflow in cluster 2
+	startReq.RequestId = common.StringPtr(uuid.New())
+	startReq.WorkflowIdReusePolicy = workflow.WorkflowIdReusePolicyAllowDuplicate.Ptr()
+	we, err = client2.StartWorkflowExecution(createContext(), startReq)
+	s.Nil(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Infof("StartWorkflowExecution in cluster 2: response: %v \n", we.GetRunId())
+
+	_, err = poller2.PollAndProcessDecisionTask(false, false)
+	s.logger.Infof("PollAndProcessDecisionTask 2: %v", err)
+	s.Nil(err)
+	s.Equal(2, workflowCompleteTimes)
 }
 
 func (s *integrationClustersTestSuite) TestTerminateFailover() {
