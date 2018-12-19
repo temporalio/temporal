@@ -281,7 +281,6 @@ Update_History_Loop:
 					// Update the task ID tracking the corresponding timer task.
 					ti.TaskID = TimerTaskStatusCreated
 					msBuilder.UpdateUserTimer(ti.TimerID, ti)
-					defer t.notifyNewTimers(timerTasks)
 				}
 
 				// Done!
@@ -457,7 +456,6 @@ Update_History_Loop:
 				return err
 			}
 
-			t.notifyNewTimers(timerTasks)
 			return nil
 		}
 
@@ -754,12 +752,13 @@ Update_History_Loop:
 
 		timersToNotify := append(timerTasks, msBuilder.GetContinueAsNew().TimerTasks...)
 		err = context.continueAsNewWorkflowExecution(nil, continueAsNewBuilder, transferTasks, timerTasks, transactionID)
-		t.notifyNewTimers(timersToNotify)
 
 		if err != nil {
 			if err == ErrConflict {
 				continue Update_History_Loop
 			}
+		} else {
+			t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timersToNotify)
 		}
 		return err
 	}
@@ -789,7 +788,7 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		tBuilder := t.historyService.getTimerBuilder(context.getExecution())
 		tranT, timerT, err := t.historyService.getDeleteWorkflowTasks(executionInfo.DomainID, executionInfo.WorkflowID, tBuilder)
 		if err != nil {
-			return nil
+			return err
 		}
 		transferTasks = append(transferTasks, tranT)
 		timerTasks = append(timerTasks, timerT)
@@ -811,6 +810,6 @@ func (t *timerQueueActiveProcessorImpl) updateWorkflowExecution(
 		return err
 	}
 
-	t.notifyNewTimers(timerTasks)
-	return err
+	t.historyService.timerProcessor.NotifyNewTimers(t.currentClusterName, t.shard.GetCurrentTime(t.currentClusterName), timerTasks)
+	return nil
 }
