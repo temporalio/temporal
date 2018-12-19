@@ -28,22 +28,24 @@ import (
 	uberKafkaClient "github.com/uber-go/kafka-client"
 	uberKafka "github.com/uber-go/kafka-client/kafka"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/common/metrics"
 	"go.uber.org/zap"
 )
 
 type (
 	// This is a default implementation of Client interface which makes use of uber-go/kafka-client as consumer
 	kafkaClient struct {
-		config *KafkaConfig
-		client uberKafkaClient.Client
-		logger bark.Logger
+		config        *KafkaConfig
+		client        uberKafkaClient.Client
+		metricsClient metrics.Client
+		logger        bark.Logger
 	}
 )
 
 var _ Client = (*kafkaClient)(nil)
 
 // NewKafkaClient is used to create an instance of KafkaClient
-func NewKafkaClient(kc *KafkaConfig, zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope, checkCluster bool) Client {
+func NewKafkaClient(kc *KafkaConfig, metricsClient metrics.Client, zLogger *zap.Logger, logger bark.Logger, metricScope tally.Scope, checkCluster bool) Client {
 	kc.Validate(checkCluster)
 
 	// mapping from cluster name to list of broker ip addresses
@@ -66,9 +68,10 @@ func NewKafkaClient(kc *KafkaConfig, zLogger *zap.Logger, logger bark.Logger, me
 	client := uberKafkaClient.New(uberKafka.NewStaticNameResolver(topicClusterAssignment, brokers), zLogger, metricScope)
 
 	return &kafkaClient{
-		config: kc,
-		client: client,
-		logger: logger,
+		config:        kc,
+		client:        client,
+		metricsClient: metricsClient,
+		logger:        logger,
 	}
 }
 
@@ -114,6 +117,9 @@ func (c *kafkaClient) NewProducer(topic string) (Producer, error) {
 		return nil, err
 	}
 
+	if c.metricsClient != nil {
+		return NewMetricProducer(NewKafkaProducer(topic, producer, c.logger), c.metricsClient), nil
+	}
 	return NewKafkaProducer(topic, producer, c.logger), nil
 }
 

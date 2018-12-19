@@ -326,6 +326,11 @@ const (
 	// FrontendClientUpdateDomainScope tracks RPC calls to frontend service
 	FrontendClientUpdateDomainScope
 
+	// MessagingPublishScope tracks Publish calls made by service to messaging layer
+	MessagingClientPublishScope
+	// MessagingPublishBatchScope tracks Publish calls made by service to messaging layer
+	MessagingClientPublishBatchScope
+
 	// DomainCacheScope tracks domain cache callbacks
 	DomainCacheScope
 	// PersistenceAppendHistoryNodesScope tracks AppendHistoryNodes calls made by service to persistence layer
@@ -706,7 +711,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientStartWorkflowExecutionScope:           {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:       {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateDomainScope:                     {operation: "FrontendClientUpdateDomain", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
-		DomainCacheScope:                                    {operation: "DomainCache"},
+
+		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
+		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
+
+		DomainCacheScope: {operation: "DomainCache"},
 	},
 	// Frontend Scope Names
 	Frontend: {
