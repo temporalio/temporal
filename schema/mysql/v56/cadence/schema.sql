@@ -107,6 +107,8 @@ CREATE TABLE executions(
 	client_feature_version VARCHAR(255) NOT NULL, -- 4.
 	client_impl VARCHAR(255) NOT NULL, -- 5.
 	signal_count INT NOT NULL,
+	cron_schedule VARCHAR(255),
+	-- TODO: fix sql to support workflow retry. https://github.com/uber/cadence/issues/1339
 	PRIMARY KEY (shard_id, domain_id, workflow_id, run_id)
 );
 

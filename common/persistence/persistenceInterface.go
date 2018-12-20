@@ -169,6 +169,8 @@ type (
 		// events V2 related
 		EventStoreVersion int32
 		BranchToken       []byte
+		CronSchedule      string
+		ExpirationSeconds int32
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface

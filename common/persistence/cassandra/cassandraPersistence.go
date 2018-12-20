@@ -159,7 +159,9 @@ const (
 		`max_attempts: ?, ` +
 		`non_retriable_errors: ?, ` +
 		`event_store_version: ?, ` +
-		`branch_token: ? ` +
+		`branch_token: ?, ` +
+		`cron_schedule: ?, ` +
+		`expiration_seconds: ? ` +
 		`}`
 
 	templateReplicationStateType = `{` +
@@ -1359,6 +1361,8 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			request.NonRetriableErrors,
 			request.EventStoreVersion,
 			request.BranchToken,
+			request.CronSchedule,
+			request.ExpirationSeconds,
 			request.NextEventID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
@@ -1422,6 +1426,8 @@ func (d *cassandraPersistence) CreateWorkflowExecutionWithinBatch(request *p.Cre
 			request.NonRetriableErrors,
 			request.EventStoreVersion,
 			request.BranchToken,
+			request.CronSchedule,
+			request.ExpirationSeconds,
 			request.ReplicationState.CurrentVersion,
 			request.ReplicationState.StartVersion,
 			request.ReplicationState.LastWriteVersion,
@@ -1594,6 +1600,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.NonRetriableErrors,
 			executionInfo.EventStoreVersion,
 			executionInfo.BranchToken,
+			executionInfo.CronSchedule,
+			executionInfo.ExpirationSeconds,
 			executionInfo.NextEventID,
 			d.shardID,
 			rowTypeExecution,
@@ -1658,6 +1666,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 			executionInfo.NonRetriableErrors,
 			executionInfo.EventStoreVersion,
 			executionInfo.BranchToken,
+			executionInfo.CronSchedule,
+			executionInfo.ExpirationSeconds,
 			replicationState.CurrentVersion,
 			replicationState.StartVersion,
 			replicationState.LastWriteVersion,
@@ -1914,6 +1924,8 @@ func (d *cassandraPersistence) ResetMutableState(request *p.InternalResetMutable
 		executionInfo.NonRetriableErrors,
 		executionInfo.EventStoreVersion,
 		executionInfo.BranchToken,
+		executionInfo.CronSchedule,
+		executionInfo.ExpirationSeconds,
 		replicationState.CurrentVersion,
 		replicationState.StartVersion,
 		replicationState.LastWriteVersion,
@@ -2877,8 +2889,9 @@ func (d *cassandraPersistence) createTimerTasks(batch *gocql.Batch, timerTasks [
 		case *p.ActivityRetryTimerTask:
 			eventID = t.EventID
 			attempt = int64(t.Attempt)
-		case *p.WorkflowRetryTimerTask:
+		case *p.WorkflowBackoffTimerTask:
 			eventID = t.EventID
+			timeoutType = t.TimeoutType
 		}
 
 		// Ignoring possible type cast errors.
@@ -3526,6 +3539,10 @@ func createWorkflowExecutionInfo(result map[string]interface{}) *p.InternalWorkf
 			info.EventStoreVersion = int32(v.(int))
 		case "branch_token":
 			info.BranchToken = v.([]byte)
+		case "cron_schedule":
+			info.CronSchedule = v.(string)
+		case "expiration_seconds":
+			info.ExpirationSeconds = int32(v.(int))
 		}
 	}
 	info.CompletionEvent = p.NewDataBlob(completionEventData, completionEventEncoding)

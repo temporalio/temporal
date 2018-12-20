@@ -67,6 +67,8 @@ CREATE TYPE workflow_execution (
   history_size                     bigint,
   last_first_event_id              bigint,
   next_event_id                    bigint,
+  cron_schedule                    text,
+  expiration_seconds               int,    -- retry expiration duration in seconds
 );
 
 -- Replication information for each cluster

@@ -255,11 +255,11 @@ func (t *timerQueueProcessorBase) notifyNewTimers(timerTasks []persistence.Task)
 			} else {
 				t.metricsClient.IncCounter(metrics.TimerStandbyTaskActivityRetryTimerScope, metrics.NewTimerCounter)
 			}
-		case persistence.TaskTypeWorkflowRetryTimer:
+		case persistence.TaskTypeWorkflowBackoffTimer:
 			if isActive {
-				t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowRetryTimerScope, metrics.NewTimerCounter)
+				t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.NewTimerCounter)
 			} else {
-				t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowRetryTimerScope, metrics.NewTimerCounter)
+				t.metricsClient.IncCounter(metrics.TimerStandbyTaskWorkflowBackoffTimerScope, metrics.NewTimerCounter)
 			}
 			// TODO add default
 		}
@@ -603,8 +603,8 @@ func (t *timerQueueProcessorBase) getTimerTaskType(taskType int) string {
 		return "DeleteHistoryEvent"
 	case persistence.TaskTypeActivityRetryTimer:
 		return "ActivityRetryTimerTask"
-	case persistence.TaskTypeWorkflowRetryTimer:
-		return "WorkflowRetryTimerTask"
+	case persistence.TaskTypeWorkflowBackoffTimer:
+		return "WorkflowBackoffTimerTask"
 	}
 	return "UnKnown"
 }

@@ -105,6 +105,7 @@ type (
 		ClientImpl                   string
 		ShardID                      int64
 		SignalCount                  int
+		CronSchedule                 string
 	}
 
 	currentExecutionRow struct {
@@ -188,7 +189,8 @@ client_library_version,
 client_feature_version,
 client_impl,
 signal_count,
-completion_event_encoding`
+completion_event_encoding,
+cron_schedule`
 
 	executionsNonNullableColumnsTags = `:shard_id,
 :domain_id,
@@ -218,7 +220,8 @@ completion_event_encoding`
 :client_feature_version,
 :client_impl,
 :signal_count,
-:completion_event_encoding`
+:completion_event_encoding,
+:cron_schedule`
 
 	executionsBlobColumns = `completion_event,
 execution_context`
@@ -304,7 +307,8 @@ current_version = :current_version,
 last_write_version = :last_write_version,
 last_write_event_id = :last_write_event_id,
 last_replication_info = :last_replication_info,
-signal_count = :signal_count
+signal_count = :signal_count,
+cron_schedule = :cron_schedule
 WHERE
 shard_id = :shard_id AND
 domain_id = :domain_id AND
@@ -692,6 +696,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(request *p.GetWorkflowExecuti
 		ClientFeatureVersion:         execution.ClientFeatureVersion,
 		ClientImpl:                   execution.ClientImpl,
 		SignalCount:                  int32(execution.SignalCount),
+		CronSchedule:                 execution.CronSchedule,
 	}
 
 	if execution.ExecutionContext != nil && len(*execution.ExecutionContext) > 0 {
@@ -1549,6 +1554,7 @@ func createExecution(tx *sqlx.Tx, request *p.CreateWorkflowExecutionRequest, sha
 		ClientFeatureVersion:         "",
 		ClientImpl:                   "",
 		SignalCount:                  int(request.SignalCount),
+		CronSchedule:                 request.CronSchedule,
 	}
 
 	if request.ReplicationState != nil {
@@ -1878,8 +1884,9 @@ func createTimerTasks(tx *sqlx.Tx, timerTasks []p.Task, deleteTimerTask p.Task, 
 			case *p.ActivityRetryTimerTask:
 				timerTasksRows[i].EventID = t.EventID
 				timerTasksRows[i].ScheduleAttempt = int64(t.Attempt)
-			case *p.WorkflowRetryTimerTask:
+			case *p.WorkflowBackoffTimerTask:
 				timerTasksRows[i].EventID = t.EventID
+				timerTasksRows[i].TimeoutType = t.TimeoutType
 			}
 
 			timerTasksRows[i].ShardID = shardID
@@ -2022,6 +2029,7 @@ func updateExecution(tx *sqlx.Tx,
 			LastWriteVersion:             common.EmptyVersion,
 			CurrentVersion:               common.EmptyVersion,
 			SignalCount:                  int(executionInfo.SignalCount),
+			CronSchedule:                 executionInfo.CronSchedule,
 		},
 		condition,
 	}

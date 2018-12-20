@@ -44,6 +44,11 @@ struct StartWorkflowExecutionRequest {
   30: optional ParentExecutionInfo parentExecutionInfo
   40: optional i32 attempt
   50: optional i64 (js.type = "Long") expirationTimestamp
+  55: optional shared.ContinueAsNewInitiator continueAsNewInitiator
+  56: optional string continuedFailureReason
+  57: optional binary continuedFailureDetails
+  58: optional binary lastCompletionResult
+  60: optional i32 firstDecisionTaskBackoffSeconds
 }
 
 struct DescribeMutableStateRequest{

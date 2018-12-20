@@ -134,3 +134,7 @@ ignored = ["github.com/uber/cadence/.gen"]
   branch = "batch"
   name = "github.com/jmoiron/sqlx"
   source = "github.com/mfateev/sqlx"
+
+[[constraint]]
+  name = "github.com/robfig/cron"
+  version = "1.1.0"

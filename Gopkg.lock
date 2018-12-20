@@ -342,6 +342,14 @@
   revision = "3113b8401b8a98917cde58f8bbd42a1b1c03b1fd"
 
 [[projects]]
+  digest = "1:6ab228f39a195cb1dab3564a0f27dc24a52bb3a19fa58dd2967f1e7b2482d82b"
+  name = "github.com/robfig/cron"
+  packages = ["."]
+  pruneopts = ""
+  revision = "b41be1df696709bb6395fe435af20370037c0b4c"
+  version = "v1.1"
+
+[[projects]]
   branch = "master"
   digest = "1:98a746c7356311a8923d37684896400749da06725a9dc7a6870888eaee42f24b"
   name = "github.com/sirupsen/logrus"
@@ -697,6 +705,7 @@
     "github.com/jmoiron/sqlx",
     "github.com/olekukonko/tablewriter",
     "github.com/pborman/uuid",
+    "github.com/robfig/cron",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/mock",

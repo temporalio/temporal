@@ -836,6 +836,14 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(errReason string) time.Dur
 	return getBackoffInterval(info.Attempt, info.MaximumAttempts, info.InitialInterval, info.MaximumInterval, info.BackoffCoefficient, time.Now(), info.ExpirationTime, errReason, info.NonRetriableErrors)
 }
 
+func (e *mutableStateBuilder) GetCronBackoffDuration() time.Duration {
+	info := e.executionInfo
+	if len(info.CronSchedule) == 0 {
+		return common.NoRetryBackoff
+	}
+	return getBackoffForNextCronSchedule(info.CronSchedule, time.Now())
+}
+
 // GetSignalInfo get details about a signal request that is currently in progress.
 func (e *mutableStateBuilder) GetSignalInfo(initiatedEventID int64) (*persistence.SignalInfo, bool) {
 	ri, ok := e.pendingSignalInfoIDs[initiatedEventID]
@@ -1178,14 +1186,28 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(d
 	}
 
 	req := &h.StartWorkflowExecutionRequest{
-		DomainUUID:          common.StringPtr(domainID),
-		StartRequest:        createRequest,
-		ParentExecutionInfo: parentExecutionInfo,
+		DomainUUID:                      common.StringPtr(domainID),
+		StartRequest:                    createRequest,
+		ParentExecutionInfo:             parentExecutionInfo,
+		LastCompletionResult:            attributes.LastCompletionResult,
+		ContinuedFailureReason:          attributes.FailureReason,
+		ContinuedFailureDetails:         attributes.FailureDetails,
+		ContinueAsNewInitiator:          attributes.Initiator,
+		FirstDecisionTaskBackoffSeconds: attributes.BackoffStartIntervalInSeconds,
 	}
-	if attributes.GetBackoffStartIntervalInSeconds() > 0 {
+	if attributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
 		req.Attempt = common.Int32Ptr(previousExecutionState.GetExecutionInfo().Attempt + 1)
 		expirationTime := previousExecutionState.GetExecutionInfo().ExpirationTime
 		if !expirationTime.IsZero() {
+			req.ExpirationTimestamp = common.Int64Ptr(expirationTime.UnixNano())
+		}
+	} else {
+		// ContinueAsNew by decider or cron
+		req.Attempt = common.Int32Ptr(0)
+		if attributes.RetryPolicy != nil && attributes.RetryPolicy.GetExpirationIntervalInSeconds() > 0 {
+			// has retry policy and expiration time.
+			expirationSeconds := attributes.RetryPolicy.GetExpirationIntervalInSeconds() + req.GetFirstDecisionTaskBackoffSeconds()
+			expirationTime := time.Now().Add(time.Second * time.Duration(expirationSeconds))
 			req.ExpirationTimestamp = common.Int64Ptr(expirationTime.UnixNano())
 		}
 	}
@@ -2275,29 +2297,37 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		PreviousRunID:        prevRunID,
 		ReplicationState:     newStateBuilder.GetReplicationState(),
 		HasRetryPolicy:       startedAttributes.RetryPolicy != nil,
-		Attempt:              e.executionInfo.Attempt,
 		InitialInterval:      e.executionInfo.InitialInterval,
 		BackoffCoefficient:   e.executionInfo.BackoffCoefficient,
 		MaximumInterval:      e.executionInfo.MaximumInterval,
-		ExpirationTime:       e.executionInfo.ExpirationTime,
 		MaximumAttempts:      e.executionInfo.MaximumAttempts,
 		NonRetriableErrors:   e.executionInfo.NonRetriableErrors,
 		EventStoreVersion:    newStateBuilder.GetEventStoreVersion(),
 		BranchToken:          newStateBuilder.GetCurrentBranch(),
+		CronSchedule:         e.executionInfo.CronSchedule,
+		ExpirationSeconds:    e.executionInfo.ExpirationSeconds,
 	}
-	if continueAsNewAttributes.GetBackoffStartIntervalInSeconds() > 0 {
-		// this is a retry
-		continueAsNew.Attempt++
+	if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
+		// retry
+		continueAsNew.Attempt = continueAsNew.Attempt + 1
+		continueAsNew.ExpirationTime = e.executionInfo.ExpirationTime
+	} else {
+		// by cron or decider
+		continueAsNew.Attempt = 0
+		if startedAttributes.RetryPolicy != nil && continueAsNew.ExpirationSeconds > 0 {
+			expirationInSeconds := startedAttributes.RetryPolicy.GetExpirationIntervalInSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
+			continueAsNew.ExpirationTime = time.Now().Add(time.Second * time.Duration(expirationInSeconds))
+		}
 	}
 
 	// timeout includes workflow_timeout + backoff_interval
 	timeoutInSeconds := continueAsNewAttributes.GetExecutionStartToCloseTimeoutSeconds() + continueAsNewAttributes.GetBackoffStartIntervalInSeconds()
 	timeoutDuration := time.Duration(timeoutInSeconds) * time.Second
-	startedTime := time.Unix(0, startedEvent.GetTimestamp())
+	startedTime := time.Now()
 	timeoutDeadline := startedTime.Add(timeoutDuration)
-	if !e.executionInfo.ExpirationTime.IsZero() && timeoutDeadline.After(e.executionInfo.ExpirationTime) {
+	if !continueAsNew.ExpirationTime.IsZero() && timeoutDeadline.After(continueAsNew.ExpirationTime) {
 		// expire before timeout
-		timeoutDeadline = e.executionInfo.ExpirationTime
+		timeoutDeadline = continueAsNew.ExpirationTime
 	}
 	continueAsNew.TimerTasks = []persistence.Task{&persistence.WorkflowTimeoutTask{
 		VisibilityTimestamp: timeoutDeadline,
@@ -2324,16 +2354,22 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionContinuedAsNewEvent(sour
 		}}
 		continueAsNew.TransferTasks = newTransferTasks
 	} else {
-		// this is for retry
+		// this need a backoff (for retry or cron)
 		continueAsNew.DecisionVersion = newStateBuilder.GetCurrentVersion()
 		continueAsNew.DecisionScheduleID = common.EmptyEventID
 		continueAsNew.DecisionStartedID = common.EmptyEventID
 		if newStateBuilder.GetReplicationState() != nil {
 			newStateBuilder.UpdateReplicationStateLastEventID(sourceClusterName, startedEvent.GetVersion(), startedEvent.GetEventId())
 		}
-		backoffTimer := &persistence.WorkflowRetryTimerTask{
+		backoffTimer := &persistence.WorkflowBackoffTimerTask{
 			VisibilityTimestamp: time.Now().Add(time.Second * time.Duration(continueAsNewAttributes.GetBackoffStartIntervalInSeconds())),
 		}
+		if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorRetryPolicy {
+			backoffTimer.TimeoutType = persistence.WorkflowBackoffTimeoutTypeRetry
+		} else if continueAsNewAttributes.GetInitiator() == workflow.ContinueAsNewInitiatorCronSchedule {
+			backoffTimer.TimeoutType = persistence.WorkflowBackoffTimeoutTypeCron
+		}
+
 		continueAsNew.TimerTasks = append(continueAsNew.TimerTasks, backoffTimer)
 	}
 	setTaskInfo(

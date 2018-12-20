@@ -1549,6 +1549,22 @@ func (_m *mockMutableState) GetRetryBackoffDuration(errReason string) time.Durat
 	return r0
 }
 
+// GetCronBackoffDuration provides a mock function
+func (_m *mockMutableState) GetCronBackoffDuration() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(time.Duration)
+		}
+	}
+
+	return r0
+}
+
 // GetScheduleIDByActivityID provides a mock function with given fields: _a0
 func (_m *mockMutableState) GetScheduleIDByActivityID(_a0 string) (int64, bool) {
 	ret := _m.Called(_a0)

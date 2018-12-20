@@ -358,6 +358,7 @@ struct ContinueAsNewWorkflowExecutionDecisionAttributes {
   90: optional string failureReason
   100: optional binary failureDetails
   110: optional binary lastCompletionResult
+  120: optional string cronSchedule
 }
 
 struct StartChildWorkflowExecutionDecisionAttributes {
@@ -372,6 +373,7 @@ struct StartChildWorkflowExecutionDecisionAttributes {
   90: optional binary control
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional RetryPolicy retryPolicy
+  120: optional string cronSchedule
 }
 
 struct Decision {
@@ -401,10 +403,16 @@ struct WorkflowExecutionStartedEventAttributes {
   50: optional i32 taskStartToCloseTimeoutSeconds
   52: optional ChildPolicy childPolicy
   54: optional string continuedExecutionRunId
+  55: optional ContinueAsNewInitiator initiator
+  56: optional string continuedFailureReason
+  57: optional binary continuedFailureDetails
+  58: optional binary lastCompletionResult
   60: optional string identity
   70: optional RetryPolicy retryPolicy
   80: optional i32 attempt
   90: optional i64 (js.type = "Long") expirationTimestamp
+  100: optional string cronSchedule
+  110: optional i32 firstDecisionTaskBackoffSeconds
 }
 
 struct WorkflowExecutionCompletedEventAttributes {
@@ -657,6 +665,7 @@ struct StartChildWorkflowExecutionInitiatedEventAttributes {
   100: optional i64 (js.type = "Long") decisionTaskCompletedEventId
   110: optional WorkflowIdReusePolicy workflowIdReusePolicy
   120: optional RetryPolicy retryPolicy
+  130: optional string cronSchedule
 }
 
 struct StartChildWorkflowExecutionFailedEventAttributes {
@@ -885,6 +894,7 @@ struct StartWorkflowExecutionRequest {
   100: optional WorkflowIdReusePolicy workflowIdReusePolicy
   110: optional ChildPolicy childPolicy
   120: optional RetryPolicy retryPolicy
+  130: optional string cronSchedule
 }
 
 struct StartWorkflowExecutionResponse {
@@ -1075,6 +1085,7 @@ struct SignalWithStartWorkflowExecutionRequest {
   120: optional binary signalInput
   130: optional binary control
   140: optional RetryPolicy retryPolicy
+  150: optional string cronSchedule
 }
 
 struct TerminateWorkflowExecutionRequest {

@@ -462,6 +462,12 @@ func (b *historyBuilder) newWorkflowExecutionStartedEvent(
 	attributes.RetryPolicy = request.RetryPolicy
 	attributes.Attempt = common.Int32Ptr(startRequest.GetAttempt())
 	attributes.ExpirationTimestamp = startRequest.ExpirationTimestamp
+	attributes.CronSchedule = request.CronSchedule
+	attributes.LastCompletionResult = startRequest.LastCompletionResult
+	attributes.ContinuedFailureReason = startRequest.ContinuedFailureReason
+	attributes.ContinuedFailureDetails = startRequest.ContinuedFailureDetails
+	attributes.Initiator = startRequest.ContinueAsNewInitiator
+	attributes.FirstDecisionTaskBackoffSeconds = startRequest.FirstDecisionTaskBackoffSeconds
 
 	parentInfo := startRequest.ParentExecutionInfo
 	if parentInfo != nil {
@@ -830,6 +836,7 @@ func (b *historyBuilder) newWorkflowExecutionContinuedAsNewEvent(decisionTaskCom
 	}
 	attributes.FailureReason = request.FailureReason
 	attributes.FailureDetails = request.FailureDetails
+	attributes.LastCompletionResult = request.LastCompletionResult
 	historyEvent.WorkflowExecutionContinuedAsNewEventAttributes = attributes
 
 	return historyEvent

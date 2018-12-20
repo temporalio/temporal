@@ -153,6 +153,8 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(info *InternalWorkflowEx
 		NonRetriableErrors:           info.NonRetriableErrors,
 		EventStoreVersion:            info.EventStoreVersion,
 		BranchToken:                  info.BranchToken,
+		CronSchedule:                 info.CronSchedule,
+		ExpirationSeconds:            info.ExpirationSeconds,
 	}
 	return newInfo, nil
 }
@@ -497,6 +499,8 @@ func (m *executionManagerImpl) SerializeExecutionInfo(info *WorkflowExecutionInf
 		NonRetriableErrors:           info.NonRetriableErrors,
 		EventStoreVersion:            info.EventStoreVersion,
 		BranchToken:                  info.BranchToken,
+		CronSchedule:                 info.CronSchedule,
+		ExpirationSeconds:            info.ExpirationSeconds,
 	}, nil
 }
 

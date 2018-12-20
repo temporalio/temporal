@@ -5974,6 +5974,7 @@ type ContinueAsNewWorkflowExecutionDecisionAttributes struct {
 	FailureReason                       *string                 `json:"failureReason,omitempty"`
 	FailureDetails                      []byte                  `json:"failureDetails,omitempty"`
 	LastCompletionResult                []byte                  `json:"lastCompletionResult,omitempty"`
+	CronSchedule                        *string                 `json:"cronSchedule,omitempty"`
 }
 
 // ToWire translates a ContinueAsNewWorkflowExecutionDecisionAttributes struct into a Thrift-level intermediate
@@ -5993,7 +5994,7 @@ type ContinueAsNewWorkflowExecutionDecisionAttributes struct {
 //   }
 func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -6085,6 +6086,14 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) ToWire() (wire.Value,
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -6217,6 +6226,16 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) FromWire(w wire.Value
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -6230,7 +6249,7 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [12]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -6274,6 +6293,10 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) String() string {
 	}
 	if v.LastCompletionResult != nil {
 		fields[i] = fmt.Sprintf("LastCompletionResult: %v", v.LastCompletionResult)
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
 		i++
 	}
 
@@ -6333,6 +6356,9 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) Equals(rhs *ContinueA
 	if !((v.LastCompletionResult == nil && rhs.LastCompletionResult == nil) || (v.LastCompletionResult != nil && rhs.LastCompletionResult != nil && bytes.Equal(v.LastCompletionResult, rhs.LastCompletionResult))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -6375,6 +6401,9 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) MarshalLogObject(enc 
 	}
 	if v.LastCompletionResult != nil {
 		enc.AddString("lastCompletionResult", base64.StdEncoding.EncodeToString(v.LastCompletionResult))
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
 	}
 	return err
 }
@@ -6484,6 +6513,16 @@ func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetFailureDetails() (
 func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetLastCompletionResult() (o []byte) {
 	if v.LastCompletionResult != nil {
 		return v.LastCompletionResult
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *ContinueAsNewWorkflowExecutionDecisionAttributes) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
 	}
 
 	return
@@ -31041,6 +31080,7 @@ type SignalWithStartWorkflowExecutionRequest struct {
 	SignalInput                         []byte                 `json:"signalInput,omitempty"`
 	Control                             []byte                 `json:"control,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
+	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 }
 
 // ToWire translates a SignalWithStartWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -31060,7 +31100,7 @@ type SignalWithStartWorkflowExecutionRequest struct {
 //   }
 func (v *SignalWithStartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [14]wire.Field
+		fields [15]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -31176,6 +31216,14 @@ func (v *SignalWithStartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 150, Value: w}
 		i++
 	}
 
@@ -31338,6 +31386,16 @@ func (v *SignalWithStartWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 150:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -31351,7 +31409,7 @@ func (v *SignalWithStartWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [14]string
+	var fields [15]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -31407,6 +31465,10 @@ func (v *SignalWithStartWorkflowExecutionRequest) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
 		i++
 	}
 
@@ -31475,6 +31537,9 @@ func (v *SignalWithStartWorkflowExecutionRequest) Equals(rhs *SignalWithStartWor
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -31526,6 +31591,9 @@ func (v *SignalWithStartWorkflowExecutionRequest) MarshalLogObject(enc zapcore.O
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
 	}
 	return err
 }
@@ -31665,6 +31733,16 @@ func (v *SignalWithStartWorkflowExecutionRequest) GetControl() (o []byte) {
 func (v *SignalWithStartWorkflowExecutionRequest) GetRetryPolicy() (o *RetryPolicy) {
 	if v.RetryPolicy != nil {
 		return v.RetryPolicy
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *SignalWithStartWorkflowExecutionRequest) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
 	}
 
 	return
@@ -32043,6 +32121,7 @@ type StartChildWorkflowExecutionDecisionAttributes struct {
 	Control                             []byte                 `json:"control,omitempty"`
 	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
+	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionDecisionAttributes struct into a Thrift-level intermediate
@@ -32062,7 +32141,7 @@ type StartChildWorkflowExecutionDecisionAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [11]wire.Field
+		fields [12]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -32154,6 +32233,14 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) ToWire() (wire.Value, er
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 110, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 120, Value: w}
 		i++
 	}
 
@@ -32288,6 +32375,16 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) FromWire(w wire.Value) e
 				}
 
 			}
+		case 120:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -32301,7 +32398,7 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [11]string
+	var fields [12]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -32345,6 +32442,10 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
 		i++
 	}
 
@@ -32404,6 +32505,9 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) Equals(rhs *StartChildWo
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -32446,6 +32550,9 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) MarshalLogObject(enc zap
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
 	}
 	return err
 }
@@ -32555,6 +32662,16 @@ func (v *StartChildWorkflowExecutionDecisionAttributes) GetWorkflowIdReusePolicy
 func (v *StartChildWorkflowExecutionDecisionAttributes) GetRetryPolicy() (o *RetryPolicy) {
 	if v.RetryPolicy != nil {
 		return v.RetryPolicy
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionDecisionAttributes) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
 	}
 
 	return
@@ -32952,6 +33069,7 @@ type StartChildWorkflowExecutionInitiatedEventAttributes struct {
 	DecisionTaskCompletedEventId        *int64                 `json:"decisionTaskCompletedEventId,omitempty"`
 	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
+	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 }
 
 // ToWire translates a StartChildWorkflowExecutionInitiatedEventAttributes struct into a Thrift-level intermediate
@@ -32971,7 +33089,7 @@ type StartChildWorkflowExecutionInitiatedEventAttributes struct {
 //   }
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -33071,6 +33189,14 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) ToWire() (wire.Val
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -33209,6 +33335,16 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) FromWire(w wire.Va
 				}
 
 			}
+		case 130:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -33222,7 +33358,7 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -33270,6 +33406,10 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
 		i++
 	}
 
@@ -33322,6 +33462,9 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) Equals(rhs *StartC
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -33367,6 +33510,9 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) MarshalLogObject(e
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
 	}
 	return err
 }
@@ -33486,6 +33632,16 @@ func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetWorkflowIdReuse
 func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetRetryPolicy() (o *RetryPolicy) {
 	if v.RetryPolicy != nil {
 		return v.RetryPolicy
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *StartChildWorkflowExecutionInitiatedEventAttributes) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
 	}
 
 	return
@@ -33848,6 +34004,7 @@ type StartWorkflowExecutionRequest struct {
 	WorkflowIdReusePolicy               *WorkflowIdReusePolicy `json:"workflowIdReusePolicy,omitempty"`
 	ChildPolicy                         *ChildPolicy           `json:"childPolicy,omitempty"`
 	RetryPolicy                         *RetryPolicy           `json:"retryPolicy,omitempty"`
+	CronSchedule                        *string                `json:"cronSchedule,omitempty"`
 }
 
 // ToWire translates a StartWorkflowExecutionRequest struct into a Thrift-level intermediate
@@ -33867,7 +34024,7 @@ type StartWorkflowExecutionRequest struct {
 //   }
 func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [12]wire.Field
+		fields [13]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -33967,6 +34124,14 @@ func (v *StartWorkflowExecutionRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 120, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
 
@@ -34107,6 +34272,16 @@ func (v *StartWorkflowExecutionRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 130:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -34120,7 +34295,7 @@ func (v *StartWorkflowExecutionRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [12]string
+	var fields [13]string
 	i := 0
 	if v.Domain != nil {
 		fields[i] = fmt.Sprintf("Domain: %v", *(v.Domain))
@@ -34168,6 +34343,10 @@ func (v *StartWorkflowExecutionRequest) String() string {
 	}
 	if v.RetryPolicy != nil {
 		fields[i] = fmt.Sprintf("RetryPolicy: %v", v.RetryPolicy)
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
 		i++
 	}
 
@@ -34220,6 +34399,9 @@ func (v *StartWorkflowExecutionRequest) Equals(rhs *StartWorkflowExecutionReques
 	if !((v.RetryPolicy == nil && rhs.RetryPolicy == nil) || (v.RetryPolicy != nil && rhs.RetryPolicy != nil && v.RetryPolicy.Equals(rhs.RetryPolicy))) {
 		return false
 	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -34265,6 +34447,9 @@ func (v *StartWorkflowExecutionRequest) MarshalLogObject(enc zapcore.ObjectEncod
 	}
 	if v.RetryPolicy != nil {
 		err = multierr.Append(err, enc.AddObject("retryPolicy", v.RetryPolicy))
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
 	}
 	return err
 }
@@ -34384,6 +34569,16 @@ func (v *StartWorkflowExecutionRequest) GetChildPolicy() (o ChildPolicy) {
 func (v *StartWorkflowExecutionRequest) GetRetryPolicy() (o *RetryPolicy) {
 	if v.RetryPolicy != nil {
 		return v.RetryPolicy
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *StartWorkflowExecutionRequest) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
 	}
 
 	return
@@ -40293,20 +40488,26 @@ func (v *WorkflowExecutionSignaledEventAttributes) GetIdentity() (o string) {
 }
 
 type WorkflowExecutionStartedEventAttributes struct {
-	WorkflowType                        *WorkflowType      `json:"workflowType,omitempty"`
-	ParentWorkflowDomain                *string            `json:"parentWorkflowDomain,omitempty"`
-	ParentWorkflowExecution             *WorkflowExecution `json:"parentWorkflowExecution,omitempty"`
-	ParentInitiatedEventId              *int64             `json:"parentInitiatedEventId,omitempty"`
-	TaskList                            *TaskList          `json:"taskList,omitempty"`
-	Input                               []byte             `json:"input,omitempty"`
-	ExecutionStartToCloseTimeoutSeconds *int32             `json:"executionStartToCloseTimeoutSeconds,omitempty"`
-	TaskStartToCloseTimeoutSeconds      *int32             `json:"taskStartToCloseTimeoutSeconds,omitempty"`
-	ChildPolicy                         *ChildPolicy       `json:"childPolicy,omitempty"`
-	ContinuedExecutionRunId             *string            `json:"continuedExecutionRunId,omitempty"`
-	Identity                            *string            `json:"identity,omitempty"`
-	RetryPolicy                         *RetryPolicy       `json:"retryPolicy,omitempty"`
-	Attempt                             *int32             `json:"attempt,omitempty"`
-	ExpirationTimestamp                 *int64             `json:"expirationTimestamp,omitempty"`
+	WorkflowType                        *WorkflowType           `json:"workflowType,omitempty"`
+	ParentWorkflowDomain                *string                 `json:"parentWorkflowDomain,omitempty"`
+	ParentWorkflowExecution             *WorkflowExecution      `json:"parentWorkflowExecution,omitempty"`
+	ParentInitiatedEventId              *int64                  `json:"parentInitiatedEventId,omitempty"`
+	TaskList                            *TaskList               `json:"taskList,omitempty"`
+	Input                               []byte                  `json:"input,omitempty"`
+	ExecutionStartToCloseTimeoutSeconds *int32                  `json:"executionStartToCloseTimeoutSeconds,omitempty"`
+	TaskStartToCloseTimeoutSeconds      *int32                  `json:"taskStartToCloseTimeoutSeconds,omitempty"`
+	ChildPolicy                         *ChildPolicy            `json:"childPolicy,omitempty"`
+	ContinuedExecutionRunId             *string                 `json:"continuedExecutionRunId,omitempty"`
+	Initiator                           *ContinueAsNewInitiator `json:"initiator,omitempty"`
+	ContinuedFailureReason              *string                 `json:"continuedFailureReason,omitempty"`
+	ContinuedFailureDetails             []byte                  `json:"continuedFailureDetails,omitempty"`
+	LastCompletionResult                []byte                  `json:"lastCompletionResult,omitempty"`
+	Identity                            *string                 `json:"identity,omitempty"`
+	RetryPolicy                         *RetryPolicy            `json:"retryPolicy,omitempty"`
+	Attempt                             *int32                  `json:"attempt,omitempty"`
+	ExpirationTimestamp                 *int64                  `json:"expirationTimestamp,omitempty"`
+	CronSchedule                        *string                 `json:"cronSchedule,omitempty"`
+	FirstDecisionTaskBackoffSeconds     *int32                  `json:"firstDecisionTaskBackoffSeconds,omitempty"`
 }
 
 // ToWire translates a WorkflowExecutionStartedEventAttributes struct into a Thrift-level intermediate
@@ -40326,7 +40527,7 @@ type WorkflowExecutionStartedEventAttributes struct {
 //   }
 func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 	var (
-		fields [14]wire.Field
+		fields [20]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -40412,6 +40613,38 @@ func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 54, Value: w}
 		i++
 	}
+	if v.Initiator != nil {
+		w, err = v.Initiator.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 55, Value: w}
+		i++
+	}
+	if v.ContinuedFailureReason != nil {
+		w, err = wire.NewValueString(*(v.ContinuedFailureReason)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 56, Value: w}
+		i++
+	}
+	if v.ContinuedFailureDetails != nil {
+		w, err = wire.NewValueBinary(v.ContinuedFailureDetails), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 57, Value: w}
+		i++
+	}
+	if v.LastCompletionResult != nil {
+		w, err = wire.NewValueBinary(v.LastCompletionResult), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 58, Value: w}
+		i++
+	}
 	if v.Identity != nil {
 		w, err = wire.NewValueString(*(v.Identity)), error(nil)
 		if err != nil {
@@ -40442,6 +40675,22 @@ func (v *WorkflowExecutionStartedEventAttributes) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.CronSchedule != nil {
+		w, err = wire.NewValueString(*(v.CronSchedule)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.FirstDecisionTaskBackoffSeconds != nil {
+		w, err = wire.NewValueI32(*(v.FirstDecisionTaskBackoffSeconds)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -40562,6 +40811,42 @@ func (v *WorkflowExecutionStartedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 55:
+			if field.Value.Type() == wire.TI32 {
+				var x ContinueAsNewInitiator
+				x, err = _ContinueAsNewInitiator_Read(field.Value)
+				v.Initiator = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 56:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ContinuedFailureReason = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 57:
+			if field.Value.Type() == wire.TBinary {
+				v.ContinuedFailureDetails, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 58:
+			if field.Value.Type() == wire.TBinary {
+				v.LastCompletionResult, err = field.Value.GetBinary(), error(nil)
+				if err != nil {
+					return err
+				}
+
+			}
 		case 60:
 			if field.Value.Type() == wire.TBinary {
 				var x string
@@ -40600,6 +40885,26 @@ func (v *WorkflowExecutionStartedEventAttributes) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CronSchedule = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.FirstDecisionTaskBackoffSeconds = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -40613,7 +40918,7 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 		return "<nil>"
 	}
 
-	var fields [14]string
+	var fields [20]string
 	i := 0
 	if v.WorkflowType != nil {
 		fields[i] = fmt.Sprintf("WorkflowType: %v", v.WorkflowType)
@@ -40655,6 +40960,22 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 		fields[i] = fmt.Sprintf("ContinuedExecutionRunId: %v", *(v.ContinuedExecutionRunId))
 		i++
 	}
+	if v.Initiator != nil {
+		fields[i] = fmt.Sprintf("Initiator: %v", *(v.Initiator))
+		i++
+	}
+	if v.ContinuedFailureReason != nil {
+		fields[i] = fmt.Sprintf("ContinuedFailureReason: %v", *(v.ContinuedFailureReason))
+		i++
+	}
+	if v.ContinuedFailureDetails != nil {
+		fields[i] = fmt.Sprintf("ContinuedFailureDetails: %v", v.ContinuedFailureDetails)
+		i++
+	}
+	if v.LastCompletionResult != nil {
+		fields[i] = fmt.Sprintf("LastCompletionResult: %v", v.LastCompletionResult)
+		i++
+	}
 	if v.Identity != nil {
 		fields[i] = fmt.Sprintf("Identity: %v", *(v.Identity))
 		i++
@@ -40669,6 +40990,14 @@ func (v *WorkflowExecutionStartedEventAttributes) String() string {
 	}
 	if v.ExpirationTimestamp != nil {
 		fields[i] = fmt.Sprintf("ExpirationTimestamp: %v", *(v.ExpirationTimestamp))
+		i++
+	}
+	if v.CronSchedule != nil {
+		fields[i] = fmt.Sprintf("CronSchedule: %v", *(v.CronSchedule))
+		i++
+	}
+	if v.FirstDecisionTaskBackoffSeconds != nil {
+		fields[i] = fmt.Sprintf("FirstDecisionTaskBackoffSeconds: %v", *(v.FirstDecisionTaskBackoffSeconds))
 		i++
 	}
 
@@ -40715,6 +41044,18 @@ func (v *WorkflowExecutionStartedEventAttributes) Equals(rhs *WorkflowExecutionS
 	if !_String_EqualsPtr(v.ContinuedExecutionRunId, rhs.ContinuedExecutionRunId) {
 		return false
 	}
+	if !_ContinueAsNewInitiator_EqualsPtr(v.Initiator, rhs.Initiator) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ContinuedFailureReason, rhs.ContinuedFailureReason) {
+		return false
+	}
+	if !((v.ContinuedFailureDetails == nil && rhs.ContinuedFailureDetails == nil) || (v.ContinuedFailureDetails != nil && rhs.ContinuedFailureDetails != nil && bytes.Equal(v.ContinuedFailureDetails, rhs.ContinuedFailureDetails))) {
+		return false
+	}
+	if !((v.LastCompletionResult == nil && rhs.LastCompletionResult == nil) || (v.LastCompletionResult != nil && rhs.LastCompletionResult != nil && bytes.Equal(v.LastCompletionResult, rhs.LastCompletionResult))) {
+		return false
+	}
 	if !_String_EqualsPtr(v.Identity, rhs.Identity) {
 		return false
 	}
@@ -40725,6 +41066,12 @@ func (v *WorkflowExecutionStartedEventAttributes) Equals(rhs *WorkflowExecutionS
 		return false
 	}
 	if !_I64_EqualsPtr(v.ExpirationTimestamp, rhs.ExpirationTimestamp) {
+		return false
+	}
+	if !_String_EqualsPtr(v.CronSchedule, rhs.CronSchedule) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.FirstDecisionTaskBackoffSeconds, rhs.FirstDecisionTaskBackoffSeconds) {
 		return false
 	}
 
@@ -40767,6 +41114,18 @@ func (v *WorkflowExecutionStartedEventAttributes) MarshalLogObject(enc zapcore.O
 	if v.ContinuedExecutionRunId != nil {
 		enc.AddString("continuedExecutionRunId", *v.ContinuedExecutionRunId)
 	}
+	if v.Initiator != nil {
+		err = multierr.Append(err, enc.AddObject("initiator", *v.Initiator))
+	}
+	if v.ContinuedFailureReason != nil {
+		enc.AddString("continuedFailureReason", *v.ContinuedFailureReason)
+	}
+	if v.ContinuedFailureDetails != nil {
+		enc.AddString("continuedFailureDetails", base64.StdEncoding.EncodeToString(v.ContinuedFailureDetails))
+	}
+	if v.LastCompletionResult != nil {
+		enc.AddString("lastCompletionResult", base64.StdEncoding.EncodeToString(v.LastCompletionResult))
+	}
 	if v.Identity != nil {
 		enc.AddString("identity", *v.Identity)
 	}
@@ -40778,6 +41137,12 @@ func (v *WorkflowExecutionStartedEventAttributes) MarshalLogObject(enc zapcore.O
 	}
 	if v.ExpirationTimestamp != nil {
 		enc.AddInt64("expirationTimestamp", *v.ExpirationTimestamp)
+	}
+	if v.CronSchedule != nil {
+		enc.AddString("cronSchedule", *v.CronSchedule)
+	}
+	if v.FirstDecisionTaskBackoffSeconds != nil {
+		enc.AddInt32("firstDecisionTaskBackoffSeconds", *v.FirstDecisionTaskBackoffSeconds)
 	}
 	return err
 }
@@ -40882,6 +41247,46 @@ func (v *WorkflowExecutionStartedEventAttributes) GetContinuedExecutionRunId() (
 	return
 }
 
+// GetInitiator returns the value of Initiator if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetInitiator() (o ContinueAsNewInitiator) {
+	if v.Initiator != nil {
+		return *v.Initiator
+	}
+
+	return
+}
+
+// GetContinuedFailureReason returns the value of ContinuedFailureReason if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetContinuedFailureReason() (o string) {
+	if v.ContinuedFailureReason != nil {
+		return *v.ContinuedFailureReason
+	}
+
+	return
+}
+
+// GetContinuedFailureDetails returns the value of ContinuedFailureDetails if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetContinuedFailureDetails() (o []byte) {
+	if v.ContinuedFailureDetails != nil {
+		return v.ContinuedFailureDetails
+	}
+
+	return
+}
+
+// GetLastCompletionResult returns the value of LastCompletionResult if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetLastCompletionResult() (o []byte) {
+	if v.LastCompletionResult != nil {
+		return v.LastCompletionResult
+	}
+
+	return
+}
+
 // GetIdentity returns the value of Identity if it is set or its
 // zero value if it is unset.
 func (v *WorkflowExecutionStartedEventAttributes) GetIdentity() (o string) {
@@ -40917,6 +41322,26 @@ func (v *WorkflowExecutionStartedEventAttributes) GetAttempt() (o int32) {
 func (v *WorkflowExecutionStartedEventAttributes) GetExpirationTimestamp() (o int64) {
 	if v.ExpirationTimestamp != nil {
 		return *v.ExpirationTimestamp
+	}
+
+	return
+}
+
+// GetCronSchedule returns the value of CronSchedule if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetCronSchedule() (o string) {
+	if v.CronSchedule != nil {
+		return *v.CronSchedule
+	}
+
+	return
+}
+
+// GetFirstDecisionTaskBackoffSeconds returns the value of FirstDecisionTaskBackoffSeconds if it is set or its
+// zero value if it is unset.
+func (v *WorkflowExecutionStartedEventAttributes) GetFirstDecisionTaskBackoffSeconds() (o int32) {
+	if v.FirstDecisionTaskBackoffSeconds != nil {
+		return *v.FirstDecisionTaskBackoffSeconds
 	}
 
 	return

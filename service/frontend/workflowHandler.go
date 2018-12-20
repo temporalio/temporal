@@ -1620,6 +1620,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, wh.error(err, scope)
 	}
 
+	if err := common.ValidateCronSchedule(startRequest.GetCronSchedule()); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
 	wh.Service.GetLogger().Debugf(
 		"Received StartWorkflowExecution. WorkflowID: %v",
 		startRequest.GetWorkflowId())
@@ -1969,6 +1973,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := common.ValidateRetryPolicy(signalWithStartRequest.RetryPolicy); err != nil {
+		return nil, wh.error(err, scope)
+	}
+
+	if err := common.ValidateCronSchedule(signalWithStartRequest.GetCronSchedule()); err != nil {
 		return nil, wh.error(err, scope)
 	}
 

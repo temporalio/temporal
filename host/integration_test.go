@@ -1068,6 +1068,118 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	s.Equal(workflow.EventTypeWorkflowExecutionCompleted, events[len(events)-1].GetEventType())
 }
 
+func (s *integrationSuite) TestCronWorkflow() {
+	id := "integration-wf-cron-test"
+	wt := "integration-wf-cron-type"
+	tl := "integration-wf-cron-tasklist"
+	identity := "worker1"
+
+	workflowType := &workflow.WorkflowType{}
+	workflowType.Name = common.StringPtr(wt)
+
+	taskList := &workflow.TaskList{}
+	taskList.Name = common.StringPtr(tl)
+
+	request := &workflow.StartWorkflowExecutionRequest{
+		RequestId:                           common.StringPtr(uuid.New()),
+		Domain:                              common.StringPtr(s.domainName),
+		WorkflowId:                          common.StringPtr(id),
+		WorkflowType:                        workflowType,
+		TaskList:                            taskList,
+		Input:                               nil,
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(100),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(1),
+		Identity:                            common.StringPtr(identity),
+		CronSchedule:                        common.StringPtr("@every 5s"), //minimum interval by standard spec is 1m (* * * * *), use non-standard descriptor for short interval for test
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(createContext(), request)
+	s.Nil(err0)
+
+	s.logger.Infof("StartWorkflowExecution: response: %v \n", *we.RunId)
+
+	var executions []*workflow.WorkflowExecution
+
+	attemptCount := 0
+
+	dtHandler := func(execution *workflow.WorkflowExecution, wt *workflow.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *workflow.History) ([]byte, []*workflow.Decision, error) {
+		executions = append(executions, execution)
+		attemptCount++
+		if attemptCount == 2 {
+			return nil, []*workflow.Decision{
+				{
+					DecisionType: common.DecisionTypePtr(workflow.DecisionTypeCompleteWorkflowExecution),
+					CompleteWorkflowExecutionDecisionAttributes: &workflow.CompleteWorkflowExecutionDecisionAttributes{
+						Result: []byte("cron-test-result"),
+					},
+				}}, nil
+		}
+		return nil, []*workflow.Decision{
+			{
+				DecisionType: common.DecisionTypePtr(workflow.DecisionTypeFailWorkflowExecution),
+				FailWorkflowExecutionDecisionAttributes: &workflow.FailWorkflowExecutionDecisionAttributes{
+					Reason:  common.StringPtr("cron-test-error"),
+					Details: nil,
+				},
+			}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:          s.engine,
+		Domain:          s.domainName,
+		TaskList:        taskList,
+		Identity:        identity,
+		DecisionHandler: dtHandler,
+		Logger:          s.logger,
+		T:               s.T(),
+	}
+
+	_, err := poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	_, err = poller.PollAndProcessDecisionTask(false, false)
+	s.True(err == nil, err)
+
+	s.Equal(3, attemptCount)
+
+	terminateErr := s.engine.TerminateWorkflowExecution(createContext(), &workflow.TerminateWorkflowExecutionRequest{
+		Domain: common.StringPtr(s.domainName),
+		WorkflowExecution: &workflow.WorkflowExecution{
+			WorkflowId: common.StringPtr(id),
+		},
+	})
+
+	fmt.Printf("terminate_err: %v\n", terminateErr)
+
+	events := s.getHistory(s.domainName, executions[0])
+	lastEvent := events[len(events)-1]
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	attributes := lastEvent.WorkflowExecutionContinuedAsNewEventAttributes
+	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal("cron-test-error", attributes.GetFailureReason())
+	s.Equal(0, len(attributes.GetLastCompletionResult()))
+
+	events = s.getHistory(s.domainName, executions[1])
+	lastEvent = events[len(events)-1]
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	attributes = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes
+	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal("", attributes.GetFailureReason())
+	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+
+	events = s.getHistory(s.domainName, executions[2])
+	lastEvent = events[len(events)-1]
+	s.Equal(workflow.EventTypeWorkflowExecutionContinuedAsNew, lastEvent.GetEventType())
+	attributes = lastEvent.WorkflowExecutionContinuedAsNewEventAttributes
+	s.Equal(workflow.ContinueAsNewInitiatorCronSchedule, attributes.GetInitiator())
+	s.Equal("cron-test-error", attributes.GetFailureReason())
+	s.Equal("cron-test-result", string(attributes.GetLastCompletionResult()))
+}
+
 func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	id := "integration-heartbeat-timeout-test"
 	wt := "integration-heartbeat-timeout-test-type"

@@ -21,6 +21,7 @@
 package history
 
 import (
+	"github.com/uber/cadence/common"
 	"testing"
 	"time"
 
@@ -116,4 +117,37 @@ func Test_NextRetry(t *testing.T) {
 	ai.MaximumAttempts = 100
 	retryTask = prepareActivityNextRetryWithNowTime(version, ai, reason, now)
 	a.Equal(now.Add(time.Second*10), retryTask.(*persistence.ActivityRetryTimerTask).VisibilityTimestamp)
+}
+
+func Test_NextCronSchedule(t *testing.T) {
+	a := assert.New(t)
+
+	// every day cron
+	now, _ := time.Parse(time.RFC3339, "2018-12-17T08:08:00+00:00")
+	cronSpec := "0 10 * * *"
+	backoff := getBackoffForNextCronSchedule(cronSpec, now)
+	a.Equal(time.Minute*112, backoff)
+	backoff = getBackoffForNextCronSchedule(cronSpec, now.Add(backoff))
+	a.Equal(time.Hour*24, backoff)
+
+	// every hour cron
+	now, _ = time.Parse(time.RFC3339, "2018-12-17T08:08:00+00:00")
+	cronSpec = "0 * * * *"
+	backoff = getBackoffForNextCronSchedule(cronSpec, now)
+	a.Equal(time.Minute*52, backoff)
+	backoff = getBackoffForNextCronSchedule(cronSpec, now.Add(backoff))
+	a.Equal(time.Hour, backoff)
+
+	// every minute cron
+	now, _ = time.Parse(time.RFC3339, "2018-12-17T08:08:18+00:00")
+	cronSpec = "* * * * *"
+	backoff = getBackoffForNextCronSchedule(cronSpec, now)
+	a.Equal(time.Second*42, backoff)
+	backoff = getBackoffForNextCronSchedule(cronSpec, now.Add(backoff))
+	a.Equal(time.Minute, backoff)
+
+	// invalid cron spec
+	cronSpec = "invalid-cron-spec"
+	backoff = getBackoffForNextCronSchedule(cronSpec, now)
+	a.Equal(common.NoRetryBackoff, backoff)
 }

@@ -158,8 +158,8 @@ func (t *timerQueueStandbyProcessorImpl) process(timerTask *persistence.TimerTas
 	case persistence.TaskTypeActivityRetryTimer:
 		return metrics.TimerStandbyTaskActivityRetryTimerScope, nil // retry backoff timer should not get created on passive cluster
 
-	case persistence.TaskTypeWorkflowRetryTimer:
-		return metrics.TimerStandbyTaskWorkflowRetryTimerScope, t.processWorkflowRetryTimerTask(timerTask)
+	case persistence.TaskTypeWorkflowBackoffTimer:
+		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope, t.processWorkflowBackoffTimerTask(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
@@ -316,7 +316,7 @@ func (t *timerQueueStandbyProcessorImpl) processDecisionTimeout(timerTask *persi
 	})
 }
 
-func (t *timerQueueStandbyProcessorImpl) processWorkflowRetryTimerTask(timerTask *persistence.TimerTaskInfo) error {
+func (t *timerQueueStandbyProcessorImpl) processWorkflowBackoffTimerTask(timerTask *persistence.TimerTaskInfo) error {
 
 	return t.processTimer(timerTask, func(context workflowExecutionContext, msBuilder mutableState) error {
 

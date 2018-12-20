@@ -22,6 +22,7 @@ package common
 
 import (
 	"encoding/json"
+	"github.com/robfig/cron"
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/metrics"
 	"sync"
@@ -306,6 +307,17 @@ func ValidateRetryPolicy(policy *workflow.RetryPolicy) error {
 	}
 	if policy.GetMaximumAttempts() == 0 && policy.GetExpirationIntervalInSeconds() == 0 {
 		return &workflow.BadRequestError{Message: "MaximumAttempts and ExpirationIntervalInSeconds are both 0. At least one of them must be specified."}
+	}
+	return nil
+}
+
+// ValidateCronSchedule validates a cron schedule spec
+func ValidateCronSchedule(cronSchedule string) error {
+	if cronSchedule == "" {
+		return nil
+	}
+	if _, err := cron.Parse(cronSchedule); err != nil {
+		return &workflow.BadRequestError{Message: "Invalid CronSchedule."}
 	}
 	return nil
 }

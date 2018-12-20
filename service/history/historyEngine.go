@@ -432,6 +432,7 @@ func (e *historyEngineImpl) createWorkflow(startRequest *h.StartWorkflowExecutio
 		EventStoreVersion:           msBuilder.GetEventStoreVersion(),
 		BranchToken:                 msBuilder.GetCurrentBranch(),
 		CreateWorkflowMode:          createMode,
+		CronSchedule:                request.GetCronSchedule(),
 	}
 
 	if createRequest.HasRetryPolicy {
@@ -445,6 +446,7 @@ func (e *historyEngineImpl) createWorkflow(startRequest *h.StartWorkflowExecutio
 		}
 		createRequest.MaximumAttempts = request.RetryPolicy.GetMaximumAttempts()
 		createRequest.NonRetriableErrors = request.RetryPolicy.NonRetriableErrorReasons
+		createRequest.ExpirationSeconds = request.RetryPolicy.GetExpirationIntervalInSeconds()
 	}
 
 	_, err = e.shard.CreateWorkflowExecution(createRequest)
@@ -1230,9 +1232,38 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 
-				if e := msBuilder.AddCompletedWorkflowEvent(completedID, attributes); e == nil {
-					return nil, &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
+				// check if this is a cron workflow
+				cronBackoff := msBuilder.GetCronBackoffDuration()
+				if cronBackoff == common.NoRetryBackoff {
+					// not cron, so complete this workflow execution
+					if e := msBuilder.AddCompletedWorkflowEvent(completedID, attributes); e == nil {
+						return nil, &workflow.InternalServiceError{Message: "Unable to add complete workflow event."}
+					}
+				} else {
+					// this is a cron workflow
+					startEvent, err := getWorkflowStartedEvent(e.historyMgr, e.historyV2Mgr, msBuilder.GetEventStoreVersion(), msBuilder.GetCurrentBranch(), e.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
+					if err != nil {
+						return nil, err
+					}
+
+					startAttributes := startEvent.WorkflowExecutionStartedEventAttributes
+					continueAsnewAttributes := &workflow.ContinueAsNewWorkflowExecutionDecisionAttributes{
+						WorkflowType:                        startAttributes.WorkflowType,
+						TaskList:                            startAttributes.TaskList,
+						RetryPolicy:                         startAttributes.RetryPolicy,
+						Input:                               startAttributes.Input,
+						ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
+						TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
+						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(cronBackoff.Seconds())),
+						Initiator:                           workflow.ContinueAsNewInitiatorCronSchedule.Ptr(),
+						LastCompletionResult:                attributes.Result,
+					}
+
+					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
+						return nil, err
+					}
 				}
+
 				isComplete = true
 			case workflow.DecisionTypeFailWorkflowExecution:
 				e.metricsClient.IncCounter(metrics.HistoryRespondDecisionTaskCompletedScope,
@@ -1267,14 +1298,20 @@ Update_History_Loop:
 					break Process_Decision_Loop
 				}
 
-				retryBackoffInterval := msBuilder.GetRetryBackoffDuration(failedAttributes.GetReason())
-				if retryBackoffInterval == common.NoRetryBackoff {
-					// no retry
+				backoffInterval := msBuilder.GetRetryBackoffDuration(failedAttributes.GetReason())
+				continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
+				if backoffInterval == common.NoRetryBackoff {
+					backoffInterval = msBuilder.GetCronBackoffDuration()
+					continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
+				}
+
+				if backoffInterval == common.NoRetryBackoff {
+					// no retry or cron
 					if evt := msBuilder.AddFailWorkflowEvent(completedID, failedAttributes); evt == nil {
 						return nil, &workflow.InternalServiceError{Message: "Unable to add fail workflow event."}
 					}
 				} else {
-					// retry with backoff
+					// retry or cron with backoff
 					startEvent, err := getWorkflowStartedEvent(e.historyMgr, e.historyV2Mgr, msBuilder.GetEventStoreVersion(), msBuilder.GetCurrentBranch(), e.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
 					if err != nil {
 						return nil, err
@@ -1288,16 +1325,18 @@ Update_History_Loop:
 						Input:                               startAttributes.Input,
 						ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 						TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
-						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
-						Initiator:                           workflow.ContinueAsNewInitiatorRetryPolicy.Ptr(),
+						BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
+						Initiator:                           continueAsNewInitiator.Ptr(),
 						FailureReason:                       failedAttributes.Reason,
 						FailureDetails:                      failedAttributes.Details,
+						LastCompletionResult:                startAttributes.LastCompletionResult,
 					}
 
 					if _, continueAsNewBuilder, err = msBuilder.AddContinueAsNewEvent(completedID, domainEntry, startAttributes.GetParentWorkflowDomain(), continueAsnewAttributes, eventStoreVersion); err != nil {
 						return nil, err
 					}
 				}
+
 				isComplete = true
 
 			case workflow.DecisionTypeCancelWorkflowExecution:
@@ -2959,6 +2998,10 @@ func validateStartChildExecutionAttributes(parentInfo *persistence.WorkflowExecu
 		return err
 	}
 
+	if err := common.ValidateCronSchedule(attributes.GetCronSchedule()); err != nil {
+		return err
+	}
+
 	// Inherit tasklist from parent workflow execution if not provided on decision
 	if attributes.TaskList == nil || attributes.TaskList.GetName() == "" {
 		attributes.TaskList = &workflow.TaskList{Name: common.StringPtr(parentInfo.TaskList)}
@@ -3044,6 +3087,7 @@ func getStartRequest(domainID string,
 		RequestId:                           request.RequestId,
 		WorkflowIdReusePolicy:               request.WorkflowIdReusePolicy,
 		RetryPolicy:                         request.RetryPolicy,
+		CronSchedule:                        request.CronSchedule,
 	}
 
 	startRequest := common.CreateHistoryStartWorkflowRequest(domainID, req)

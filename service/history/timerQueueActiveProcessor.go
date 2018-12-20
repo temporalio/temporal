@@ -225,8 +225,8 @@ func (t *timerQueueActiveProcessorImpl) process(timerTask *persistence.TimerTask
 	case persistence.TaskTypeActivityRetryTimer:
 		return metrics.TimerActiveTaskActivityRetryTimerScope, t.processActivityRetryTimer(timerTask)
 
-	case persistence.TaskTypeWorkflowRetryTimer:
-		return metrics.TimerActiveTaskWorkflowRetryTimerScope, t.processWorkflowRetryTimer(timerTask)
+	case persistence.TaskTypeWorkflowBackoffTimer:
+		return metrics.TimerActiveTaskWorkflowBackoffTimerScope, t.processWorkflowBackoffTimer(timerTask)
 
 	case persistence.TaskTypeDeleteHistoryEvent:
 		return metrics.TimerActiveTaskDeleteHistoryEventScope, t.timerQueueProcessorBase.processDeleteHistoryEvent(timerTask)
@@ -537,13 +537,19 @@ Update_History_Loop:
 	return ErrMaxAttemptsExceeded
 }
 
-func (t *timerQueueActiveProcessorImpl) processWorkflowRetryTimer(task *persistence.TimerTaskInfo) (retError error) {
+func (t *timerQueueActiveProcessorImpl) processWorkflowBackoffTimer(task *persistence.TimerTaskInfo) (retError error) {
 
 	context, release, err0 := t.cache.getOrCreateWorkflowExecution(t.timerQueueProcessorBase.getDomainIDAndWorkflowExecution(task))
 	if err0 != nil {
 		return err0
 	}
 	defer func() { release(retError) }()
+
+	if task.TimeoutType == persistence.WorkflowBackoffTimeoutTypeRetry {
+		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowRetryBackoffTimerCount)
+	} else {
+		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
+	}
 
 Update_History_Loop:
 	for attempt := 0; attempt < conditionalRetryCount; attempt++ {
@@ -685,8 +691,14 @@ Update_History_Loop:
 		}
 
 		timeoutReason := getTimeoutErrorReason(workflow.TimeoutTypeStartToClose)
-		retryBackoffInterval := msBuilder.GetRetryBackoffDuration(timeoutReason)
-		if retryBackoffInterval == common.NoRetryBackoff {
+		backoffInterval := msBuilder.GetRetryBackoffDuration(timeoutReason)
+		continueAsNewInitiator := workflow.ContinueAsNewInitiatorRetryPolicy
+		if backoffInterval == common.NoRetryBackoff {
+			// check if a cron backoff is needed
+			backoffInterval = msBuilder.GetCronBackoffDuration()
+			continueAsNewInitiator = workflow.ContinueAsNewInitiatorCronSchedule
+		}
+		if backoffInterval == common.NoRetryBackoff {
 			if e := msBuilder.AddTimeoutWorkflowEvent(); e == nil {
 				// If we failed to add the event that means the workflow is already completed.
 				// we drop this timeout event.
@@ -704,7 +716,7 @@ Update_History_Loop:
 			return err
 		}
 
-		// workflow timeout, but a retry is needed, so we do continue as new to retry
+		// workflow timeout, but a retry or cron is needed, so we do continue as new to retry or cron
 		startEvent, err := getWorkflowStartedEvent(t.historyService.historyMgr, t.historyService.historyV2Mgr, msBuilder.GetEventStoreVersion(), msBuilder.GetCurrentBranch(), t.logger, domainID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId())
 		if err != nil {
 			return err
@@ -718,8 +730,8 @@ Update_History_Loop:
 			Input:                               startAttributes.Input,
 			ExecutionStartToCloseTimeoutSeconds: startAttributes.ExecutionStartToCloseTimeoutSeconds,
 			TaskStartToCloseTimeoutSeconds:      startAttributes.TaskStartToCloseTimeoutSeconds,
-			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(retryBackoffInterval.Seconds())),
-			Initiator:                           workflow.ContinueAsNewInitiatorRetryPolicy.Ptr(),
+			BackoffStartIntervalInSeconds:       common.Int32Ptr(int32(backoffInterval.Seconds())),
+			Initiator:                           continueAsNewInitiator.Ptr(),
 			FailureReason:                       common.StringPtr(timeoutReason),
 		}
 		domainEntry, err := getActiveDomainEntryFromShard(t.shard, &domainID)

@@ -5,6 +5,7 @@
   "SchemaUpdateCqlFiles": [
     "events_v2.cql",
     "signal_count.cql",
-    "system_domain_bootstrap.cql"
+    "system_domain_bootstrap.cql",
+    "cron.cql"
   ]
 }
