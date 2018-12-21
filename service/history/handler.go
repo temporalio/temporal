@@ -23,9 +23,10 @@ package history
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/uber-common/bark"
 	"github.com/uber/cadence/common/logging"
-	"sync"
 
 	"github.com/pborman/uuid"
 	"github.com/uber/cadence/.gen/go/health"
@@ -1046,6 +1047,39 @@ func (h *Handler) ReplicateEvents(ctx context.Context, replicateRequest *hist.Re
 	}
 
 	err2 := engine.ReplicateEvents(ctx, replicateRequest)
+	if err2 != nil {
+		return h.error(err2, scope, domainID, workflowID)
+	}
+
+	return nil
+}
+
+// ReplicateRawEvents is called by processor to replicate history raw events for passive domains
+func (h *Handler) ReplicateRawEvents(ctx context.Context, replicateRequest *hist.ReplicateRawEventsRequest) error {
+	h.startWG.Wait()
+
+	scope := metrics.HistoryReplicateRawEventsScope
+	h.metricsClient.IncCounter(scope, metrics.CadenceRequests)
+	sw := h.metricsClient.StartTimer(scope, metrics.CadenceLatency)
+	defer sw.Stop()
+
+	domainID := replicateRequest.GetDomainUUID()
+	if domainID == "" {
+		return h.error(errDomainNotSet, scope, domainID, "")
+	}
+
+	if ok, _ := h.rateLimiter.TryConsume(1); !ok {
+		return h.error(errHistoryHostThrottle, scope, domainID, "")
+	}
+
+	workflowExecution := replicateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err1 := h.controller.GetEngine(workflowID)
+	if err1 != nil {
+		return h.error(err1, scope, domainID, workflowID)
+	}
+
+	err2 := engine.ReplicateRawEvents(ctx, replicateRequest)
 	if err2 != nil {
 		return h.error(err2, scope, domainID, workflowID)
 	}

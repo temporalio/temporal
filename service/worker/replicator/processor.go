@@ -37,6 +37,7 @@ import (
 	"github.com/uber/cadence/common/logging"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/xdc"
 	"go.uber.org/yarpc/yarpcerrors"
 )
 
@@ -47,22 +48,23 @@ type (
 	}
 
 	replicationTaskProcessor struct {
-		currentCluster   string
-		sourceCluster    string
-		topicName        string
-		consumerName     string
-		client           messaging.Client
-		consumer         messaging.Consumer
-		isStarted        int32
-		isStopped        int32
-		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
-		config           *Config
-		logger           bark.Logger
-		metricsClient    metrics.Client
-		domainReplicator DomainReplicator
-		historyClient    history.Client
-		msgEncoder       codec.BinaryEncoder
+		currentCluster      string
+		sourceCluster       string
+		topicName           string
+		consumerName        string
+		client              messaging.Client
+		consumer            messaging.Consumer
+		isStarted           int32
+		isStopped           int32
+		shutdownWG          sync.WaitGroup
+		shutdownCh          chan struct{}
+		config              *Config
+		logger              bark.Logger
+		metricsClient       metrics.Client
+		domainReplicator    DomainReplicator
+		historyRereplicator xdc.HistoryRereplicator
+		historyClient       history.Client
+		msgEncoder          codec.BinaryEncoder
 	}
 )
 
@@ -89,27 +91,24 @@ var (
 
 func newReplicationTaskProcessor(currentCluster, sourceCluster, consumer string, client messaging.Client, config *Config,
 	logger bark.Logger, metricsClient metrics.Client, domainReplicator DomainReplicator,
-	historyClient history.Client) *replicationTaskProcessor {
+	historyRereplicator xdc.HistoryRereplicator, historyClient history.Client) *replicationTaskProcessor {
 
 	retryableHistoryClient := history.NewRetryableClient(historyClient, common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError)
 
 	return &replicationTaskProcessor{
-		currentCluster: currentCluster,
-		sourceCluster:  sourceCluster,
-		consumerName:   consumer,
-		client:         client,
-		shutdownCh:     make(chan struct{}),
-		config:         config,
-		logger: logger.WithFields(bark.Fields{
-			logging.TagWorkflowComponent: logging.TagValueReplicationTaskProcessorComponent,
-			logging.TagSourceCluster:     sourceCluster,
-			logging.TagConsumerName:      consumer,
-		}),
-		metricsClient:    metricsClient,
-		domainReplicator: domainReplicator,
-		historyClient:    retryableHistoryClient,
-		msgEncoder:       codec.NewThriftRWEncoder(),
+		currentCluster:      currentCluster,
+		sourceCluster:       sourceCluster,
+		consumerName:        consumer,
+		client:              client,
+		shutdownCh:          make(chan struct{}),
+		config:              config,
+		logger:              logger,
+		metricsClient:       metricsClient,
+		domainReplicator:    domainReplicator,
+		historyRereplicator: historyRereplicator,
+		historyClient:       retryableHistoryClient,
+		msgEncoder:          codec.NewThriftRWEncoder(),
 	}
 }
 
@@ -353,7 +352,7 @@ func (p *replicationTaskProcessor) handleSyncShardTask(task *replicator.Replicat
 		ShardId:       attr.ShardId,
 		Timestamp:     attr.Timestamp,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
 	return p.historyClient.SyncShardStatus(ctx, req)
 }
@@ -436,6 +435,22 @@ RetryLoop:
 			continue RetryLoop
 		}
 		break RetryLoop
+	}
+
+	if retryErr, ok := err.(*shared.RetryTaskError); ok {
+		beginRunID := retryErr.GetRunId()
+		beginEventID := retryErr.GetNextEventId()
+		endRunID := attr.GetRunId()
+		endEventID := attr.GetFirstEventId()
+
+		// history service will return RetryTaskError, we can use it as an hint
+		errResend := p.historyRereplicator.SendMultiWorkflowHistory(
+			attr.GetDomainId(), attr.GetWorkflowId(),
+			beginRunID, beginEventID, endRunID, endEventID,
+		)
+		if errResend != nil {
+			logger.WithField(logging.TagErr, err).Error("Error resending history.")
+		}
 	}
 	return err
 }

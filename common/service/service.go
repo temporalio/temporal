@@ -23,6 +23,7 @@ package service
 import (
 	"math/rand"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/uber/cadence/common/archival"
@@ -80,6 +81,7 @@ type (
 
 	// Service contains the objects specific to this service
 	serviceImpl struct {
+		status                 int32
 		sName                  string
 		hostName               string
 		hostInfo               *membership.HostInfo
@@ -107,6 +109,7 @@ type (
 // TODO: have a better name for Service.
 func New(params *BootstrapParams) Service {
 	sVice := &serviceImpl{
+		status:                common.DaemonStatusInitialized,
 		sName:                 params.Name,
 		logger:                params.Logger,
 		rpcFactory:            params.RPCFactory,
@@ -147,6 +150,10 @@ func (h *serviceImpl) GetHostName() string {
 
 // Start starts a yarpc service
 func (h *serviceImpl) Start() {
+	if !atomic.CompareAndSwapInt32(&h.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
+
 	var err error
 
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
@@ -204,6 +211,10 @@ func (h *serviceImpl) Start() {
 
 // Stop closes the associated transport
 func (h *serviceImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(&h.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+
 	if h.membershipMonitor != nil {
 		h.membershipMonitor.Stop()
 	}

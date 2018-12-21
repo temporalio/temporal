@@ -85,6 +85,7 @@ type (
 		TransientDecision *gen.TransientDecisionInfo
 		EventStoreVersion int32
 		BranchToken       []byte
+		ReplicationInfo   map[string]*gen.ReplicationInfo
 	}
 )
 
@@ -2435,11 +2436,12 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context,
 		}
 		// this means sticky timeout, should try using the normal tasklist
 		// we should clear the stickyness of this workflow
-		resetContext, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, err = wh.history.ResetStickyTaskList(resetContext, &h.ResetStickyTaskListRequest{
 			DomainUUID: common.StringPtr(domainID),
 			Execution:  queryRequest.Execution,
 		})
+		cancel()
 		if err != nil {
 			return nil, wh.error(err, scope)
 		}
@@ -2566,7 +2568,7 @@ func (wh *WorkflowHandler) getHistory(scope int, domainID string, execution gen.
 		if err != nil {
 			return nil, nil, err
 		}
-		historyEvents = append(historyEvents, response.History...)
+		historyEvents = append(historyEvents, response.HistoryEvents...)
 		nextPageToken = response.NextPageToken
 		size = response.Size
 	} else {

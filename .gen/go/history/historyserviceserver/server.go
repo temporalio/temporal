@@ -84,6 +84,11 @@ type Interface interface {
 		ReplicateRequest *history.ReplicateEventsRequest,
 	) error
 
+	ReplicateRawEvents(
+		ctx context.Context,
+		ReplicateRequest *history.ReplicateRawEventsRequest,
+	) error
+
 	RequestCancelWorkflowExecution(
 		ctx context.Context,
 		CancelRequest *history.RequestCancelWorkflowExecutionRequest,
@@ -277,6 +282,17 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 			},
 
 			thrift.Method{
+				Name: "ReplicateRawEvents",
+				HandlerSpec: thrift.HandlerSpec{
+
+					Type:  transport.Unary,
+					Unary: thrift.UnaryHandler(h.ReplicateRawEvents),
+				},
+				Signature:    "ReplicateRawEvents(ReplicateRequest *history.ReplicateRawEventsRequest)",
+				ThriftModule: history.ThriftModule,
+			},
+
+			thrift.Method{
 				Name: "RequestCancelWorkflowExecution",
 				HandlerSpec: thrift.HandlerSpec{
 
@@ -432,7 +448,7 @@ func New(impl Interface, opts ...thrift.RegisterOption) []transport.Procedure {
 		},
 	}
 
-	procedures := make([]transport.Procedure, 0, 24)
+	procedures := make([]transport.Procedure, 0, 25)
 	procedures = append(procedures, thrift.BuildProcedures(service, opts...)...)
 	return procedures
 }
@@ -620,6 +636,25 @@ func (h handler) ReplicateEvents(ctx context.Context, body wire.Value) (thrift.R
 
 	hadError := err != nil
 	result, err := history.HistoryService_ReplicateEvents_Helper.WrapResponse(err)
+
+	var response thrift.Response
+	if err == nil {
+		response.IsApplicationError = hadError
+		response.Body = result
+	}
+	return response, err
+}
+
+func (h handler) ReplicateRawEvents(ctx context.Context, body wire.Value) (thrift.Response, error) {
+	var args history.HistoryService_ReplicateRawEvents_Args
+	if err := args.FromWire(body); err != nil {
+		return thrift.Response{}, err
+	}
+
+	err := h.impl.ReplicateRawEvents(ctx, args.ReplicateRequest)
+
+	hadError := err != nil
+	result, err := history.HistoryService_ReplicateRawEvents_Helper.WrapResponse(err)
 
 	var response thrift.Response
 	if err == nil {

@@ -31,7 +31,7 @@ import (
 	workflow "github.com/uber/cadence/.gen/go/shared"
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/messaging"
-	"github.com/uber/cadence/common/persistence/persistence-tests"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"github.com/uber/cadence/service/history"
 	"github.com/uber/cadence/service/matching"
 	"go.uber.org/yarpc"
@@ -57,7 +57,7 @@ type (
 
 	// TaskPoller is used in integration tests to poll decision or activity tasks
 	TaskPoller struct {
-		Engine                              Client
+		Engine                              FrontendClient
 		Domain                              string
 		TaskList                            *workflow.TaskList
 		StickyTaskList                      *workflow.TaskList

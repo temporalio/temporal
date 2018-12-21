@@ -447,6 +447,20 @@ func (_m *HistoryClient) ReplicateEvents(ctx context.Context, request *history.R
 	return r0
 }
 
+// ReplicateRawEvents provides a mock function with given fields: ctx, request
+func (_m *HistoryClient) ReplicateRawEvents(ctx context.Context, request *history.ReplicateRawEventsRequest, opts ...yarpc.CallOption) error {
+	ret := _m.Called(ctx, request)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *history.ReplicateRawEventsRequest) error); ok {
+		r0 = rf(ctx, request)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SyncShardStatus provides a mock function with given fields: ctx, request
 func (_m *HistoryClient) SyncShardStatus(ctx context.Context, request *history.SyncShardStatusRequest, opts ...yarpc.CallOption) error {
 	ret := _m.Called(ctx, request)

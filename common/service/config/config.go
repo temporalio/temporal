@@ -162,7 +162,7 @@ type (
 		// ConnectAddr is the remote addr of the database
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
-		ConnectProtocol string `yaml:"connectProtocol validate:"nonzero""`
+		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
 		// MaxQPS the max request rate on this datastore
 		MaxQPS int `yaml:"maxQPS"`
 		// MaxConns the max number of connections to this datastore
@@ -198,7 +198,15 @@ type (
 		// ClusterInitialFailoverVersions contains all cluster names to corresponding initial failover version
 		ClusterInitialFailoverVersions map[string]int64 `yaml:"clusterInitialFailoverVersion"`
 		// ClusterAddress contains all cluster names to corresponding address
-		ClusterAddress map[string]string `yaml:"clusterAddress"`
+		ClusterAddress map[string]Address `yaml:"clusterAddress"`
+	}
+
+	// Address indicate the remote cluster's service name and address
+	Address struct {
+		// RPCName indicate the remote service name
+		RPCName string `yaml:"rpcName"`
+		// Address indicate the remote service IP address
+		RPCAddress string `yaml:"rpcAddress"`
 	}
 
 	// Metrics contains the config items for metrics subsystem

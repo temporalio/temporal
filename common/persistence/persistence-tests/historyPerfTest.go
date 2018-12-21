@@ -248,10 +248,10 @@ func (s *HistoryPerfSuite) readv2(branch []byte, minID, maxID int64, pageSize in
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(resp.History) > 0 {
+	if len(resp.HistoryEvents) > 0 {
 		s.True(resp.Size > 0)
 	}
-	return resp.History, resp.NextPageToken, nil
+	return resp.HistoryEvents, resp.NextPageToken, nil
 }
 
 // persistence helper

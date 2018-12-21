@@ -23,6 +23,7 @@ package cluster
 import (
 	"fmt"
 
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -47,7 +48,7 @@ type (
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
 		// GetAllClientAddress return the frontend address for each cluster name
-		GetAllClientAddress() map[string]string
+		GetAllClientAddress() map[string]config.Address
 	}
 
 	metadataImpl struct {
@@ -66,7 +67,7 @@ type (
 		// clusterInitialFailoverVersions contains all initial failover version -> corresponding cluster name
 		initialFailoverVersionClusters map[int64]string
 		// clusterToAddress contains the cluster name to corresponding frontend client
-		clusterToAddress map[string]string
+		clusterToAddress map[string]config.Address
 	}
 )
 
@@ -74,7 +75,7 @@ type (
 func NewMetadata(enableGlobalDomain dynamicconfig.BoolPropertyFn, failoverVersionIncrement int64,
 	masterClusterName string, currentClusterName string,
 	clusterInitialFailoverVersions map[string]int64,
-	clusterToAddress map[string]string) Metadata {
+	clusterToAddress map[string]config.Address) Metadata {
 
 	if len(clusterInitialFailoverVersions) < 0 {
 		panic("Empty initial failover versions for cluster")
@@ -185,6 +186,6 @@ func (metadata *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int6
 }
 
 // GetAllClientAddress return the frontend address for each cluster name
-func (metadata *metadataImpl) GetAllClientAddress() map[string]string {
+func (metadata *metadataImpl) GetAllClientAddress() map[string]config.Address {
 	return metadata.clusterToAddress
 }

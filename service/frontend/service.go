@@ -138,7 +138,7 @@ func (s *Service) Start() {
 	wfHandler := NewWorkflowHandler(base, s.config, metadata, history, historyV2, visibility, kafkaProducer, params.BlobstoreClient)
 	wfHandler.Start()
 
-	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, metadata)
+	adminHandler := NewAdminHandler(base, pConfig.NumHistoryShards, metadata, history, historyV2)
 	adminHandler.Start()
 
 	log.Infof("%v started", common.FrontendServiceName)

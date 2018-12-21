@@ -21,6 +21,8 @@
 package cluster
 
 import (
+	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"
 )
 
@@ -63,9 +65,9 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 		masterClusterName,
 		TestCurrentClusterName,
 		TestAllClusterFailoverVersions,
-		map[string]string{
-			TestCurrentClusterName:     TestCurrentClusterFrontendAddress,
-			TestAlternativeClusterName: TestAlternativeClusterFrontendAddress,
+		map[string]config.Address{
+			TestCurrentClusterName:     config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestCurrentClusterFrontendAddress},
+			TestAlternativeClusterName: config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestAlternativeClusterFrontendAddress},
 		},
 	)
 }

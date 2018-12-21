@@ -918,21 +918,60 @@ func (v *GetMutableStateRequest) GetExpectedNextEventId() (o int64) {
 }
 
 type GetMutableStateResponse struct {
-	Execution                            *shared.WorkflowExecution `json:"execution,omitempty"`
-	WorkflowType                         *shared.WorkflowType      `json:"workflowType,omitempty"`
-	NextEventId                          *int64                    `json:"NextEventId,omitempty"`
-	PreviousStartedEventId               *int64                    `json:"PreviousStartedEventId,omitempty"`
-	LastFirstEventId                     *int64                    `json:"LastFirstEventId,omitempty"`
-	TaskList                             *shared.TaskList          `json:"taskList,omitempty"`
-	StickyTaskList                       *shared.TaskList          `json:"stickyTaskList,omitempty"`
-	ClientLibraryVersion                 *string                   `json:"clientLibraryVersion,omitempty"`
-	ClientFeatureVersion                 *string                   `json:"clientFeatureVersion,omitempty"`
-	ClientImpl                           *string                   `json:"clientImpl,omitempty"`
-	IsWorkflowRunning                    *bool                     `json:"isWorkflowRunning,omitempty"`
-	StickyTaskListScheduleToStartTimeout *int32                    `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
-	EventStoreVersion                    *int32                    `json:"eventStoreVersion,omitempty"`
-	BranchToken                          []byte                    `json:"branchToken,omitempty"`
+	Execution                            *shared.WorkflowExecution          `json:"execution,omitempty"`
+	WorkflowType                         *shared.WorkflowType               `json:"workflowType,omitempty"`
+	NextEventId                          *int64                             `json:"NextEventId,omitempty"`
+	PreviousStartedEventId               *int64                             `json:"PreviousStartedEventId,omitempty"`
+	LastFirstEventId                     *int64                             `json:"LastFirstEventId,omitempty"`
+	TaskList                             *shared.TaskList                   `json:"taskList,omitempty"`
+	StickyTaskList                       *shared.TaskList                   `json:"stickyTaskList,omitempty"`
+	ClientLibraryVersion                 *string                            `json:"clientLibraryVersion,omitempty"`
+	ClientFeatureVersion                 *string                            `json:"clientFeatureVersion,omitempty"`
+	ClientImpl                           *string                            `json:"clientImpl,omitempty"`
+	IsWorkflowRunning                    *bool                              `json:"isWorkflowRunning,omitempty"`
+	StickyTaskListScheduleToStartTimeout *int32                             `json:"stickyTaskListScheduleToStartTimeout,omitempty"`
+	EventStoreVersion                    *int32                             `json:"eventStoreVersion,omitempty"`
+	BranchToken                          []byte                             `json:"branchToken,omitempty"`
+	ReplicationInfo                      map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
 }
+
+type _Map_String_ReplicationInfo_MapItemList map[string]*shared.ReplicationInfo
+
+func (m _Map_String_ReplicationInfo_MapItemList) ForEach(f func(wire.MapItem) error) error {
+	for k, v := range m {
+		if v == nil {
+			return fmt.Errorf("invalid [%v]: value is nil", k)
+		}
+		kw, err := wire.NewValueString(k), error(nil)
+		if err != nil {
+			return err
+		}
+
+		vw, err := v.ToWire()
+		if err != nil {
+			return err
+		}
+		err = f(wire.MapItem{Key: kw, Value: vw})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m _Map_String_ReplicationInfo_MapItemList) Size() int {
+	return len(m)
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) KeyType() wire.Type {
+	return wire.TBinary
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) ValueType() wire.Type {
+	return wire.TStruct
+}
+
+func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 
 // ToWire translates a GetMutableStateResponse struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -951,7 +990,7 @@ type GetMutableStateResponse struct {
 //   }
 func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 	var (
-		fields [14]wire.Field
+		fields [15]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -1069,6 +1108,14 @@ func (v *GetMutableStateResponse) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 130, Value: w}
 		i++
 	}
+	if v.ReplicationInfo != nil {
+		w, err = wire.NewValueMap(_Map_String_ReplicationInfo_MapItemList(v.ReplicationInfo)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 140, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
@@ -1083,6 +1130,40 @@ func _TaskList_Read(w wire.Value) (*shared.TaskList, error) {
 	var v shared.TaskList
 	err := v.FromWire(w)
 	return &v, err
+}
+
+func _ReplicationInfo_Read(w wire.Value) (*shared.ReplicationInfo, error) {
+	var v shared.ReplicationInfo
+	err := v.FromWire(w)
+	return &v, err
+}
+
+func _Map_String_ReplicationInfo_Read(m wire.MapItemList) (map[string]*shared.ReplicationInfo, error) {
+	if m.KeyType() != wire.TBinary {
+		return nil, nil
+	}
+
+	if m.ValueType() != wire.TStruct {
+		return nil, nil
+	}
+
+	o := make(map[string]*shared.ReplicationInfo, m.Size())
+	err := m.ForEach(func(x wire.MapItem) error {
+		k, err := x.Key.GetString(), error(nil)
+		if err != nil {
+			return err
+		}
+
+		v, err := _ReplicationInfo_Read(x.Value)
+		if err != nil {
+			return err
+		}
+
+		o[k] = v
+		return nil
+	})
+	m.Close()
+	return o, err
 }
 
 // FromWire deserializes a GetMutableStateResponse struct from its Thrift-level
@@ -1237,6 +1318,14 @@ func (v *GetMutableStateResponse) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 140:
+			if field.Value.Type() == wire.TMap {
+				v.ReplicationInfo, err = _Map_String_ReplicationInfo_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -1250,7 +1339,7 @@ func (v *GetMutableStateResponse) String() string {
 		return "<nil>"
 	}
 
-	var fields [14]string
+	var fields [15]string
 	i := 0
 	if v.Execution != nil {
 		fields[i] = fmt.Sprintf("Execution: %v", v.Execution)
@@ -1308,6 +1397,10 @@ func (v *GetMutableStateResponse) String() string {
 		fields[i] = fmt.Sprintf("BranchToken: %v", v.BranchToken)
 		i++
 	}
+	if v.ReplicationInfo != nil {
+		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
 
 	return fmt.Sprintf("GetMutableStateResponse{%v}", strings.Join(fields[:i], ", "))
 }
@@ -1330,6 +1423,23 @@ func _I32_EqualsPtr(lhs, rhs *int32) bool {
 		return (x == y)
 	}
 	return lhs == nil && rhs == nil
+}
+
+func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*shared.ReplicationInfo) bool {
+	if len(lhs) != len(rhs) {
+		return false
+	}
+
+	for lk, lv := range lhs {
+		rv, ok := rhs[lk]
+		if !ok {
+			return false
+		}
+		if !lv.Equals(rv) {
+			return false
+		}
+	}
+	return true
 }
 
 // Equals returns true if all the fields of this GetMutableStateResponse match the
@@ -1384,8 +1494,22 @@ func (v *GetMutableStateResponse) Equals(rhs *GetMutableStateResponse) bool {
 	if !((v.BranchToken == nil && rhs.BranchToken == nil) || (v.BranchToken != nil && rhs.BranchToken != nil && bytes.Equal(v.BranchToken, rhs.BranchToken))) {
 		return false
 	}
+	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
+		return false
+	}
 
 	return true
+}
+
+type _Map_String_ReplicationInfo_Zapper map[string]*shared.ReplicationInfo
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of _Map_String_ReplicationInfo_Zapper.
+func (m _Map_String_ReplicationInfo_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+	for k, v := range m {
+		err = multierr.Append(err, enc.AddObject((string)(k), v))
+	}
+	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -1435,6 +1559,9 @@ func (v *GetMutableStateResponse) MarshalLogObject(enc zapcore.ObjectEncoder) (e
 	}
 	if v.BranchToken != nil {
 		enc.AddString("branchToken", base64.StdEncoding.EncodeToString(v.BranchToken))
+	}
+	if v.ReplicationInfo != nil {
+		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
 	}
 	return err
 }
@@ -1574,6 +1701,16 @@ func (v *GetMutableStateResponse) GetEventStoreVersion() (o int32) {
 func (v *GetMutableStateResponse) GetBranchToken() (o []byte) {
 	if v.BranchToken != nil {
 		return v.BranchToken
+	}
+
+	return
+}
+
+// GetReplicationInfo returns the value of ReplicationInfo if it is set or its
+// zero value if it is unset.
+func (v *GetMutableStateResponse) GetReplicationInfo() (o map[string]*shared.ReplicationInfo) {
+	if v.ReplicationInfo != nil {
+		return v.ReplicationInfo
 	}
 
 	return
@@ -4049,57 +4186,19 @@ func (v *RemoveSignalMutableStateRequest) GetRequestId() (o string) {
 }
 
 type ReplicateEventsRequest struct {
-	SourceCluster           *string                     `json:"sourceCluster,omitempty"`
-	DomainUUID              *string                     `json:"domainUUID,omitempty"`
-	WorkflowExecution       *shared.WorkflowExecution   `json:"workflowExecution,omitempty"`
-	FirstEventId            *int64                      `json:"firstEventId,omitempty"`
-	NextEventId             *int64                      `json:"nextEventId,omitempty"`
-	Version                 *int64                      `json:"version,omitempty"`
-	ReplicationInfo         map[string]*ReplicationInfo `json:"replicationInfo,omitempty"`
-	History                 *shared.History             `json:"history,omitempty"`
-	NewRunHistory           *shared.History             `json:"newRunHistory,omitempty"`
-	ForceBufferEvents       *bool                       `json:"forceBufferEvents,omitempty"`
-	EventStoreVersion       *int32                      `json:"eventStoreVersion,omitempty"`
-	NewRunEventStoreVersion *int32                      `json:"newRunEventStoreVersion,omitempty"`
+	SourceCluster           *string                            `json:"sourceCluster,omitempty"`
+	DomainUUID              *string                            `json:"domainUUID,omitempty"`
+	WorkflowExecution       *shared.WorkflowExecution          `json:"workflowExecution,omitempty"`
+	FirstEventId            *int64                             `json:"firstEventId,omitempty"`
+	NextEventId             *int64                             `json:"nextEventId,omitempty"`
+	Version                 *int64                             `json:"version,omitempty"`
+	ReplicationInfo         map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	History                 *shared.History                    `json:"history,omitempty"`
+	NewRunHistory           *shared.History                    `json:"newRunHistory,omitempty"`
+	ForceBufferEvents       *bool                              `json:"forceBufferEvents,omitempty"`
+	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
+	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
 }
-
-type _Map_String_ReplicationInfo_MapItemList map[string]*ReplicationInfo
-
-func (m _Map_String_ReplicationInfo_MapItemList) ForEach(f func(wire.MapItem) error) error {
-	for k, v := range m {
-		if v == nil {
-			return fmt.Errorf("invalid [%v]: value is nil", k)
-		}
-		kw, err := wire.NewValueString(k), error(nil)
-		if err != nil {
-			return err
-		}
-
-		vw, err := v.ToWire()
-		if err != nil {
-			return err
-		}
-		err = f(wire.MapItem{Key: kw, Value: vw})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (m _Map_String_ReplicationInfo_MapItemList) Size() int {
-	return len(m)
-}
-
-func (_Map_String_ReplicationInfo_MapItemList) KeyType() wire.Type {
-	return wire.TBinary
-}
-
-func (_Map_String_ReplicationInfo_MapItemList) ValueType() wire.Type {
-	return wire.TStruct
-}
-
-func (_Map_String_ReplicationInfo_MapItemList) Close() {}
 
 // ToWire translates a ReplicateEventsRequest struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
@@ -4222,40 +4321,6 @@ func (v *ReplicateEventsRequest) ToWire() (wire.Value, error) {
 	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
-}
-
-func _ReplicationInfo_Read(w wire.Value) (*ReplicationInfo, error) {
-	var v ReplicationInfo
-	err := v.FromWire(w)
-	return &v, err
-}
-
-func _Map_String_ReplicationInfo_Read(m wire.MapItemList) (map[string]*ReplicationInfo, error) {
-	if m.KeyType() != wire.TBinary {
-		return nil, nil
-	}
-
-	if m.ValueType() != wire.TStruct {
-		return nil, nil
-	}
-
-	o := make(map[string]*ReplicationInfo, m.Size())
-	err := m.ForEach(func(x wire.MapItem) error {
-		k, err := x.Key.GetString(), error(nil)
-		if err != nil {
-			return err
-		}
-
-		v, err := _ReplicationInfo_Read(x.Value)
-		if err != nil {
-			return err
-		}
-
-		o[k] = v
-		return nil
-	})
-	m.Close()
-	return o, err
 }
 
 func _History_Read(w wire.Value) (*shared.History, error) {
@@ -4465,23 +4530,6 @@ func (v *ReplicateEventsRequest) String() string {
 	return fmt.Sprintf("ReplicateEventsRequest{%v}", strings.Join(fields[:i], ", "))
 }
 
-func _Map_String_ReplicationInfo_Equals(lhs, rhs map[string]*ReplicationInfo) bool {
-	if len(lhs) != len(rhs) {
-		return false
-	}
-
-	for lk, lv := range lhs {
-		rv, ok := rhs[lk]
-		if !ok {
-			return false
-		}
-		if !lv.Equals(rv) {
-			return false
-		}
-	}
-	return true
-}
-
 // Equals returns true if all the fields of this ReplicateEventsRequest match the
 // provided ReplicateEventsRequest.
 //
@@ -4530,17 +4578,6 @@ func (v *ReplicateEventsRequest) Equals(rhs *ReplicateEventsRequest) bool {
 	}
 
 	return true
-}
-
-type _Map_String_ReplicationInfo_Zapper map[string]*ReplicationInfo
-
-// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
-// fast logging of _Map_String_ReplicationInfo_Zapper.
-func (m _Map_String_ReplicationInfo_Zapper) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
-	for k, v := range m {
-		err = multierr.Append(err, enc.AddObject((string)(k), v))
-	}
-	return err
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
@@ -4650,7 +4687,7 @@ func (v *ReplicateEventsRequest) GetVersion() (o int64) {
 
 // GetReplicationInfo returns the value of ReplicationInfo if it is set or its
 // zero value if it is unset.
-func (v *ReplicateEventsRequest) GetReplicationInfo() (o map[string]*ReplicationInfo) {
+func (v *ReplicateEventsRequest) GetReplicationInfo() (o map[string]*shared.ReplicationInfo) {
 	if v.ReplicationInfo != nil {
 		return v.ReplicationInfo
 	}
@@ -4708,12 +4745,17 @@ func (v *ReplicateEventsRequest) GetNewRunEventStoreVersion() (o int32) {
 	return
 }
 
-type ReplicationInfo struct {
-	Version     *int64 `json:"version,omitempty"`
-	LastEventId *int64 `json:"lastEventId,omitempty"`
+type ReplicateRawEventsRequest struct {
+	DomainUUID              *string                            `json:"domainUUID,omitempty"`
+	WorkflowExecution       *shared.WorkflowExecution          `json:"workflowExecution,omitempty"`
+	ReplicationInfo         map[string]*shared.ReplicationInfo `json:"replicationInfo,omitempty"`
+	History                 *shared.DataBlob                   `json:"history,omitempty"`
+	NewRunHistory           *shared.DataBlob                   `json:"newRunHistory,omitempty"`
+	EventStoreVersion       *int32                             `json:"eventStoreVersion,omitempty"`
+	NewRunEventStoreVersion *int32                             `json:"newRunEventStoreVersion,omitempty"`
 }
 
-// ToWire translates a ReplicationInfo struct into a Thrift-level intermediate
+// ToWire translates a ReplicateRawEventsRequest struct into a Thrift-level intermediate
 // representation. This intermediate representation may be serialized
 // into bytes using a ThriftRW protocol implementation.
 //
@@ -4728,39 +4770,85 @@ type ReplicationInfo struct {
 //   if err := binaryProtocol.Encode(x, writer); err != nil {
 //     return err
 //   }
-func (v *ReplicationInfo) ToWire() (wire.Value, error) {
+func (v *ReplicateRawEventsRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [7]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
 	)
 
-	if v.Version != nil {
-		w, err = wire.NewValueI64(*(v.Version)), error(nil)
+	if v.DomainUUID != nil {
+		w, err = wire.NewValueString(*(v.DomainUUID)), error(nil)
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 10, Value: w}
 		i++
 	}
-	if v.LastEventId != nil {
-		w, err = wire.NewValueI64(*(v.LastEventId)), error(nil)
+	if v.WorkflowExecution != nil {
+		w, err = v.WorkflowExecution.ToWire()
 		if err != nil {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
+	if v.ReplicationInfo != nil {
+		w, err = wire.NewValueMap(_Map_String_ReplicationInfo_MapItemList(v.ReplicationInfo)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.History != nil {
+		w, err = v.History.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.NewRunHistory != nil {
+		w, err = v.NewRunHistory.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.EventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		w, err = wire.NewValueI32(*(v.NewRunEventStoreVersion)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 70, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
 }
 
-// FromWire deserializes a ReplicationInfo struct from its Thrift-level
+func _DataBlob_Read(w wire.Value) (*shared.DataBlob, error) {
+	var v shared.DataBlob
+	err := v.FromWire(w)
+	return &v, err
+}
+
+// FromWire deserializes a ReplicateRawEventsRequest struct from its Thrift-level
 // representation. The Thrift-level representation may be obtained
 // from a ThriftRW protocol implementation.
 //
-// An error is returned if we were unable to build a ReplicationInfo struct
+// An error is returned if we were unable to build a ReplicateRawEventsRequest struct
 // from the provided intermediate representation.
 //
 //   x, err := binaryProtocol.Decode(reader, wire.TStruct)
@@ -4768,31 +4856,73 @@ func (v *ReplicationInfo) ToWire() (wire.Value, error) {
 //     return nil, err
 //   }
 //
-//   var v ReplicationInfo
+//   var v ReplicateRawEventsRequest
 //   if err := v.FromWire(x); err != nil {
 //     return nil, err
 //   }
 //   return &v, nil
-func (v *ReplicationInfo) FromWire(w wire.Value) error {
+func (v *ReplicateRawEventsRequest) FromWire(w wire.Value) error {
 	var err error
 
 	for _, field := range w.GetStruct().Fields {
 		switch field.ID {
 		case 10:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.Version = &x
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.DomainUUID = &x
 				if err != nil {
 					return err
 				}
 
 			}
 		case 20:
-			if field.Value.Type() == wire.TI64 {
-				var x int64
-				x, err = field.Value.GetI64(), error(nil)
-				v.LastEventId = &x
+			if field.Value.Type() == wire.TStruct {
+				v.WorkflowExecution, err = _WorkflowExecution_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 30:
+			if field.Value.Type() == wire.TMap {
+				v.ReplicationInfo, err = _Map_String_ReplicationInfo_Read(field.Value.GetMap())
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TStruct {
+				v.History, err = _DataBlob_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TStruct {
+				v.NewRunHistory, err = _DataBlob_Read(field.Value)
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.EventStoreVersion = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 70:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.NewRunEventStoreVersion = &x
 				if err != nil {
 					return err
 				}
@@ -4804,41 +4934,76 @@ func (v *ReplicationInfo) FromWire(w wire.Value) error {
 	return nil
 }
 
-// String returns a readable string representation of a ReplicationInfo
+// String returns a readable string representation of a ReplicateRawEventsRequest
 // struct.
-func (v *ReplicationInfo) String() string {
+func (v *ReplicateRawEventsRequest) String() string {
 	if v == nil {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [7]string
 	i := 0
-	if v.Version != nil {
-		fields[i] = fmt.Sprintf("Version: %v", *(v.Version))
+	if v.DomainUUID != nil {
+		fields[i] = fmt.Sprintf("DomainUUID: %v", *(v.DomainUUID))
 		i++
 	}
-	if v.LastEventId != nil {
-		fields[i] = fmt.Sprintf("LastEventId: %v", *(v.LastEventId))
+	if v.WorkflowExecution != nil {
+		fields[i] = fmt.Sprintf("WorkflowExecution: %v", v.WorkflowExecution)
+		i++
+	}
+	if v.ReplicationInfo != nil {
+		fields[i] = fmt.Sprintf("ReplicationInfo: %v", v.ReplicationInfo)
+		i++
+	}
+	if v.History != nil {
+		fields[i] = fmt.Sprintf("History: %v", v.History)
+		i++
+	}
+	if v.NewRunHistory != nil {
+		fields[i] = fmt.Sprintf("NewRunHistory: %v", v.NewRunHistory)
+		i++
+	}
+	if v.EventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("EventStoreVersion: %v", *(v.EventStoreVersion))
+		i++
+	}
+	if v.NewRunEventStoreVersion != nil {
+		fields[i] = fmt.Sprintf("NewRunEventStoreVersion: %v", *(v.NewRunEventStoreVersion))
 		i++
 	}
 
-	return fmt.Sprintf("ReplicationInfo{%v}", strings.Join(fields[:i], ", "))
+	return fmt.Sprintf("ReplicateRawEventsRequest{%v}", strings.Join(fields[:i], ", "))
 }
 
-// Equals returns true if all the fields of this ReplicationInfo match the
-// provided ReplicationInfo.
+// Equals returns true if all the fields of this ReplicateRawEventsRequest match the
+// provided ReplicateRawEventsRequest.
 //
 // This function performs a deep comparison.
-func (v *ReplicationInfo) Equals(rhs *ReplicationInfo) bool {
+func (v *ReplicateRawEventsRequest) Equals(rhs *ReplicateRawEventsRequest) bool {
 	if v == nil {
 		return rhs == nil
 	} else if rhs == nil {
 		return false
 	}
-	if !_I64_EqualsPtr(v.Version, rhs.Version) {
+	if !_String_EqualsPtr(v.DomainUUID, rhs.DomainUUID) {
 		return false
 	}
-	if !_I64_EqualsPtr(v.LastEventId, rhs.LastEventId) {
+	if !((v.WorkflowExecution == nil && rhs.WorkflowExecution == nil) || (v.WorkflowExecution != nil && rhs.WorkflowExecution != nil && v.WorkflowExecution.Equals(rhs.WorkflowExecution))) {
+		return false
+	}
+	if !((v.ReplicationInfo == nil && rhs.ReplicationInfo == nil) || (v.ReplicationInfo != nil && rhs.ReplicationInfo != nil && _Map_String_ReplicationInfo_Equals(v.ReplicationInfo, rhs.ReplicationInfo))) {
+		return false
+	}
+	if !((v.History == nil && rhs.History == nil) || (v.History != nil && rhs.History != nil && v.History.Equals(rhs.History))) {
+		return false
+	}
+	if !((v.NewRunHistory == nil && rhs.NewRunHistory == nil) || (v.NewRunHistory != nil && rhs.NewRunHistory != nil && v.NewRunHistory.Equals(rhs.NewRunHistory))) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.EventStoreVersion, rhs.EventStoreVersion) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.NewRunEventStoreVersion, rhs.NewRunEventStoreVersion) {
 		return false
 	}
 
@@ -4846,35 +5011,100 @@ func (v *ReplicationInfo) Equals(rhs *ReplicationInfo) bool {
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler, enabling
-// fast logging of ReplicationInfo.
-func (v *ReplicationInfo) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
+// fast logging of ReplicateRawEventsRequest.
+func (v *ReplicateRawEventsRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err error) {
 	if v == nil {
 		return nil
 	}
-	if v.Version != nil {
-		enc.AddInt64("version", *v.Version)
+	if v.DomainUUID != nil {
+		enc.AddString("domainUUID", *v.DomainUUID)
 	}
-	if v.LastEventId != nil {
-		enc.AddInt64("lastEventId", *v.LastEventId)
+	if v.WorkflowExecution != nil {
+		err = multierr.Append(err, enc.AddObject("workflowExecution", v.WorkflowExecution))
+	}
+	if v.ReplicationInfo != nil {
+		err = multierr.Append(err, enc.AddObject("replicationInfo", (_Map_String_ReplicationInfo_Zapper)(v.ReplicationInfo)))
+	}
+	if v.History != nil {
+		err = multierr.Append(err, enc.AddObject("history", v.History))
+	}
+	if v.NewRunHistory != nil {
+		err = multierr.Append(err, enc.AddObject("newRunHistory", v.NewRunHistory))
+	}
+	if v.EventStoreVersion != nil {
+		enc.AddInt32("eventStoreVersion", *v.EventStoreVersion)
+	}
+	if v.NewRunEventStoreVersion != nil {
+		enc.AddInt32("newRunEventStoreVersion", *v.NewRunEventStoreVersion)
 	}
 	return err
 }
 
-// GetVersion returns the value of Version if it is set or its
+// GetDomainUUID returns the value of DomainUUID if it is set or its
 // zero value if it is unset.
-func (v *ReplicationInfo) GetVersion() (o int64) {
-	if v.Version != nil {
-		return *v.Version
+func (v *ReplicateRawEventsRequest) GetDomainUUID() (o string) {
+	if v.DomainUUID != nil {
+		return *v.DomainUUID
 	}
 
 	return
 }
 
-// GetLastEventId returns the value of LastEventId if it is set or its
+// GetWorkflowExecution returns the value of WorkflowExecution if it is set or its
 // zero value if it is unset.
-func (v *ReplicationInfo) GetLastEventId() (o int64) {
-	if v.LastEventId != nil {
-		return *v.LastEventId
+func (v *ReplicateRawEventsRequest) GetWorkflowExecution() (o *shared.WorkflowExecution) {
+	if v.WorkflowExecution != nil {
+		return v.WorkflowExecution
+	}
+
+	return
+}
+
+// GetReplicationInfo returns the value of ReplicationInfo if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetReplicationInfo() (o map[string]*shared.ReplicationInfo) {
+	if v.ReplicationInfo != nil {
+		return v.ReplicationInfo
+	}
+
+	return
+}
+
+// GetHistory returns the value of History if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetHistory() (o *shared.DataBlob) {
+	if v.History != nil {
+		return v.History
+	}
+
+	return
+}
+
+// GetNewRunHistory returns the value of NewRunHistory if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetNewRunHistory() (o *shared.DataBlob) {
+	if v.NewRunHistory != nil {
+		return v.NewRunHistory
+	}
+
+	return
+}
+
+// GetEventStoreVersion returns the value of EventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetEventStoreVersion() (o int32) {
+	if v.EventStoreVersion != nil {
+		return *v.EventStoreVersion
+	}
+
+	return
+}
+
+// GetNewRunEventStoreVersion returns the value of NewRunEventStoreVersion if it is set or its
+// zero value if it is unset.
+func (v *ReplicateRawEventsRequest) GetNewRunEventStoreVersion() (o int32) {
+	if v.NewRunEventStoreVersion != nil {
+		return *v.NewRunEventStoreVersion
 	}
 
 	return

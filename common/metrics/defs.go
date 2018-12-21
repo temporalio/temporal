@@ -80,6 +80,7 @@ const (
 	HistoryRoleTagValue  = "history"
 	MatchingRoleTagValue = "matching"
 	FrontendRoleTagValue = "frontend"
+	AdminRoleTagValue    = "admin"
 
 	SizeStatsTypeTagValue  = "size"
 	CountStatsTypeTagValue = "count"
@@ -245,6 +246,8 @@ const (
 	HistoryClientRecordChildExecutionCompletedScope
 	// HistoryClientReplicateEventsScope tracks RPC calls to history service
 	HistoryClientReplicateEventsScope
+	// HistoryClientReplicateRawEventsScope tracks RPC calls to history service
+	HistoryClientReplicateRawEventsScope
 	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
 	HistoryClientSyncShardStatusScope
 	// HistoryClientSyncActivityScope tracks RPC calls to history service
@@ -325,6 +328,12 @@ const (
 	FrontendClientTerminateWorkflowExecutionScope
 	// FrontendClientUpdateDomainScope tracks RPC calls to frontend service
 	FrontendClientUpdateDomainScope
+	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
+	AdminClientDescribeHistoryHostScope
+	// AdminClientDescribeWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientDescribeWorkflowExecutionScope
+	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
+	AdminClientGetWorkflowExecutionRawHistoryScope
 
 	// MessagingPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -347,10 +356,22 @@ const (
 	NumCommonScopes
 )
 
+// -- Operation scopes for Admin service --
+const (
+	// AdminDescribeHistoryHostScope is the metric scope for admin.AdminDescribeHistoryHostScope
+	AdminDescribeHistoryHostScope = iota + NumCommonScopes
+	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
+	AdminDescribeWorkflowExecutionScope
+	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryScope
+
+	NumAdminScopes
+)
+
 // -- Operation scopes for Frontend service --
 const (
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
-	FrontendStartWorkflowExecutionScope = iota + NumCommonScopes
+	FrontendStartWorkflowExecutionScope = iota + NumAdminScopes
 	// PollForDecisionTaskScope is the metric scope for frontend.PollForDecisionTask
 	FrontendPollForDecisionTaskScope
 	// FrontendPollForActivityTaskScope is the metric scope for frontend.PollForActivityTask
@@ -455,6 +476,8 @@ const (
 	HistoryRequestCancelWorkflowExecutionScope
 	// HistoryReplicateEventsScope tracks ReplicateEvents API calls received by service
 	HistoryReplicateEventsScope
+	// HistoryReplicateRawEventsScope tracks ReplicateEvents API calls received by service
+	HistoryReplicateRawEventsScope
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
@@ -671,6 +694,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientScheduleDecisionTaskScope:              {operation: "HistoryClientScheduleDecisionTask", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordChildExecutionCompletedScope:     {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateEventsScope:                   {operation: "HistoryClientReplicateEvents", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientReplicateRawEventsScope:                {operation: "HistoryClientReplicateRawEvents", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncShardStatusScope:                   {operation: "HistoryClientSyncShardStatusScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientSyncActivityScope:                      {operation: "HistoryClientSyncActivityScope", tags: map[string]string{CadenceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollForDecisionTaskScope:              {operation: "MatchingClientPollForDecisionTask", tags: map[string]string{CadenceRoleTagName: MatchingRoleTagValue}},
@@ -711,6 +735,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientStartWorkflowExecutionScope:           {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:       {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateDomainScope:                     {operation: "FrontendClientUpdateDomain", tags: map[string]string{CadenceRoleTagName: FrontendRoleTagValue}},
+		AdminClientDescribeHistoryHostScope:                 {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeWorkflowExecutionScope:           {operation: "AdminClientDescribeWorkflowExecution", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryScope:      {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{CadenceRoleTagName: AdminRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -719,6 +746,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
+		// Admin API scope co-locates with with frontend
+		AdminDescribeHistoryHostScope:            {operation: "DescribeHistoryHost"},
+		AdminDescribeWorkflowExecutionScope:      {operation: "DescribeWorkflowExecution"},
+		AdminGetWorkflowExecutionRawHistoryScope: {operation: "GetWorkflowExecutionRawHistory"},
+
 		FrontendStartWorkflowExecutionScope:           {operation: "StartWorkflowExecution"},
 		FrontendPollForDecisionTaskScope:              {operation: "PollForDecisionTask"},
 		FrontendPollForActivityTaskScope:              {operation: "PollForActivityTask"},
@@ -772,6 +804,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRecordChildExecutionCompletedScope:    {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
 		HistoryReplicateEventsScope:                  {operation: "ReplicateEvents"},
+		HistoryReplicateRawEventsScope:               {operation: "ReplicateRawEvents"},
 		HistorySyncShardStatusScope:                  {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                     {operation: "SyncActivity"},
 		HistoryDescribeMutableStateScope:             {operation: "DescribeMutableState"},

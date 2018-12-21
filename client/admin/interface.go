@@ -18,31 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package host
+package admin
 
-import (
-	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
-	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
-	"github.com/uber/cadence/common"
-	"go.uber.org/yarpc"
-)
+import "github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 
-// AdminClient is the interface exposed by admin service client
-type AdminClient interface {
+// Client is the interface exposed by admin service client
+type Client interface {
 	adminserviceclient.Interface
-}
-
-// FrontendClient is the interface exposed by frontend service client
-type FrontendClient interface {
-	workflowserviceclient.Interface
-}
-
-// NewAdminClient creates a client to cadence admin client
-func NewAdminClient(d *yarpc.Dispatcher) AdminClient {
-	return adminserviceclient.New(d.ClientConfig(common.FrontendServiceName))
-}
-
-// NewFrontendClient creates a client to cadence frontend client
-func NewFrontendClient(d *yarpc.Dispatcher) FrontendClient {
-	return workflowserviceclient.New(d.ClientConfig(common.FrontendServiceName))
 }

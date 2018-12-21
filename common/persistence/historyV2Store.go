@@ -90,7 +90,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(request *ForkHistoryBranchReque
 	if err != nil {
 		return nil, err
 	}
-	if len(readResp.History) != 1 {
+	if len(readResp.HistoryEvents) != 1 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("ForkNodeID is invalid: %v for %+v", request.ForkNodeID, forkBranch),
 		}
@@ -208,7 +208,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(request *ReadHistoryBran
 func (m *historyV2ManagerImpl) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
 	resp := &ReadHistoryBranchResponse{}
 	var err error
-	resp.History, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
+	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
 	if err != nil {
 		return nil, err
 	}

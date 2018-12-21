@@ -152,7 +152,7 @@ func (r *conflictResolverImpl) getHistory(domainID string, execution shared.Work
 		if err != nil {
 			return nil, 0, 0, nil, err
 		}
-		return response.History, response.Size, response.LastFirstEventID, response.NextPageToken, nil
+		return response.HistoryEvents, response.Size, response.LastFirstEventID, response.NextPageToken, nil
 	}
 	response, err := r.historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 		DomainID:      domainID,

@@ -24,13 +24,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/uber/cadence/common/archival"
-	"github.com/uber/cadence/common/blobstore"
-	"github.com/uber/cadence/common/metrics"
-
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/archival"
+	"github.com/uber/cadence/common/blobstore"
 	"github.com/uber/cadence/common/cluster"
+	"github.com/uber/cadence/common/metrics"
 	"github.com/uber/cadence/common/service"
 	"github.com/uber/cadence/common/service/config"
 	"github.com/uber/cadence/common/service/dynamicconfig"

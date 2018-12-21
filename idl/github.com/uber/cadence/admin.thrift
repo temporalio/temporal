@@ -38,14 +38,26 @@ service AdminService {
     )
 
   /**
-    * DescribeHistoryHost returns information about the internal states of a history host
-    **/
-    shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)
-      throws (
-        1: shared.BadRequestError       badRequestError,
-        2: shared.InternalServiceError  internalServiceError,
-        3: shared.AccessDeniedError     accessDeniedError,
-      )
+  * DescribeHistoryHost returns information about the internal states of a history host
+  **/
+  shared.DescribeHistoryHostResponse DescribeHistoryHost(1: shared.DescribeHistoryHostRequest request)
+    throws (
+      1: shared.BadRequestError       badRequestError,
+      2: shared.InternalServiceError  internalServiceError,
+      3: shared.AccessDeniedError     accessDeniedError,
+    )
+
+  /**
+  * Returns the raw history of specified workflow execution.  It fails with 'EntityNotExistError' if speficied workflow
+  * execution in unknown to the service.
+  **/
+  GetWorkflowExecutionRawHistoryResponse GetWorkflowExecutionRawHistory(1: GetWorkflowExecutionRawHistoryRequest getRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: shared.ServiceBusyError serviceBusyError,
+    )
 }
 
 struct DescribeWorkflowExecutionRequest {
@@ -58,4 +70,20 @@ struct DescribeWorkflowExecutionResponse{
   20: optional string historyAddr
   40: optional string mutableStateInCache
   50: optional string mutableStateInDatabase
+}
+
+struct GetWorkflowExecutionRawHistoryRequest {
+  10: optional string domain
+  20: optional shared.WorkflowExecution execution
+  30: optional i64 (js.type = "Long") firstEventId
+  40: optional i64 (js.type = "Long") nextEventId
+  50: optional i32 maximumPageSize
+  60: optional binary nextPageToken
+}
+
+struct GetWorkflowExecutionRawHistoryResponse {
+  10: optional binary nextPageToken
+  20: optional list<shared.DataBlob> historyBatches
+  30: optional map<string, shared.ReplicationInfo> replicationInfo
+  40: optional i32 eventStoreVersion
 }

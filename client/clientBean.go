@@ -28,10 +28,10 @@ import (
 	"go.uber.org/yarpc"
 	"go.uber.org/yarpc/transport/tchannel"
 
+	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/client/frontend"
 	"github.com/uber/cadence/client/history"
 	"github.com/uber/cadence/client/matching"
-	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/cluster"
 )
 
@@ -45,18 +45,20 @@ type (
 		GetHistoryClient() history.Client
 		GetMatchingClient() matching.Client
 		GetFrontendClient() frontend.Client
+		GetRemoteAdminClient(cluster string) admin.Client
 		GetRemoteFrontendClient(cluster string) frontend.Client
 	}
 
 	// DispatcherProvider provides a diapatcher to a given address
 	DispatcherProvider interface {
-		Get(address string) (*yarpc.Dispatcher, error)
+		Get(name string, address string) (*yarpc.Dispatcher, error)
 	}
 
 	clientBeanImpl struct {
 		historyClient         history.Client
 		matchingClient        matching.Client
 		frontendClient        frontend.Client
+		remoteAdminClients    map[string]admin.Client
 		remoteFrontendClients map[string]frontend.Client
 	}
 
@@ -82,14 +84,25 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 		return nil, err
 	}
 
+	remoteAdminClients := map[string]admin.Client{}
 	remoteFrontendClients := map[string]frontend.Client{}
 	for cluster, address := range clusterMetadata.GetAllClientAddress() {
-		dispatcher, err := dispatcherProvider.Get(address)
+		dispatcher, err := dispatcherProvider.Get(address.RPCName, address.RPCAddress)
 		if err != nil {
 			return nil, err
 		}
 
-		client, err := factory.NewFrontendClientWithTimeoutAndDispatcher(
+		adminClient, err := factory.NewAdminClientWithTimeoutAndDispatcher(
+			address.RPCName,
+			admin.DefaultTimeout,
+			dispatcher,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		frontendclient, err := factory.NewFrontendClientWithTimeoutAndDispatcher(
+			address.RPCName,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
 			dispatcher,
@@ -98,13 +111,15 @@ func NewClientBean(factory Factory, dispatcherProvider DispatcherProvider, clust
 			return nil, err
 		}
 
-		remoteFrontendClients[cluster] = client
+		remoteAdminClients[cluster] = adminClient
+		remoteFrontendClients[cluster] = frontendclient
 	}
 
 	return &clientBeanImpl{
 		historyClient:         historyClient,
 		matchingClient:        matchingClient,
 		frontendClient:        frontendClient,
+		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
 }
@@ -119,6 +134,18 @@ func (h *clientBeanImpl) GetMatchingClient() matching.Client {
 
 func (h *clientBeanImpl) GetFrontendClient() frontend.Client {
 	return h.frontendClient
+}
+
+func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) admin.Client {
+	client, ok := h.remoteAdminClients[cluster]
+	if !ok {
+		panic(fmt.Sprintf(
+			"Unknown cluster name: %v with given cluster client map: %v.",
+			cluster,
+			h.remoteAdminClients,
+		))
+	}
+	return client
 }
 
 func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) frontend.Client {
@@ -138,7 +165,7 @@ func NewIPYarpcDispatcherProvider() DispatcherProvider {
 	return &ipDispatcherProvider{}
 }
 
-func (p *ipDispatcherProvider) Get(address string) (*yarpc.Dispatcher, error) {
+func (p *ipDispatcherProvider) Get(name string, address string) (*yarpc.Dispatcher, error) {
 	match, err := regexp.MatchString(ipPortRegex, address)
 	if err != nil {
 		return nil, err
@@ -147,15 +174,24 @@ func (p *ipDispatcherProvider) Get(address string) (*yarpc.Dispatcher, error) {
 		return nil, errors.New("invalid ip:port address")
 	}
 
-	channel, err := tchannel.NewChannelTransport(tchannel.ServiceName(crossDCCaller))
+	channel, err := tchannel.NewChannelTransport(
+		tchannel.ServiceName(crossDCCaller),
+		// this aim to get rid of the annoying popup about accepting incoming network connections
+		tchannel.ListenAddr("127.0.0.1:0"),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return yarpc.NewDispatcher(yarpc.Config{
+	dispatcher := yarpc.NewDispatcher(yarpc.Config{
 		Name: crossDCCaller,
 		Outbounds: yarpc.Outbounds{
-			common.FrontendServiceName: {Unary: channel.NewSingleOutbound(address)},
+			name: {Unary: channel.NewSingleOutbound(address)},
 		},
-	}), nil
+	})
+	err = dispatcher.Start()
+	if err != nil {
+		return nil, err
+	}
+	return dispatcher, nil
 }

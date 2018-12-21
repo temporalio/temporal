@@ -676,6 +676,17 @@ func (e *historyEngineImpl) getMutableState(ctx context.Context,
 		BranchToken:                          msBuilder.GetCurrentBranch(),
 	}
 
+	replicationState := msBuilder.GetReplicationState()
+	if replicationState != nil {
+		retResp.ReplicationInfo = map[string]*workflow.ReplicationInfo{}
+		for k, v := range replicationState.LastReplicationInfo {
+			retResp.ReplicationInfo[k] = &workflow.ReplicationInfo{
+				Version:     common.Int64Ptr(v.Version),
+				LastEventId: common.Int64Ptr(v.LastEventID),
+			}
+		}
+	}
+
 	return
 }
 
@@ -2503,6 +2514,10 @@ func (e *historyEngineImpl) ReplicateEvents(ctx context.Context, replicateReques
 	return e.replicator.ApplyEvents(ctx, replicateRequest)
 }
 
+func (e *historyEngineImpl) ReplicateRawEvents(ctx context.Context, replicateRequest *h.ReplicateRawEventsRequest) error {
+	return e.replicator.ApplyRawEvents(ctx, replicateRequest)
+}
+
 func (e *historyEngineImpl) SyncShardStatus(ctx context.Context, request *h.SyncShardStatusRequest) error {
 	clusterName := request.GetSourceCluster()
 	now := time.Unix(0, request.GetTimestamp())
@@ -3110,7 +3125,7 @@ func getWorkflowStartedEvent(historyMgr persistence.HistoryManager, historyV2Mgr
 			}).Error("Conflict resolution current workflow finished.", err)
 			return nil, err
 		}
-		events = response.History
+		events = response.HistoryEvents
 	} else {
 		response, err := historyMgr.GetWorkflowExecutionHistory(&persistence.GetWorkflowExecutionHistoryRequest{
 			DomainID: domainID,

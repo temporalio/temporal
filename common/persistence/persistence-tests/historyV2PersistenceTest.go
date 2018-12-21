@@ -171,7 +171,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		go func(idx int) {
 			defer wg.Done()
 
-			branch := s.getBranchByKey(m, idx)
+			branch := s.getBranchByKey(&m, idx)
 
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
@@ -320,8 +320,8 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 			// Event we fork from level1 branch, it is possible that the new branch will fork from master branch
 			forkNodeID := rand.Int63n(int64(concurrency)*2) + 2
-			forkBr := s.getBranchByKey(level1Br, idx)
-			lastForkNodeID := s.getIDByKey(level1ID, idx)
+			forkBr := s.getBranchByKey(&level1Br, idx)
+			lastForkNodeID := s.getIDByKey(&level1ID, idx)
 
 			if forkNodeID > lastForkNodeID {
 				atomic.AddInt32(&forkOnLevel1, int32(1))
@@ -405,14 +405,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 }
 
-func (s *HistoryV2PersistenceSuite) getBranchByKey(m sync.Map, k int) []byte {
+func (s *HistoryV2PersistenceSuite) getBranchByKey(m *sync.Map, k int) []byte {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	br := v.([]byte)
 	return br
 }
 
-func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
+func (s *HistoryV2PersistenceSuite) getIDByKey(m *sync.Map, k int) int64 {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	id := v.(int64)
@@ -487,10 +487,10 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 		if err != nil {
 			return nil, err
 		}
-		if len(resp.History) > 0 {
+		if len(resp.HistoryEvents) > 0 {
 			s.True(resp.Size > 0)
 		}
-		res = append(res, resp.History...)
+		res = append(res, resp.HistoryEvents...)
 		token = resp.NextPageToken
 		if len(token) == 0 {
 			break

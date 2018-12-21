@@ -22,6 +22,11 @@ package worker
 
 import (
 	"context"
+	"time"
+
+	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/persistence"
+
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
 	"github.com/uber/cadence/client/frontend"
@@ -33,7 +38,6 @@ import (
 	"github.com/uber/cadence/service/worker/replicator"
 	"github.com/uber/cadence/service/worker/sysworkflow"
 	"go.uber.org/cadence/.gen/go/shared"
-	"time"
 )
 
 const (
@@ -53,6 +57,8 @@ type (
 		params        *service.BootstrapParams
 		config        *Config
 		metricsClient metrics.Client
+		metadataV2Mgr persistence.MetadataManager
+		domainCache   cache.DomainCache
 	}
 
 	// Config contains all the service config for worker
@@ -87,6 +93,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 
 // Start is called to start the service
 func (s *Service) Start() {
+	var err error
 	params := s.params
 	base := service.New(params)
 
@@ -96,7 +103,17 @@ func (s *Service) Start() {
 
 	s.metricsClient = base.GetMetricsClient()
 
-	if s.params.ClusterMetadata.IsGlobalDomainEnabled() {
+	pConfig := params.PersistenceConfig
+	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
+	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
+	s.metadataV2Mgr, err = pFactory.NewMetadataManager(persistencefactory.MetadataV2)
+	if err != nil {
+		log.Fatalf("failed to create metadata manager: %v", err)
+	}
+	s.domainCache = cache.NewDomainCache(s.metadataV2Mgr, params.ClusterMetadata, s.metricsClient, log)
+	s.domainCache.Start()
+
+	if params.ClusterMetadata.IsGlobalDomainEnabled() {
 		s.startReplicator(params, base, log)
 	}
 
@@ -115,22 +132,14 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) startReplicator(params *service.BootstrapParams, base service.Service, log bark.Logger) {
-	pConfig := params.PersistenceConfig
-	pConfig.SetMaxQPS(pConfig.DefaultStore, s.config.ReplicationCfg.PersistenceMaxQPS())
-	pFactory := persistencefactory.New(&pConfig, params.ClusterMetadata.GetCurrentClusterName(), s.metricsClient, log)
-
-	metadataManager, err := pFactory.NewMetadataManager(persistencefactory.MetadataV2)
-	if err != nil {
-		log.Fatalf("failed to create metadata manager: %v", err)
-	}
 
 	history, err := base.GetClientFactory().NewHistoryClient()
 	if err != nil {
 		log.Fatalf("failed to create history service client: %v", err)
 	}
-
-	replicator := replicator.NewReplicator(params.ClusterMetadata, metadataManager, history, s.config.ReplicationCfg, params.MessagingClient, log,
-		s.metricsClient)
+	clientBean := base.GetClientBean()
+	replicator := replicator.NewReplicator(params.ClusterMetadata, s.metadataV2Mgr, s.domainCache, clientBean,
+		history, s.config.ReplicationCfg, params.MessagingClient, log, s.metricsClient)
 	if err := replicator.Start(); err != nil {
 		replicator.Stop()
 		log.Fatalf("Fail to start replicator: %v", err)

@@ -34,9 +34,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/uber-common/bark"
 	"github.com/uber-go/tally"
+	"github.com/uber/cadence/.gen/go/admin/adminserviceclient"
 	"github.com/uber/cadence/.gen/go/cadence/workflowserviceclient"
 	"github.com/uber/cadence/client"
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/messaging"
 	"github.com/uber/cadence/common/mocks"
@@ -75,6 +77,7 @@ const (
 type Cadence interface {
 	Start() error
 	Stop()
+	GetAdminClient() adminserviceclient.Interface
 	GetFrontendClient() workflowserviceclient.Interface
 	FrontendAddress() string
 	GetFrontendService() service.Service
@@ -82,6 +85,7 @@ type Cadence interface {
 
 type (
 	cadenceImpl struct {
+		adminHandler          *frontend.AdminHandler
 		frontendHandler       *frontend.WorkflowHandler
 		matchingHandler       *matching.Handler
 		historyHandlers       []*history.Handler
@@ -180,6 +184,7 @@ func (c *cadenceImpl) Stop() {
 		c.shutdownWG.Add(3)
 	}
 	c.frontendHandler.Stop()
+	c.adminHandler.Stop()
 	for _, historyHandler := range c.historyHandlers {
 		historyHandler.Stop()
 	}
@@ -263,8 +268,12 @@ func (c *cadenceImpl) WorkerPProfPort() int {
 	return 7109
 }
 
+func (c *cadenceImpl) GetAdminClient() adminserviceclient.Interface {
+	return NewAdminClient(c.frontEndService.GetDispatcher())
+}
+
 func (c *cadenceImpl) GetFrontendClient() workflowserviceclient.Interface {
-	return New(c.frontEndService.GetDispatcher())
+	return NewFrontendClient(c.frontEndService.GetDispatcher())
 }
 
 // For integration tests to get hold of FE instance.
@@ -308,12 +317,18 @@ func (c *cadenceImpl) startFrontend(rpHosts []string, startWG *sync.WaitGroup) {
 	}
 
 	c.frontEndService = service.New(params)
+	c.adminHandler = frontend.NewAdminHandler(
+		c.frontEndService, c.numberOfHistoryShards, c.metadataMgr, c.historyMgr, c.historyV2Mgr)
 	c.frontendHandler = frontend.NewWorkflowHandler(
 		c.frontEndService, frontend.NewConfig(dynamicconfig.NewNopCollection()),
 		c.metadataMgr, c.historyMgr, c.historyV2Mgr, c.visibilityMgr, kafkaProducer, params.BlobstoreClient)
 	err = c.frontendHandler.Start()
 	if err != nil {
 		c.logger.WithField("error", err).Fatal("Failed to start frontend")
+	}
+	err = c.adminHandler.Start()
+	if err != nil {
+		c.logger.WithField("error", err).Fatal("Failed to start admin")
 	}
 	startWG.Done()
 	<-c.shutdownCh
@@ -412,10 +427,12 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 		c.logger.WithField("error", err).Fatal("Failed to create history service client when start worker")
 	}
 	metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgrV2, service.GetMetricsClient(), c.logger)
+	domainCache := cache.NewDomainCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+	domainCache.Start()
 
 	workerConfig := worker.NewConfig(dynamicconfig.NewNopCollection())
 	workerConfig.ReplicationCfg.ReplicatorConcurrency = dynamicconfig.GetIntPropertyFn(10)
-	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, historyClient,
+	c.replicator = replicator.NewReplicator(c.clusterMetadata, metadataManager, domainCache, service.GetClientBean(), historyClient,
 		workerConfig.ReplicationCfg, c.messagingClient, c.logger, service.GetMetricsClient())
 	if err := c.replicator.Start(); err != nil {
 		c.replicator.Stop()
@@ -423,6 +440,7 @@ func (c *cadenceImpl) startWorker(rpHosts []string, startWG *sync.WaitGroup) {
 	}
 	startWG.Done()
 	<-c.shutdownCh
+	domainCache.Stop()
 	c.shutdownWG.Done()
 }
 

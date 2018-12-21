@@ -34,8 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/uber/cadence/common/persistence/persistence-tests"
-
 	"github.com/pborman/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -45,6 +43,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/mocks"
 	"github.com/uber/cadence/common/persistence"
+	persistencetests "github.com/uber/cadence/common/persistence/persistence-tests"
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
 	"go.uber.org/cadence/.gen/go/shared"
 	"go.uber.org/cadence/activity"

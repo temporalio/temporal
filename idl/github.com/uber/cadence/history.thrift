@@ -82,6 +82,7 @@ struct GetMutableStateResponse {
   110: optional i32 stickyTaskListScheduleToStartTimeout
   120: optional i32 eventStoreVersion
   130: optional binary branchToken
+  140: optional map<string, shared.ReplicationInfo> replicationInfo
 }
 
 struct ResetStickyTaskListRequest {
@@ -226,11 +227,6 @@ struct RecordChildExecutionCompletedRequest {
   50: optional shared.HistoryEvent completionEvent
 }
 
-struct ReplicationInfo {
-  10: optional i64 (js.type = "Long") version
-  20: optional i64 (js.type = "Long") lastEventId
-}
-
 struct ReplicateEventsRequest {
   10: optional string sourceCluster
   20: optional string domainUUID
@@ -238,12 +234,22 @@ struct ReplicateEventsRequest {
   40: optional i64 (js.type = "Long") firstEventId
   50: optional i64 (js.type = "Long") nextEventId
   60: optional i64 (js.type = "Long") version
-  70: optional map<string, ReplicationInfo> replicationInfo
+  70: optional map<string, shared.ReplicationInfo> replicationInfo
   80: optional shared.History history
   90: optional shared.History newRunHistory
   100: optional bool forceBufferEvents
   110: optional i32 eventStoreVersion
   120: optional i32 newRunEventStoreVersion
+}
+
+struct ReplicateRawEventsRequest {
+  10: optional string domainUUID
+  20: optional shared.WorkflowExecution workflowExecution
+  30: optional map<string, shared.ReplicationInfo> replicationInfo
+  40: optional shared.DataBlob history
+  50: optional shared.DataBlob newRunHistory
+  60: optional i32 eventStoreVersion
+  70: optional i32 newRunEventStoreVersion
 }
 
 struct SyncShardStatusRequest {
@@ -589,6 +595,17 @@ service HistoryService {
     )
 
   void ReplicateEvents(1: ReplicateEventsRequest replicateRequest)
+    throws (
+      1: shared.BadRequestError badRequestError,
+      2: shared.InternalServiceError internalServiceError,
+      3: shared.EntityNotExistsError entityNotExistError,
+      4: ShardOwnershipLostError shardOwnershipLostError,
+      5: shared.LimitExceededError limitExceededError,
+      6: shared.RetryTaskError retryTaskError,
+      7: shared.ServiceBusyError serviceBusyError,
+    )
+
+  void ReplicateRawEvents(1: ReplicateRawEventsRequest replicateRequest)
     throws (
       1: shared.BadRequestError badRequestError,
       2: shared.InternalServiceError internalServiceError,
