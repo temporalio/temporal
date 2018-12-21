@@ -41,6 +41,8 @@ const (
 	TestCurrentClusterFrontendAddress = "127.0.0.1:7104"
 	// TestAlternativeClusterFrontendAddress is the ip port address of alternative cluster
 	TestAlternativeClusterFrontendAddress = "127.0.0.1:8104"
+	// TestDeploymentGroup is alternative deployment group used for test
+	TestDeploymentGroup = "test"
 )
 
 var (
@@ -69,5 +71,6 @@ func GetTestClusterMetadata(enableGlobalDomain bool, isMasterCluster bool) Metad
 			TestCurrentClusterName:     config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestCurrentClusterFrontendAddress},
 			TestAlternativeClusterName: config.Address{RPCName: common.FrontendServiceName, RPCAddress: TestAlternativeClusterFrontendAddress},
 		},
+		TestDeploymentGroup,
 	)
 }

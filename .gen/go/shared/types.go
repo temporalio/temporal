@@ -2370,6 +2370,190 @@ func (v *ActivityType) GetName() (o string) {
 	return
 }
 
+type ArchivalStatus int32
+
+const (
+	ArchivalStatusNeverEnabled ArchivalStatus = 0
+	ArchivalStatusDisabled     ArchivalStatus = 1
+	ArchivalStatusEnabled      ArchivalStatus = 2
+)
+
+// ArchivalStatus_Values returns all recognized values of ArchivalStatus.
+func ArchivalStatus_Values() []ArchivalStatus {
+	return []ArchivalStatus{
+		ArchivalStatusNeverEnabled,
+		ArchivalStatusDisabled,
+		ArchivalStatusEnabled,
+	}
+}
+
+// UnmarshalText tries to decode ArchivalStatus from a byte slice
+// containing its name.
+//
+//   var v ArchivalStatus
+//   err := v.UnmarshalText([]byte("NEVER_ENABLED"))
+func (v *ArchivalStatus) UnmarshalText(value []byte) error {
+	switch s := string(value); s {
+	case "NEVER_ENABLED":
+		*v = ArchivalStatusNeverEnabled
+		return nil
+	case "DISABLED":
+		*v = ArchivalStatusDisabled
+		return nil
+	case "ENABLED":
+		*v = ArchivalStatusEnabled
+		return nil
+	default:
+		val, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			return fmt.Errorf("unknown enum value %q for %q: %v", s, "ArchivalStatus", err)
+		}
+		*v = ArchivalStatus(val)
+		return nil
+	}
+}
+
+// MarshalText encodes ArchivalStatus to text.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements the TextMarshaler interface.
+func (v ArchivalStatus) MarshalText() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return []byte("NEVER_ENABLED"), nil
+	case 1:
+		return []byte("DISABLED"), nil
+	case 2:
+		return []byte("ENABLED"), nil
+	}
+	return []byte(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler, enabling
+// fast logging of ArchivalStatus.
+// Enums are logged as objects, where the value is logged with key "value", and
+// if this value's name is known, the name is logged with key "name".
+func (v ArchivalStatus) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddInt32("value", int32(v))
+	switch int32(v) {
+	case 0:
+		enc.AddString("name", "NEVER_ENABLED")
+	case 1:
+		enc.AddString("name", "DISABLED")
+	case 2:
+		enc.AddString("name", "ENABLED")
+	}
+	return nil
+}
+
+// Ptr returns a pointer to this enum value.
+func (v ArchivalStatus) Ptr() *ArchivalStatus {
+	return &v
+}
+
+// ToWire translates ArchivalStatus into a Thrift-level intermediate
+// representation. This intermediate representation may be serialized
+// into bytes using a ThriftRW protocol implementation.
+//
+// Enums are represented as 32-bit integers over the wire.
+func (v ArchivalStatus) ToWire() (wire.Value, error) {
+	return wire.NewValueI32(int32(v)), nil
+}
+
+// FromWire deserializes ArchivalStatus from its Thrift-level
+// representation.
+//
+//   x, err := binaryProtocol.Decode(reader, wire.TI32)
+//   if err != nil {
+//     return ArchivalStatus(0), err
+//   }
+//
+//   var v ArchivalStatus
+//   if err := v.FromWire(x); err != nil {
+//     return ArchivalStatus(0), err
+//   }
+//   return v, nil
+func (v *ArchivalStatus) FromWire(w wire.Value) error {
+	*v = (ArchivalStatus)(w.GetI32())
+	return nil
+}
+
+// String returns a readable string representation of ArchivalStatus.
+func (v ArchivalStatus) String() string {
+	w := int32(v)
+	switch w {
+	case 0:
+		return "NEVER_ENABLED"
+	case 1:
+		return "DISABLED"
+	case 2:
+		return "ENABLED"
+	}
+	return fmt.Sprintf("ArchivalStatus(%d)", w)
+}
+
+// Equals returns true if this ArchivalStatus value matches the provided
+// value.
+func (v ArchivalStatus) Equals(rhs ArchivalStatus) bool {
+	return v == rhs
+}
+
+// MarshalJSON serializes ArchivalStatus into JSON.
+//
+// If the enum value is recognized, its name is returned. Otherwise,
+// its integer value is returned.
+//
+// This implements json.Marshaler.
+func (v ArchivalStatus) MarshalJSON() ([]byte, error) {
+	switch int32(v) {
+	case 0:
+		return ([]byte)("\"NEVER_ENABLED\""), nil
+	case 1:
+		return ([]byte)("\"DISABLED\""), nil
+	case 2:
+		return ([]byte)("\"ENABLED\""), nil
+	}
+	return ([]byte)(strconv.FormatInt(int64(v), 10)), nil
+}
+
+// UnmarshalJSON attempts to decode ArchivalStatus from its JSON
+// representation.
+//
+// This implementation supports both, numeric and string inputs. If a
+// string is provided, it must be a known enum name.
+//
+// This implements json.Unmarshaler.
+func (v *ArchivalStatus) UnmarshalJSON(text []byte) error {
+	d := json.NewDecoder(bytes.NewReader(text))
+	d.UseNumber()
+	t, err := d.Token()
+	if err != nil {
+		return err
+	}
+
+	switch w := t.(type) {
+	case json.Number:
+		x, err := w.Int64()
+		if err != nil {
+			return err
+		}
+		if x > math.MaxInt32 {
+			return fmt.Errorf("enum overflow from JSON %q for %q", text, "ArchivalStatus")
+		}
+		if x < math.MinInt32 {
+			return fmt.Errorf("enum underflow from JSON %q for %q", text, "ArchivalStatus")
+		}
+		*v = (ArchivalStatus)(x)
+		return nil
+	case string:
+		return v.UnmarshalText([]byte(w))
+	default:
+		return fmt.Errorf("invalid JSON value %q (%T) to unmarshal into %q", t, t, "ArchivalStatus")
+	}
+}
+
 type BadRequestError struct {
 	Message string `json:"message,required"`
 }
@@ -11682,8 +11866,12 @@ func (v *DomainCacheInfo) GetNumOfItemsInCacheByName() (o int64) {
 }
 
 type DomainConfiguration struct {
-	WorkflowExecutionRetentionPeriodInDays *int32 `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
-	EmitMetric                             *bool  `json:"emitMetric,omitempty"`
+	WorkflowExecutionRetentionPeriodInDays *int32          `json:"workflowExecutionRetentionPeriodInDays,omitempty"`
+	EmitMetric                             *bool           `json:"emitMetric,omitempty"`
+	ArchivalBucketName                     *string         `json:"archivalBucketName,omitempty"`
+	ArchivalRetentionPeriodInDays          *int32          `json:"archivalRetentionPeriodInDays,omitempty"`
+	ArchivalStatus                         *ArchivalStatus `json:"archivalStatus,omitempty"`
+	ArchivalBucketOwner                    *string         `json:"archivalBucketOwner,omitempty"`
 }
 
 // ToWire translates a DomainConfiguration struct into a Thrift-level intermediate
@@ -11703,7 +11891,7 @@ type DomainConfiguration struct {
 //   }
 func (v *DomainConfiguration) ToWire() (wire.Value, error) {
 	var (
-		fields [2]wire.Field
+		fields [6]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -11725,8 +11913,46 @@ func (v *DomainConfiguration) ToWire() (wire.Value, error) {
 		fields[i] = wire.Field{ID: 20, Value: w}
 		i++
 	}
+	if v.ArchivalBucketName != nil {
+		w, err = wire.NewValueString(*(v.ArchivalBucketName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 30, Value: w}
+		i++
+	}
+	if v.ArchivalRetentionPeriodInDays != nil {
+		w, err = wire.NewValueI32(*(v.ArchivalRetentionPeriodInDays)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 40, Value: w}
+		i++
+	}
+	if v.ArchivalStatus != nil {
+		w, err = v.ArchivalStatus.ToWire()
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 50, Value: w}
+		i++
+	}
+	if v.ArchivalBucketOwner != nil {
+		w, err = wire.NewValueString(*(v.ArchivalBucketOwner)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 60, Value: w}
+		i++
+	}
 
 	return wire.NewValueStruct(wire.Struct{Fields: fields[:i]}), nil
+}
+
+func _ArchivalStatus_Read(w wire.Value) (ArchivalStatus, error) {
+	var v ArchivalStatus
+	err := v.FromWire(w)
+	return v, err
 }
 
 // FromWire deserializes a DomainConfiguration struct from its Thrift-level
@@ -11771,6 +11997,46 @@ func (v *DomainConfiguration) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 30:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ArchivalBucketName = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 40:
+			if field.Value.Type() == wire.TI32 {
+				var x int32
+				x, err = field.Value.GetI32(), error(nil)
+				v.ArchivalRetentionPeriodInDays = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 50:
+			if field.Value.Type() == wire.TI32 {
+				var x ArchivalStatus
+				x, err = _ArchivalStatus_Read(field.Value)
+				v.ArchivalStatus = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 60:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.ArchivalBucketOwner = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -11784,7 +12050,7 @@ func (v *DomainConfiguration) String() string {
 		return "<nil>"
 	}
 
-	var fields [2]string
+	var fields [6]string
 	i := 0
 	if v.WorkflowExecutionRetentionPeriodInDays != nil {
 		fields[i] = fmt.Sprintf("WorkflowExecutionRetentionPeriodInDays: %v", *(v.WorkflowExecutionRetentionPeriodInDays))
@@ -11794,8 +12060,34 @@ func (v *DomainConfiguration) String() string {
 		fields[i] = fmt.Sprintf("EmitMetric: %v", *(v.EmitMetric))
 		i++
 	}
+	if v.ArchivalBucketName != nil {
+		fields[i] = fmt.Sprintf("ArchivalBucketName: %v", *(v.ArchivalBucketName))
+		i++
+	}
+	if v.ArchivalRetentionPeriodInDays != nil {
+		fields[i] = fmt.Sprintf("ArchivalRetentionPeriodInDays: %v", *(v.ArchivalRetentionPeriodInDays))
+		i++
+	}
+	if v.ArchivalStatus != nil {
+		fields[i] = fmt.Sprintf("ArchivalStatus: %v", *(v.ArchivalStatus))
+		i++
+	}
+	if v.ArchivalBucketOwner != nil {
+		fields[i] = fmt.Sprintf("ArchivalBucketOwner: %v", *(v.ArchivalBucketOwner))
+		i++
+	}
 
 	return fmt.Sprintf("DomainConfiguration{%v}", strings.Join(fields[:i], ", "))
+}
+
+func _ArchivalStatus_EqualsPtr(lhs, rhs *ArchivalStatus) bool {
+	if lhs != nil && rhs != nil {
+
+		x := *lhs
+		y := *rhs
+		return x.Equals(y)
+	}
+	return lhs == nil && rhs == nil
 }
 
 // Equals returns true if all the fields of this DomainConfiguration match the
@@ -11814,6 +12106,18 @@ func (v *DomainConfiguration) Equals(rhs *DomainConfiguration) bool {
 	if !_Bool_EqualsPtr(v.EmitMetric, rhs.EmitMetric) {
 		return false
 	}
+	if !_String_EqualsPtr(v.ArchivalBucketName, rhs.ArchivalBucketName) {
+		return false
+	}
+	if !_I32_EqualsPtr(v.ArchivalRetentionPeriodInDays, rhs.ArchivalRetentionPeriodInDays) {
+		return false
+	}
+	if !_ArchivalStatus_EqualsPtr(v.ArchivalStatus, rhs.ArchivalStatus) {
+		return false
+	}
+	if !_String_EqualsPtr(v.ArchivalBucketOwner, rhs.ArchivalBucketOwner) {
+		return false
+	}
 
 	return true
 }
@@ -11829,6 +12133,18 @@ func (v *DomainConfiguration) MarshalLogObject(enc zapcore.ObjectEncoder) (err e
 	}
 	if v.EmitMetric != nil {
 		enc.AddBool("emitMetric", *v.EmitMetric)
+	}
+	if v.ArchivalBucketName != nil {
+		enc.AddString("archivalBucketName", *v.ArchivalBucketName)
+	}
+	if v.ArchivalRetentionPeriodInDays != nil {
+		enc.AddInt32("archivalRetentionPeriodInDays", *v.ArchivalRetentionPeriodInDays)
+	}
+	if v.ArchivalStatus != nil {
+		err = multierr.Append(err, enc.AddObject("archivalStatus", *v.ArchivalStatus))
+	}
+	if v.ArchivalBucketOwner != nil {
+		enc.AddString("archivalBucketOwner", *v.ArchivalBucketOwner)
 	}
 	return err
 }
@@ -11848,6 +12164,46 @@ func (v *DomainConfiguration) GetWorkflowExecutionRetentionPeriodInDays() (o int
 func (v *DomainConfiguration) GetEmitMetric() (o bool) {
 	if v.EmitMetric != nil {
 		return *v.EmitMetric
+	}
+
+	return
+}
+
+// GetArchivalBucketName returns the value of ArchivalBucketName if it is set or its
+// zero value if it is unset.
+func (v *DomainConfiguration) GetArchivalBucketName() (o string) {
+	if v.ArchivalBucketName != nil {
+		return *v.ArchivalBucketName
+	}
+
+	return
+}
+
+// GetArchivalRetentionPeriodInDays returns the value of ArchivalRetentionPeriodInDays if it is set or its
+// zero value if it is unset.
+func (v *DomainConfiguration) GetArchivalRetentionPeriodInDays() (o int32) {
+	if v.ArchivalRetentionPeriodInDays != nil {
+		return *v.ArchivalRetentionPeriodInDays
+	}
+
+	return
+}
+
+// GetArchivalStatus returns the value of ArchivalStatus if it is set or its
+// zero value if it is unset.
+func (v *DomainConfiguration) GetArchivalStatus() (o ArchivalStatus) {
+	if v.ArchivalStatus != nil {
+		return *v.ArchivalStatus
+	}
+
+	return
+}
+
+// GetArchivalBucketOwner returns the value of ArchivalBucketOwner if it is set or its
+// zero value if it is unset.
+func (v *DomainConfiguration) GetArchivalBucketOwner() (o string) {
+	if v.ArchivalBucketOwner != nil {
+		return *v.ArchivalBucketOwner
 	}
 
 	return
@@ -24088,6 +24444,8 @@ type RegisterDomainRequest struct {
 	ActiveClusterName                      *string                            `json:"activeClusterName,omitempty"`
 	Data                                   map[string]string                  `json:"data,omitempty"`
 	SecurityToken                          *string                            `json:"securityToken,omitempty"`
+	EnableArchival                         *bool                              `json:"enableArchival,omitempty"`
+	CustomArchivalBucketName               *string                            `json:"customArchivalBucketName,omitempty"`
 }
 
 // ToWire translates a RegisterDomainRequest struct into a Thrift-level intermediate
@@ -24107,7 +24465,7 @@ type RegisterDomainRequest struct {
 //   }
 func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 	var (
-		fields [9]wire.Field
+		fields [11]wire.Field
 		i      int = 0
 		w      wire.Value
 		err    error
@@ -24183,6 +24541,22 @@ func (v *RegisterDomainRequest) ToWire() (wire.Value, error) {
 			return w, err
 		}
 		fields[i] = wire.Field{ID: 90, Value: w}
+		i++
+	}
+	if v.EnableArchival != nil {
+		w, err = wire.NewValueBool(*(v.EnableArchival)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 100, Value: w}
+		i++
+	}
+	if v.CustomArchivalBucketName != nil {
+		w, err = wire.NewValueString(*(v.CustomArchivalBucketName)), error(nil)
+		if err != nil {
+			return w, err
+		}
+		fields[i] = wire.Field{ID: 110, Value: w}
 		i++
 	}
 
@@ -24297,6 +24671,26 @@ func (v *RegisterDomainRequest) FromWire(w wire.Value) error {
 				}
 
 			}
+		case 100:
+			if field.Value.Type() == wire.TBool {
+				var x bool
+				x, err = field.Value.GetBool(), error(nil)
+				v.EnableArchival = &x
+				if err != nil {
+					return err
+				}
+
+			}
+		case 110:
+			if field.Value.Type() == wire.TBinary {
+				var x string
+				x, err = field.Value.GetString(), error(nil)
+				v.CustomArchivalBucketName = &x
+				if err != nil {
+					return err
+				}
+
+			}
 		}
 	}
 
@@ -24310,7 +24704,7 @@ func (v *RegisterDomainRequest) String() string {
 		return "<nil>"
 	}
 
-	var fields [9]string
+	var fields [11]string
 	i := 0
 	if v.Name != nil {
 		fields[i] = fmt.Sprintf("Name: %v", *(v.Name))
@@ -24346,6 +24740,14 @@ func (v *RegisterDomainRequest) String() string {
 	}
 	if v.SecurityToken != nil {
 		fields[i] = fmt.Sprintf("SecurityToken: %v", *(v.SecurityToken))
+		i++
+	}
+	if v.EnableArchival != nil {
+		fields[i] = fmt.Sprintf("EnableArchival: %v", *(v.EnableArchival))
+		i++
+	}
+	if v.CustomArchivalBucketName != nil {
+		fields[i] = fmt.Sprintf("CustomArchivalBucketName: %v", *(v.CustomArchivalBucketName))
 		i++
 	}
 
@@ -24389,6 +24791,12 @@ func (v *RegisterDomainRequest) Equals(rhs *RegisterDomainRequest) bool {
 	if !_String_EqualsPtr(v.SecurityToken, rhs.SecurityToken) {
 		return false
 	}
+	if !_Bool_EqualsPtr(v.EnableArchival, rhs.EnableArchival) {
+		return false
+	}
+	if !_String_EqualsPtr(v.CustomArchivalBucketName, rhs.CustomArchivalBucketName) {
+		return false
+	}
 
 	return true
 }
@@ -24425,6 +24833,12 @@ func (v *RegisterDomainRequest) MarshalLogObject(enc zapcore.ObjectEncoder) (err
 	}
 	if v.SecurityToken != nil {
 		enc.AddString("securityToken", *v.SecurityToken)
+	}
+	if v.EnableArchival != nil {
+		enc.AddBool("enableArchival", *v.EnableArchival)
+	}
+	if v.CustomArchivalBucketName != nil {
+		enc.AddString("customArchivalBucketName", *v.CustomArchivalBucketName)
 	}
 	return err
 }
@@ -24514,6 +24928,26 @@ func (v *RegisterDomainRequest) GetData() (o map[string]string) {
 func (v *RegisterDomainRequest) GetSecurityToken() (o string) {
 	if v.SecurityToken != nil {
 		return *v.SecurityToken
+	}
+
+	return
+}
+
+// GetEnableArchival returns the value of EnableArchival if it is set or its
+// zero value if it is unset.
+func (v *RegisterDomainRequest) GetEnableArchival() (o bool) {
+	if v.EnableArchival != nil {
+		return *v.EnableArchival
+	}
+
+	return
+}
+
+// GetCustomArchivalBucketName returns the value of CustomArchivalBucketName if it is set or its
+// zero value if it is unset.
+func (v *RegisterDomainRequest) GetCustomArchivalBucketName() (o string) {
+	if v.CustomArchivalBucketName != nil {
+		return *v.CustomArchivalBucketName
 	}
 
 	return

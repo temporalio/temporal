@@ -199,6 +199,8 @@ type (
 		ClusterInitialFailoverVersions map[string]int64 `yaml:"clusterInitialFailoverVersion"`
 		// ClusterAddress contains all cluster names to corresponding address
 		ClusterAddress map[string]Address `yaml:"clusterAddress"`
+		// DeploymentGroup contains the deployment group name
+		DeploymentGroup string `yaml:"deploymentGroup"`
 	}
 
 	// Address indicate the remote cluster's service name and address

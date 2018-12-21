@@ -88,6 +88,20 @@ func (_m *ClusterMetadata) GetMasterClusterName() string {
 	return r0
 }
 
+// GetDeploymentGroup provides a mock function with given fields:
+func (_m *ClusterMetadata) GetDeploymentGroup() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // GetNextFailoverVersion provides a mock function with given fields: _a0, _a1
 func (_m *ClusterMetadata) GetNextFailoverVersion(_a0 string, _a1 int64) int64 {
 	ret := _m.Called(_a0, _a1)

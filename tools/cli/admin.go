@@ -238,6 +238,117 @@ func newAdminDomainCommands() []cli.Command {
 				AdminGetDomainIDOrName(c)
 			},
 		},
+		// TODO: remove this command and add archival config options to domains.go once archival is finished
+		{
+			Name:    "register",
+			Aliases: []string{"re"},
+			Usage:   "Register workflow domain",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDescriptionWithAlias,
+					Usage: "Domain description",
+				},
+				cli.StringFlag{
+					Name:  FlagOwnerEmailWithAlias,
+					Usage: "Owner email",
+				},
+				cli.StringFlag{
+					Name:  FlagRetentionDaysWithAlias,
+					Usage: "Workflow execution retention in days",
+				},
+				cli.StringFlag{
+					Name:  FlagEmitMetricWithAlias,
+					Usage: "Flag to emit metric",
+				},
+				cli.StringFlag{
+					Name:  FlagActiveClusterNameWithAlias,
+					Usage: "Active cluster name",
+				},
+				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
+					Name:  FlagClustersWithAlias,
+					Usage: "Clusters",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainDataWithAlias,
+					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
+				},
+				cli.StringFlag{
+					Name:  FlagSecurityTokenWithAlias,
+					Usage: "Security token with permission",
+				},
+				cli.StringFlag{
+					Name:  FlagEnableArchivalWithAlias,
+					Usage: "Flag to enable archival",
+				},
+				cli.StringFlag{
+					Name:  FlagCustomArchivalBucketNameWithAlias,
+					Usage: "Optional custom bucket to use for archival (cannot be changed once archival is enabled)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRegisterDomain(c)
+			},
+		},
+		// TODO: remove this command and add archival config options to domains.go once archival is finished
+		{
+			Name:    "update",
+			Aliases: []string{"up", "u"},
+			Usage:   "Update existing workflow domain",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagDescriptionWithAlias,
+					Usage: "Domain description",
+				},
+				cli.StringFlag{
+					Name:  FlagOwnerEmailWithAlias,
+					Usage: "Owner email",
+				},
+				cli.StringFlag{
+					Name:  FlagRetentionDaysWithAlias,
+					Usage: "Workflow execution retention in days",
+				},
+				cli.StringFlag{
+					Name:  FlagEmitMetricWithAlias,
+					Usage: "Flag to emit metric",
+				},
+				cli.StringFlag{
+					Name:  FlagActiveClusterNameWithAlias,
+					Usage: "Active cluster name",
+				},
+				cli.StringFlag{ // use StringFlag instead of buggy StringSliceFlag
+					Name:  FlagClustersWithAlias,
+					Usage: "Clusters",
+				},
+				cli.StringFlag{
+					Name:  FlagDomainDataWithAlias,
+					Usage: "Domain data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
+				},
+				cli.StringFlag{
+					Name:  FlagSecurityTokenWithAlias,
+					Usage: "Security token with permission ",
+				},
+				cli.StringFlag{
+					Name:  FlagArchivalStatusWithAlias,
+					Usage: "Flag to update archival status, valid values are: {enabled, disabled}",
+				},
+				cli.StringFlag{
+					Name:  FlagCustomArchivalBucketNameWithAlias,
+					Usage: "Optional custom bucket to use for archival (cannot be changed once archival is enabled)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminUpdateDomain(c)
+			},
+		},
+		// TODO: remove this command and add archival config options to domains.go once archival is finished
+		{
+			Name:    "describe",
+			Aliases: []string{"desc"},
+			Usage:   "Describe existing workflow domain",
+			Action: func(c *cli.Context) {
+				AdminDescribeDomain(c)
+			},
+		},
 	}
 }
 

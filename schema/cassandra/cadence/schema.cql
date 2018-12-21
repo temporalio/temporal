@@ -230,7 +230,9 @@ CREATE TYPE domain (
 
 CREATE TYPE domain_config (
   retention   int,
-  emit_metric boolean
+  emit_metric boolean,
+  archival_bucket text,
+  archival_status int
 );
 
 CREATE TYPE cluster_replication_config (

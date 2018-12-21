@@ -100,6 +100,7 @@ var (
 				clusterName[0]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
 				clusterName[1]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
 			},
+			DeploymentGroup: "test",
 		},
 		{
 			EnableGlobalDomain:             true,
@@ -111,6 +112,7 @@ var (
 				clusterName[0]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[0]},
 				clusterName[1]: config.Address{RPCName: common.FrontendServiceName, RPCAddress: clusterAddress[1]},
 			},
+			DeploymentGroup: "test",
 		},
 	}
 	clusterReplicationConfig = []*workflow.ClusterReplicationConfiguration{
@@ -140,6 +142,7 @@ func (s *testCluster) setupCluster(no int, enableEventsV2 bool) {
 		clusterInfo.CurrentClusterName,
 		clusterInfo.ClusterInitialFailoverVersions,
 		clusterInfo.ClusterAddress,
+		clusterInfo.DeploymentGroup,
 	)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&options)
 	s.TestBase.Setup()

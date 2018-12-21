@@ -80,6 +80,7 @@ clustersInfo:
     standby:
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:8933"
+  deploymentGroup: "development"
 
 kafka:
   clusters:

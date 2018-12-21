@@ -128,6 +128,7 @@ func (s *server) startService() common.Daemon {
 		s.cfg.ClustersInfo.CurrentClusterName,
 		s.cfg.ClustersInfo.ClusterInitialFailoverVersions,
 		s.cfg.ClustersInfo.ClusterAddress,
+		s.cfg.ClustersInfo.DeploymentGroup,
 	)
 	params.DispatcherProvider = client.NewIPYarpcDispatcherProvider()
 	// TODO: We need to switch Cadence to use zap logger, until then just pass zap.NewNop

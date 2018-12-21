@@ -42,7 +42,9 @@ const (
 
 	templateDomainConfigType = `{` +
 		`retention: ?, ` +
-		`emit_metric: ?` +
+		`emit_metric: ?, ` +
+		`archival_bucket: ?, ` +
+		`archival_status: ?` +
 		`}`
 
 	templateDomainReplicationConfigType = `{` +
@@ -64,6 +66,7 @@ const (
 
 	templateGetDomainByNameQuery = `SELECT domain.id, domain.name, domain.status, domain.description, ` +
 		`domain.owner_email, domain.data, config.retention, config.emit_metric, ` +
+		`config.archival_bucket, config.archival_status, ` +
 		`replication_config.active_cluster_name, replication_config.clusters, ` +
 		`is_global_domain, ` +
 		`config_version, ` +
@@ -152,6 +155,8 @@ func (m *cassandraMetadataPersistence) CreateDomain(request *p.CreateDomainReque
 		request.Info.Data,
 		request.Config.Retention,
 		request.Config.EmitMetric,
+		request.Config.ArchivalBucket,
+		request.Config.ArchivalStatus,
 		request.ReplicationConfig.ActiveClusterName,
 		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
 		request.IsGlobalDomain,
@@ -245,6 +250,8 @@ func (m *cassandraMetadataPersistence) GetDomain(request *p.GetDomainRequest) (*
 		&info.Data,
 		&config.Retention,
 		&config.EmitMetric,
+		&config.ArchivalBucket,
+		&config.ArchivalStatus,
 		&replicationConfig.ActiveClusterName,
 		&replicationClusters,
 		&isGlobalDomain,
@@ -289,6 +296,8 @@ func (m *cassandraMetadataPersistence) UpdateDomain(request *p.UpdateDomainReque
 		request.Info.Data,
 		request.Config.Retention,
 		request.Config.EmitMetric,
+		request.Config.ArchivalBucket,
+		request.Config.ArchivalStatus,
 		request.ReplicationConfig.ActiveClusterName,
 		p.SerializeClusterConfigs(request.ReplicationConfig.Clusters),
 		request.ConfigVersion,
@@ -330,7 +339,7 @@ func (m *cassandraMetadataPersistence) DeleteDomain(request *p.DeleteDomainReque
 func (m *cassandraMetadataPersistence) DeleteDomainByName(request *p.DeleteDomainByNameRequest) error {
 	var ID string
 	query := m.session.Query(templateGetDomainByNameQuery, request.Name)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	err := query.Scan(&ID, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		if err == gocql.ErrNotFound {
 			return nil

@@ -112,6 +112,13 @@ var (
 	errInvalidExecutionStartToCloseTimeoutSeconds = &gen.BadRequestError{Message: "A valid ExecutionStartToCloseTimeoutSeconds is not set on request."}
 	errInvalidTaskStartToCloseTimeoutSeconds      = &gen.BadRequestError{Message: "A valid TaskStartToCloseTimeoutSeconds is not set on request."}
 
+	// archival errors
+	errSettingBucketNameWithoutEnabling = &gen.BadRequestError{Message: "Request specifies custom bucket without enabling archival."}
+	errDisallowedStatusChange           = &gen.BadRequestError{Message: "Disallowed archival status change. Allowable changes are: never_enabled->enabled, enabled->disabled and disabled->enabled."}
+	errDisallowedBucketMetadata         = &gen.BadRequestError{Message: "Cannot set bucket owner or bucket retention (must update bucket manually)."}
+	errBucketNameUpdate                 = &gen.BadRequestError{Message: "Cannot update bucket name after after archival has been enabled for the first time."}
+	errUnknownArchivalStatus            = &gen.BadRequestError{Message: "Got unknown archival status."}
+
 	// err indicating that this cluster is not the master, so cannot do domain registration or update
 	errNotMasterCluster                = &gen.BadRequestError{Message: "Cluster is not master cluster, cannot do domain registration or domain update."}
 	errCannotAddClusterToLocalDomain   = &gen.BadRequestError{Message: "Cannot add more replicated cluster to local domain."}
@@ -209,6 +216,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(errRequestNotSet, scope)
 	}
 
+	if wh.customBucketNameProvided(registerRequest.CustomArchivalBucketName) && !registerRequest.GetEnableArchival() {
+		return wh.error(errSettingBucketNameWithoutEnabling, scope)
+	}
+
 	if err := wh.checkPermission(registerRequest.SecurityToken, scope); err != nil {
 		return err
 	}
@@ -227,13 +238,13 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(errDomainNotSet, scope)
 	}
 
-	// first check if the name is already resigered as the local domain
+	// first check if the name is already registered as the local domain
 	_, err := wh.metadataMgr.GetDomain(&persistence.GetDomainRequest{Name: registerRequest.GetName()})
 	if err != nil {
 		if _, ok := err.(*gen.EntityNotExistsError); !ok {
 			return wh.error(err, scope)
 		}
-		// extity not exists, we can proceed to create the domain
+		// entity not exists, we can proceed to create the domain
 	} else {
 		// domain already exists, cannot proceed
 		return wh.error(&gen.DomainAlreadyExistsError{Message: "Domain already exists."}, scope)
@@ -269,6 +280,13 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 		return wh.error(errActiveClusterNotInClusters, scope)
 	}
 
+	archivalBucketName := ""
+	archivalStatus := gen.ArchivalStatusNeverEnabled
+	if registerRequest.GetEnableArchival() {
+		archivalBucketName = wh.bucketName(registerRequest.CustomArchivalBucketName)
+		archivalStatus = gen.ArchivalStatusEnabled
+	}
+
 	domainRequest := &persistence.CreateDomainRequest{
 		Info: &persistence.DomainInfo{
 			ID:          uuid.New(),
@@ -279,8 +297,10 @@ func (wh *WorkflowHandler) RegisterDomain(ctx context.Context, registerRequest *
 			Data:        registerRequest.Data,
 		},
 		Config: &persistence.DomainConfig{
-			Retention:  registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
-			EmitMetric: registerRequest.GetEmitMetric(),
+			Retention:      registerRequest.GetWorkflowExecutionRetentionPeriodInDays(),
+			EmitMetric:     registerRequest.GetEmitMetric(),
+			ArchivalBucket: archivalBucketName,
+			ArchivalStatus: archivalStatus,
 		},
 		ReplicationConfig: &persistence.DomainReplicationConfig{
 			ActiveClusterName: activeClusterName,
@@ -341,7 +361,7 @@ func (wh *WorkflowHandler) ListDomains(ctx context.Context,
 			IsGlobalDomain:  common.BoolPtr(d.IsGlobalDomain),
 			FailoverVersion: common.Int64Ptr(d.FailoverVersion),
 		}
-		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = createDomainResponse(d.Info, d.Config, d.ReplicationConfig)
+		desc.DomainInfo, desc.Configuration, desc.ReplicationConfiguration = wh.createDomainResponse(d.Info, d.Config, d.ReplicationConfig)
 		domains = append(domains, desc)
 	}
 
@@ -379,7 +399,7 @@ func (wh *WorkflowHandler) DescribeDomain(ctx context.Context,
 		IsGlobalDomain:  common.BoolPtr(resp.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(resp.FailoverVersion),
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = wh.createDomainResponse(
 		resp.Info, resp.Config, resp.ReplicationConfig)
 
 	return response, nil
@@ -395,6 +415,21 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 
 	if updateRequest == nil {
 		return nil, wh.error(errRequestNotSet, scope)
+	}
+
+	if updateRequest.Configuration != nil {
+		cfg := updateRequest.Configuration
+
+		// ensure intended archival state transition is to either enable or disable archival
+		if cfg.ArchivalStatus != nil && cfg.GetArchivalStatus() == gen.ArchivalStatusNeverEnabled {
+			return nil, wh.error(errDisallowedStatusChange, scope)
+		}
+		if cfg.ArchivalBucketOwner != nil || cfg.ArchivalRetentionPeriodInDays != nil {
+			return nil, wh.error(errDisallowedBucketMetadata, scope)
+		}
+		if wh.customBucketNameProvided(cfg.ArchivalBucketName) && cfg.GetArchivalStatus() != gen.ArchivalStatusEnabled {
+			return nil, wh.error(errSettingBucketNameWithoutEnabling, scope)
+		}
 	}
 
 	// don't require permission for failover request
@@ -434,6 +469,11 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 	configVersion := getResponse.ConfigVersion
 	failoverVersion := getResponse.FailoverVersion
 	failoverNotificationVersion := getResponse.FailoverNotificationVersion
+
+	// ensure that if bucket is already set it cannot be updated
+	if len(config.ArchivalBucket) != 0 && updateRequest.Configuration != nil && wh.customBucketNameProvided(updateRequest.Configuration.ArchivalBucketName) {
+		return nil, wh.error(errBucketNameUpdate, scope)
+	}
 
 	// whether active cluster is changed
 	activeClusterChanged := false
@@ -533,6 +573,35 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionPeriodInDays()
 		}
+		if updatedConfig.ArchivalStatus != nil {
+			name := ""
+			status := gen.ArchivalStatusNeverEnabled
+
+			switch config.ArchivalStatus {
+			case gen.ArchivalStatusNeverEnabled:
+				if updatedConfig.GetArchivalStatus() != gen.ArchivalStatusEnabled {
+					return nil, wh.error(errDisallowedStatusChange, scope)
+				}
+				name = wh.bucketName(updatedConfig.ArchivalBucketName)
+				status = gen.ArchivalStatusEnabled
+			case gen.ArchivalStatusDisabled:
+				if updatedConfig.GetArchivalStatus() != gen.ArchivalStatusEnabled {
+					return nil, wh.error(errDisallowedStatusChange, scope)
+				}
+				name = config.ArchivalBucket
+				status = gen.ArchivalStatusEnabled
+			case gen.ArchivalStatusEnabled:
+				if updatedConfig.GetArchivalStatus() != gen.ArchivalStatusDisabled {
+					return nil, wh.error(errDisallowedStatusChange, scope)
+				}
+				name = config.ArchivalBucket
+				status = gen.ArchivalStatusDisabled
+			default:
+				return nil, wh.error(errUnknownArchivalStatus, scope)
+			}
+			config.ArchivalBucket = name
+			config.ArchivalStatus = status
+		}
 	}
 	if updateRequest.ReplicationConfiguration != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfiguration
@@ -599,7 +668,7 @@ func (wh *WorkflowHandler) UpdateDomain(ctx context.Context,
 		IsGlobalDomain:  common.BoolPtr(getResponse.IsGlobalDomain),
 		FailoverVersion: common.Int64Ptr(failoverVersion),
 	}
-	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = createDomainResponse(
+	response.DomainInfo, response.Configuration, response.ReplicationConfiguration = wh.createDomainResponse(
 		info, config, replicationConfig)
 	return response, nil
 }
@@ -2731,7 +2800,7 @@ func getDomainStatus(info *persistence.DomainInfo) *gen.DomainStatus {
 	return nil
 }
 
-func createDomainResponse(info *persistence.DomainInfo, config *persistence.DomainConfig,
+func (wh *WorkflowHandler) createDomainResponse(info *persistence.DomainInfo, config *persistence.DomainConfig,
 	replicationConfig *persistence.DomainReplicationConfig) (*gen.DomainInfo,
 	*gen.DomainConfiguration, *gen.DomainReplicationConfiguration) {
 
@@ -2746,6 +2815,19 @@ func createDomainResponse(info *persistence.DomainInfo, config *persistence.Doma
 	configResult := &gen.DomainConfiguration{
 		EmitMetric:                             common.BoolPtr(config.EmitMetric),
 		WorkflowExecutionRetentionPeriodInDays: common.Int32Ptr(config.Retention),
+		ArchivalStatus:                         common.ArchivalStatusPtr(config.ArchivalStatus),
+	}
+
+	if configResult.GetArchivalStatus() != gen.ArchivalStatusNeverEnabled {
+		bucketName := config.ArchivalBucket
+		configResult.ArchivalBucketName = common.StringPtr(bucketName)
+		metadata, err := wh.blobstoreClient.BucketMetadata(context.Background(), bucketName)
+
+		// TODO: handle error correctly once there is a working implementation of blobstore
+		if err == nil {
+			configResult.ArchivalRetentionPeriodInDays = common.Int32Ptr(int32(metadata.RetentionDays))
+			configResult.ArchivalBucketOwner = common.StringPtr(metadata.Owner)
+		}
 	}
 
 	clusters := []*gen.ClusterReplicationConfiguration{}
@@ -2884,4 +2966,15 @@ func (wh *WorkflowHandler) validateClusterName(clusterName string) error {
 		return &gen.BadRequestError{Message: fmt.Sprintf(errMsg, clusterName)}
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) bucketName(customBucketName *string) string {
+	if wh.customBucketNameProvided(customBucketName) {
+		return *customBucketName
+	}
+	return fmt.Sprintf("cadence_%v", wh.Service.GetClusterMetadata().GetDeploymentGroup())
+}
+
+func (wh *WorkflowHandler) customBucketNameProvided(customBucketName *string) bool {
+	return customBucketName != nil && len(*customBucketName) != 0
 }

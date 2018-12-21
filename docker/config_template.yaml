@@ -72,3 +72,4 @@ clustersInfo:
     active:
       rpcName: "cadence-frontend"
       rpcAddress: "127.0.0.1:7933"
+  deploymentGroup: "development"
