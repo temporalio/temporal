@@ -92,11 +92,11 @@ func (s *cliAppSuite) SetupTest() {
 
 	s.clientFrontendClient = clientFrontendTest.NewMockClient(s.mockCtrl)
 	s.serverAdminClient = serverAdminTest.NewMockClient(s.mockCtrl)
-	cFactory = &clientFactoryMock{
+	SetFactory(&clientFactoryMock{
 		clientFrontendClient: s.clientFrontendClient,
 		serverFrontendClient: serverFrontendTest.NewMockClient(s.mockCtrl),
 		serverAdminClient:    s.serverAdminClient,
-	}
+	})
 }
 
 func (s *cliAppSuite) TearDownTest() {

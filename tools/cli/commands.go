@@ -180,6 +180,10 @@ const (
 	showErrorStackEnv    = `CADENCE_CLI_SHOW_STACKS`
 )
 
+func SetFactory(factory ClientFactory) {
+	cFactory = factory
+}
+
 var (
 	cFactory ClientFactory
 
